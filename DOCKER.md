@@ -28,10 +28,27 @@ docker run --rm -p 8080:8080 -v "$PWD/data/store:/data/store:ro" ghcr.io/yrousse
 ```
 
 Config is via environment variables (already set in the image): `CAMBER_STORE` (default
-`/data/store`), `CAMBER_API_HOST` (`0.0.0.0` in the container), `CAMBER_API_PORT` (`8080`).
+`/data/store`), `CAMBER_API_HOST` (`0.0.0.0` in the container), `CAMBER_API_PORT` (`8080`),
+`CAMBER_API_ALLOWED_HOSTS` (`localhost,127.0.0.1`).
 The container binds all interfaces *inside its own network namespace*; the API is read-only and
 should still be reached through compose's port mapping / a reverse proxy, not exposed raw to an
 untrusted network (see [docs/SECURITY.md](docs/SECURITY.md)).
+
+Since 0.103 the API refuses a request whose `Host` header is not on its allowlist (403, a
+DNS-rebinding defence), and binding `0.0.0.0` without an allowlist refuses to start. The image's
+default answers `localhost` and `127.0.0.1` on any published port. If clients reach it by another
+name (a proxy, a DNS alias, the host's LAN address), add it:
+
+```sh
+docker run --rm -p 8080:8080 -v "$PWD/data/store:/data/store:ro" \
+  -e CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1,camber.example.org ghcr.io/yroussev/camber:latest
+```
+
+`CAMBER_API_ALLOWED_HOSTS='*'` turns the check off; do that only behind a proxy that checks
+`Host` itself. The container has no authentication by default and logs a warning saying so;
+`CAMBER_API_AUTH=token` with a `CAMBER_API_TOKEN` of 16 or more characters requires that token
+(`Authorization: Bearer`, or `/ui?token=...` once for a session cookie) on every route except a
+bare `GET /health`.
 
 ## Run any command / a shell
 

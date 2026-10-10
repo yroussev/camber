@@ -67,11 +67,45 @@ Run CAMBER in IT/DMZ, never inside the control VLAN; cross the boundary through 
 data diode. Use read-only DB accounts, monitoring-scoped BACnet/SC certificates, and read-only
 Modbus register maps where the gateway supports them.
 
-The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.server`) is GET-only
-(no write endpoints) and binds `127.0.0.1` by default; the `/ui` HTML is served with a strict
-same-origin `Content-Security-Policy` and loads no external asset. It ships **no authentication** —
-binding it to a non-localhost interface (`--host` / `CAMBER_API_HOST`) is your decision, and if you
-do, put it behind your own authenticating reverse proxy / network controls. The catalog UI,
+The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.server`) is GET-only:
+every other method, `HEAD` and `OPTIONS` included, is 405, and it answers no CORS preflight. It
+binds `127.0.0.1` by default; the `/ui` HTML is served with a strict same-origin
+`Content-Security-Policy` and loads no external asset. Its request checks (0.103, #128):
+
+- **Host allowlist, always on (DNS rebinding).** A web page on another site can point its own DNS
+  name at 127.0.0.1 (or at the server's LAN address) and then read the answers through a visitor's
+  browser as a same-origin request. Such a request still carries the attacker's name in `Host`, so
+  every request whose `Host` is not allowed is refused with 403 before any route runs. Allowed:
+  `127.0.0.1`, `localhost` and `[::1]` at the bound port when bound to loopback (or to every
+  interface); the bound host at the bound port; and each `--allow-host NAME` /
+  `CAMBER_API_ALLOWED_HOSTS` entry (a bare name on any port, `NAME:PORT` exactly). Binding
+  `0.0.0.0` or `::` refuses to start without an explicit allowlist. `--allow-host '*'` answers any
+  `Host`; it turns this defence off and is meant only behind a proxy that checks `Host` itself.
+- **Token auth, opt-in (`--auth token`).** The same model as `camber lab` (§11, shared code in
+  `camber._access`): a random 256-bit access token per run (or `CAMBER_API_TOKEN`, 16+ characters,
+  from the environment, never argv); a launch URL `http://127.0.0.1:<port>/ui?token=...` printed
+  to the terminal and saved in a 0600 launch file `serve-<port>.url` in a 0700 folder; a GET with a
+  valid `?token=` gets a session cookie `camber-serve-<port>` (`HttpOnly; SameSite=Strict;
+  Path=/`) and a 303 to the same URL without the token; scripts send `Authorization: Bearer`.
+  Every route needs the cookie or the token (401 without, 403 for a wrong one), except that a bare
+  `GET /health` answers `{"ok": true}` and nothing else, for container health checks. Secrets are
+  compared with `hmac.compare_digest`.
+- **Default off in 0.103.** Without `--auth token` the server has **no authentication**: on a
+  computer shared by several accounts, any local user can read every facility, point and history
+  it serves, and bound to another interface, anyone who can reach that address can. It prints a
+  warning when bound to anything but loopback without `--auth token`. A later release may make
+  token auth the default on loopback.
+
+Residual risks: the server speaks plain HTTP (no TLS), so the token and the cookie cross the
+network in clear text when it is bound beyond loopback; terminate TLS at a proxy. The cookie has no
+`Secure` flag for the same reason. A token is per process, so several replicas behind a load
+balancer do not share one; use an authenticating ingress there. There are no user accounts, roles
+or per-facility permissions: whoever holds the token reads everything. A bare `--allow-host`
+name matches any port. The Host check does not stop a client that can reach the port directly and
+sends an allowed `Host` itself; it stops browsers being used as a proxy. Binding beyond loopback
+(`--host` / `CAMBER_API_HOST`) remains your decision; put it behind your own authenticating
+reverse proxy and network controls. The container image binds `0.0.0.0` with
+`CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1` (see DOCKER.md and DEPLOY.md). The catalog UI,
 `camber lab`, is a separate loopback-only server with its own request checks (§11); it does not
 add a write route to `camber serve`.
 

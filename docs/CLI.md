@@ -12,7 +12,7 @@ camber ask "<question>" --config <config.json>  # grounded natural-language Q&A 
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
-camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
+camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]   # read-only API + live /ui
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
@@ -29,6 +29,35 @@ camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge 
 `http://127.0.0.1:8080/ui` (facility/equip/role selectors + a synchronized multitrend, brush-linked
 and polling). Read-only (GET-only), localhost-bound by default; see
 [VISUALIZATION.md](VISUALIZATION.md) and [SECURITY.md](SECURITY.md).
+
+Who may connect (0.103):
+
+- **Host allowlist, always on.** A request whose `Host` header is not an allowed name is refused
+  (403), so a web page on another site cannot read the store through your browser by pointing its
+  own DNS name at your machine (DNS rebinding). Bound to loopback (the default), the allowed names
+  are `127.0.0.1`, `localhost` and `[::1]` at the bound port; bound to an address, that address
+  too. `--allow-host NAME` (repeatable), or `CAMBER_API_ALLOWED_HOSTS=name1,name2`, adds the names
+  a proxy or DNS alias uses: a bare `NAME` matches any port, `NAME:PORT` only that port.
+- **Every interface needs a list.** `--host 0.0.0.0` (or `::`) refuses to start unless an
+  allowlist is given. `--allow-host '*'` answers any `Host` and turns the rebinding check off; it
+  is unsafe and meant only behind a proxy that checks `Host` itself.
+- **`--auth token` (opt-in).** Every route needs this run's access token, as in `camber lab`: the
+  command prints a launch URL ending in `?token=...` and saves it, readable by you only, in
+  `serve-<port>.url` (in `$XDG_RUNTIME_DIR/camber`, else `~/.config/camber`). Opening it sets an
+  `HttpOnly; SameSite=Strict` session cookie and redirects to the same page without the token.
+  Scripts send `Authorization: Bearer <token>`. Without credentials a request is 401 (403 for a
+  wrong token), except `GET /health`, which then answers only `{"ok": true}` for health checks.
+  `CAMBER_API_TOKEN` (16 or more characters) fixes the token instead of a fresh one per run; use
+  an environment variable, never the command line, which other accounts can read.
+- Bound to anything but loopback without `--auth token`, it prints a warning: anyone who can reach
+  the address can read every facility. Put an authenticating reverse proxy in front.
+
+```sh
+camber serve ./store                                   # http://127.0.0.1:8080/ui, no token
+camber serve ./store --auth token                      # prints the launch URL with ?token=
+camber serve ./store --host 0.0.0.0 --allow-host camber.example.org   # behind a proxy
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/facilities
+```
 
 A **config** is the same declarative JSON that drives `camber.config.run_config` (source, mapping,
 equipment, rules — see the config examples). `run`/`report` execute it; `explain`/`ask` build the

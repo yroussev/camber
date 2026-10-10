@@ -401,8 +401,14 @@ synchronized multitrend links to a timestamp readout exactly like the static pan
 
 ```sh
 camber serve /path/to/store          # read-only API + live dashboard at http://127.0.0.1:8080/ui
+camber serve /path/to/store --auth token   # open the printed URL (it ends in ?token=...) instead
 python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints unchanged
 ```
+
+Open the viewer at `http://127.0.0.1:8080/ui` or `http://localhost:8080/ui`. Since 0.103 the
+server answers only the names it is bound to (a DNS-rebinding defence); for any other name, add
+`--allow-host NAME`. With `--auth token`, open the launch URL the command prints; it sets a session
+cookie, so later visits in that browser need no token (see [CLI.md](CLI.md)).
 
 ![Screenshot of the live trend viewer: facility and equipment selectors, role checkboxes and two unit panels](img/shots/trend-viewer.png)
 
@@ -410,8 +416,9 @@ python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints u
 
 Framework-free and dependency-light: stdlib `http.server` + inline vanilla JS/SVG, **no framework, no
 CDN, no external asset** (a strict `Content-Security-Policy` header is sent on the HTML route). It is
-**read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on a public interface is your
-decision and adds no auth (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
+**read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on another interface is your
+decision; it checks the `Host` header and offers opt-in token auth (`--auth token`), but no user
+accounts or TLS (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
 **carpet/heatmap** panel; the live multitrend + selectors + cross-panel linking + polling ship now.
 
 **Units, axes and a legend (0.96, #78).** Series of different scales no longer share one axis

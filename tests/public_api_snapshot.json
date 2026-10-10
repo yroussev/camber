@@ -93,7 +93,9 @@
     "ReadAPI"
   ],
   "camber.api.server": [
+    "ALLOWED_HOSTS_ENV",
     "ReadAPIHandler",
+    "check_request",
     "dispatch",
     "make_server",
     "serve"

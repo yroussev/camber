@@ -405,8 +405,8 @@ shared computer:
 - give each learner their own login, and run one lab per learner;
 - do not leave a lab running unattended; stop it with Ctrl-C when you are done;
 - to show data to a room, project your screen, or publish a store read-only with
-  `camber serve` (it accepts no writes and has no token: see its notes in SECURITY.md). The lab
-  cannot be opened from another computer.
+  `camber serve` (it accepts no writes and needs a token only with `--auth token`: see its notes
+  in SECURITY.md). The lab cannot be opened from another computer.
 
 The full list of the lab's request checks is in
 [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096).

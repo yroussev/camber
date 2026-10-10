@@ -460,8 +460,9 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
   `python -m camber.api.server <store> [port]`): GET `/about` `/health` `/facilities` `/points`
   `/history`, plus a live vanilla-JS dashboard at **`/ui`** (facility/equip/role selectors + a
   synchronized multitrend, brush-linked via `window.CAMBER`, polling for fresh data). Read-only,
-  localhost-bound, CSP-locked, no framework. Env: `CAMBER_STORE` / `CAMBER_API_HOST` /
-  `CAMBER_API_PORT`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
+  localhost-bound, CSP-locked, no framework; a `Host` allowlist against DNS rebinding and opt-in
+  token auth (`--auth token`, 0.103). Env: `CAMBER_STORE` / `CAMBER_API_HOST` / `CAMBER_API_PORT` /
+  `CAMBER_API_ALLOWED_HOSTS` / `CAMBER_API_AUTH` / `CAMBER_API_TOKEN`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
 
 ## Orchestration & distribution
 

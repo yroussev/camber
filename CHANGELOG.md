@@ -12,6 +12,46 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.103.0] — Unreleased
+
+### Added
+- **`camber serve --auth token`: optional token auth, like `camber lab` (#128).** Every route
+  (`/ui`, `/facilities`, `/points`, `/history`, `/about`) then needs this run's access token. The
+  command prints a launch URL ending in `?token=...` and saves it in a launch file
+  `serve-<port>.url` that only you can read (0600, in a 0700 folder). Opening it sets an
+  `HttpOnly; SameSite=Strict` session cookie `camber-serve-<port>` and redirects (303) to the same
+  page without the token; scripts send `Authorization: Bearer <token>`. Without credentials a
+  request is 401 (403 for a wrong token); a bare `GET /health` answers only `{"ok": true}`, for
+  health checks. `CAMBER_API_TOKEN` (16 or more characters) fixes the token. Python:
+  `make_server(..., auth="token", access_token=...)` and `serve(...)` take the same arguments;
+  `python -m camber.api.server` reads `CAMBER_API_AUTH` and `CAMBER_API_TOKEN`. **Off by default
+  in 0.103**, so existing deployments keep working; a later release may make token auth the
+  default on loopback.
+- **`camber serve --allow-host NAME` (repeatable) and `CAMBER_API_ALLOWED_HOSTS` (#128)**, the
+  extra `Host` names to answer for a proxy or DNS name: a bare name on any port, `NAME:PORT`
+  exactly. `make_server(..., allowed_hosts=[...])` is the Python form, and
+  `camber.api.server.check_request` the pure request check.
+
+### Changed
+- **`camber serve` binding `0.0.0.0` or `::` refuses to start without a Host allowlist (#128)**
+  (`--allow-host` or `CAMBER_API_ALLOWED_HOSTS`; `'*'` turns the check off and is unsafe). The
+  Docker image and `docker-compose.yml` now set `CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1`,
+  and `deploy/k8s/camber-api.yaml` lists the Service's names and probes `/health` with
+  `Host: localhost`: **add the hostname your proxy or ingress forwards**, or it gets 403. Bound to
+  anything but loopback without `--auth token`, `camber serve` prints a warning. `--host ::`
+  (IPv6) now binds. `HEAD`, `PUT`, `DELETE`, `PATCH` and `OPTIONS` get 405 like `POST` (they were
+  501); the API stays GET-only.
+- **The lab's token, cookie and launch-file helpers moved to `camber._access` (#128)**, shared with
+  `camber serve`; `camber.lab._auth` keeps its names and behaviour.
+
+### Security
+- **`camber serve` checks the `Host` header against DNS rebinding (#128).** A web page on another
+  site could point its own DNS name at your machine and read the store through your browser. Every
+  request whose `Host` is not an allowed name is now refused with 403: `127.0.0.1`, `localhost`
+  and `[::1]` at the bound port when bound to loopback, the bound host, and any `--allow-host`.
+  On by default. [SECURITY.md](docs/SECURITY.md) section 3 describes the model and its residual
+  risks (plain HTTP, no accounts, a per-process token).
+
 ## [0.102.0] — 2026-10-10
 
 **0.102: follow-ups from 0.101, sample charts across the docs, a guide to the lab, and an access token on every lab route (#110–#121, #127).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue ranks first again (#112). The docs site gains charts and screenshots rendered by CAMBER's own chart code (#113) and a step-by-step guide to `camber lab` (#121). Evidence charts shade exactly what each rule flags and name roles with their units (#114–#117, #119). A stuck supply-air sensor on a scheduled fan is now flagged (#118). **Behaviour change (#120):** `free_cooling_missed` no longer judges fan-off hours, so missed shares rise on units whose fan runs only when occupied; the `air-economizer` and capstone answers move with it. **Security (#127):** `camber lab` now requires a per-run access token on every route; open the URL it prints.

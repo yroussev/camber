@@ -51,14 +51,19 @@ spec:
             - { name: CAMBER_STORE, value: /data/store }
             - { name: CAMBER_API_HOST, value: "0.0.0.0" }
             - { name: CAMBER_API_PORT, value: "8080" }
+            # Host allowlist (0.103, DNS-rebinding defence; required when binding 0.0.0.0): the
+            # Service names below, plus the hostname your ingress serves (add it here).
+            - name: CAMBER_API_ALLOWED_HOSTS
+              value: "localhost,camber-api,camber-api.camber,camber-api.camber.svc,camber-api.camber.svc.cluster.local"
           volumeMounts:
             - { name: store, mountPath: /data/store, readOnly: true }
           readinessProbe:
-            httpGet: { path: /health, port: 8080 }
+            # kubelet sends the pod IP as Host by default; name an allowed one instead
+            httpGet: { path: /health, port: 8080, httpHeaders: [{ name: Host, value: localhost }] }
             initialDelaySeconds: 5
             periodSeconds: 15
           livenessProbe:
-            httpGet: { path: /health, port: 8080 }
+            httpGet: { path: /health, port: 8080, httpHeaders: [{ name: Host, value: localhost }] }
             initialDelaySeconds: 10
             periodSeconds: 30
           resources:
