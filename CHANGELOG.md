@@ -105,6 +105,35 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   measures chapter of PNNL's small/medium-sized building re-tuning course (PNNL-SA-92685), new in
   `camber.references` as `pnnl-small-retuning-ch3`. It covers packaged units and their
   thermostats.
+- **`hw_pump_summer_lockout`: the hot-water pump's warm-weather lockout (#132).** PNNL's
+  heating-plant re-tuning locks out the hot-water pumps, not only the boiler, in warm weather; a
+  pump left running all summer with the boiler off passed `boiler_summer_lockout`. The new rule
+  reads when the pump runs (its status, else its speed above 5 %, else the loop flow) and
+  reports the share of its occupied running hours above the lockout, with the boiler check's
+  semantics and severity (warn at 5 %, fault at 20 %), plus `max_oat_running_f` and
+  `boiler_off_pct` (the pump running with the boiler off). It shares the boiler's
+  `summer_lockout_oat_f` (default 65 °F): a config that sets it on `boiler_summer_lockout` only
+  passes it on, recorded in the finding's `param_basis`. It declines on a pump with no hot-water
+  point (it may serve another loop). Wired through the parameter registry and `THRESHOLDS.md`,
+  the references, the scorecard, a recommended action and a walk-down item (both new for
+  `boiler_summer_lockout` too), the RCx report's cause chains (a boiler and its pump on one
+  plant are one issue), the G36 plant sequence (`g36_plant`) and a faultlab scenario pending
+  sign-off as a gated benchmark key. See `docs/PLANT-DETECTORS.md`.
+- **Synthetic catalog entries (#133).** A catalog entry of `kind: "synthetic"` is generated
+  locally by one of CAMBER's own generators instead of downloaded: `camber datasets fetch` (and
+  the lab's **Fetch & ingest**) writes it into the cache from a fixed seed, the same bytes on
+  every machine, and it is ingested like any other entry. It carries CAMBER's licence
+  (Apache-2.0, open tier), no URL, size or SHA-256, and is labelled synthetic in `camber datasets
+  list` / `info`, the lab (a **synthetic** badge and a kind filter) and every report's "Data
+  source & licence" block. The catalog check still validates it; the refresh and link-check
+  scripts skip it. See `docs/DATASETS.md`, "Synthetic datasets".
+- **`synthetic-hw-plant-lockout` and the `plant-lockout` workbook exercise (#133).** The first
+  synthetic entry: one hot-water plant, eight weeks hourly with a warm spell, as four plants
+  (locked out at 65 °F, left enabled through the warm spell, the pump left running, locked out
+  at 58 °F). The new exercise finds the boiler and the pump left on, then varies the lockout
+  (`plant-lockout--58f`, `plant-lockout--75f`) to show how the verdict rests on it and where
+  each plant really stops firing. Its answers are pinned by the workbook tests, with an
+  instructor key and a figure.
 
 ### Changed
 - **Breaking: numpy 2 is now required; numpy 1.x is no longer supported (#129).** pyarrow 26
@@ -160,6 +189,9 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `zone-reheat-saturated`), and `--layout rcx` adds a page per issue.
 - **`docs/LAB.md`, `docs/DATASETS.md`, `docs/CLI.md` and `docs/SECURITY.md` §11** describe the
   new lab controls and POST routes, and the lab screenshots are re-rendered.
+- **`boiler_summer_lockout` reports `max_oat_running_f` (#133)**, the warmest outdoor
+  temperature at which the boiler fired: where the plant actually stops firing, to compare with
+  the lockout. Severities and the other metrics are unchanged.
 
 ### Fixed
 - **Store part files are byte-reproducible (#130).** Ingesting the same files twice gave part

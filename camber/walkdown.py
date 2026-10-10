@@ -613,6 +613,30 @@ SITE_CHECKS: dict = {
             "something else (a flame-relay flicker, a pump interlock).",
         ),
     },
+    # 0.103 (#132): the heating plant's warm-weather lockout, boiler and pump
+    "boiler_summer_lockout": {
+        "*": _T(
+            "The boiler's enable logic in the controller (its outdoor-air lockout and any "
+            "override), the boiler panel on a warm afternoon, and what calls for heat",
+            "boiler status (or gas input) vs outdoor temperature",
+            "On a day above the lockout the boiler is enabled and fires: the lockout is missing, "
+            "set too high, overridden, or a zone keeps requesting heat.",
+            "The boiler is locked out on site: the status point is an enable or a pump interlock, "
+            "not the burner firing (map the firing or flame signal), or the outdoor sensor reads "
+            "low.",
+        ),
+    },
+    "hw_pump_summer_lockout": {
+        "*": _T(
+            "The hot-water pump on a warm afternoon (running or not, its hand/off/auto switch), "
+            "its enable logic in the controller and whether the loop is warm with the boiler off",
+            "pump status (or speed, flow) vs outdoor temperature",
+            "The pump runs above the lockout: it is in hand, overridden, enabled on a schedule "
+            "rather than with the boiler, or kept on by a minimum-flow or freeze interlock.",
+            "The pump is off on site: the status point is a command or a drive 'ready' signal, "
+            "or it belongs to another loop (fix the mapping).",
+        ),
+    },
     "compressor_short_cycle": {  # 0.103 (#125)
         "*": _T(
             "The compressor at low load: its minimum on/off timers, the stage differential, the "
@@ -794,6 +818,9 @@ DESIGN_PARAMS: dict = {
     "compressor_short_cycle": [
         ("max_starts_per_day", "Compressor starts per day the manufacturer allows", None)
     ],
+    # 0.103 (#132): the site's heating lockout, from its sequence of operations
+    "boiler_summer_lockout": [("summer_lockout_oat_f", "Heating-plant outdoor-air lockout", None)],
+    "hw_pump_summer_lockout": [("summer_lockout_oat_f", "Heating-plant outdoor-air lockout", None)],
     "chw_pump_dp_reset": [("near_min_pct", "Chilled-water pump drive minimum speed", None)],
     "hw_pump_dp_reset": [("near_min_pct", "Hot-water pump drive minimum speed", None)],
     "leaking_valve": [("fan_heat_f", "Supply-fan heat (rise across the fan)", None)],

@@ -1088,10 +1088,15 @@ def _reference_source_note(ref) -> str:
 
 def _rule_param_overrides(config: dict | None) -> dict:
     """``{rule name: params}`` for the config's parameterized rule entries."""
+    from ..config import _inherited_params
+
     out = {}
     for entry in (config or {}).get("rules", []) or []:
         if isinstance(entry, dict) and entry.get("params"):
             out[entry["name"]] = dict(entry["params"])
+    # 0.103 (#132): a value a rule inherits from another's entry is site-configured too
+    for rule, (param, value, _src) in _inherited_params(config or {}).items():
+        out.setdefault(rule, {}).setdefault(param, value)
     return out
 
 

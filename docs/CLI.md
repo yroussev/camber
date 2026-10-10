@@ -430,7 +430,7 @@ camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-
 them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DATASETS.md)):
 
 ```
-camber datasets list [--licence commercial|all] [--kind simulated|real|lab] [--labeled] [--json]
+camber datasets list [--licence commercial|all] [--kind simulated|real|lab|synthetic] [--labeled] [--json]
 camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
 camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
@@ -456,6 +456,9 @@ running the YAML config needs the `[yaml]` extra.
 downloads). A named research-only id needs `--accept-noncommercial` on every fetch; each acceptance
 is recorded in `acknowledgements.json`. There is no environment-variable bypass. `ingest` of
 research-only data needs that recorded acknowledgement (or its own `--accept-noncommercial`).
+A **synthetic** entry (0.103) is generated, not downloaded: `fetch` writes it from CAMBER's own
+generator (`list` shows its download as `generated`), and `ingest` generates it when it is not in
+the cache yet; see [DATASETS.md](DATASETS.md#synthetic-datasets).
 A **manual** entry (files you download yourself, e.g. from a portal with terms) is never fetched:
 `fetch <id>` exits 1 with the instructions and `fetch --all` skips it; download the files, then
 `ingest <id> --from-dir DIR --store STORE`, which verifies every pinned file (size + SHA-256)

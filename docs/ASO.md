@@ -78,6 +78,7 @@ fired, read from its metrics, never only to its rule name:
 | | under-ventilation (`below_floor_pct`, `co2_breach_at_min_pct`, `unventilated_high_co2_hours`) | Restore the OA floor; make OA respond to high CO₂; restore ventilation while occupied |
 | `chw_plant_reset` | low loop ΔT (`low_deltaT_pct`; not on a constant-flow plant, `flow_mode`) / CHWST rising with OAT (`chwst_reset_direction: reverse`) / flat CHWST (`chwst_reset_present`) | Fix low loop ΔT / find why the chilled-water supply warms in hot weather / reset the CHW supply temperature |
 | `chw_pump_dp_reset`, `hw_pump_dp_reset` | at the VFD minimum / near full with a reset / near full without | Right-size the pump / find the valve driving the reset / reset the DP setpoint |
+| `boiler_summer_lockout`, `hw_pump_summer_lockout` (0.103) | running above the lockout (`summer_run_pct`, `lockout_oat_f`); for the pump, with the boiler off (`boiler_off_pct` at least 50 %) | Lock the boiler / the hot-water pump out above the heating lockout; find the override or the call for heat |
 | `supply_air_reset` | the setpoint already resets (`sp_behaviour`) / SAT rises with load (`reset_direction`) | Widen the reset range / check cooling capacity |
 | `cooling_tower_approach` | wide approach at full fan (`effort_gated`) | Restore tower capacity (fill, distribution, flow) |
 | `reheat_minimization_g36` | reheat above the minimum airflow | Implement the dual-maximum heating sequence |

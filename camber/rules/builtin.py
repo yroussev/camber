@@ -35,6 +35,7 @@ from .heatpump_ops_rule import HPCapacityShortfall, HPModeVsNeed, HPRoomImbalanc
 from .heatpump_rule import HeatPumpDefrost
 from .hunting_rule import ControlHunting
 from .hwplant_deltat_rule import HWPlantDeltaT
+from .hwpump_lockout_rule import HWPumpSummerLockout  # 0.103 (#132)
 from .hwpump_rule import HWPumpDPReset
 from .iaq_rule import CO2Ventilation, CO2VentilationSystem  # 0.93 (#38): + the fleet twin
 from .leakvalve_rule import LeakingValve
@@ -116,6 +117,7 @@ RULE_CLASSES: list[type] = [
     SourceLoopDeltaT,
     # --- end 0.93 (#40) block
     ActuatorStuck,  # 0.98 (#85): a terminal / fan-coil damper or valve stuck against demand
+    HWPumpSummerLockout,  # 0.103 (#132): a hot-water pump running in warm weather
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

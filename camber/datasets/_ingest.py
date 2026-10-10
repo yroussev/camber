@@ -1020,6 +1020,10 @@ def ingest_dataset(
         via=via,
         action="ingest",
     )
+    if entry.synthetic:  # 0.103 (#133): generate the files if they are not in the cache yet
+        from ._synthetic import ensure_generated
+
+        ensure_generated(entry, subset=sname, data_dir=root)
     inputs = verified_inputs(entry, sname, root)
     shas = {k: v[1] for k, v in inputs.items()}
     mapping_text = mapping_texts(entry)

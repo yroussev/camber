@@ -103,6 +103,45 @@ cooling tower's own `Leaving_/Entering_Water_Temperature_Sensor` map to `cw_supp
 `cw_return_temp`; and a chiller's `Entering_Condenser_Water_Temperature_Sensor` becomes
 `cond_entering_water_temp` when the model also has that tower point.
 
+## Hot-water pump warm-weather lockout (`hw_pump_summer_lockout`)
+
+PNNL's heating-plant re-tuning locks out the hot-water **pumps**, not only the boiler, in warm
+weather. `boiler_summer_lockout` judges boiler firing alone, so a pump left running all summer
+with the boiler off passes it: the pump's energy is wasted, and the warm loop feeds heat into every
+air handler and box whose heating valve leaks. `hw_pump_summer_lockout` (0.103, #132) is the
+pump's own check, built-in and single-period, on hot-water plants and pumps.
+
+- **When the pump runs.** Its run status (`pump_status`), else its speed (`hw_pump_speed` above
+  5 %, the running cut of `hw_pump_dp_reset`), else the loop flow (`hw_flow` above 5 % of its own
+  95th percentile). `run_source` says which, with a caveat when it is not the status.
+- **The check.** The share of the pump's occupied running hours (the generic weekday schedule)
+  with the outdoor temperature above `summer_lockout_oat_f` (`summer_run_pct`): the boiler
+  check's semantics and severity, warn at 5 % and fault at 20 %. Without OAT it is not evaluated.
+- **The lockout is shared.** The parameter has the boiler rule's name and default (65 °F). A
+  config that sets it on `boiler_summer_lockout` only passes the value on; the pump finding
+  records it in `param_basis` ("inherited from boiler_summer_lockout in this config").
+- **What else it reports.** `max_oat_running_f`, the warmest outdoor temperature at which the
+  pump ran (the boiler finding reports the same for firing since 0.103), and `boiler_off_pct`: of
+  the pump's hours above the lockout, the share with the boiler not firing (from its status or
+  gas input). Near 100 % means the pump was left on alone; lower means the whole plant was
+  enabled.
+- **Which loop.** A `pump_status` point does not say which loop a pump serves. On an equipment
+  with no hot-water point at all (no `hw_pump_speed`, `hw_flow`, hot-water temperature or boiler
+  signal) the rule declines rather than judge what may be a chilled-water pump.
+- **Why a separate rule.** Each finding then names one piece of equipment to lock out (a pump
+  can be its own equipment, class `pump`, and can be locked out by another sequence than the
+  boiler), and the boiler's finding and its existing answers do not change. The RCx report groups
+  a boiler and a pump finding on the same plant into one issue (the `hw_lockout` cause chain),
+  the boiler first.
+- **Not a fault everywhere.** A plant that serves dehumidification reheat, domestic hot water or
+  freeze protection needs the loop in warm weather: set the lockout to its sequence, or leave the
+  rule out.
+
+It is scored on a synthetic injected fault (`camber.faultlab.PENDING_SCENARIOS`, TPR 1.0 and FPR
+0.0) but not yet a gated benchmark key, and no open dataset shows the fault; the
+[`plant-lockout`](workbook/plant-lockout.md) exercise works it on the synthetic catalog entry
+`synthetic-hw-plant-lockout`.
+
 ## Validation
 
 On the labelled LBNL chiller and boiler plants (`examples/lbnl_fdd/plant_detectors.py`; measured,

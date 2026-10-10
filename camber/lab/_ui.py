@@ -60,6 +60,7 @@ color:var(--muted)}
 background:var(--chip)}
 .badge.open{color:var(--ok)}.badge.ro{color:var(--bad);font-weight:600}
 .badge.manual{color:var(--warn)}.badge.missing{color:var(--bad);font-weight:600}
+.badge.synthetic{color:var(--warn);font-weight:600}
 .lic{white-space:nowrap}.hint{font-size:12px;color:var(--bad);overflow-wrap:anywhere}
 td.links button{font-size:13px;padding:2px 8px;margin:2px 8px 2px 0}
 .links a{margin-right:8px;white-space:nowrap}
@@ -166,6 +167,10 @@ function render(){
     if(d.manual){c3.appendChild(document.createTextNode(' '));
       c3.appendChild(el('span',{'class':'badge manual',title:'download it yourself, then '+
         'ingest it from a folder'},'manual'));}
+    // 0.103 (#133): generated on this computer by CAMBER; no real building behind it
+    if(d.synthetic){c3.appendChild(document.createTextNode(' '));
+      c3.appendChild(el('span',{'class':'badge synthetic',title:'generated locally by CAMBER '+
+        '(nothing is downloaded); it describes no real building'},'synthetic'));}
     // 0.103 (#123): the optional extras an entry needs; a missing one blocks the fetch
     (d.requires_extras||[]).forEach(function(x){
       var m=miss.filter(function(k){return k.extra===x;})[0];
@@ -175,7 +180,7 @@ function render(){
       if(m)c3.appendChild(el('div',{'class':'hint'},'install first: '+(m.hint||x)));});
     tr.appendChild(c3);
     tr.appendChild(el('td',{'class':'num','data-label':'Download'},
-      bytes(sub(d).download_bytes)));
+      d.synthetic?'generated':bytes(sub(d).download_bytes)));
     tr.appendChild(el('td',{'class':'num hide-sm'},sub(d).store_bytes==null?'?':
       bytes(sub(d).store_bytes)));
     var c6=el('td',{'data-label':'Status'});
@@ -184,7 +189,8 @@ function render(){
       f.facility_id+(f.state&&f.state!=='active'?' ['+f.state+']':'')+' · '+
       (f.rows!=null?Number(f.rows).toLocaleString()+' rows':'')));});}
     else c6.appendChild(el('div',{'class':'state'+(fetched(d)?' warn':'')},
-      fetched(d)?'fetched, not ingested':'not fetched'));
+      fetched(d)?(d.synthetic?'generated, not ingested':'fetched, not ingested'):
+      (d.synthetic?'not generated':'not fetched')));
     tr.appendChild(c6);
     var c7=el('td',{'class':'links'});
     fac.forEach(function(f){
@@ -195,7 +201,7 @@ function render(){
     if(/^(https:\/\/|\/lab\/docs\/workbook\/)/.test(d.exercise||''))c7.appendChild(el('a',
       {href:d.exercise,target:'_blank',rel:'noopener noreferrer'},'exercise'));
     if(/^https:\/\//.test(d.landing_url||''))c7.appendChild(el('a',{href:d.landing_url,
-      target:'_blank',rel:'noopener noreferrer'},'publisher'));
+      target:'_blank',rel:'noopener noreferrer'},d.synthetic?'how it is made':'publisher'));
     if(d.manual){var bf=el('button',{type:'button'},'From a folder…');bf.disabled=miss.length>0;
       bf.addEventListener('click',function(){fromFolder(d);});c7.appendChild(bf);}
     var have=fac.length||d.bytes_on_disk>0||Object.keys(d.fetched||{}).some(function(k){
@@ -390,7 +396,8 @@ reports. Loopback only. <span id="where"></span></div>
 <label>Licence <select id="lic"><option value="">all</option><option value="open">open</option>
 <option value="research">research-only</option></select></label>
 <label>Kind <select id="kind"><option value="">all</option><option value="simulated">simulated
-</option><option value="real">real</option><option value="lab">lab</option></select></label>
+</option><option value="real">real</option><option value="lab">lab</option>
+<option value="synthetic">synthetic</option></select></label>
 <label><input type="checkbox" id="labeled"> labelled faults</label>
 <label><input type="checkbox" id="have"> ingested</label>
 <span id="shown" class="muted"></span>

@@ -211,6 +211,8 @@ class LabApp:
                     "labeled_faults": e.labeled_faults,
                     "manual": e.manual,
                     "manual_instructions": e.manual_instructions if e.manual else "",
+                    # 0.103 (#133): generated locally by CAMBER, never downloaded
+                    "synthetic": e.synthetic,
                     "equipment": e.equipment,
                     "requires_extras": list(e.requires_extras),
                     # 0.103 (#123): an extra that is not installed disables the row's fetch
@@ -575,10 +577,11 @@ class LabApp:
     def _fetch_one(self, job, entry, subset, accepted: bool) -> dict:
         from ..datasets._ops import fetch_dataset
 
-        job.report(f"{entry.id}: fetching")
+        job.report(f"{entry.id}: {'generating' if entry.synthetic else 'fetching'}")
+        verb = "generating" if entry.synthetic else "downloading"  # 0.103 (#133)
 
         def progress(name, done, total, _id=entry.id):
-            job.report(f"{_id}: downloading {name}", done, total)
+            job.report(f"{_id}: {verb} {name}", done, total)
 
         res = fetch_dataset(
             entry,
@@ -605,7 +608,7 @@ class LabApp:
                 "files": [f["name"] for f in res.files],
             },
         )
-        job.report(f"{entry.id}: fetched")
+        job.report(f"{entry.id}: {'generated' if entry.synthetic else 'fetched'}")
         return {
             "subset": res.subset,
             "downloaded_bytes": res.downloaded_bytes,

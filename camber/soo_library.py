@@ -72,16 +72,26 @@ def g36_ahu_sequence(
 
 def g36_plant_sequence(
     *,
-    summer_lockout_oat_f: float = 65.0,  # boiler should be off above this OAT
+    summer_lockout_oat_f: float = 65.0,  # boiler (and its pumps) should be off above this OAT
     persistence: int = 2,
 ) -> list:
-    """A small G36-style heating-plant sequence as SOO clauses (ASHRAE Guideline 36)."""
+    """A small G36-style heating-plant sequence as SOO clauses (ASHRAE Guideline 36).
+
+    0.103 (#132): the hot-water pump is locked out with the boiler (PNNL Re-tuning Ch.8), at the
+    same outdoor temperature. A plant with no pump status mapped reports that clause as not
+    assessable."""
     R = Role
     return [
         Clause(
             "boiler_summer_lockout",
             when=Predicate(R.OAT, "gt", value=summer_lockout_oat_f),
             expect=Predicate(R.BOILER_STATUS, "off"),
+            persistence=persistence,
+        ),
+        Clause(
+            "hw_pump_summer_lockout",
+            when=Predicate(R.OAT, "gt", value=summer_lockout_oat_f),
+            expect=Predicate(R.PUMP_STATUS, "off"),
             persistence=persistence,
         ),
     ]

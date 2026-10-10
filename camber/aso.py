@@ -767,6 +767,54 @@ def _rec_boiler_cycle(f, frame, P):
     )
 
 
+def _rec_hw_lockout(f, frame, P):
+    """0.103 (#132): the boiler or its hot-water pump running in warm weather."""
+    m = getattr(f, "metrics", None) or {}
+    pump = getattr(f, "rule", "") == "hw_pump_summer_lockout"
+    what = "Hot-water pump" if pump else "Boiler"
+    sp, lock = m.get("summer_run_pct"), m.get("lockout_oat_f")
+    ok = isinstance(sp, (int, float)) and isinstance(lock, (int, float))
+    cause = (
+        f"{what} running above the {lock:g}°F lockout ({sp:.0f}% of its running hours)"
+        if ok
+        else f"{what} running in warm weather"
+    )
+    off = m.get("boiler_off_pct")
+    if pump and isinstance(off, (int, float)) and off >= 50.0:
+        cause += ", with the boiler off"
+    if pump:
+        action = (
+            "Lock the hot-water pumps out with the boiler: stop them above the heating lockout "
+            "(an outdoor-air enable with a few degrees of deadband) unless a zone or a coil "
+            "calls for heat, and check the pump's hand/off/auto switch and any override."
+        )
+    else:
+        action = (
+            "Enable the boiler only below the heating lockout (an outdoor-air enable with a few "
+            "degrees of deadband) and find what calls for heat above it: an override, a stuck "
+            "zone request, or reheat fighting overcooled zones."
+        )
+    return _rec(
+        f,
+        title=f"Lock out the {'hot-water pump' if pump else 'boiler'} in warm weather",
+        cause=cause,
+        action=action,
+        parameter="Heating-plant outdoor-air lockout",
+        suggested=f"off above ~{lock:g}°F" if isinstance(lock, (int, float)) else "",
+        expected_effect=(
+            "Less pump energy, and no heat carried to valves that leak into the air stream."
+            if pump
+            else "Less boiler standby and firing gas, and less reheat fighting cooling."
+        ),
+        confidence="medium",
+        standard="PNNL Re-tuning Ch.8 (heating-plant lockout)",
+        caveats=[
+            "A plant that serves dehumidification reheat or domestic hot water needs heat in warm "
+            "weather: set the lockout to the sequence's own value before acting."
+        ],
+    )
+
+
 def _rec_compressor_cycle(f, frame, P):
     """0.103 (#125): a DX / heat-pump / chiller compressor short-cycling."""
     m = getattr(f, "metrics", None) or {}
@@ -1229,6 +1277,8 @@ RECOMMENDERS = {
     "hw_pump_dp_reset": _rec_pump_dp,
     "cooling_tower_approach": _rec_cooling_tower,
     "boiler_short_cycle": _rec_boiler_cycle,
+    "boiler_summer_lockout": _rec_hw_lockout,  # 0.103 (#132)
+    "hw_pump_summer_lockout": _rec_hw_lockout,  # 0.103 (#132)
     "compressor_short_cycle": _rec_compressor_cycle,  # 0.103 (#125)
     "leaking_valve": _rec_leaking_valve,
     "dcv_verification": _rec_dcv,

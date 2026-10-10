@@ -90,6 +90,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`hp_room_imbalance`](#hp_room_imbalance) | 9 |  |
 | [`hw_plant_deltat`](#hw_plant_deltat) | 1 |  |
 | [`hw_pump_dp_reset`](#hw_pump_dp_reset) | 2 | yes |
+| [`hw_pump_summer_lockout`](#hw_pump_summer_lockout) | 1 |  |
 | [`leaking_valve`](#leaking_valve) | 8 |  |
 | [`night_weekend_setback`](#night_weekend_setback) | 8 |  |
 | [`outdoor_air_fraction`](#outdoor_air_fraction) | 5 |  |
@@ -806,6 +807,16 @@ How to calibrate:
 - `floor_tol_pct`: Look at the spread of the speed readings while the pump sits at its minimum (trend resolution and rounding); set this just wider than that spread. *Note:* Used only when near_min_pct is "auto".
 
 Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)
+
+## hw_pump_summer_lockout
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `summer_lockout_oat_f` | `65.0` | °F | 50.0 to 80.0 | CAMBER judgment: the same generic mild-climate lockout as boiler_summer_lockout; the check follows PNNL Re-tuning Ch.8 (lock out the hot-water pumps, not only the boiler, in warm weather), which gives no single value |
+
+How to calibrate:
+
+- `summer_lockout_oat_f`: Use the same heating lockout as boiler_summer_lockout: the one the sequence of operations specifies, or the outdoor temperature above which no zone has called for heat in a known-good year of trends. A plant that serves dehumidification reheat or domestic hot water in summer needs a higher value, or none of this check. *Note:* Severity is fixed in code, as for the boiler: warn when the pump runs at OAT above this for >= 5 % of its occupied running hours, fault at >= 20 %. Without an OAT point the check is not evaluated. A config that sets this on boiler_summer_lockout but not here passes the boiler's value on (recorded in the finding's param_basis). Running comes from the pump status, else the speed above 5 %, else the loop flow above 5 % of its own 95th percentile (fixed in code).
 
 ## leaking_valve
 

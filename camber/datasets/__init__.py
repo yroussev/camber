@@ -18,6 +18,10 @@ a ``source.kind: "store"`` config (:func:`config_template` writes one).
     datasets.config_template("lbnl-sdahu", "lab_store", out="sdahu.json")
     print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 
+Synthetic entries (``kind == "synthetic"``, 0.103) are the exception to "downloaded from its
+publisher": :func:`fetch` runs one of CAMBER's own generators instead, deterministically, and the
+data carries CAMBER's licence (see :mod:`camber.datasets._synthetic`).
+
 Licences: entries whose licence forbids commercial use or derivatives (NC / ND) are
 ``access == "research_only"``; :func:`fetch` refuses them unless ``accept_noncommercial=True`` and
 records the acceptance, and every report built from them carries a do-not-redistribute banner.
@@ -69,7 +73,8 @@ def catalog(*, licence: str = "all", kind: str | None = None, labeled: bool | No
     ``licence="commercial"`` keeps only the open tier (entries CAMBER lets you use commercially:
     the licence allows it and no ``access_reason`` holds the entry research-only); ``"all"``
     (default) includes research-only entries. ``kind`` is ``"simulated"``,
-    ``"real"`` or ``"lab"``; ``labeled=True`` keeps entries with ground-truth fault labels.
+    ``"real"``, ``"lab"`` or ``"synthetic"`` (0.103, #133: generated locally by CAMBER, never
+    downloaded); ``labeled=True`` keeps entries with ground-truth fault labels.
     """
     if licence not in ("all", "commercial"):
         raise ValueError("licence must be 'all' or 'commercial'")

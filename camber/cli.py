@@ -594,10 +594,17 @@ def _cmd_datasets_list(args) -> int:
     for e in rows:
         print(
             f"{e.id:14s} {_ds_tier(e):13s} {e.licence:16s} {e.kind:9s} "
-            f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  "
+            f"{'yes' if e.labeled_faults else 'no':6s} "
+            f"{'generated' if e.synthetic else _mb(e.download_bytes()):>9s}  "
             f"{e.title}{' [manual download]' if e.manual else ''}"
+            f"{' [synthetic: generated locally]' if e.synthetic else ''}"
         )
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
+    if any(e.synthetic for e in rows):  # 0.103 (#133)
+        print(
+            "synthetic: CAMBER generates the data on this computer (nothing is downloaded); it "
+            "describes no real building."
+        )
     if any(e.research_only for e in rows):
         print(
             "research-only: NC/ND licence (or a stated access reason; see `datasets info`) -- "
@@ -645,6 +652,13 @@ def _cmd_datasets_info(args) -> int:
     if e.dois:
         print(f"doi       : {', '.join(e.dois)}")
     print(f"kind      : {e.kind}; labelled faults: {'yes' if e.labeled_faults else 'no'}")
+    if e.synthetic:  # 0.103 (#133)
+        gen = e.generator or {}
+        print(
+            f"            synthetic: generated locally by CAMBER (generator {gen.get('name')}, "
+            f"seed {gen.get('seed')}); `fetch` generates it, nothing is downloaded, and it "
+            "describes no real building"
+        )
     if e.equipment:
         print(f"equipment : {e.equipment}")
     if e.teaches:
@@ -762,7 +776,13 @@ def _cmd_datasets_fetch(args) -> int:
         if e.manual:
             print(f"skipping {e.id}: manual download (`camber datasets info {e.id}`)")
             continue
-        print(f"fetching {e.id} ({args.subset or 'default'}, {_mb(e.download_bytes(args.subset))})")
+        if e.synthetic:  # 0.103 (#133)
+            print(f"generating {e.id} (synthetic: CAMBER generates it, nothing is downloaded)")
+        else:
+            print(
+                f"fetching {e.id} ({args.subset or 'default'}, "
+                f"{_mb(e.download_bytes(args.subset))})"
+            )
         res = ds.fetch(
             e.id,
             subset=args.subset,
@@ -771,7 +791,10 @@ def _cmd_datasets_fetch(args) -> int:
             progress=None if args.quiet else _progress_printer(),
         )
         for f in res.files:
-            state = "verified (already present)" if f["skipped"] else "downloaded + verified"
+            if f.get("generated"):
+                state = "already generated" if f["skipped"] else "generated"
+            else:
+                state = "verified (already present)" if f["skipped"] else "downloaded + verified"
             print(f"  {f['name']}: {state}, sha256 {f['sha256'][:12]}…")
         for w in res.warnings:
             print(f"  warning: {w}")
@@ -2986,7 +3009,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     dsl = dssub.add_parser("list", help="list catalog datasets")
     dsl.add_argument("--licence", choices=["commercial", "all"], default="all")
-    dsl.add_argument("--kind", choices=["simulated", "real", "lab"])
+    dsl.add_argument("--kind", choices=["simulated", "real", "lab", "synthetic"])
     dsl.add_argument("--labeled", action="store_true", help="only datasets with fault labels")
     dsl.add_argument("--json", action="store_true")
     dsl.set_defaults(func=_cmd_datasets_list)

@@ -355,6 +355,8 @@ RULE_REFERENCES: dict = {
     "hw_pump_dp_reset": ("pnnl-guide-plant-heating", _CH8),
     "boiler_short_cycle": (_CH8,),
     "boiler_summer_lockout": (_CH8,),
+    # 0.103 (#132): the heating guide's warm-weather shutdown and ch. 8's pump lockout
+    "hw_pump_summer_lockout": ("pnnl-guide-plant-heating", _CH8),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
 

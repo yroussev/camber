@@ -167,7 +167,8 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     with the resample interval; `how="any"` keeps the old "on at any moment" bins.
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
-  CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
+  CHW reset + low-ΔT, boiler summer-lockout + short-cycle, hot-water pump warm-weather lockout
+  (`hw_pump_summer_lockout`, 0.103). Flags include design targets
   (`design_kw_per_ton`, `max_starts_per_day`, …).
 - **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
   direction excessively (unstable loop) by counting reversals per *observed* hour beyond a deadband

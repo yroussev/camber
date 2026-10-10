@@ -32,12 +32,35 @@ from .schedules import occupied_mask
 __all__ = [
     "HWPLANT_MEASURES",
     "HWPlantResult",
+    "HWPumpLockoutResult",
+    "LOCKOUT_FAULT_PCT",
+    "LOCKOUT_WARN_PCT",
+    "SUMMER_LOCKOUT_OAT_F",
     "analyze_hw_plant",
+    "analyze_hw_pump_lockout",
+    "lockout_severity",
 ]
 
 # Roles consumed (kept as strings here to avoid a hard import cycle with model;
 # the rule wrapper maps Role -> these legacy column names).
 HWPLANT_MEASURES = ["BoilerStatus", "HWS_Temp", "HWR_Temp", "HW_DiffPress", "OAT"]
+
+#: The default warm-weather lockout (°F) of ``boiler_summer_lockout`` and
+#: ``hw_pump_summer_lockout``: a generic mild-climate value, to be replaced by the site's own.
+SUMMER_LOCKOUT_OAT_F = 65.0
+#: Share (%) of running hours above the lockout at which a lockout rule warns, and faults.
+LOCKOUT_WARN_PCT = 5.0
+LOCKOUT_FAULT_PCT = 20.0
+
+
+def lockout_severity(summer_run_pct) -> str:
+    """``ok`` / ``warn`` / ``fault`` for a share of running hours above the lockout (``info``
+    when the share was not evaluated, ``None``). Shared by both warm-weather lockout rules."""
+    if summer_run_pct is None:
+        return "info"
+    if summer_run_pct >= LOCKOUT_FAULT_PCT:
+        return "fault"
+    return "warn" if summer_run_pct >= LOCKOUT_WARN_PCT else "ok"
 
 
 @dataclass
@@ -59,10 +82,21 @@ class HWPlantResult:
     dp_median: float
     coverage_start: str
     coverage_end: str
+    # 0.103 (#133): the warmest outdoor temperature at which the boiler ran (None = no OAT or no
+    # running hours): where the plant actually stops firing, to compare with the lockout
+    max_oat_running_f: float | None = None
 
     def as_dict(self):
         """Return the result as a plain dict."""
         return asdict(self)
+
+
+def _max_running_oat(work: pd.DataFrame, running: pd.Series) -> float | None:
+    """The warmest OAT over the running samples of ``work`` (``None`` when there is none)."""
+    if "OAT" not in work.columns or not bool(running.any()):
+        return None
+    oat = pd.to_numeric(work.loc[running, "OAT"], errors="coerce").dropna()
+    return round(float(oat.max()), 1) if len(oat) else None
 
 
 def _ols_slope(x: np.ndarray, y: np.ndarray):
@@ -173,6 +207,87 @@ def analyze_hw_plant(
         low_deltaT_pct=low_dt_pct,
         design_deltaT_min_f=float(design_deltaT_min_f),
         dp_median=dp_median,
+        coverage_start=str(df.index.min()),
+        coverage_end=str(df.index.max()),
+        max_oat_running_f=_max_running_oat(work, running),
+    )
+
+
+# --------------------------------------------------------------------------------------------- #
+# 0.103 (#132): the hot-water pump's warm-weather lockout                                        #
+# --------------------------------------------------------------------------------------------- #
+
+
+@dataclass
+class HWPumpLockoutResult:
+    """Hot-water pump running hours against the warm-weather lockout (PNNL Re-tuning Ch.8)."""
+
+    equip: str
+    n_considered: int  # occupied samples with a pump run reading
+    pump_running_pct: float  # % of those samples the pump runs
+    n_running: int
+    summer_run_pct: float | None  # % running samples at OAT > lockout; None = not evaluated
+    lockout_oat_f: float
+    max_oat_running_f: float | None  # warmest OAT at which the pump ran (None = no OAT / never)
+    # % of the pump's samples above the lockout in which the boiler did not fire (None = no
+    # boiler run signal, or no warm running samples): the pump left running on its own
+    boiler_off_pct: float | None
+    coverage_start: str
+    coverage_end: str
+
+    def as_dict(self):
+        """Return the result as a plain dict."""
+        return asdict(self)
+
+
+def analyze_hw_pump_lockout(
+    df: pd.DataFrame,
+    equip: str,
+    *,
+    summer_lockout_oat_f: float = SUMMER_LOCKOUT_OAT_F,
+    occupied_only: bool = True,
+) -> HWPumpLockoutResult | None:
+    """Share of a hot-water pump's running hours at OAT above the warm-weather lockout.
+
+    ``df`` columns: ``PumpRun`` (0/1, the pump running; missing = no reading), ``OAT`` and,
+    optionally, ``BoilerRun`` (0/1, the boiler firing). The same semantics as the boiler's check
+    in :func:`analyze_hw_plant`: occupied samples only (the generic weekday schedule), "above"
+    means OAT strictly greater than the lockout, and without OAT the share is ``None`` (not
+    evaluated), never a confident 0 %. A pump that never runs scores an honest 0 %.
+    """
+    if "PumpRun" not in df.columns:
+        return None
+    work = df.copy()
+    if occupied_only:
+        work = work[occupied_mask(work.index)]
+    work = work.dropna(subset=["PumpRun"])
+    n = len(work)
+    if n == 0:
+        return None
+    running = work["PumpRun"] > 0.5
+    n_run = int(running.sum())
+    boiler_off = None
+    if "OAT" not in work.columns:
+        summer = None
+    elif n_run:
+        oat_run = work.loc[running, "OAT"].dropna()
+        warm = oat_run > summer_lockout_oat_f
+        summer = round(100.0 * float(warm.mean()), 2) if len(oat_run) else None
+        if "BoilerRun" in work.columns and bool(warm.any()):
+            fire = work.loc[warm[warm].index, "BoilerRun"].dropna()
+            if len(fire):
+                boiler_off = round(100.0 * float((fire <= 0.5).mean()), 2)
+    else:
+        summer = 0.0
+    return HWPumpLockoutResult(
+        equip=equip,
+        n_considered=n,
+        pump_running_pct=round(100.0 * n_run / n, 2),
+        n_running=n_run,
+        summer_run_pct=summer,
+        lockout_oat_f=float(summer_lockout_oat_f),
+        max_oat_running_f=_max_running_oat(work, running),
+        boiler_off_pct=boiler_off,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
     )

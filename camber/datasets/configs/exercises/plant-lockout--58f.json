@@ -1,0 +1,28 @@
+{
+  "_comment": "Workbook exercise plant-lockout, the threshold lesson: the same two rules with the lockout lowered to 58 F, the value of the low_lockout plant's own sequence. Set on boiler_summer_lockout only; hw_pump_summer_lockout inherits it (its findings record param_basis 'inherited from boiler_summer_lockout in this config').",
+  "_dataset": "synthetic-hw-plant-lockout",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-hw-plant-lockout"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "HW_PLANT",
+      "marker_role": "hw_supply_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "boiler_summer_lockout",
+      "params": {
+        "summer_lockout_oat_f": 58.0
+      }
+    },
+    "hw_pump_summer_lockout"
+  ],
+  "report": {
+    "level": 2
+  }
+}

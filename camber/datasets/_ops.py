@@ -92,6 +92,10 @@ def fetch_dataset(
     :class:`._paths.CacheReadOnly`.
     """
     sname = subset or "default"
+    if entry.synthetic:  # 0.103 (#133): generated locally, never downloaded
+        from ._synthetic import ensure_generated
+
+        return ensure_generated(entry, subset=sname, data_dir=data_dir, progress=progress)
     files = entry.subset_files(sname)
     if entry.manual:
         raise ManualDownload(
@@ -272,6 +276,11 @@ def adopt_local_files(
     data still needs an acknowledgement).
     """
     sname = subset or "default"
+    if entry.synthetic:
+        raise ValueError(
+            f"{entry.id} is synthetic: CAMBER generates its files, so there is nothing to take "
+            f"from a folder (run `camber datasets fetch {entry.id}`)"
+        )
     files = entry.subset_files(sname)
     src_root = os.path.abspath(os.fspath(from_dir))
     if not os.path.isdir(src_root):
