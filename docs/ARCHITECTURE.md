@@ -84,7 +84,9 @@ prioritized findings) to text/HTML.
 
 ### Storage — `camber/store/`
 `ParquetStore`: a tidy long-form, hive-partitioned (site/year) Parquet store keyed
-to the entity model, with tag-filtered reads, rollups, and retention pruning.
+to the entity model, with tag-filtered reads, rollups, and retention pruning. Every part it
+writes is byte-reproducible: sorted rows, fixed writer options, no pandas metadata (see
+[SCALE.md](SCALE.md#reproducible-part-files)).
 
 ### Interop — `camber/interop/`
 `brick.py` derives a role mapping from a Brick (`.ttl`) model; `export.py` emits

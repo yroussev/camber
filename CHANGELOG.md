@@ -162,6 +162,18 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   new lab controls and POST routes, and the lab screenshots are re-rendered.
 
 ### Fixed
+- **Store part files are byte-reproducible (#130).** Ingesting the same files twice gave part
+  files with the same rows in a different order, because the writer stored rows in the order its
+  threads finished. Every part the store writes (`write_long`, `write_rollup`, dataset ingest,
+  `migrate-partitions` and retention rollups) now has its rows sorted by
+  `(ts, equip, role, equip_class, value)` and is written single-threaded as one row group, with
+  fixed writer options. It carries a `camber.layout = "1"` marker and no pandas metadata, which
+  recorded library versions. The same inputs with the same CAMBER and pyarrow versions now give
+  byte-identical files with the same names. On another pyarrow version only the rows are
+  guaranteed. Large ingests are up to about 3x smaller (2 to 3.4x for the LBNL simulation archives,
+  `irish-ahu` and `nuig-ahu101`). Existing stores read unchanged and need no re-ingest;
+  `camber datasets ingest <id> --force` rewrites one in the new layout. Edge forwarder parts are
+  unchanged. See [SCALE.md](docs/SCALE.md#reproducible-part-files).
 - **The trend viewer's UTC box stays hidden when no time zone is recorded (#122).** A `display`
   rule on the control labels overrode the `hidden` attribute, so the box still showed.
 - **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row

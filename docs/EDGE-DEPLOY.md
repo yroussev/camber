@@ -62,6 +62,12 @@ layout** so the cloud reads it with the existing `ParquetStore.read_long` / `rea
   and `camber store migrate-partitions` converts them. If an older forwarder re-sends a year-only
   part after its year was migrated, the landing recognises it (same name and sha256 as recorded by
   the migration) and quarantines it as a `duplicate` instead of storing its rows twice.
+- **Edge parts are content-addressed, not canonicalised.** Since 0.103 the store writes its own
+  parts in a canonical, byte-reproducible layout (see
+  [SCALE.md](SCALE.md#reproducible-part-files)). The forwarder does not: its part keeps the
+  batch's row order and pyarrow's default writer metadata, so its name follows those bytes. The
+  same batch re-sent by the same forwarder still lands the same key, and the store reads both
+  kinds of part the same way.
 - **Per-batch manifest** (sink metadata): facility, window, rows, roles, equips, quality summary,
   full `content_sha256`, `schema_version` — for cloud-side reconciliation and audit.
 - **NDJSON** (`wire_format="ndjson"`) is a documented compatibility fallback for endpoints that can't

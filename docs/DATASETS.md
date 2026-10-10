@@ -437,6 +437,11 @@ rejects their earlier spellings and names the key to use:
 - **Idempotent.** Re-running `ingest` with the same inputs is skipped; `--force`, a different
   subset or a different corrections mode (the content hash covers it) replaces the dataset's
   facilities atomically (staged, then swapped in).
+- **Reproducible.** Since 0.103, ingesting the same files with the same CAMBER and pyarrow
+  versions gives byte-identical part files with the same names, in any archive member order; on
+  another pyarrow version the rows are the same but the bytes may differ. A store ingested
+  before 0.103 reads the same and is not re-ingested; `ingest --force` rewrites it in the
+  canonical layout. See [SCALE.md](SCALE.md#reproducible-part-files).
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).

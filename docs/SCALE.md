@@ -38,6 +38,41 @@ migrate-partitions STORE` converts them (a dry run unless `--apply --yes`; crash
 idempotent). Month partitions are what month-level retention prunes: see
 [PORTFOLIO.md](PORTFOLIO.md#retention).
 
+## Reproducible part files
+
+Since 0.103 every part the store writes is in one canonical layout, so the same rows give the same
+bytes. That holds for `write_long` (and `write_role_frame`, `write_rollup` and every dataset
+ingest), `migrate-partitions` and the retention rollups. Each part:
+
+- has its rows sorted by `(ts, equip, role, equip_class, value)`, whatever order the source
+  frame, the archive members or the wide frame's columns came in;
+- is written single-threaded as one row group (up to 1,048,576 rows), with fixed writer options:
+  snappy, dictionary encoding, statistics, format 2.6, data page v1;
+- carries no pandas metadata, which records the pandas and pyarrow versions, and instead the
+  key-value marker `camber.layout = "1"`. A retention rollup also keeps its
+  `camber.rollup.covers` key.
+
+Part names were already deterministic (`part-<seq>-<i>.parquet`, with `<seq>` counting the
+facility's earlier writes).
+
+**What is guaranteed.** The same inputs with the same CAMBER version and the *exact same* pyarrow
+version give byte-identical part files, with the same names. Across pyarrow (or pandas) versions,
+only the content is guaranteed: the same rows in the same order with the same types. The bytes may
+differ, because the Parquet footer's `created_by` names the full pyarrow version and the encoder
+can change. CAMBER does not overwrite `created_by`. The tests check both: a content digest that
+holds on every pyarrow version, and a byte golden pinned to one pyarrow release.
+
+**Older stores.** Parts written before 0.103 (pandas metadata, a large part in about ten row groups,
+rows in thread order) read back exactly like canonical ones, and a store may mix both. Nothing needs re-ingesting.
+The ingest content hash is unchanged, so an already-ingested dataset is still skipped;
+`camber datasets ingest <id> --force` rewrites it in the canonical layout. Sorted rows in one row
+group also make large ingests smaller on disk: 2 to 3.4 times smaller for the LBNL simulation
+archives, `irish-ahu` and `nuig-ahu101`, and 1.8 times smaller across all the workbook's dataset stores
+(537 MB to 291 MB).
+
+The edge forwarder's parts are content-addressed but not canonicalised: see
+[EDGE-DEPLOY.md](EDGE-DEPLOY.md#2-data-flow-landing-format).
+
 ## Facility identity (why an id, not a name)
 
 Each facility is keyed by a **stable, path-safe `facility_id`**, decoupled from its human display

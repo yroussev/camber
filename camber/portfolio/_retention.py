@@ -387,9 +387,8 @@ def _write_rollup(
     import hashlib
 
     import pyarrow as pa
-    import pyarrow.parquet as pq
 
-    from ..store.parquet_store import _read_part_file
+    from ..store.parquet_store import _canonicalize, _read_part_file, _write_part
 
     target = _part_path(root, fid, year, month)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -415,7 +414,8 @@ def _write_rollup(
                         import shutil
 
                         shutil.copy2(src, os.path.join(stage, n))
-    pq.write_table(table, os.path.join(stage, name))
+    # the canonical part layout (#130): sorted, fixed writer options, no pandas metadata
+    _write_part(_canonicalize(table, keep_meta=(_COVERS_KEY,)), os.path.join(stage, name))
     _swap.commit(target)
     back = _read_part_file(os.path.join(target, name)).to_pandas()
     return {"rows": int(len(back)), "n": int(back["n"].sum()) if len(back) else 0}
