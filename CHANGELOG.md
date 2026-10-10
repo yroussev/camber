@@ -162,6 +162,8 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   new lab controls and POST routes, and the lab screenshots are re-rendered.
 
 ### Fixed
+- **The trend viewer's UTC box stays hidden when no time zone is recorded (#122).** A `display`
+  rule on the control labels overrode the `hidden` attribute, so the box still showed.
 - **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row
   under its header, and pandas' chunked CSV parsing typed each chunk of a column separately,
   then warned that the columns had mixed types. The catalog's CSV reader now types each column

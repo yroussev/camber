@@ -88,6 +88,7 @@ def role_units() -> dict:
 
 
 _UI_STYLE = (
+    "[hidden]{display:none!important}"  # a display rule below would otherwise un-hide a label
     ".controls{margin:14px 0;display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap}"
     ".controls label{font-size:14px}.muted{color:#666;font-size:13px}"
     ".roles{display:inline-flex;gap:10px;flex-wrap:wrap}.roles label{font-size:13px}"

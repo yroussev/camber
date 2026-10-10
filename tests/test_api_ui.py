@@ -163,6 +163,14 @@ def test_ui_time_axis_label_comes_from_points_and_never_defaults_to_utc():
     assert "'time ('+zoneName()+')'" not in h  # the old label that said UTC with no zone
 
 
+def test_ui_hidden_attribute_beats_label_display_rules():
+    # the UTC box is hidden by the hidden attribute when no zone is recorded; the
+    # .controls label display rule must not override it
+    h = live_dashboard_html()
+    assert "[hidden]{display:none!important}" in h
+    assert "id='utcbox' hidden" in h
+
+
 def test_ui_page_has_no_external_asset_after_the_rework():
     h = live_dashboard_html()
     assert "<script src" not in h and "<link " not in h and "https://" not in h
