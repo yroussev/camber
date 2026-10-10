@@ -750,9 +750,10 @@ def _drop_registry_timezone(store, fid):
         json.dump(data, fh)
 
 
-def _ui_axis_label(facilities: dict, fid: str, *, utc: bool = False) -> str | None:
-    """Run the trend viewer's own zone code (setZone / zoneName) on a /facilities body in node
-    and return its time-axis label; ``None`` when node is not installed."""
+def _ui_axis_label(facilities: dict, points: dict, fid: str, *, utc: bool = False) -> str | None:
+    """Run the trend viewer's own zone code (setZone / axisLabel) on a /facilities body and the
+    facility's /points body in node and return its time-axis label; ``None`` when node is not
+    installed. 0.103 (#122): the label comes from /points' ``time_axis``."""
     import shutil
     import subprocess
 
@@ -763,17 +764,17 @@ def _ui_axis_label(facilities: dict, fid: str, *, utc: bool = False) -> str | No
         return None
     h = live_dashboard_html()
     assert "FTZ[f.facility_id]=f.timezone||null" in h  # how the page reads /facilities
-    assert "'time ('+zoneName()+')'" in h  # how it labels the time axis
+    assert "AXIS=d.time_axis||AXIS" in h  # and the label /points gives
     a = h.index("function setZone(){")
     b = h.index("function offMs(", a)
     script = (
         "var FTZ={},TZ=null,fmtZ=null,offC={};"
         f"var facSel={{value:{json.dumps(fid)}}},utcBox={{checked:{json.dumps(utc)}}},"
         "utcLbl={hidden:true};"
-        f"var d={json.dumps(facilities)};"
+        f"var d={json.dumps(facilities)},AXIS={json.dumps(points['time_axis'])};"
         "d.facilities.forEach(function(f){FTZ[f.facility_id]=f.timezone||null;});"
         + h[a:b]
-        + "setZone();process.stdout.write('time ('+zoneName()+')');"
+        + "setZone();process.stdout.write(axisLabel());"
     )
     out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
@@ -804,11 +805,16 @@ def test_ingested_facility_reports_its_zone_through_the_read_api(tmp_path, pkg_d
     rows = {f["facility_id"]: f for f in body["facilities"]}
     assert rows[fid]["timezone"] == TZ
     assert set(rows["plain"]) == {"facility_id", "name", "display_name", "state"}  # unchanged
-    label = _ui_axis_label(body, fid)
+    api = ReadAPI(ParquetStore(store))
+    pts = {f: dispatch(api, "GET", "/points", {"facility_id": [f]})[1] for f in (fid, "plain")}
+    label = _ui_axis_label(body, pts[fid], fid)
     if label is not None:
-        assert label == f"time ({TZ})"
-        assert _ui_axis_label(body, fid, utc=True) == "time (UTC)"  # the UTC box converts
-        assert _ui_axis_label(body, "plain") == "time (UTC)"  # no zone: UTC, as before
+        assert label == f"local time ({TZ})"
+        assert _ui_axis_label(body, pts[fid], fid, utc=True) == "time (UTC)"  # the box converts
+        # no zone: the page never claims UTC, even with the (hidden) box ticked (0.103, #122)
+        no_zone = "local time (no time zone recorded)"
+        assert _ui_axis_label(body, pts["plain"], "plain") == no_zone
+        assert _ui_axis_label(body, pts["plain"], "plain", utc=True) == no_zone
     # re-ingesting the same building in another zone moves the facility's zone with it
     ingest_package(pkg_dir, timezone="America/New_York", unit_system="ip", store=store)
     rows = {f["facility_id"]: f for f in ReadAPI(ParquetStore(store)).facilities()["facilities"]}

@@ -12,6 +12,48 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.103.0] — Unreleased
+
+### Added
+- **Trend viewer: date range, brush-to-zoom and a whole-span view (#122).** The `/ui` trend
+  viewer that `camber serve` and `camber lab` both serve gains **From** / **to** date inputs,
+  **Last 7 days** / **Last 30 days** presets (counted back from the last stored sample) and
+  **All**. Brushing a panel now zooms to that span and reads it again at full resolution (up to
+  20,000 samples per series), and still selects its samples for the `N selected` readout; **Zoom
+  out** steps back through the spans viewed. A line under the controls gives the span shown, its
+  time-axis label, and how many samples were drawn out of how many stored. See
+  [Visualization](docs/VISUALIZATION.md#live-web-ui-072) and [the lab guide](docs/LAB.md).
+- **`/history?max_points=` (#122).** The read API's `/history` takes an optional `max_points`, a
+  per-series budget: a longer series is cut into `max_points / 2` equal time buckets, and each
+  keeps its minimum and maximum sample, so spikes, dips and flatlines survive the thinning. The
+  reply adds `source_count` (rows in the window before thinning), `downsampled`, `max_points`,
+  and `first` / `last` (the window's first and last stored timestamp). A request without
+  `max_points` returns the same rows as before.
+- **`time_axis` on `/points` (#122).** `/points?facility_id=…` also returns how to label that
+  facility's time axis: `timezone` (or `null`), `local_label`, and `utc_label` (`null` when the
+  store records no time zone for the facility).
+
+### Changed
+- **The trend viewer draws each series' whole span, not its first 5,000 samples (#122).** It
+  opens on every stored sample, thinned on the server to at most 2,000 per series with a min/max
+  envelope, so a long series is no longer cut to its first few days and series that start at
+  different times share one axis.
+- **The trend viewer's facility and equipment lists refresh without a reload (#122).** They are
+  read again when either list is opened, on **Reload lists** or **Refresh**, and on each live
+  poll, so a facility ingested after the page opened appears; the chosen equipment and ticked
+  roles are kept.
+- **A facility with a recorded time zone has its trend axis labelled `local time (<zone>)`
+  (#122)**, and `time (UTC)` only while the **UTC** box is ticked. It was `time (<zone>)`.
+
+### Fixed
+- **The trend viewer no longer labels a zone-less clock as UTC (#122).** For a facility with no
+  recorded time zone (most LBNL and ORNL datasets), the time axis and hover readout said UTC
+  although they showed the publisher's local clock. They now say `local time (no time zone
+  recorded)`, and there is no UTC box.
+- **`/history` answers a malformed `start`, `end`, `limit` or `max_points` with a 400 (#122)**,
+  naming the parameter, instead of a 500. An offset on `start` / `end` is dropped rather than
+  compared against the store's naive wall clock.
+
 ## [0.102.0] — 2026-10-10
 
 **0.102: follow-ups from 0.101, sample charts across the docs, a guide to the lab, and an access token on every lab route (#110–#121, #127).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue ranks first again (#112). The docs site gains charts and screenshots rendered by CAMBER's own chart code (#113) and a step-by-step guide to `camber lab` (#121). Evidence charts shade exactly what each rule flags and name roles with their units (#114–#117, #119). A stuck supply-air sensor on a scheduled fan is now flagged (#118). **Behaviour change (#120):** `free_cooling_missed` no longer judges fan-off hours, so missed shares rise on units whose fan runs only when occupied; the `air-economizer` and capstone answers move with it. **Security (#127):** `camber lab` now requires a per-run access token on every route; open the URL it prints.
