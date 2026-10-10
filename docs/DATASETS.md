@@ -70,7 +70,9 @@ was. When a job finishes, the page shows the dataset's citation. Please cite it.
 
 **Research-only datasets.** Selecting one opens a dialog that states the licence terms. You tick
 *I accept* and **type the dataset id**; only then is the fetch queued. The acceptance is recorded
-in `acknowledgements.json`, exactly like `--accept-noncommercial` (with `via: "lab fetch"`).
+in `acknowledgements.json`, exactly like `--accept-noncommercial` (with `via: "lab fetch"`): in
+the cache's, or in your own when the cache is read-only (see
+[a read-only shared cache](#caches-locks-and-a-read-only-shared-cache)).
 Every fetch asks again. An ingest of data already fetched with an acknowledgement does not.
 
 **Trends and reports.** An ingested dataset's row links to:
@@ -171,7 +173,9 @@ Each entry carries an SPDX licence id and a licence **tier** (`access`), shown b
   commercially or redistribute it (or anything built from it). CAMBER makes that an explicit act:
   - `fetch` refuses it unless you pass `--accept-noncommercial` -- on every fetch; there is no
     environment-variable bypass. The acceptance is appended to `acknowledgements.json` in the
-    cache (and to the manifest) before anything downloads.
+    cache (and to the manifest) before anything downloads. Against a cache you cannot write, it
+    goes to your own ledger instead (see
+    [a read-only shared cache](#caches-locks-and-a-read-only-shared-cache)).
   - `fetch --all` covers the **open tier only**; research-only entries need `--licence all`
     **and** `--accept-noncommercial`.
   - `ingest` needs an acknowledgement of the entry's current licence (from the fetch, or its own
@@ -410,6 +414,67 @@ rejects their earlier spellings and names the key to use:
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).
+
+## Caches, locks and a read-only shared cache
+
+**The cache.** Downloads go to the dataset cache: `--dir`, else `$CAMBER_DATA_DIR`, else
+`$XDG_CACHE_HOME/camber/datasets`, else `~/.cache/camber/datasets`. Each dataset has a folder,
+`<cache>/<id>/downloads/` for the files as published and `<cache>/<id>/extracted/` for the
+archive members an ingest needed. Beside them are `manifest.json` (what was fetched, with which
+SHA-256), `acknowledgements.json` (the research-only acceptances) and, since 0.103, `_lock`.
+
+**Locks (0.103).** Two processes writing one cache or one store, such as two `camber lab`s or a
+lab and `camber datasets ingest`, no longer get in each other's way:
+
+- every write to a cache holds the cache's single-writer lock, `<cache>/_lock`. That covers a
+  fetch that downloads, `ingest --from-dir` placing files, an ingest extracting archive members
+  or recording an acknowledgement, and `remove`;
+- an ingest, and `remove --purge-store`, hold the store's lock for as long as they write it.
+  A plain store's lock is `<store>/_lock`. A store inside a
+  [portfolio workspace](PORTFOLIO.md) uses the workspace's own lock, never a second one, so a
+  command that already holds it (the lab's workspace ingest) carries on without deadlocking;
+- a second writer **waits up to 30 seconds**, then stops with an error that names the holder:
+  `dataset cache … is locked by <pid>@<host> since <time>` or `store … is locked by …`
+  (`camber datasets` exits 1; a lab job fails with that message). Run it again once the other
+  job finishes;
+- reads take no lock: `status`, the lab's catalog, trends and reports, and `camber run` on the
+  store. Files and partitions are swapped in whole, so a reader sees the old data or the new;
+- the lock is the kernel's (`flock`, or `msvcrt` on Windows), the same one the portfolio uses. It
+  is released when its process exits, even after a crash or `kill -9`. A `_lock` file left behind
+  is not a stale lock, only stale text, and the next writer takes it over;
+- advisory locks are unreliable on some network filesystems (older NFS, SMB without byte-range
+  locks). Keep a cache that several machines write on a local disk, or give each machine its own.
+
+The lock covers what `camber datasets` and `camber lab` write. Other commands that write a plain
+store, such as `camber ingest` of a CSV export, do not take it.
+
+**A read-only shared cache (0.103).** A cache that you can read but not write, such as a course
+folder on a shared drive that one person filled, now works:
+
+- **Fetch** checks that every file of the subset is present and matches its pinned size and
+  SHA-256. If so, it downloads nothing and writes nothing, not even the manifest; a writable
+  cache whose manifest already records the files is left alone the same way. If a file is
+  missing or does not verify, the fetch stops with *the dataset cache … is read-only for this
+  user*: ask whoever maintains the cache to fetch it there, or use a cache you can write.
+- **Ingest** reads the downloads where they are. Archive members already extracted in the cache
+  are used as they are. Members it still needs are extracted into a scratch folder next to the
+  ingest's staging area in the **store** (`<store>/_staging/`), which is deleted when the ingest
+  ends. So the store's disk needs room for them while the ingest runs, and each ingest extracts
+  them again. To avoid that, whoever fills the cache can ingest each dataset once, which leaves
+  its members extracted there.
+- **Research-only acknowledgements are per user.** Against a read-only cache, your
+  acknowledgement goes to your own ledger, `$XDG_STATE_HOME/camber/datasets/acknowledgements.json`
+  (else `~/.local/state/camber/datasets/acknowledgements.json`). The record names the cache. Only
+  your own ledger counts there: the cache's manifest records the acceptance of the person who
+  filled it, which does not stand in for yours. So the first fetch or ingest of a research-only
+  dataset from a shared cache asks you to accept its terms. A cache you can write keeps its
+  acknowledgements in its own `acknowledgements.json` and manifest, as before. Everyone who
+  writes a *writable* shared cache shares those.
+- **What still needs a writable cache:** downloading, `ingest --from-dir`, and `remove`. They
+  stop with the read-only message and change nothing.
+
+"Read-only" means the current user cannot create files in the cache folder (or in the dataset's
+folder inside it).
 
 ## Scoring
 

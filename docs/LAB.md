@@ -283,7 +283,9 @@ members an ingest needed.
   estimate of the space it takes once ingested; `default` subsets stay under about 100 MB in the
   store.
 - For a dataset published as an archive, the members an ingest extracts **stay in the cache**,
-  next to the download, and can be larger than it. The page does not count them.
+  next to the download, and can be larger than it. The page does not count them. With a
+  read-only cache they are extracted into the store's `_staging/` folder for the length of the
+  ingest instead (see [Sharing one cache read-only](#sharing-one-cache-read-only)).
 - `camber datasets status --dir D --store S` lists, per dataset, the subsets fetched, the bytes
   on disk in the cache (downloads and extractions) and the facilities ingested.
 - The `full` subsets are much bigger than `default`. Pick them only when an exercise asks you
@@ -333,12 +335,46 @@ or set it once for every command: `export CAMBER_DATA_DIR=$PWD/course-cache`. Wi
 already in the cache, **Fetch & ingest** verifies the files, downloads nothing and goes straight
 to the ingest.
 
-Give each learner **their own writable copy** of the cache. The lab writes to it (the manifest
-on every fetch, extracted archive members on ingest, the acknowledgements ledger), and two labs
-writing one cache at the same time can get in each other's way.
-
 For the workbook pages offline, run the lab from a source checkout, or point it at a copy of the
 repository's `docs/` folder with `camber lab --docs DIR`.
+
+### Sharing one cache read-only
+
+Since 0.103 the learners do not need their own copy. One read-only cache can serve the whole
+room, for example a folder on a network share that only you can write:
+
+```
+camber datasets fetch ornl-frp-ops irish-ahu lbnl-sdahu --dir /srv/course-cache
+camber datasets ingest ornl-frp-ops irish-ahu lbnl-sdahu --dir /srv/course-cache --store /tmp/warmup
+chmod -R a-w /srv/course-cache      # or share it read-only
+```
+
+Each learner then runs `camber lab --dir /srv/course-cache` (or sets `CAMBER_DATA_DIR`) with their
+own `--store`. With a read-only cache:
+
+- **Fetch & ingest** checks the files against their pinned SHA-256 and writes nothing to the
+  cache. A dataset that is not in the cache cannot be fetched into it. The job fails with *the
+  dataset cache … is read-only for this user*, so fetch every dataset the class needs
+  beforehand.
+- The ingest reads the downloads in place. Archive members missing from the cache's `extracted/`
+  folder are extracted into a scratch folder in the learner's store and deleted afterwards.
+  Ingesting each dataset once yourself (the second command above, into any throwaway store)
+  leaves the members in the cache, so the learners' ingests do not extract them again and
+  their stores need no room for them.
+- **Research-only datasets** ask each learner to accept the terms. Your acceptance, recorded
+  when you filled the cache, does not count for them. Each learner's acceptance goes to their
+  own `acknowledgements.json` under `$XDG_STATE_HOME/camber/datasets/` (else
+  `~/.local/state/camber/datasets/`).
+- `camber datasets remove` and `ingest --from-dir` need a cache they can write.
+- Every learner must be able to read the folder. If anyone still writes to it, its filesystem
+  must support file locks (see
+  [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache)).
+
+A **writable** shared cache also works since 0.103: every write to it takes the cache's lock, so
+two labs fetching into it at once take turns. The second waits up to 30 seconds, then fails
+with *dataset cache … is locked by …*; run the job again when the first one finishes. Everyone
+who writes a writable shared cache also shares its acknowledgements ledger, so prefer a read-only
+one for a class that uses research-only data.
 
 ### Manual downloads
 
@@ -530,9 +566,10 @@ a dialog with the licence terms and the citation.
 
 **Acknowledge** stays disabled until you tick *I accept these terms* **and** type the dataset id
 exactly. **Cancel** queues nothing. The acceptance is recorded in the cache's
-`acknowledgements.json`, and every report built from the data carries the do-not-redistribute
-banner. Each fetch asks again; **Ingest (already fetched)** does not, once the dataset's current
-licence was accepted in this cache.
+`acknowledgements.json` (in your own, for a read-only cache), and every report built from the
+data carries the do-not-redistribute banner. Each fetch asks again; **Ingest (already fetched)**
+does not, once the dataset's current licence was accepted in this cache (by you, for a read-only
+cache).
 
 ### A job failed with another message
 
@@ -543,6 +580,8 @@ The job shows the error in red. The ones you may meet:
 | *… not fetched yet (…); run `camber datasets fetch …` first* | You pressed **Ingest (already fetched)** for a dataset that is not in the cache. Use **Fetch & ingest**. |
 | *… is a manual download: CAMBER does not fetch it* | See [Manual downloads](#manual-downloads). |
 | *portfolio is locked by …* | In a workspace, another command holds the lock. Wait for it to finish, then try again. |
+| *dataset cache … is locked by …* or *store … is locked by …* | Another lab or `camber datasets` command is writing the same cache or store. It waited 30 seconds; try again when the other job finishes. |
+| *the dataset cache … is read-only for this user* | The cache is shared read-only and the dataset is not fully in it. Ask whoever maintains it to fetch the dataset, or use a cache you can write (`--dir`). |
 | *facility … is suspended: the lab ingests only into provisioning or active facilities* | In a workspace, `camber facility resume` (or `restore`) it first. |
 | *report for … failed: …* (in the report's tab) | The report could not be built from the store; the message says why. |
 | *lost contact with the lab server* (at the top of the page) | The lab stopped. Start it again and reload the page. |

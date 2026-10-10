@@ -549,13 +549,18 @@ def _ds_errors(fn):
     def wrapped(args) -> int:
         from .datasets._archive import UnsafeArchive
         from .datasets._fetch import ChecksumMismatch, FetchError, InsufficientSpace
+        from .datasets._paths import CacheReadOnly
         from .datasets._readers import MissingExtra
+        from .portfolio._lock import LockHeld
 
         try:
             return fn(args)
         except ChecksumMismatch as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_CHECKSUM
+        except (LockHeld, CacheReadOnly) as e:  # 0.103 (#124): a busy or read-only cache/store
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         except PermissionError as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_LICENCE

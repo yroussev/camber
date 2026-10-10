@@ -31,6 +31,26 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   extra `Host` names to answer for a proxy or DNS name: a bare name on any port, `NAME:PORT`
   exactly. `make_server(..., allowed_hosts=[...])` is the Python form, and
   `camber.api.server.check_request` the pure request check.
+- **Single-writer locks on plain stores and dataset caches (#124).** Two processes writing one
+  cache or one store, such as two `camber lab`s or a lab and `camber datasets ingest`, no longer
+  corrupt each other. Every write to a dataset cache holds `<cache>/_lock`: a fetch that
+  downloads, `ingest --from-dir`, an ingest extracting archive members or recording an
+  acknowledgement, and `remove`. An ingest and `remove --purge-store` hold the store's lock:
+  `<store>/_lock` for a plain store, or the workspace's own lock for a store in a portfolio
+  workspace, which is re-entered rather than doubled, so the lab's workspace ingest cannot
+  deadlock. It is the portfolio's kernel lock (`flock`, `msvcrt` on Windows), released when its
+  process exits, so a crash leaves no stale lock. A second writer waits up to 30 seconds, then
+  stops with `dataset cache … is locked by <pid>@<host> since <time>` (or `store … is locked by
+  …`); `camber datasets` exits 1. Reads take no lock. See
+  [DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+- **A read-only shared cache (#124).** A dataset cache the user cannot write, such as a course
+  folder shared read-only across a classroom, now works for `camber datasets` and `camber lab`.
+  A fetch whose files are all present and match their pinned SHA-256 downloads and writes
+  nothing. An ingest reads the downloads in place and uses the archive members already extracted
+  there. Members still needed are extracted into a scratch folder beside the ingest's staging
+  area in the store, deleted when the ingest ends. Downloading, `ingest --from-dir` and `remove`
+  stop with *the dataset cache … is read-only for this user* and change nothing.
+  [Using the lab](docs/LAB.md#sharing-one-cache-read-only) describes setting one up for a class.
 
 ### Changed
 - **Breaking: numpy 2 is now required; numpy 1.x is no longer supported (#129).** pyarrow 26
@@ -49,6 +69,26 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   501); the API stays GET-only.
 - **The lab's token, cookie and launch-file helpers moved to `camber._access` (#128)**, shared with
   `camber serve`; `camber.lab._auth` keeps its names and behaviour.
+- **A fetch of files already in the cache no longer rewrites the manifest (#124).** When every
+  file of the subset is present, verifies, and is already recorded, `camber datasets fetch` (and
+  the lab's **Fetch & ingest**) leaves `manifest.json` untouched; its `fetched_at` keeps the time
+  of the fetch that downloaded the files. A research-only fetch still records its
+  acknowledgement.
+- **Research-only acknowledgements against a read-only cache are per user (#124).** They go to
+  the user's own ledger, `$XDG_STATE_HOME/camber/datasets/acknowledgements.json` (else
+  `~/.local/state/camber/datasets/acknowledgements.json`), with the cache's path in each record.
+  Only that ledger counts for a read-only cache. The acceptance recorded in the cache by whoever
+  filled it does not stand in for another user's, so each learner accepts a research-only
+  dataset's terms once. A writable cache keeps its acknowledgements in its own ledger and
+  manifest, as before.
+
+### Fixed
+- **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row
+  under its header, and pandas' chunked CSV parsing typed each chunk of a column separately,
+  then warned that the columns had mixed types. The catalog's CSV reader now types each column
+  in one pass (`low_memory=False`). The stored values are unchanged: every value column goes
+  through `pd.to_numeric` either way, and re-ingesting all 23 locally cached dataset subsets
+  gives the same rows as 0.102. No other catalog dataset raised the warning.
 
 ### Security
 - **`camber serve` checks the `Host` header against DNS rebinding (#128).** A web page on another
