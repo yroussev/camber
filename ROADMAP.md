@@ -415,12 +415,18 @@ Version numbers are given only where a release is already planned.
     - [x] #108 the walk-down's equipment item follows the cause that heads the RCx issue;
     - [x] #109 the open-fdd cross-check leaves the per-verdict list out of its JSON by default;
     - [x] integration: the open-fdd cross-check re-run on the merged code.
-  - **0.102 — follow-ups from 0.101** (integrated, not yet released). Closes #110–#112:
+  - **0.102 — follow-ups from 0.101, docs charts, lab guide, lab access token** (released 2026-10-10). Closes #110–#121, #127:
     - [x] #110 the suggester's unitless range check no longer overturns a strong name on a dirty
       series (dropout zeros ignored; a strong name keeps at least 75 % of its score);
     - [x] #111 the `air-economizer` exercise teaches the economizer low-limit lockout; the capstone
       adopts it;
     - [x] #112 the RCx report ranks uncosted issues of one severity by confidence before the key.
+    - [x] #113 sample charts and screenshots across the docs, rendered by `scripts/docs_figures.py`;
+    - [x] #114–#117, #119 evidence charts shade what each rule flags, with role names and units;
+    - [x] #118 a stuck supply-air sensor on a scheduled fan is flagged across fan-off spans;
+    - [x] #120 `free_cooling_missed` is fan-gated; workbook answers updated;
+    - [x] #121 `docs/LAB.md`, a step-by-step guide to `camber lab`;
+    - [x] #127 `camber lab` requires a per-run access token on every route.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
