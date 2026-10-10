@@ -20,7 +20,8 @@ Endpoints (facility_id addresses a facility; the legacy ``site=`` param is still
   GET /facilities   -> {"facilities": [{"facility_id","name","display_name","state"}, ...]}
   GET /sites                            -> {"sites": [...]}   (deprecated alias)
   GET /points?facility_id=&equip=&role=                       -> {"points": [...], "count": n}
-  GET /history?facility_id=&equip=&role=&start=&end=&limit=   -> {"history": [...], "count": n}
+  GET /history?facility_id=&equip=&role=&start=&end=&limit=&max_points=
+                                   -> {"history": [...], "count": n, "source_count", "first", ...}
 """
 
 from __future__ import annotations
@@ -69,8 +70,13 @@ def dispatch(api: ReadAPI, method: str, path: str, query: dict):
     if path == "/points":
         return 200, api.points(**_q(query, "facility_id", "site", "equip", "role"))
     if path == "/history":
-        kw = _q(query, "facility_id", "site", "equip", "role", "start", "end", "limit")
-        return 200, api.history(**kw)
+        kw = _q(
+            query, "facility_id", "site", "equip", "role", "start", "end", "limit", "max_points"
+        )
+        try:
+            return 200, api.history(**kw)
+        except ValueError as exc:  # a malformed start / end / limit / max_points (0.103, #122)
+            return 400, {"error": "bad request", "detail": str(exc)}
     return 404, {"error": "not found", "path": path}
 
 

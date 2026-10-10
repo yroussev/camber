@@ -51,6 +51,23 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   area in the store, deleted when the ingest ends. Downloading, `ingest --from-dir` and `remove`
   stop with *the dataset cache … is read-only for this user* and change nothing.
   [Using the lab](docs/LAB.md#sharing-one-cache-read-only) describes setting one up for a class.
+- **Trend viewer: date range, brush-to-zoom and a whole-span view (#122).** The `/ui` trend
+  viewer that `camber serve` and `camber lab` both serve gains **From** / **to** date inputs,
+  **Last 7 days** / **Last 30 days** presets (counted back from the last stored sample) and
+  **All**. Brushing a panel now zooms to that span and reads it again at full resolution (up to
+  20,000 samples per series), and still selects its samples for the `N selected` readout; **Zoom
+  out** steps back through the spans viewed. A line under the controls gives the span shown, its
+  time-axis label, and how many samples were drawn out of how many stored. See
+  [Visualization](docs/VISUALIZATION.md#live-web-ui-072) and [the lab guide](docs/LAB.md).
+- **`/history?max_points=` (#122).** The read API's `/history` takes an optional `max_points`, a
+  per-series budget: a longer series is cut into `max_points / 2` equal time buckets, and each
+  keeps its minimum and maximum sample, so spikes, dips and flatlines survive the thinning. The
+  reply adds `source_count` (rows in the window before thinning), `downsampled`, `max_points`,
+  and `first` / `last` (the window's first and last stored timestamp). A request without
+  `max_points` returns the same rows as before.
+- **`time_axis` on `/points` (#122).** `/points?facility_id=…` also returns how to label that
+  facility's time axis: `timezone` (or `null`), `local_label`, and `utc_label` (`null` when the
+  store records no time zone for the facility).
 
 ### Changed
 - **Breaking: numpy 2 is now required; numpy 1.x is no longer supported (#129).** pyarrow 26
@@ -81,6 +98,16 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   filled it does not stand in for another user's, so each learner accepts a research-only
   dataset's terms once. A writable cache keeps its acknowledgements in its own ledger and
   manifest, as before.
+- **The trend viewer draws each series' whole span, not its first 5,000 samples (#122).** It
+  opens on every stored sample, thinned on the server to at most 2,000 per series with a min/max
+  envelope, so a long series is no longer cut to its first few days and series that start at
+  different times share one axis.
+- **The trend viewer's facility and equipment lists refresh without a reload (#122).** They are
+  read again when either list is opened, on **Reload lists** or **Refresh**, and on each live
+  poll, so a facility ingested after the page opened appears; the chosen equipment and ticked
+  roles are kept.
+- **A facility with a recorded time zone has its trend axis labelled `local time (<zone>)`
+  (#122)**, and `time (UTC)` only while the **UTC** box is ticked. It was `time (<zone>)`.
 
 ### Fixed
 - **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row
@@ -89,6 +116,13 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   in one pass (`low_memory=False`). The stored values are unchanged: every value column goes
   through `pd.to_numeric` either way, and re-ingesting all 23 locally cached dataset subsets
   gives the same rows as 0.102. No other catalog dataset raised the warning.
+- **The trend viewer no longer labels a zone-less clock as UTC (#122).** For a facility with no
+  recorded time zone (most LBNL and ORNL datasets), the time axis and hover readout said UTC
+  although they showed the publisher's local clock. They now say `local time (no time zone
+  recorded)`, and there is no UTC box.
+- **`/history` answers a malformed `start`, `end`, `limit` or `max_points` with a 400 (#122)**,
+  naming the parameter, instead of a 500. An offset on `start` / `end` is dropped rather than
+  compared against the store's naive wall clock.
 
 ### Security
 - **`camber serve` checks the `Host` header against DNS rebinding (#128).** A web page on another

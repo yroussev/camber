@@ -365,12 +365,13 @@ def test_role_units_leave_the_suggester_unit_table_alone():
 
 def test_trend_viewer_has_legend_units_axes_and_a_normalised_toggle():
     h = live_dashboard_html()
-    for token in ("id='legend'", "id='norm'", "id='tip'", "'time ('", "niceTicks", '"co2"'):
+    for token in ("id='legend'", "id='norm'", "id='tip'", "axisLabel()", "niceTicks", '"co2"'):
         assert token in h, token
     # 0.96: site time when /facilities reports a zone, labelled with it; a UTC box converts;
-    # hover labels follow the same rule; no zone keeps UTC
-    for token in ("id='utc'", "f.timezone", "timeZone:TZ", "zoneName()", "'UTC'", "wallToUtc"):
+    # hover labels follow the same rule. 0.103 (#122): no zone says so and never claims UTC
+    for token in ("id='utc'", "f.timezone", "timeZone:TZ", "zoneTag()", "'UTC'", "wallToUtc"):
         assert token in h, token
+    assert "local time (no time zone recorded)" in h
     assert "' UTC'" not in h  # the hover label is no longer hard-coded
     assert "<script src" not in h and "https://" not in h and h.count("http://") == 1
     js = h[h.rindex("<script>") :]

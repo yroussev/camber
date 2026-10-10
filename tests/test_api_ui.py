@@ -115,3 +115,55 @@ def test_json_endpoint_unchanged_over_http(tmp_path):
         assert "Content-Security-Policy" not in r.headers  # CSP is HTML-only
         data = json.loads(r.read())
     assert [f["facility_id"] for f in data["facilities"]] == ["S"]
+
+
+# --------------------------------------------------------------------------- 0.103 (#122)
+
+
+def test_ui_reads_a_window_thinned_server_side_not_the_first_5000():
+    h = live_dashboard_html()
+    assert "limit=5000" not in h  # the old first-5,000-samples read is gone
+    assert "max_points=" in h and "&start=" in h and "&end=" in h
+    # whole span thinned to 2,000 per series; a window read at full resolution up to 20,000
+    assert "OVERVIEW=2000" in h and "WINDOW=20000" in h
+    assert "source_count" in h and "downsampled" in h  # the page reports what it drew
+    assert "id='window'" in h and "min and max of each time bucket kept" in h
+
+
+def test_ui_has_date_range_presets_and_zoom_out():
+    h = live_dashboard_html()
+    for token in ("type='date' id='from'", "type='date' id='to'", "id='zoomout'"):
+        assert token in h, token
+    for days in ("data-days='7'", "data-days='30'", "data-days='0'"):
+        assert days in h, days
+    assert "Last 7 days" in h and "Last 30 days" in h and ">All<" in h
+
+
+def test_ui_brush_zooms_and_still_selects():
+    h = live_dashboard_html()
+    assert "pendingSel={a:a,b:b};go(" in h  # mouseup zooms to the brushed span ...
+    assert "window.CAMBER.set(sel)" in h  # ... and the 'N selected' readout still fires
+    assert "' selected: '" in h
+
+
+def test_ui_refreshes_lists_without_a_reload():
+    h = live_dashboard_html()
+    assert "id='lists'" in h and "Reload lists" in h
+    assert "facSel.addEventListener('mousedown',onOpen)" in h
+    assert "eqSel.addEventListener('focus',onOpen)" in h
+    assert "refreshAll" in h
+    # the deep link camber lab uses is still honoured
+    assert "get('facility_id')" in h
+
+
+def test_ui_time_axis_label_comes_from_points_and_never_defaults_to_utc():
+    h = live_dashboard_html()
+    assert "d.time_axis" in h and "local_label" in h and "utc_label" in h
+    assert "local time (no time zone recorded)" in h
+    assert "'time ('+zoneName()+')'" not in h  # the old label that said UTC with no zone
+
+
+def test_ui_page_has_no_external_asset_after_the_rework():
+    h = live_dashboard_html()
+    assert "<script src" not in h and "<link " not in h and "https://" not in h
+    assert "eval(" not in h and "new Function" not in h  # nothing a stricter CSP would refuse

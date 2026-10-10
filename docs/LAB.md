@@ -129,12 +129,13 @@ In the dataset's row, click **trends**. The trend viewer opens on the facility. 
 equipment `RTU__sb_heating` (the night-setback test), tick `supply_fan_status`,
 `return_air_temp` and `supply_air_temp`, and untick the rest.
 
-![The trend viewer on RTU__sb_heating: supply and return air temperature in one panel in °F, supply fan status 0 to 1 in a second panel, the fan off most nights, a hover readout and a brushed span](img/shots/lab-trends.png)
+![The trend viewer on RTU__sb_heating, zoomed to a brushed span of about a day: supply and return air temperature in one panel in °F, supply fan status 0 to 1 in a second panel, the fan stopping in the evening and cycling overnight](img/shots/lab-trends.png)
 
-*The trend viewer: one panel per unit, a legend with each series' range, a hover readout, and a brushed span counted under the chart. The fan stops at night and cycles to hold the setback. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
+*The trend viewer zoomed to a brushed span: one panel per unit, a legend with each series' range, the span and sample count above the chart, and the brushed samples counted under it. The fan stops in the evening and cycles to hold the setback. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
 
-You are looking at the setback test's first days: the fan stops for the night and then cycles
-on and off to hold the space at its setback temperature. Switch the equipment to
+The viewer opens on the whole test. Drag across a panel to zoom to about a day, as in the
+picture: the fan stops for the night and then cycles on and off to hold the space at its setback
+temperature. Switch the equipment to
 `RTU__base_heating`, the around-the-clock test, and compare. [Reading the
 trends](#the-trend-viewer) explains the controls.
 
@@ -200,20 +201,30 @@ The trend viewer is the live view of the store that `camber serve` also offers (
 - **Normalised (0–1).** Scales every series to its own minimum and maximum and draws them on one
   panel. Use it to compare *shapes and timing* (when the fan starts against when the return air
   starts to warm). The hover readout still shows the real values.
-- **UTC.** The store holds the site's local clock as the publisher wrote it. When the catalog
-  knows the site's time zone (for example `bdg2`, `lbnl-b59`, `b4b-windesheim`), the time axis
-  is labelled with that zone and a **UTC** box converts it. Otherwise there is no box and the
-  axis is labelled UTC, but it still shows the clock as published.
+- **Time axis and UTC.** The store holds the site's local clock as the publisher wrote it. When
+  the catalog knows the site's time zone (for example `bdg2`, `lbnl-b59`, `b4b-windesheim`), the
+  axis is labelled `local time (<zone>)` and a **UTC** box converts it to `time (UTC)`. Otherwise
+  there is no box and the axis is labelled `local time (no time zone recorded)`: it shows the clock
+  as published, which cannot be placed on UTC.
+- **What is drawn.** The viewer opens on each series' whole span. A long series is thinned to
+  2,000 samples: the span is cut into 1,000 equal slices and each keeps its lowest and highest
+  sample, so a one-sample spike or a flat stretch still shows. The line under the controls gives
+  the span shown and the sample count, for example `Showing all data, 2022-01-01 00:00 to
+  2022-03-31 23:59 (local time (no time zone recorded)) · 4,000 of 259,200 samples drawn`.
+- **Choosing dates.** Pick **From** and **to** dates, or press **Last 7 days**, **Last 30 days**
+  (counted back from the last sample in the store, not from today) or **All**. A chosen span is
+  read at full resolution, up to 20,000 samples per series; a longer one is thinned the same way,
+  and the line under the controls says so.
+- **Brushing to zoom.** Drag across a panel to zoom to that span. The viewer reads it again at
+  full resolution, and the line under the chart counts the samples in it and gives their first
+  and last timestamp. **Zoom out** goes back one step; **All** goes back to the whole span.
 - **Live refresh.** With **Live** ticked the viewer re-reads the store every 15 seconds (change
-  it with **every … s**); **Refresh** re-reads it at once. The line next to it says when it last
-  updated and how many points it drew. A facility ingested after you opened the page appears
-  when you reload the page.
-- **Brushing a span.** Drag across a panel to select a time span. The line under the chart
-  counts the samples in it and gives its first and last timestamp. Brushing selects; it does not
-  zoom.
-- **Only the start of each series.** The viewer draws each point's first 5,000 samples: about
-  three and a half days of one-minute data, or about seven weeks of 15-minute data. It has no
-  date picker. To look at a later period, read the store from Python, for example:
+  it with **every … s**); **Refresh** re-reads it at once. The text next to it says when it last
+  updated and how many points it drew. A facility or equipment ingested after you opened the page
+  appears when you open the **Facility** or **Equipment** list, press **Reload lists**, or on the
+  next refresh; there is no need to reload the page.
+- **Reading the store from Python.** To work with a span's numbers rather than look at them, read
+  the store directly, for example:
 
   ```python
   from camber.store import ParquetStore

@@ -115,8 +115,17 @@ _CONTROLS_HTML = (
     "<div class='controls'>"
     "<label>Facility <select id='facility'></select></label>"
     "<label>Equipment <select id='equip'></select></label>"
+    "<button id='lists' title='Re-read the facility and equipment lists from the store'>"
+    "Reload lists</button>"
     "</div><div class='controls'>"
     "<span id='roles' class='roles'></span>"
+    "</div><div class='controls' id='range'>"
+    "<label>From <input type='date' id='from'></label>"
+    "<label>to <input type='date' id='to'></label>"
+    "<button data-days='7' class='preset' title='The last 7 days of data'>Last 7 days</button>"
+    "<button data-days='30' class='preset' title='The last 30 days of data'>Last 30 days</button>"
+    "<button data-days='0' class='preset' title='Every sample, thinned to fit'>All</button>"
+    "<button id='zoomout' title='Back to the previous span' disabled>Zoom out</button>"
     "</div><div class='controls'>"
     "<label title='Scale every series to 0-1 on one panel'><input type='checkbox' id='norm'> "
     "Normalised (0–1)</label>"
@@ -125,26 +134,37 @@ _CONTROLS_HTML = (
     "<label><input type='checkbox' id='live' checked> Live</label>"
     "<label>every <input type='number' id='interval' value='15' min='2' "
     "style='width:3.2em'> s</label>"
-    "<button id='refresh'>Refresh</button>"
+    "<button id='refresh' title='Re-read the store now, lists included'>Refresh</button>"
     "<span id='updated' class='muted'></span>"
     "</div>"
+    "<div id='window' class='muted' aria-live='polite'></div>"
 )
 
-# Vanilla-JS app. No f-string: braces are literal; __UNITS__ is replaced with a JSON object.
+# per-series sample budgets: the whole span is thinned to _OVERVIEW_POINTS, a brushed or picked
+# window is read at full resolution up to _WINDOW_POINTS (thinned past that, and the page says so)
+_OVERVIEW_POINTS = 2000
+_WINDOW_POINTS = 20000
+
+# Vanilla-JS app. No f-string: braces are literal; __UNITS__ is replaced with a JSON object and
+# __OVERVIEW__ / __WINDOW__ with the sample budgets.
 _APP_JS = r"""
 (function(){
   var NS="http://www.w3.org/2000/svg";
-  var UNITS=__UNITS__;
+  var UNITS=__UNITS__,OVERVIEW=__OVERVIEW__,WINDOW=__WINDOW__,DAY=864e5;
   // categorical slots in fixed order; a role keeps its colour whatever else is ticked
   var PAL=["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"];
-  var facSel=document.getElementById('facility'),eqSel=document.getElementById('equip');
-  var rolesBox=document.getElementById('roles'),svg=document.getElementById('trend');
-  var legend=document.getElementById('legend'),tip=document.getElementById('tip');
-  var updated=document.getElementById('updated'),liveBox=document.getElementById('live');
-  var normBox=document.getElementById('norm');
-  var utcBox=document.getElementById('utc'),utcLbl=document.getElementById('utcbox');
-  var intBox=document.getElementById('interval'),readout=document.getElementById('readout');
+  function $(id){return document.getElementById(id);}
+  var facSel=$('facility'),eqSel=$('equip'),rolesBox=$('roles'),svg=$('trend');
+  var legend=$('legend'),tip=$('tip'),updated=$('updated'),liveBox=$('live');
+  var normBox=$('norm'),utcBox=$('utc'),utcLbl=$('utcbox'),intBox=$('interval');
+  var readout=$('readout'),winLine=$('window'),fromIn=$('from'),toIn=$('to');
+  var zoomBtn=$('zoomout');
   var timer=null,allRoles=[],last=null,geo=null,FTZ={},TZ=null,fmtZ=null,offC={};
+  // AXIS: how /points says to label this facility's time axis (no zone: never claim UTC)
+  var AXIS={timezone:null,local_label:'local time (no time zone recorded)',utc_label:null};
+  // view: the window drawn, in stored wall-clock ms ({} = the whole span, thinned);
+  // views: the spans to go back to; extent: first/last stored sample of the whole span
+  var view={},views=[],extent=null,pendingSel=null,meta=null,busy=0;
 
   function j(url){return fetch(url).then(function(r){return r.json();});}
   function opt(sel,v,t){var o=document.createElement('option');o.value=v;o.textContent=t;
@@ -157,32 +177,40 @@ _APP_JS = r"""
   function unitOf(r){return UNITS[r]||'';}
   function colorOf(r){var i=allRoles.indexOf(r);return PAL[(i<0?0:i)%PAL.length];}
   function dashOf(r){var i=allRoles.indexOf(r);return i>=PAL.length?'6 3':'';}
-  // store timestamps: an offset-less ISO string is the stored wall clock, read as UTC
+  // store timestamps: an offset-less ISO string is the stored wall clock, held as UTC ms
   function tms(ts){return Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(ts)?ts:ts+'Z');}
+  // wall-clock ms back to the store's naive ISO form (for start= / end=)
+  function iso(w){return new Date(w).toISOString().slice(0,19);}
   function pad(n){return (n<10?'0':'')+n;}
-  // The store holds the site's naive wall clock. With a known site zone the axis shows it as
-  // site time (labelled with the zone) and the UTC box converts; without one it reads as UTC.
-  function setZone(){TZ=FTZ[facSel.value]||null;fmtZ=null;offC={};
+  function num(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+  // The store holds the site's naive wall clock. With a recorded zone the axis shows it as local
+  // time in that zone and the UTC box converts; without one there is no box and no UTC claim.
+  function setZone(){TZ=AXIS.timezone||FTZ[facSel.value]||null;fmtZ=null;offC={};
     if(TZ){try{fmtZ=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hourCycle:'h23',
       year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',
       second:'numeric'});}catch(e){TZ=null;}}
-    utcLbl.hidden=!TZ;}
-  function zoneName(){return TZ&&!utcBox.checked?TZ:'UTC';}
+    utcLbl.hidden=!TZ;if(!TZ)utcBox.checked=false;}
+  function utcOn(){return !!(TZ&&utcBox.checked);}
+  function axisLabel(){return utcOn()?(AXIS.utc_label||'time (UTC)')
+    :(AXIS.local_label||'local time (no time zone recorded)');}
+  function zoneTag(){return utcOn()?'UTC':(TZ||'local, no time zone recorded');}
   // the zone's UTC offset (ms) at instant u, cached per hour
   function offMs(u){var k=Math.floor(u/36e5);if(offC[k]!=null)return offC[k];var o={};
     fmtZ.formatToParts(new Date(u)).forEach(function(q){o[q.type]=q.value;});
     var s=Math.floor(u/1000)*1000;
     return offC[k]=Date.UTC(+o.year,+o.month-1,+o.day,+o.hour%24,+o.minute,+o.second)-s;}
   function wallToUtc(w){return w-offMs(w-offMs(w));}
-  function disp(w){return TZ&&utcBox.checked?wallToUtc(w):w;}
+  function disp(w){return utcOn()?wallToUtc(w):w;}
+  function toWall(t){return utcOn()?t+offMs(t):t;}
   // a time label at the tick step's resolution: hours under a day, days under a year
   function fmtT(ms,step){var d=new Date(ms);
     var md=pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
     var hm=pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
     if(step==null)return d.getUTCFullYear()+'-'+md+' '+hm;
-    if(step<864e5)return (d.getUTCHours()===0?md+' ':'')+hm;
-    if(step<28*864e5)return md;
+    if(step<DAY)return (d.getUTCHours()===0?md+' ':'')+hm;
+    if(step<28*DAY)return md;
     return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1);}
+  function dateOf(ms){return new Date(ms).toISOString().slice(0,10);}
   function fmtV(v){var a=Math.abs(v);if(v===Math.round(v))return String(v);
     return a>=100?v.toFixed(0):a>=10?v.toFixed(1):v.toFixed(2);}
   function fmtTick(v,st){var dec=Math.max(0,-Math.floor(Math.log(st)/Math.LN10+1e-9));
@@ -192,63 +220,122 @@ _APP_JS = r"""
     var st=(f<1.5?1:f<3?2:f<7?5:10)*p,a=Math.floor(lo/st)*st,out=[];
     for(var v=a;v<=hi+st*0.5;v+=st)out.push(+v.toPrecision(12));
     out.step=st;return out;}
-  function timeTicks(t0,t1,n){var H=36e5,D=864e5;
-    var steps=[H,3*H,6*H,12*H,D,2*D,7*D,14*D,30*D,91*D,182*D,365*D];
+  function timeTicks(t0,t1,n){var H=36e5,D=DAY;
+    var steps=[60e3,5*60e3,15*60e3,H,3*H,6*H,12*H,D,2*D,7*D,14*D,30*D,91*D,182*D,365*D];
     var st=steps[steps.length-1];
     for(var i=0;i<steps.length;i++)if((t1-t0)/steps[i]<=n){st=steps[i];break;}
     var out=[],a=Math.ceil(t0/st)*st;for(var t=a;t<=t1;t+=st)out.push(t);out.step=st;
     return out;}
 
-  function loadFacilities(){
+  // ---- facility and equipment lists: re-read on demand, the DOM touched only on a change
+  function sameList(sel,vals){if(sel.options.length!==vals.length)return false;
+    for(var i=0;i<vals.length;i++)if(sel.options[i].value!==vals[i][0]||
+      sel.options[i].textContent!==vals[i][1])return false;return true;}
+  function fillList(sel,vals,keep){if(sameList(sel,vals))return false;clear(sel);
+    vals.forEach(function(v){opt(sel,v[0],v[1]);});
+    if(keep!=null)Array.prototype.forEach.call(sel.options,function(o){
+      if(o.value===keep)sel.value=keep;});
+    return true;}
+  function loadFacilities(first){
+    var keep=facSel.value;
     return j('/facilities').then(function(d){
-      clear(facSel);(d.facilities||[]).forEach(function(f){
+      var vals=(d.facilities||[]).map(function(f){
         var nm=f.display_name||f.name||f.facility_id;FTZ[f.facility_id]=f.timezone||null;
-        opt(facSel,f.facility_id,nm+(f.state&&f.state!=='active'?' ['+f.state+']':''));});
+        return [f.facility_id,nm+(f.state&&f.state!=='active'?' ['+f.state+']':'')];});
+      fillList(facSel,vals,keep||null);
       // deep link: /ui?facility_id=<fid> preselects that facility (camber lab links here)
-      var want=new URLSearchParams(location.search).get('facility_id');
-      if(want)Array.prototype.forEach.call(facSel.options,function(o){
-        if(o.value===want)facSel.value=want;});
-      if(facSel.options.length)return loadPoints();
+      if(first){var want=new URLSearchParams(location.search).get('facility_id');
+        if(want)Array.prototype.forEach.call(facSel.options,function(o){
+          if(o.value===want)facSel.value=want;});}
+      if(!facSel.options.length)return;
+      if(first||facSel.value!==keep)return loadPoints(true);
+      return loadPoints(false);
     });
   }
-  function loadPoints(){
-    setZone();
-    return j('/points?facility_id='+encodeURIComponent(facSel.value)).then(function(d){
-      var eqs=[],seenE={},seenR={};allRoles=[];
+  // fresh: a new facility was picked (reset the span); otherwise keep the choices made
+  function loadPoints(fresh){
+    var fid=facSel.value;
+    return j('/points?facility_id='+encodeURIComponent(fid)).then(function(d){
+      if(fid!==facSel.value)return;
+      AXIS=d.time_axis||AXIS;setZone();
+      var eqs=[],seenE={},seenR={},roles=[];
       (d.points||[]).forEach(function(p){
-        if(!seenE[p.equip]){seenE[p.equip]=1;eqs.push(p.equip);}
-        if(!seenR[p.role]){seenR[p.role]=1;allRoles.push(p.role);}
+        if(!seenE[p.equip]){seenE[p.equip]=1;eqs.push([p.equip,p.equip]);}
+        if(!seenR[p.role]){seenR[p.role]=1;roles.push(p.role);}
       });
-      clear(eqSel);eqs.forEach(function(e){opt(eqSel,e,e);});
-      clear(rolesBox);allRoles.forEach(function(r,i){
-        var l=document.createElement('label'),c=document.createElement('input');
-        c.type='checkbox';c.value=r;c.checked=i<3;c.addEventListener('change',draw);
-        l.appendChild(c);
-        l.appendChild(document.createTextNode(' '+r+(unitOf(r)?' ('+unitOf(r)+')':'')));
-        rolesBox.appendChild(l);
-      });
+      var keepEq=fresh?null:eqSel.value;
+      var eqChanged=fillList(eqSel,eqs,keepEq)&&!fresh&&eqSel.value!==keepEq;
+      var was=checkedRoles();
+      if(fresh||roles.join('\n')!==allRoles.join('\n')){
+        allRoles=roles;clear(rolesBox);roles.forEach(function(r,i){
+          var l=document.createElement('label'),c=document.createElement('input');
+          c.type='checkbox';c.value=r;c.checked=fresh?i<3:was.indexOf(r)>=0;
+          c.addEventListener('change',function(){draw();});
+          l.appendChild(c);
+          l.appendChild(document.createTextNode(' '+r+(unitOf(r)?' ('+unitOf(r)+')':'')));
+          rolesBox.appendChild(l);});
+      }
+      if(fresh||eqChanged)resetView();
       return draw();
     });
   }
+  function refreshAll(){return loadFacilities(false);}
+
+  // ---- the window drawn
+  function unselect(){pendingSel=null;if(window.CAMBER)window.CAMBER.set(new Set());}
+  function resetView(){view={};views=[];extent=null;zoomBtn.disabled=true;}
+  // a new window: a brushed span is selected once read (pendingSel), any other clears the selection
+  function go(v){if(!pendingSel)unselect();views.push(view);view=v;zoomBtn.disabled=false;
+    return draw();}
   function draw(){
     var fid=facSel.value,eq=eqSel.value;if(!fid||!eq)return Promise.resolve();
-    var roles=checkedRoles();
-    // one request per role, so every ticked series gets its own row budget
+    var roles=checkedRoles(),win=view.a!=null,q='';
+    if(win)q='&start='+encodeURIComponent(iso(view.a))+'&end='+encodeURIComponent(iso(view.b));
+    q+='&max_points='+(win?WINDOW:OVERVIEW);
+    busy++;
+    // one request per role, so every ticked series gets its own sample budget
     return Promise.all(roles.map(function(r){
       return j('/history?facility_id='+encodeURIComponent(fid)+'&equip='+encodeURIComponent(eq)
-        +'&role='+encodeURIComponent(r)+'&limit=5000');
+        +'&role='+encodeURIComponent(r)+q);
     })).then(function(parts){
-      var series=[],n=0;
-      roles.forEach(function(r,i){
-        var pts=(parts[i].history||[]).filter(function(h){return h.value!=null;})
-          .map(function(h){var w=tms(h.ts);return {ts:h.ts,w:w,t:disp(w),v:h.value};})
+      busy--;
+      var series=[],n=0,src=0,thin=false,lo=Infinity,hi=-Infinity;
+      roles.forEach(function(r,i){var h=parts[i]||{};
+        src+=h.source_count||0;if(h.downsampled)thin=true;
+        if(h.first){lo=Math.min(lo,tms(h.first));hi=Math.max(hi,tms(h.last));}
+        var pts=(h.history||[]).filter(function(x){return x.value!=null;})
+          .map(function(x){var w=tms(x.ts);return {ts:x.ts,w:w,t:disp(w),v:x.value};})
           .sort(function(a,b){return a.t-b.t;});
         n+=pts.length;if(pts.length)series.push({role:r,unit:unitOf(r),pts:pts});
       });
-      last=series;render();
-      updated.textContent='updated '+new Date().toLocaleTimeString()+' · '+n+' points';
-    });
+      if(!win&&lo<=hi)extent={a:lo,b:hi};
+      meta={n:n,src:src,thin:thin,a:win?view.a:lo,b:win?view.b:hi,win:win};
+      last=series;render();showWindow();
+      if(pendingSel){var ps=pendingSel,sel=new Set();pendingSel=null;
+        series.forEach(function(s){s.pts.forEach(function(p){
+          if(p.w>=ps.a&&p.w<=ps.b)sel.add(p.ts);});});
+        if(window.CAMBER)window.CAMBER.set(sel);}
+      updated.textContent='updated '+new Date().toLocaleTimeString()+' · '+num(n)+' points drawn';
+    },function(){busy--;});
   }
+  function showWindow(){
+    if(!meta||!(meta.a<=meta.b)){winLine.textContent='no samples in this span';return;}
+    var a=disp(meta.a),b=disp(meta.b);
+    fromIn.value=dateOf(a);toIn.value=dateOf(b);
+    winLine.textContent=(meta.win?'Showing ':'Showing all data, ')+fmtT(a)+' to '+fmtT(b)
+      +' ('+axisLabel()+') · '+num(meta.n)+(meta.thin?' of '+num(meta.src)
+      +' samples drawn (min and max of each time bucket kept)':' samples, every one drawn');
+  }
+  // a span of days in the display clock, from the date inputs or a preset
+  function dayStart(s){return Date.parse(s+'T00:00:00Z');}
+  function pickDates(){if(!fromIn.value||!toIn.value)return;
+    var da=dayStart(fromIn.value),db=dayStart(toIn.value);if(isNaN(da)||isNaN(db))return;
+    go({a:toWall(Math.min(da,db)),b:toWall(Math.max(da,db)+DAY-1000)});}
+  function preset(days){
+    if(!days){unselect();views=[];view={};zoomBtn.disabled=true;return draw();}
+    var end=extent?extent.b:(meta&&meta.b);if(end==null)return;
+    return go({a:end-days*DAY,b:end});}
+
   function groups(series){
     if(normBox.checked)return [{key:'norm',label:'normalised (0–1 per series)',items:series}];
     var out=[],by={};
@@ -277,9 +364,13 @@ _APP_JS = r"""
     var gs=groups(series);
     var H=Math.max(1,gs.length)*(PH+GAP)+XA;
     svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('height',H);
-    if(!series.length){svg.appendChild(mk('text',{x:L,y:40},'no data for this selection'));
-      geo=null;return;}
-    var t0=Infinity,t1=-Infinity;series.forEach(function(s){
+    if(!series.length){svg.appendChild(mk('text',{x:L,y:40},
+      view.a!=null?'no data in this span: zoom out or pick other dates'
+      :'no data for this selection'));geo=null;return;}
+    var t0=Infinity,t1=-Infinity;
+    // a window spans exactly what was asked for; the whole span, the data's own extent
+    if(view.a!=null){t0=disp(view.a);t1=disp(view.b);}
+    else series.forEach(function(s){
       if(s.pts[0].t<t0)t0=s.pts[0].t;if(s.pts[s.pts.length-1].t>t1)t1=s.pts[s.pts.length-1].t;});
     if(t1===t0)t1=t0+1;
     function X(t){return L+(t-t0)*(W-L-R)/(t1-t0);}
@@ -321,7 +412,7 @@ _APP_JS = r"""
     var yb=gs.length*(PH+GAP)+GAP-GAP;
     xt.forEach(function(t){svg.appendChild(mk('text',{x:X(t),y:yb+16,'text-anchor':'middle'},
       fmtT(t,xt.step)));});
-    svg.appendChild(mk('text',{x:W-R,y:yb+28,'text-anchor':'end'},'time ('+zoneName()+')'));
+    svg.appendChild(mk('text',{x:W-R,y:yb+28,'text-anchor':'end','class':'xlabel'},axisLabel()));
     geo={W:W,H:H,L:L,R:R,t0:t0,t1:t1,X:X,top:GAP,bot:yb,span:span};
   }
   function pxOf(e){var b=svg.getBoundingClientRect();return (e.clientX-b.left)*geo.W/b.width;}
@@ -337,7 +428,7 @@ _APP_JS = r"""
     hair.setAttribute('x1',x);hair.setAttribute('x2',x);hair.setAttribute('y1',geo.top);
     hair.setAttribute('y2',geo.bot);svg.appendChild(hair);
     clear(tip);var head=document.createElement('div');head.className='t';
-    head.textContent=fmtT(t)+' '+zoneName();tip.appendChild(head);
+    head.textContent=fmtT(t)+' '+zoneTag();tip.appendChild(head);
     last.forEach(function(s){var p=nearest(s.pts,t),row=document.createElement('div');
       var sw=document.createElement('span');sw.className='sw';sw.style.cssText=
         'display:inline-block;width:10px;height:3px;margin-right:6px;vertical-align:middle;background:'
@@ -353,37 +444,54 @@ _APP_JS = r"""
   }
   function hideTip(){tip.style.display='none';
     if(hair&&hair.parentNode)hair.parentNode.removeChild(hair);}
-  svg.addEventListener('mousedown',function(e){if(!geo)return;x0=pxOf(e);
+  function clampX(x){return Math.max(geo.L,Math.min(geo.W-geo.R,x));}
+  svg.addEventListener('mousedown',function(e){if(!geo)return;e.preventDefault();
+    x0=clampX(pxOf(e));
     brush=mk('rect',{y:geo.top,height:geo.bot-geo.top,fill:'rgba(42,120,214,.15)'});
     svg.appendChild(brush);upd(x0);});
-  svg.addEventListener('mousemove',function(e){if(!geo)return;if(brush)upd(pxOf(e));showTip(e);});
+  svg.addEventListener('mousemove',function(e){if(!geo)return;if(brush)upd(clampX(pxOf(e)));
+    showTip(e);});
   svg.addEventListener('mouseleave',hideTip);
+  // brush to zoom: the span is re-read at full resolution and its samples are selected
   window.addEventListener('mouseup',function(e){
-    if(!brush)return;var x1=pxOf(e),ta=tOf(Math.min(x0,x1)),tb=tOf(Math.max(x0,x1));
-    var sel=new Set();(last||[]).forEach(function(s){s.pts.forEach(function(p){
-      if(p.t>=ta&&p.t<=tb)sel.add(p.ts);});});
-    if(window.CAMBER)window.CAMBER.set(sel);brush.parentNode.removeChild(brush);brush=null;});
+    if(!brush)return;var x1=clampX(pxOf(e));brush.parentNode.removeChild(brush);brush=null;
+    if(Math.abs(x1-x0)<5){unselect();return;}
+    var a=toWall(tOf(Math.min(x0,x1))),b=toWall(tOf(Math.max(x0,x1)));
+    pendingSel={a:a,b:b};go({a:Math.floor(a),b:Math.ceil(b)});});
   function upd(x1){var a=Math.min(x0,x1),b=Math.max(x0,x1);
     brush.setAttribute('x',a);brush.setAttribute('width',Math.max(b-a,1));}
   if(window.CAMBER)window.CAMBER.onChange(function(sel){
     var a=Array.from(sel).sort();
     readout.textContent=a.length?(a.length+' selected: '+a[0]+' … '+a[a.length-1])
-      :'brush the trend to select a time span';
+      :'brush the trend to zoom to a time span and select it';
   });
   function reschedule(){if(timer)clearInterval(timer);
     var s=Math.max(2,parseInt(intBox.value,10)||15);
-    timer=setInterval(function(){if(liveBox.checked)draw();},s*1000);}
+    timer=setInterval(function(){if(liveBox.checked&&!busy)refreshAll();},s*1000);}
   var rz=null;
   window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(render,120);});
-  facSel.addEventListener('change',loadPoints);
-  eqSel.addEventListener('change',draw);
+  facSel.addEventListener('change',function(){AXIS={timezone:null,
+    local_label:'local time (no time zone recorded)',utc_label:null};unselect();
+    loadPoints(true);});
+  eqSel.addEventListener('change',function(){unselect();resetView();draw();});
+  // a facility or equipment ingested after the page opened appears when its list is opened
+  var lastList=0;
+  function onOpen(){var now=Date.now();if(now-lastList<2000)return;lastList=now;refreshAll();}
+  facSel.addEventListener('mousedown',onOpen);facSel.addEventListener('focus',onOpen);
+  eqSel.addEventListener('mousedown',onOpen);eqSel.addEventListener('focus',onOpen);
+  $('lists').addEventListener('click',refreshAll);
   normBox.addEventListener('change',render);
   utcBox.addEventListener('change',function(){(last||[]).forEach(function(s){
     s.pts.forEach(function(p){p.t=disp(p.w);});
-    s.pts.sort(function(a,b){return a.t-b.t;});});render();});
+    s.pts.sort(function(a,b){return a.t-b.t;});});render();showWindow();});
+  fromIn.addEventListener('change',pickDates);toIn.addEventListener('change',pickDates);
+  Array.prototype.forEach.call(document.querySelectorAll('button.preset'),function(btn){
+    btn.addEventListener('click',function(){preset(+btn.getAttribute('data-days'));});});
+  zoomBtn.addEventListener('click',function(){if(!views.length)return;unselect();
+    view=views.pop();zoomBtn.disabled=!views.length;draw();});
   intBox.addEventListener('change',reschedule);
-  document.getElementById('refresh').addEventListener('click',draw);
-  loadFacilities().then(reschedule);
+  $('refresh').addEventListener('click',refreshAll);
+  loadFacilities(true).then(reschedule);
 })();
 """
 
@@ -397,7 +505,16 @@ def live_dashboard_html() -> str:
     series are drawn in one panel per unit (:func:`role_units`; each with a labelled y axis), on a
     shared, labelled time axis, with a legend, a hover readout, and a normalised (0-1) toggle. The
     time axis and the hover readout show site time, labelled with the facility's zone, when
-    ``/facilities`` reports a ``timezone`` (a UTC box converts); otherwise UTC.
+    ``/facilities`` reports a ``timezone`` (a UTC box converts).
+
+    0.103 (#122): the page opens on each series' whole span, thinned server-side to a min/max
+    envelope (``/history?max_points=``), and says which span it shows and how many samples it
+    drew. Date inputs and presets (last 7 / 30 days of data, all) pick a window; brushing a panel
+    zooms to that span, re-read at full resolution (up to a cap), and selects its samples; **Zoom
+    out** steps back. The facility and equipment lists are re-read on **Reload lists**,
+    **Refresh**, the live poll, or when a list is opened. The time-axis label comes from
+    ``/points``' ``time_axis``: with no recorded zone it reads ``local time (no time zone
+    recorded)`` and the page never claims UTC.
     """
     style = _STYLE + LINK_STYLE + _UI_STYLE
     units = json.dumps(role_units(), ensure_ascii=False).replace("<", "\\u003c")
@@ -407,14 +524,17 @@ def live_dashboard_html() -> str:
         f"<title>CAMBER — live dashboard</title><style>{style}</style></head><body>"
         "<h1>CAMBER — live dashboard</h1>"
         "<p class='muted'>Live view of the read-only store. One panel per unit; hover for "
-        "values, brush a panel to select a time span.</p>"
+        "values, brush a panel to zoom to a time span.</p>"
         + _CONTROLS_HTML
         + "<div id='legend' class='legend' aria-label='legend'></div>"
         + "<div class='chartbox'><svg id='trend' class='trend' viewBox='0 0 1000 240' "
         "role='img' aria-label='trend chart'></svg><div id='tip' class='tip'></div></div>"
-        + "<div id='readout' class='camber-out'>brush the trend to select a time span</div>"
+        + "<div id='readout' class='camber-out'>brush the trend to zoom to a time span and select "
+        "it</div>"
         + selection_bus_html()
         + "<script>"
         + _APP_JS.replace("__UNITS__", units)
+        .replace("__OVERVIEW__", str(_OVERVIEW_POINTS))
+        .replace("__WINDOW__", str(_WINDOW_POINTS))
         + "</script></body></html>"
     )
