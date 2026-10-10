@@ -33,6 +33,9 @@ from urllib.parse import urlparse
 
 USER_AGENT = "camber-toolkit dataset fetcher (https://github.com/yroussev/camber)"
 _PROGRESS_INTERVAL = 0.5  # seconds between progress callbacks (plus one final call)
+#: Headroom every disk pre-check adds to the bytes it needs (a fetch, an archive extraction and
+#: ``camber lab``'s pre-fetch check all use it, so the page and the fetch agree).
+DISK_MARGIN = 0.05
 
 
 class FetchError(RuntimeError):
@@ -124,7 +127,7 @@ def https_opener(timeout: float = 60.0) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(_HttpsOnlyRedirect())
 
 
-def check_disk(path: str, needed_bytes, *, margin: float = 0.05) -> None:
+def check_disk(path: str, needed_bytes, *, margin: float = DISK_MARGIN) -> None:
     """Raise :class:`InsufficientSpace` unless ``needed_bytes`` (+ ``margin``) fit at ``path``.
 
     Uses the nearest existing ancestor directory of ``path``. ``needed_bytes`` of ``None``/0 is a

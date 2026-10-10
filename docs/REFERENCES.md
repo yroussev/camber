@@ -54,6 +54,20 @@ The `pnnl-trending-requirements` guide lists the points to trend before re-tunin
 
 Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them. Chapter 9 (Building Walk Down) is linked instead from the RCx report's **Verify on site** section (0.98): every walk-down item carries it (`camber.references.WALKDOWN_REFERENCES`), and the report's Further reading list adds it when that section is present.
 
+## Small/Medium-Sized Commercial Building Re-tuning
+
+PNNL's second course covers small buildings that have packaged rooftop units and thermostats and
+often no BAS. Its measures chapter is the closest match for a packaged unit's compressor.
+
+| Resource | Number | Rules | Checked against (headings) | Verified |
+|---|---|---|---|---|
+| [Small/Medium-Sized Commercial Building Re-tuning Training, chapter 3: Identifying and Implementing Re-tuning Measures](https://www.pnnl.gov/sites/default/files/media/file/ch3_sm_identifying_and_implementing_retuning_measures.pdf) | PNNL-SA-92685 | `compressor_short_cycle` | Building HVAC Implementation: Different HVAC System General Guidance Examples (packaged units); Building HVAC Implementation: Thermostats | 2026-10-10 |
+
+`compressor_short_cycle` maps here since 0.103 (#125). The chapter has no heading on compressor
+starts. Its packaged-unit and thermostat sections cover the settings that make a unit cycle: the
+thermostat's set points, its location and its fan mode. The large-building course's chapter 8
+covers chillers, but not their compressor starts.
+
 ## Other resources
 
 | Resource | Kind | Number | Verified |
@@ -75,8 +89,8 @@ These rules have no Re-tuning guide or chapter that clearly covers them, so they
   which check a trim-and-respond sequence the guides predate;
 - the G36 fault conditions (`g36_afdd`), which cite ASHRAE Guideline 36 itself;
 - `filter_fouling`;
-- the DX and heat-pump rules and `source_loop_deltat` (the course covers built-up air handlers
-  and central plants);
+- the DX and heat-pump rules other than `compressor_short_cycle`, and `source_loop_deltat` (the
+  course covers built-up air handlers and central plants);
 - the drift detectors, except `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift`,
   which map to chapter 8.
 

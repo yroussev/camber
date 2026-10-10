@@ -32,9 +32,10 @@ pip install "camber-toolkit[xlsx]"
 
 The lab itself needs nothing beyond the core package. The `xlsx` extra (`openpyxl`) lets CAMBER
 read the catalog's Excel workbooks: `ornl-frp-vav`, used by the
-[`zone-bad-box`](workbook/zone-bad-box.md) exercise, and `nist-heatpump-fdd`. Without it those two
-download but do not ingest (see [Troubleshooting](#the-xlsx-extra)). With conda, install
-`camber-toolkit` and `openpyxl` from conda-forge instead.
+[`zone-bad-box`](workbook/zone-bad-box.md) exercise, and `nist-heatpump-fdd`. Without it the lab
+marks those two rows *needs xlsx* in red, with the install command, and will not fetch them (see
+[Troubleshooting](#the-xlsx-extra)). With conda, install `camber-toolkit` and `openpyxl` from
+conda-forge instead.
 
 Instructors may prefer a **source checkout** (`pip install -e ".[xlsx]"` in a clone of the
 repository): the lab then serves the workbook pages itself, so the exercise links work without a
@@ -79,9 +80,9 @@ then shows plain `http://127.0.0.1:8765/lab`. Reload it and open the trends and 
 as usual while the browser and the lab keep running. The page lists every catalog dataset, one
 per row. Type `ornl` in the search box, tick **ornl-frp-ops**, and leave **Subset** at `default`.
 
-![The camber lab catalog searched for ornl: three rows, ornl-frp-ops ticked, and the line under the table reading 1 selected, download 14 MB and store about 8.6 MB against the free disk](img/shots/lab-select.png)
+![The camber lab catalog searched for ornl: three rows, ornl-frp-ops ticked, ornl-frp-vav marked needs xlsx, and the line under the buttons reading 1 selected, download 14 MB, store about 8.6 MB and the free space on the disk the cache and the store share](img/shots/lab-select.png)
 
-*The catalog with one dataset ticked. Under the table, the page adds up the download and the store size of the selection and compares them with the free disk. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
+*The catalog with one dataset ticked. Under the buttons, the page adds up what the selection downloads, extracts and takes in the store, and compares it with the free disk. `ornl-frp-vav` needs the `xlsx` extra, which is installed here. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
 
 Each row shows:
 
@@ -89,16 +90,17 @@ Each row shows:
 |---|---|
 | **Dataset** | Title, catalog id and a one-line description of the equipment. *What it teaches* opens a short list of the lessons in the data. |
 | **Kind** | `simulated`, `real` or `lab`, and `labelled` when the dataset has ground-truth fault labels. |
-| **Licence** | A green **open** badge or a red **research-only** one, and the licence id. A **manual** badge means you must download the files yourself (see [Manual downloads](#manual-downloads)). |
+| **Licence** | A green **open** badge or a red **research-only** one, and the licence id. A **manual** badge means you must download the files yourself (see [Manual downloads](#manual-downloads)). A **needs xlsx** badge names an optional extra the dataset needs; it turns red, with the install command, when the extra is not installed, and the row cannot be ticked. |
 | **Download** | How much the selected subset downloads. |
 | **Store** | An estimate of its size once ingested. |
 | **Status** | `not fetched`, `fetched, not ingested`, or the facility it was ingested into and its row count. |
-| **Open** | Links: **trends** and **report** once ingested, the workbook **exercise** and the **publisher**'s page. |
+| **Open** | Links: **trends** and **report** once ingested, the workbook **exercise** and the **publisher**'s page. **Remove…** once anything of the dataset is on disk (see [Cleaning up](#cleaning-up)), and **From a folder…** for a manual download. |
 
 Above the table you can search (by id, title, description or what a dataset teaches) and filter
 by licence tier, kind, labelled faults or what you have already ingested. The line under the
-table sums up your selection: how much it downloads against the free space on the cache's disk,
-and how big it gets in the store against the free space on the store's disk.
+table sums up your selection: how much it still downloads, how much its archives extract into the
+cache, and how big it gets in the store, against the free space on the cache's disk and the
+store's disk (one figure when they are the same disk). See [Disk use](#disk-use).
 
 ### Step 4: Fetch & ingest, and watch the job
 
@@ -112,16 +114,18 @@ Press **Fetch & ingest**. A job appears under **Jobs**:
    and how many rows it ingested into which facility. The row's status changes to
    `ds-ornl-frp-ops · 1,075,357 rows`, and the **trends** and **report** links appear.
 
-![A finished fetch+ingest job for ornl-frp-ops: the citation, ingested 1,075,357 rows into ds-ornl-frp-ops, and the row now showing trends, report, exercise and publisher links](img/shots/lab-job.png)
+![A finished fetch+ingest job for ornl-frp-ops: the citation, ingested 1,075,357 rows into ds-ornl-frp-ops, and the row now showing trends, report, exercise and publisher links and a Remove button](img/shots/lab-job.png)
 
-*A finished job. The row now names its facility, `ds-ornl-frp-ops`, and links to its trends and report. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
+*A finished job. The row now names its facility, `ds-ornl-frp-ops`, links to its trends and report, and has a **Remove…** button. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
 
 Jobs run **one at a time**, in the order you queued them. While a job is queued or running it
 has a **Cancel** button (see [Cancel and resume](#cancel-and-resume)). The job list lives in the
 running lab only: after a restart it is empty, but the downloads and the store are still there.
 
 **Ingest (already fetched)** runs only the second half, for datasets you have already
-downloaded, for example after installing a missing extra.
+downloaded. An ingest of unchanged data is skipped (*already up to date*); tick **force
+re-ingest** next to the button to run it again anyway, for example after a CAMBER upgrade changed
+how a dataset is read.
 
 ### Step 5: open the trends
 
@@ -145,9 +149,9 @@ Back in the lab, click **report**. It opens in a new tab. The lab builds it the 
 open it by running the dataset's default config (a few seconds here; longer for a big dataset),
 and keeps it until the data changes or the lab stops.
 
-![The lab's report for ornl-frp-ops: the data source and licence block, then the prioritized findings, with two compressor short-cycle faults and a missing night setback, and the recommended actions](img/shots/lab-report.png)
+![The lab's report for ornl-frp-ops: the data source and licence block, the prioritized findings, with two compressor short-cycle faults and a missing night setback and a Learn more link on each, and the first evidence chart, the compressor status of the around-the-clock unit](img/shots/lab-report.png)
 
-*The report: its data source and licence block, the findings ranked worst first, the recommended actions and the caveats. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
+*The top of the report: its data source and licence block, the findings ranked worst first with their Learn more links, and the first of the evidence charts. The recommended actions and the caveats follow further down. Data: ORNL FRP-2 operations dataset (Im, Jung, Yoon, 2022), CC-BY-4.0.*
 
 Read the **Prioritized FDD findings** table from the top. Each row is one finding: its severity,
 the rule that raised it, the equipment, a one-line summary with the numbers behind it, and links
@@ -239,7 +243,7 @@ The trend viewer is the live view of the store that `camber serve` also offers (
 
 The lab's report is CAMBER's audit report for the dataset's default config: the same report
 `camber datasets config <id> --store lab_store --out cfg.json` and `camber report cfg.json --out
-report.html` write. From the top:
+report.html` write. Since 0.103 it includes the evidence charts. From the top:
 
 - **Title.** *Building analytics report*, with the dataset's title.
 - **Research-only banner.** For a research-only dataset only: a red-bordered box, *NON-COMMERCIAL
@@ -253,6 +257,9 @@ report.html` write. From the top:
   worst first: rank, severity, rule, equipment, summary, and *Learn more* links to the PNNL
   guidance when the rule has some. Findings that passed (`ok`) are left out of the report;
   `camber run` prints them all, and its `findings.json` holds every metric.
+- **Finding evidence.** A chart for each of the findings above, worst first: the samples the
+  rule judged, shaded where it flags them. The report draws the first 12, so a dataset with many
+  findings still opens quickly, and says so when there were more.
 - **Recommended actions.** One advisory action per finding, with the target it aims for and the
   standard it cites. The *$/yr* column shows `—` when there is no energy price or load to cost a
   finding with, as in the lab; the heading then says the actions are ranked by severity.
@@ -260,8 +267,8 @@ report.html` write. From the top:
 - **Caveats.** What the rules had to assume or could not check, for example *no trended
   occupancy: unoccupied = outside the assumed schedule*. Read them before you trust a finding.
 
-The lab's report has no **evidence charts**. For a chart per issue (the samples a rule judged,
-shaded where it flags them), write the config and run the RCx layout:
+For the printable retro-commissioning report, with a page per issue (its chart, the site checks
+and the cost), write the config and run the RCx layout:
 
 ```
 camber datasets config ornl-frp-ops --store lab_store --out ops.json
@@ -294,9 +301,15 @@ members an ingest needed.
   estimate of the space it takes once ingested; `default` subsets stay under about 100 MB in the
   store.
 - For a dataset published as an archive, the members an ingest extracts **stay in the cache**,
-  next to the download, and can be larger than it. The page does not count them. With a
-  read-only cache they are extracted into the store's `_staging/` folder for the length of the
-  ingest instead (see [Sharing one cache read-only](#sharing-one-cache-read-only)).
+  next to the download, and can be many times larger than it. The page counts them: exactly, from
+  the archive's own index, once a zip is downloaded; before that, from the catalog's
+  `extracted_size`, for the share of the archive's files the subset reads. With a read-only cache they are
+  extracted into the store's `_staging/` folder for the length of the ingest instead (see
+  [Sharing one cache read-only](#sharing-one-cache-read-only)).
+- Before it queues a job, the lab checks the download, the extraction and the store estimate
+  against the free space, with the same 5 % headroom the fetch itself adds. When the cache and the
+  store are on one disk it adds them up. **Fetch & ingest** stays disabled for a selection the
+  fetch would refuse, and **Ingest (already fetched)** is checked against the store's disk too.
 - `camber datasets status --dir D --store S` lists, per dataset, the subsets fetched, the bytes
   on disk in the cache (downloads and extractions) and the facilities ingested.
 - The `full` subsets are much bigger than `default`. Pick them only when an exercise asks you
@@ -304,23 +317,32 @@ members an ingest needed.
 
 ### Cleaning up
 
-The lab has no delete button. Stop the lab (or wait until no job is running) and use the
-command line:
+Press **Remove…** in the dataset's row. A dialog says what it deletes and asks you to type the
+dataset id; **Remove** stays disabled until you do. It queues a job like any other:
+
+- it deletes the dataset's folder in the cache (downloads and extractions) and its manifest
+  entry, and the job says how much it freed. The ingested data stays, and the trends and report
+  keep working;
+- tick **Also drop its facilities from the store** to purge them too. Their trends and report
+  go with them. The facility ids stay reserved for the same dataset, so you can fetch and ingest
+  it again afterwards.
+
+The same on the command line (stop the lab first, or wait until no job is running):
 
 ```
 camber datasets remove ornl-frp-ops                              # the downloads and extractions
 camber datasets remove ornl-frp-ops --store lab_store --purge-store   # and its facilities
 ```
 
-`remove` deletes the dataset's folder in the cache and its manifest entry, and prints how much it
-freed. With `--purge-store` it also drops the dataset's facilities from the store; without it the
-ingested data stays and the trends and report keep working. Add `--dir` if your cache is not in
-the default place. The acknowledgements ledger is never trimmed: it is the record of which
-research-only licences were accepted. You can fetch and ingest the dataset again afterwards.
+Add `--dir` if your cache is not in the default place. The acknowledgements ledger is never
+trimmed: it is the record of which research-only licences were accepted.
 
-In a portfolio workspace, retire a dataset facility through its lifecycle instead (offboard,
-archive, purge; see [PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging)), so the
-audit log records it.
+In a portfolio workspace the purge follows the facility lifecycle. The lab purges a dataset
+facility only while it is `provisioning` or `active` and has no legal hold; the dialog greys out
+the tick box and says why otherwise. A suspended, offboarding or archived facility belongs to
+its lifecycle: resume or restore it, or retire it with `camber facility offboard`, `archive` and
+`purge` (see [PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging)). Every removal and
+purge is in the audit log (`lab.remove`, `lab.purge`).
 
 ## 4. Setting up a class
 
@@ -392,19 +414,28 @@ one for a class that uses research-only data.
 Two catalog entries, `lbnl-b59` (used by the [`zone-min-oa`](workbook/zone-min-oa.md) and
 [`data-trend-quality`](workbook/data-trend-quality.md) exercises) and `nist-ibal`, come from
 publisher portals with terms to accept, so CAMBER never downloads them. Their rows carry a
-**manual** badge and cannot be ticked. `camber datasets info lbnl-b59` prints where to get the
-files. Download them, then ingest them on the command line into the lab's store and cache:
+**manual** badge and cannot be ticked. Download the files yourself (the row's **From a folder…**
+dialog, and `camber datasets info lbnl-b59`, say where to get them), then press **From a
+folder…**, type the full path of the folder that holds them (for example
+`~/Downloads/b59`, which the lab expands to your home folder) and press **Ingest**. The job verifies and
+ingests them like any other, and the row then shows the facility, with its trends and report.
+**force re-ingest** applies here too, and a research-only dataset asks for its acknowledgement
+first.
+
+The lab checks the path before it queues anything: it must be a full path (not relative to where
+the lab runs) to a folder you can read. It only reads that folder: it looks for each file by its
+catalog name, refuses a file that is a link to somewhere outside it, checks each file's size and
+SHA-256, and copies (or links) it into the cache. It never writes to the folder.
+
+The same on the command line:
 
 ```
 camber datasets ingest lbnl-b59 --from-dir ~/Downloads/b59 --store lab_store
 ```
 
-`--from-dir` finds each file by its catalog name, checks its size and SHA-256 before using it,
-and links (or copies) it into the cache, so it then behaves like a fetched file. Add `--dir` when
-the lab uses a cache other than the default. Reload the lab
-page and the row shows the facility, with its trends and report. `--from-dir` works for any
-dataset whose files you already have, which is another way to set up an offline room. See
-[DATASETS.md](DATASETS.md#manual-downloads).
+Add `--dir` when the lab uses a cache other than the default. On the command line `--from-dir`
+works for any dataset whose files you already have, which is another way to set up an offline
+room. See [DATASETS.md](DATASETS.md#manual-downloads).
 
 ### Running against a portfolio workspace
 
@@ -423,9 +454,11 @@ that belongs to one. Then:
   activated after it;
 - the ingest runs under the workspace's single-writer lock;
 - every fetch, acknowledgement and ingest adds a `lab.fetch`, `lab.acknowledge` or `lab.ingest`
-  line to the audit log: `camber portfolio audit` lists them;
+  line to the audit log, an ingest from a folder a `lab.adopt` line, and a removal `lab.remove`
+  (and `lab.purge` per purged facility): `camber portfolio audit` lists them;
 - a dataset facility that is suspended, offboarding or archived is not re-ingested until you
-  `camber facility resume` or `restore` it.
+  `camber facility resume` or `restore` it, and the lab does not purge it (nor one under a legal
+  hold).
 
 ### What "loopback only" means for a shared machine
 
@@ -439,8 +472,8 @@ launch URL, or the cookie the browser gets for it:
   where other people's process lists would show it;
 - without it, every page, the catalog, the jobs, the reports, the trend viewer and its data
   answer *401* and show nothing;
-- a change (queueing or cancelling a job, for catalog ids only) must also come from the lab's
-  own page, which sends a second token, and the lab answers only requests addressed to
+- a change (queueing or cancelling a job: fetch, ingest, ingest from a folder or remove, for
+  catalog ids only) must also come from the lab's own page, which sends a second token, and the lab answers only requests addressed to
   `127.0.0.1:<port>` or `localhost:<port>`. That keeps other websites open in your browser from
   using it.
 
@@ -463,11 +496,11 @@ The full list of the lab's request checks is in
 ### The port is in use
 
 ```
-error: [Errno 48] Address already in use
+error: port 8765 on 127.0.0.1 is already in use (another `camber lab`, or another program, is listening there). Stop it, or pick a free port: `camber lab --port 8766` (or any free port number)
 ```
 
-(the number differs between systems). Another program, or a lab you already started, is using
-port 8765. Stop the other lab, or pick another port:
+Another program, or a lab you already started, is using port 8765. The lab exits with code 1.
+Stop the other lab, or pick another port:
 
 ```
 camber lab --port 8766
@@ -508,13 +541,17 @@ cookie belongs to the name you first opened, so for `localhost` open the launch 
 ### Fetch & ingest is greyed out
 
 The button is disabled when nothing is ticked, and when the selection does not fit: the line
-next to it turns red when the download is bigger than the free space on the cache's disk, or the
-store estimate is bigger than the free space on the store's disk. Untick something, choose the
-`default` subset, free some space, or start the lab with `--dir` or `--store` on a bigger disk.
+next to it turns red and says which disk is short (*not enough disk to fetch & ingest: cache +
+store needs …, … free*). It counts the download, the archive extraction and the store estimate,
+each with the fetch's 5 % headroom (see [Disk use](#disk-use)). **Ingest (already fetched)** is
+disabled the same way when the extraction and the store do not fit. Untick something, choose the
+`default` subset, free some space (**Remove…** another dataset), or start the lab with `--dir` or
+`--store` on a bigger disk.
 
-The page's check is a first look. The fetch checks again before it downloads (with a 5 % margin),
-and the ingest checks before it extracts an archive; either stops the job with *not enough disk
-space at …: need …, only … free*.
+The server runs the same check before it queues a job and refuses with *not enough disk space:
+…*. The fetch and the ingest still check again before they download or extract, since the
+disk can fill up while a job waits; either stops the job with *not enough disk space at …: need
+…, only … free*.
 
 ### Proxies and firewalls
 
@@ -560,10 +597,11 @@ cancel them.
 
 ### The xlsx extra
 
-`ornl-frp-vav` and `nist-heatpump-fdd` are Excel workbooks. Without the `xlsx` extra the
-download succeeds and the ingest stops with *dataset … (extra 'xlsx') needs the optional package
-'openpyxl': pip install "camber-toolkit[xlsx]"*. Install it, stop and restart the lab, tick the
-dataset and press **Ingest (already fetched)**.
+`ornl-frp-vav` and `nist-heatpump-fdd` are Excel workbooks. Without the `xlsx` extra their rows
+show a red **needs xlsx** badge and *install first: pip install "camber-toolkit[xlsx]"*, and
+cannot be ticked, so nothing is downloaded that could not be ingested. Install the extra, stop and
+restart the lab, and reload the page. A request that skips the page is refused the same way: *…
+needs the optional extra(s) xlsx (the 'openpyxl' package: pip install "camber-toolkit[xlsx]")*.
 
 ### A research-only dataset will not fetch
 
@@ -593,6 +631,9 @@ The job shows the error in red. The ones you may meet:
 | *portfolio is locked by …* | In a workspace, another command holds the lock. Wait for it to finish, then try again. |
 | *dataset cache … is locked by …* or *store … is locked by …* | Another lab or `camber datasets` command is writing the same cache or store. It waited 30 seconds; try again when the other job finishes. |
 | *the dataset cache … is read-only for this user* | The cache is shared read-only and the dataset is not fully in it. Ask whoever maintains it to fetch the dataset, or use a cache you can write (`--dir`). |
+| *not enough disk space: …* | The selection does not fit; see [Fetch & ingest is greyed out](#fetch--ingest-is-greyed-out). |
+| *… is suspended: its lifecycle owns its data …* or *… is under a legal hold …* (when removing) | In a workspace, the purge is refused; see [Cleaning up](#cleaning-up). The cache can still be removed. |
+| *… is not a folder*, *dir must be an absolute path …*, *… links outside it* | **From a folder…** needs the full path of a folder you can read that holds the files themselves. |
 | *facility … is suspended: the lab ingests only into provisioning or active facilities* | In a workspace, `camber facility resume` (or `restore`) it first. |
 | *report for … failed: …* (in the report's tab) | The report could not be built from the store; the message says why. |
 | *lost contact with the lab server* (at the top of the page) | The lab stopped. Start it again and reload the page. |

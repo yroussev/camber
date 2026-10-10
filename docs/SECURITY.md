@@ -354,9 +354,32 @@ that accepts writes. It is built for one person on their own machine:
   `hmac.compare_digest`. A POST never accepts `?token=`.
 - **Narrow writes.** POST accepts only `application/json` (else 415) with a body of at most
   16 KiB (else 413, decided on the declared length before the body is read; chunked bodies are
-  refused). Unknown fields are refused. The only writes are queueing a fetch or ingest job, and
-  cancelling one, for **catalog ids only**: no URL, path or file name is ever taken from a
-  request. Manual-download entries are not fetched.
+  refused). Unknown fields are refused, and a flag must be a JSON boolean. The only writes are
+  queueing a job and cancelling one, for **catalog ids only**: no URL or file name is ever taken
+  from a request, and the one path (below) is only read. Manual-download entries are not
+  fetched. The POST routes are:
+  - `/lab/jobs/fetch` and `/lab/jobs/ingest` (`ids`, `subset`, `ingest` / `force`,
+    `acknowledge`);
+  - `/lab/jobs/remove` (0.103, #123: `id`, `confirm`, `purge_store`). It deletes the dataset's
+    cache folder and, with `purge_store`, its facilities in the store, as `camber datasets remove
+    [--purge-store]` does. `confirm` must equal the id (the page's dialog has it typed), else 400.
+    In a workspace a purge is refused (409, with the reason) while any of the dataset's
+    facilities is under a legal hold or is suspended, offboarding or archived, and it is checked
+    again under the workspace lock when the job runs. The lab never bypasses the lifecycle.
+  - `/lab/jobs/from-dir` (0.103, #123: `id`, `dir`, `subset`, `force`, `acknowledge`), for a
+    `manual: true` entry only. `dir` is untrusted input: a string of at most 4096 characters
+    with no control character, an absolute path (`~` is expanded), resolved with `realpath`,
+    that must be an existing directory the lab can read, else 400. The lab looks up only the
+    catalog's own file names in it, as `ingest --from-dir` does, and refuses a file that
+    resolves (through a symbolic link) outside the folder. It only reads the folder: pinned
+    files are verified (size + SHA-256) before they are copied or hard-linked into the cache,
+    and nothing in the folder is written or served back. The authenticated user can name any
+    folder their own account can read; the check keeps the request to that folder.
+  - `/lab/jobs/<id>/cancel` (`{}`).
+- **Pre-flight checks (0.103, #123).** Before a fetch or ingest job is queued, the server
+  refuses it when an optional extra the entry needs is not installed (409, with the install
+  command) or when its download, archive extraction and store estimate, with the fetch's own
+  5 % headroom, do not fit on the disk (507). Nothing is downloaded first.
 - **Licence gate.** A research-only (NC / ND) dataset is refused with 403 unless the request
   carries the acknowledgement the modal collects (the user ticks the terms and types the dataset
   id). As on the CLI, every fetch needs it again. The acceptance goes to the same
@@ -377,8 +400,9 @@ that accepts writes. It is built for one person on their own machine:
   an ingest stops before its staged data is swapped in.
 - **Workspace.** In a portfolio workspace the dataset facilities follow the lifecycle: they are
   registered `provisioning`, ingested under the single-writer lock, then activated. Suspended,
-  offboarding and archived facilities are not written. Every fetch, acknowledgement and ingest
-  appends a `lab.*` line to the audit log. The actor is the OS user running the lab (§8).
+  offboarding and archived facilities are not written or purged, nor is one under a legal hold.
+  Every fetch, acknowledgement, ingest, ingest from a folder, removal and purge appends a
+  `lab.*` line to the audit log. The actor is the OS user running the lab (§8).
 - **No OT code.** `camber.lab` and `camber.datasets` import no BACnet, Modbus, OPC-UA, MQTT,
   OpenADR or edge module, directly or through anything they import. A static test
   (`tests/test_lab.py`) enforces this.

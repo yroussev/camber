@@ -148,16 +148,9 @@ def _cmd_report(args) -> int:
 
 
 def _audit_html(res, cfg, base) -> str:
-    from .config import data_sources
-    from .report.audit import AuditReport
+    from .report.audit import _run_html
 
-    report = res.report
-    if report is None:
-        report = AuditReport(
-            building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
-        )
-        report.add_findings(res.findings)
-    return report.to_html_document(recommend=True)
+    return _run_html(res, cfg, base)
 
 
 def _plugin_report(layout: str, res):
@@ -980,13 +973,22 @@ def _lab_target(args):
 def _cmd_lab(args) -> int:
     from .lab import LabApp, announce, make_lab_server
     from .lab._auth import remove_launch_file
+    from .lab._server import PortInUse
 
+    app = None
     try:
         store, ws = _lab_target(args)
         app = LabApp(store=store, workspace=ws, data_dir=args.dir, docs_dir=args.docs)
         httpd = make_lab_server(app, port=args.port)
+    except PortInUse as e:  # 0.103 (#123): say what to do, not just the errno
+        print(f"error: {e}", file=sys.stderr)
+        if app is not None:
+            app.close()
+        return 1
     except (ValueError, FileNotFoundError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
+        if app is not None:
+            app.close()
         return 1
     where = f"workspace {app.portfolio.root}" if app.portfolio is not None else f"store {store}"
     print(f"camber lab: {where}; dataset cache {app.data_dir}", flush=True)
