@@ -7,6 +7,14 @@ The API serves GET only (`/about` `/health` `/sites` `/points` `/history`) and n
 BAS/OT. Keep it behind the cluster boundary or an authenticating ingress — see
 [SECURITY.md](SECURITY.md).
 
+**Host allowlist (0.103).** The API answers only requests whose `Host` header names it (a
+DNS-rebinding defence), and binding `0.0.0.0` refuses to start without an allowlist. The image
+sets `CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1`; the Kubernetes manifest lists the Service's
+names and probes `/health` with `Host: localhost`. **Add the hostname your ingress or proxy
+forwards** (comma-separated; a bare name matches any port), or the API answers it with 403. Token
+auth (`CAMBER_API_AUTH=token`) is per process, so it does not suit several replicas; use the
+authenticating ingress there.
+
 *Runtime topology: a separate writer populates the store out-of-band; the API pods only read.*
 
 ```mermaid

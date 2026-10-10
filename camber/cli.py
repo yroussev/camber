@@ -12,7 +12,7 @@ Subcommands:
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
-    camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
+    camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]  # read API + /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
@@ -238,9 +238,23 @@ def _cmd_serve(args) -> int:  # pragma: no cover - blocking server loop
     from .api.server import serve
     from .store import ParquetStore
 
-    print(f"CAMBER read-only API + live dashboard on http://{args.host}:{args.port}/ui")
-    print("(read-only, GET-only; bind stays on localhost unless you change --host)")
-    serve(ParquetStore(args.store), host=args.host, port=args.port)
+    # no --allow-host: None, so make_server reads CAMBER_API_ALLOWED_HOSTS
+    allowed = list(args.allow_host) if args.allow_host else None
+    try:
+        serve(
+            ParquetStore(args.store),
+            host=args.host,
+            port=args.port,
+            allowed_hosts=allowed,
+            auth=args.auth,
+            access_token=os.environ.get("CAMBER_API_TOKEN") or None,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: cannot bind {args.host}:{args.port}: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -2611,6 +2625,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--host", default="127.0.0.1", help="bind host (default 127.0.0.1 / localhost)"
     )
     psv.add_argument("--port", type=int, default=8080, help="bind port (default 8080)")
+    psv.add_argument(
+        "--allow-host",
+        action="append",
+        metavar="NAME",
+        help="also answer requests whose Host is NAME or NAME:PORT (repeatable; a proxy or DNS "
+        "name). Default: the loopback names and the bound host; env CAMBER_API_ALLOWED_HOSTS "
+        "(comma-separated) when not given. Binding 0.0.0.0 / :: needs one. '*' allows any Host "
+        "and turns the DNS-rebinding check off (unsafe)",
+    )
+    psv.add_argument(
+        "--auth",
+        choices=["none", "token"],
+        default=None,
+        help="'token': require this run's access token on every route (the launch URL printed "
+        "at startup sets a session cookie; scripts send Authorization: Bearer). Default none; "
+        "env CAMBER_API_TOKEN fixes the token",
+    )
     psv.set_defaults(func=_cmd_serve)
 
     pb = sub.add_parser(
