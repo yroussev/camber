@@ -12,6 +12,72 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.103.0] — Unreleased
+
+### Added
+- **`camber lab`: remove a dataset from the page (#123).** Each row with anything on disk has a
+  **Remove…** button. After you type the dataset id, a job deletes the dataset's downloads and
+  extractions from the cache, as `camber datasets remove` does. A tick box also drops its
+  facilities from the store, as `--purge-store` does. The route is `POST /lab/jobs/remove`, under
+  the lab's usual checks (access token, CSRF token, JSON only, catalog ids only), and needs
+  `confirm` equal to the id. In a portfolio workspace the purge follows the facility lifecycle:
+  it is refused, with the reason shown in the dialog, while a facility is under a legal hold or
+  is suspended, offboarding or archived, and it is checked again under the workspace lock.
+  Removals and purges are audited (`lab.remove`, `lab.purge`).
+- **`camber lab`: ingest a manual download from a folder (#123).** A `manual: true` entry has a
+  **From a folder…** button that does what `camber datasets ingest --from-dir` does
+  (`POST /lab/jobs/from-dir`). The server treats the path as untrusted input. It must be an
+  absolute path (`~` is expanded) of at most 4096 characters, with no control character, to a
+  readable folder. A catalog file that links outside the folder is refused. The folder is only
+  read: each pinned file is verified (size and SHA-256), then copied or hard-linked into the
+  cache and ingested. A research-only entry needs its acknowledgement; in a workspace the ingest
+  is audited (`lab.adopt`).
+- **`camber lab`: force re-ingest (#123).** A **force re-ingest** tick box next to **Ingest
+  (already fetched)**, also used by **From a folder…**, re-ingests data whose inputs are
+  unchanged, which an ingest otherwise skips.
+- **`camber lab` shows each dataset's optional extras (#123).** A row lists its
+  `requires_extras` (for example *needs xlsx*). When an extra is not installed the badge turns
+  red with the install command, the row cannot be ticked, and the server refuses its fetch or
+  ingest (409) before anything is downloaded. Before, an Excel dataset downloaded in full and
+  then failed at ingest.
+- **Evidence charts in the audit report (#125).** `camber report` (the default audit layout) and
+  the lab's **report** link now include a **Finding evidence** section. Each chart shows the
+  samples the rule judged, shaded where it flags them, drawn with the run's own rule instances
+  and data. To bound the report's size and build time, it draws the charts of the 12 worst
+  findings that have one (`camber.report.audit.EVIDENCE_LIMIT`; about 50 KB each) and says so
+  when there were more. The RCx layout (`--layout rcx`) still gives each issue its own page.
+- **`compressor_short_cycle` gets a recommended action and a Learn more link (#125).** The
+  recommended action covers the compressor's minimum on/off timers, the stage differential and
+  where the calling sensor is mounted, with a site check for the walk-down. The link goes to the
+  measures chapter of PNNL's small/medium-sized building re-tuning course (PNNL-SA-92685), new in
+  `camber.references` as `pnnl-small-retuning-ch3`. It covers packaged units and their
+  thermostats.
+
+### Changed
+- **The lab's disk check counts everything a job writes (#123).** The page and the server now
+  add up the download still to fetch, the archive members the ingest extracts into the cache,
+  and the store estimate. Each gets the fetch's own 5 % headroom
+  (`camber.datasets._fetch.DISK_MARGIN`, which the fetch uses too), and the needs are added
+  together when the cache and the store share a disk. Extraction is exact from the zip's own
+  index once it is downloaded, and estimated from the catalog's `extracted_size` before.
+  **Fetch & ingest** is disabled for any selection the fetch would refuse. **Ingest (already
+  fetched)** is now checked against the store's disk too. The server refuses a job that does
+  not fit with HTTP 507 before anything is downloaded. Before, the check left out extraction
+  and the margin, so Fetch could be enabled and still fail.
+- **The workbook's report notes now say the audit report has evidence charts (#125)**
+  (`air-economizer`, `air-scheduling`, `air-static-pressure`, `zone-reheat-overcooling`,
+  `zone-reheat-saturated`), and `--layout rcx` adds a page per issue.
+- **`docs/LAB.md`, `docs/DATASETS.md`, `docs/CLI.md` and `docs/SECURITY.md` §11** describe the
+  new lab controls and POST routes, and the lab screenshots are re-rendered.
+
+### Fixed
+- **`camber lab` on a port already in use (#123)** printed only `error: [Errno 48] Address
+  already in use`. It now says the port is taken and suggests `camber lab --port N`, and exits
+  with code 1, with no traceback. `make_lab_server` raises `camber.lab.PortInUse`, an `OSError`.
+- **`scripts/docs_figures.py --screenshots` captured the lab's 401 page for
+  `docs/img/shots/lab.png`** after 0.102 required an access token on every lab route. It now opens
+  the launch URL the lab prints.
+
 ## [0.102.0] — 2026-10-10
 
 **0.102: follow-ups from 0.101, sample charts across the docs, a guide to the lab, and an access token on every lab route (#110–#121, #127).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue ranks first again (#112). The docs site gains charts and screenshots rendered by CAMBER's own chart code (#113) and a step-by-step guide to `camber lab` (#121). Evidence charts shade exactly what each rule flags and name roles with their units (#114–#117, #119). A stuck supply-air sensor on a scheduled fan is now flagged (#118). **Behaviour change (#120):** `free_cooling_missed` no longer judges fan-off hours, so missed shares rise on units whose fan runs only when occupied; the `air-economizer` and capstone answers move with it. **Security (#127):** `camber lab` now requires a per-run access token on every route; open the URL it prints.

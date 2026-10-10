@@ -27,6 +27,7 @@ from ._jobs import Job, JobCancelled, JobQueue
 from ._server import (
     BODY_LIMIT,
     TOKEN_HEADER,
+    PortInUse,
     announce,
     dispatch_lab,
     make_lab_server,
@@ -36,6 +37,7 @@ from ._server import (
 __all__ = [
     "LabApp",
     "LabError",
+    "PortInUse",
     "Job",
     "JobQueue",
     "JobCancelled",

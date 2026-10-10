@@ -52,21 +52,40 @@ troubleshooting.
 
 ![Screenshot of the camber lab catalog table: dataset rows with kind, licence badge, sizes, status and links](img/shots/lab.png)
 
-*The `camber lab` catalog page on an empty store: each dataset's kind, licence tier, download and store sizes, status, and its exercise and publisher links.*
+*The `camber lab` catalog page on an empty store: each dataset's kind, licence tier, download and store sizes, status, and its exercise and publisher links. A manual download has a **From a folder…** button.*
 
 **The catalog table.** Each dataset shows its kind, its licence **tier** (a green *open* badge,
 or a red *research-only* one), its download size and its estimated size once ingested. It also
 shows what is already fetched or ingested. Filter by licence tier, kind, labelled faults or
 ingested, and search by id, title or what the dataset teaches (each row's *what it teaches*
 list is collapsed until you open it, or until your search matches it; 0.96, #78). Pick a subset (`default` or
-`full`) and tick datasets. The page adds up what they need and compares it with the free space
-on the cache's disk and the store's disk; **Fetch & ingest** is disabled while the selection
-does not fit.
+`full`) and tick datasets. The page adds up what they need (0.103, #123): the download still to
+fetch, the archive members the ingest extracts into the cache, and the store estimate, each with
+the fetch's own 5 % headroom. It compares the cache's needs with the free space on the cache's
+disk and the store's with the store's disk, or their sum when both are one disk. **Fetch &
+ingest** is disabled while the selection does not fit, and **Ingest (already fetched)** while its
+extraction and store do not. The server runs the same check before it queues a job (*not
+enough disk space*, HTTP 507). A row whose `requires_extras` names an extra that is not installed
+shows it in red with the install command and cannot be ticked; the server refuses its fetch or
+ingest (409) before anything is downloaded.
 
 **Jobs.** A fetch (and the ingest that follows it) runs as a job on a single background worker,
 one job at a time, with a progress bar, a log line and a **Cancel** button. A cancelled download
 keeps its partial file, so the next fetch resumes it. A cancelled ingest leaves the store as it
 was. When a job finishes, the page shows the dataset's citation. Please cite it.
+**force re-ingest** (next to **Ingest (already fetched)**) re-ingests data whose inputs have not
+changed, which an ingest otherwise skips.
+
+**Remove and ingest from a folder** (0.103, #123). **Remove…** in a row does what `camber datasets
+remove` does: after you type the dataset id, a job deletes the dataset's downloads and
+extractions from the cache, and, when you tick it, drops its facilities from the store
+(`--purge-store`). In a workspace the purge respects the facility lifecycle: a facility under a
+legal hold, or one that is suspended, offboarding or archived, is not purged, and the dialog says
+why. A manual entry's **From a folder…** does what `camber datasets ingest --from-dir` does. It
+takes the absolute path of a folder with the files you downloaded. The lab checks that the folder
+exists and refuses a file that links outside it. It only reads the folder, then verifies the
+files, copies them into the cache and ingests them. [Using the lab](LAB.md#cleaning-up) shows
+both.
 
 **Research-only datasets.** Selecting one opens a dialog that states the licence terms. You tick
 *I accept* and **type the dataset id**; only then is the fetch queued. The acceptance is recorded
@@ -79,8 +98,9 @@ Every fetch asks again. An ingest of data already fetched with an acknowledgemen
   `camber serve`; one panel per unit with axes, a legend and a normalised view, see
   [the live web UI](VISUALIZATION.md#live-web-ui-072));
 - **report**: the audit report of the dataset's config template, built on demand and cached until
-  the data changes. It carries the dataset's *Data source & licence* block and, for
-  research-only data, the non-commercial / do-not-redistribute banner;
+  the data changes. It carries the dataset's *Data source & licence* block, the evidence charts
+  of its worst findings (0.103) and, for research-only data, the non-commercial /
+  do-not-redistribute banner;
 - **publisher**: the publisher's landing page;
 - **exercise**: the dataset's [workbook](workbook/index.md) exercise, when the entry names one
   (served offline by the lab from a source checkout, else linked on the docs site).
@@ -91,10 +111,12 @@ facility goes through the [lifecycle](PORTFOLIO.md):
 1. Its first ingest registers `ds-<id>` as `provisioning`. The ingest runs under the workspace's
    single-writer lock, and the facility is activated afterwards.
 2. Every fetch, acknowledgement and ingest appends a `lab.fetch`, `lab.acknowledge` or
-   `lab.ingest` line to the audit log. `camber portfolio audit` shows them next to the
+   `lab.ingest` line to the audit log; an ingest from a folder adds `lab.adopt`, a removal
+   `lab.remove` and each purged facility `lab.purge`. `camber portfolio audit` shows them next to the
    `facility.add` and `facility.activate` lines.
 3. Retention, offboarding and archiving then apply to it as to any facility. A suspended,
-   offboarding or archived dataset facility is not re-ingested: resume or restore it first.
+   offboarding or archived dataset facility is not re-ingested, nor purged from the lab: resume or
+   restore it first, or retire it with `camber facility offboard|archive|purge`.
 
 Without a workspace, the lab writes to a plain store (`--store`, default `./lab_store`).
 
@@ -103,7 +125,8 @@ Without a workspace, the lab writes to a plain store (`--store`, default `./lab_
 launch URL `camber lab` prints (`http://127.0.0.1:8765/lab?token=...`, also saved in a launch
 file only you can read), and the browser keeps a session cookie for it (0.102). Other accounts
 on a shared computer get 401. It accepts writes only from its own page, which also sends a
-per-run CSRF token with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
+per-run CSRF token with each one. The only writes it accepts are queueing (fetch, ingest, ingest
+from a folder, remove) or cancelling a job, for **catalog ids**.
 The full list is in [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096). From
 Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 
@@ -206,7 +229,8 @@ name, **verifies every pinned file** (size + SHA-256; a mismatch is refused with
 your file is left untouched), hashes unpinned ones with a warning, and hard-links (or copies) them
 into the cache, recorded in the manifest as `source: "local"` -- from then on `status`, `remove`
 and re-ingest treat them like fetched files. `--from-dir` works for any entry whose files you
-already have. A research-only manual entry also needs `--accept-noncommercial`.
+already have. A research-only manual entry also needs `--accept-noncommercial`. In `camber lab`, a
+manual entry's **From a folder…** button does the same (0.103).
 
 ### Running the workbook answer checks on local files
 
@@ -265,7 +289,9 @@ pip install "camber-toolkit[xlsx]"      # openpyxl, imported only when a workboo
 ```
 
 Such an entry lists `"requires_extras": ["xlsx"]` (the validator requires it whenever a run reads a
-workbook), and `ingest` stops with that install command when the extra is missing. A run names its
+workbook), and `ingest` stops with that install command when the extra is missing. `camber lab`
+shows the extra on the entry's row and, when it is missing, refuses the fetch before downloading
+anything (0.103). A run names its
 worksheet with `"sheet"` (default: the first). Legacy `.xls` files are **not** covered by the extra:
 the only one published beside a planned entry (a heat-pump test report's appendix) is a transposed
 steady-state summary table, not time-series data, so the entry does not use it. CAMBER reads an

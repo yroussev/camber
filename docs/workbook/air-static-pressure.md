@@ -94,7 +94,7 @@ camber run census.json --out census_out
 - **Data issues.** `camber datasets info lbnl-sdahu` lists how the published static points were
   corrected at ingest; `camber datasets info ornl-frp-vav` lists the test days whose duct static
   collapsed.
-- **Report.** `camber report sp.json --out sp.html` shows the same findings as a report; add `--layout rcx` for the printable RCx report with evidence charts.
+- **Report.** `camber report sp.json --out sp.html` shows the same findings as a report, with their evidence charts; add `--layout rcx` for the printable RCx report, with a page per issue.
 
 ![Box plot of duct static pressure by hour of day, one flat band around 1.5 in. w.c.](../img/viz/box-by-hour.png)
 

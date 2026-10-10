@@ -767,6 +767,40 @@ def _rec_boiler_cycle(f, frame, P):
     )
 
 
+def _rec_compressor_cycle(f, frame, P):
+    """0.103 (#125): a DX / heat-pump / chiller compressor short-cycling."""
+    m = getattr(f, "metrics", None) or {}
+    spd = m.get("starts_per_day")
+    return _rec(
+        f,
+        title="Stop compressor short-cycling",
+        cause=(
+            f"Compressor short-cycling ({spd:.0f} starts/day)"
+            if isinstance(spd, (int, float)) and spd == spd
+            else "Compressor short-cycling"
+        ),
+        action=(
+            "Check the compressor's minimum on- and off-time delays and the staging "
+            "differential (the thermostat's or controller's cycle rate), and that the "
+            "space or supply-air sensor driving it is not near a supply diffuser. At low load, "
+            "lock out a stage, or let a larger deadband hold the setpoint, so the compressor "
+            "runs longer and starts less often."
+        ),
+        parameter="Compressor min on/off timers + staging differential",
+        suggested="longer minimum run/off times, a wider stage differential",
+        expected_effect=(
+            "Fewer starts: less start-up inrush and wear, better part-load efficiency and "
+            "dehumidification."
+        ),
+        confidence="medium",
+        standard="PNNL small-building Re-tuning (packaged units, thermostats)",
+        caveats=[
+            "Keep the manufacturer's minimum on/off times; an oversized unit cycles at low "
+            "load whatever the settings."
+        ],
+    )
+
+
 def _leak_cause(m: dict) -> str:
     """Which valve leaks: the larger of the heating and cooling leak shares (0.98, #88)."""
     hw, chw = _num(m.get("hw_leak_pct")), _num(m.get("chw_leak_pct"))
@@ -1195,6 +1229,7 @@ RECOMMENDERS = {
     "hw_pump_dp_reset": _rec_pump_dp,
     "cooling_tower_approach": _rec_cooling_tower,
     "boiler_short_cycle": _rec_boiler_cycle,
+    "compressor_short_cycle": _rec_compressor_cycle,  # 0.103 (#125)
     "leaking_valve": _rec_leaking_valve,
     "dcv_verification": _rec_dcv,
     "dcv_system_verification": _rec_dcv,

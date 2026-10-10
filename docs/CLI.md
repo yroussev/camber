@@ -111,7 +111,9 @@ difference (about 2.6 °F at 1,600 m in hot, dry air).
 
 `camber report` writes the **audit** report by default. It is titled as an ASHRAE Std-211 audit
 only when the config gives the Std-211 inputs (`report.benchmark`, and at Level 2 `report.ecms`);
-otherwise "Building analytics report" (0.96, #78; `report.title` sets one). `--layout rcx` writes the printable
+otherwise "Building analytics report" (0.96, #78; `report.title` sets one). Since 0.103 (#125) it
+includes a **Finding evidence** section: the chart of each of the 12 worst findings, drawn with
+the run's own rules and data. `--layout rcx` writes the printable
 [RCx report](RCX-REPORT.md) instead. Without the flag, the config's `report.layout` decides, and
 any other name is looked up in the `camber.reports` [plugin](PLUGINS.md) group.
 
@@ -476,11 +478,17 @@ step-by-step guide, with screenshots, a classroom setup and troubleshooting, see
 [Using the lab](LAB.md). From it you can:
 
 - filter the datasets by licence tier, kind, labels, or what you have ingested;
-- tick one or more, compare the download and store sizes with the free disk, and press **Fetch &
-  ingest**;
+- tick one or more, compare what they download, extract and take in the store with the free
+  disk (with the fetch's 5 % headroom; 0.103), and press **Fetch & ingest**, or **Ingest
+  (already fetched)**, with **force re-ingest** to re-run an unchanged ingest;
+- see the optional extras a dataset needs; one that is not installed blocks its fetch, with the
+  install command (0.103);
+- ingest a manual download **From a folder…** (`ingest --from-dir`), and **Remove…** a dataset's
+  cache files, optionally purging its facilities (`datasets remove [--purge-store]`), after typing
+  its id (0.103);
 - follow each job's progress, and cancel it;
 - open the **trends** (the live viewer at `/ui?facility_id=ds-<id>`), the **report** (the
-  dataset's config template, run on demand), or the publisher's page.
+  dataset's config template, run on demand, with its evidence charts), or the publisher's page.
 
 A research-only dataset opens a dialog: tick the terms and type the dataset id to acknowledge
 them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
@@ -501,6 +509,8 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   deleted when the lab stops. There is no option that takes the token on the command line. Writes
   also need a per-run CSRF token, from the lab's own origin, as JSON of at most 16 KiB (see
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
+- **Port in use.** When the port is taken, `camber lab` exits with code 1 and says so, suggesting
+  `--port` (0.103). `--port 0` picks a free port.
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
 

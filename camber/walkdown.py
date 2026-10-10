@@ -613,6 +613,17 @@ SITE_CHECKS: dict = {
             "something else (a flame-relay flicker, a pump interlock).",
         ),
     },
+    "compressor_short_cycle": {  # 0.103 (#125)
+        "*": _T(
+            "The compressor at low load: its minimum on/off timers, the stage differential, the "
+            "sensor that calls for cooling (or heating) and where it is mounted",
+            "compressor status (or power)",
+            "The compressor starts and stops many times an hour at low load: short timers, a "
+            "tight differential, a sensor in the supply air stream, or an oversized unit.",
+            "On site the compressor runs steadily: the status point toggles on something else "
+            "(a contactor chatter, a status derived from a power threshold set too high).",
+        ),
+    },
     "leaking_valve": _LEAK,
     "dcv_verification": _DCV,
     "dcv_system_verification": _DCV,
@@ -779,6 +790,9 @@ DESIGN_PARAMS: dict = {
     "cooling_tower_approach": [("design_approach_f", "Design tower approach", None)],
     "boiler_short_cycle": [
         ("max_starts_per_day", "Boiler starts per day the manufacturer allows", None)
+    ],
+    "compressor_short_cycle": [
+        ("max_starts_per_day", "Compressor starts per day the manufacturer allows", None)
     ],
     "chw_pump_dp_reset": [("near_min_pct", "Chilled-water pump drive minimum speed", None)],
     "hw_pump_dp_reset": [("near_min_pct", "Hot-water pump drive minimum speed", None)],

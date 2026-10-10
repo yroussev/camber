@@ -83,14 +83,15 @@ def _rules_map(rules) -> dict:
     return {getattr(r, "name", str(i)): r for i, r in enumerate(rules)}
 
 
-def render_evidence_blocks(ranked, rules_map, frame_for, *, dpi: int = 90) -> str:
+def render_evidence_blocks(ranked, rules_map, frame_for, *, dpi: int = 90, limit=None) -> str:
     """Shared pattern-J evidence rendering used by the dashboard and the audit report.
 
     ``frame_for(equip)`` resolves the role-frame for a finding's equipment (the dashboard passes a
     single ``df`` for all; the audit passes a per-equipment map). A finding renders only when its
     rule exposes an ``evidence()`` hook and a frame exists. A failed render closes only its own
     figure (never the whole pyplot registry) and is skipped. ``dpi`` is the PNG resolution
-    (the RCx report prints at 150).
+    (the RCx report prints at 150). ``limit`` stops after that many charts (0.103, #125: the
+    audit report bounds its size and build time).
     """
     from ..charts.evidence import finding_evidence, render_evidence
 
@@ -98,8 +99,10 @@ def render_evidence_blocks(ranked, rules_map, frame_for, *, dpi: int = 90) -> st
         return ""
     import matplotlib.pyplot as plt
 
-    blocks = []
+    blocks: list = []
     for r in ranked:
+        if limit is not None and len(blocks) >= limit:
+            break
         f = r.finding
         equip = _attr(f, "equip", "")
         rule = rules_map.get(_attr(f, "rule", ""))
