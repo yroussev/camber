@@ -70,7 +70,8 @@ Modbus register maps where the gateway supports them.
 The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.server`) is GET-only:
 every other method, `HEAD` and `OPTIONS` included, is 405, and it answers no CORS preflight. It
 binds `127.0.0.1` by default; the `/ui` HTML is served with a strict same-origin
-`Content-Security-Policy` and loads no external asset. Its request checks (0.103, #128):
+`Content-Security-Policy` and loads no external asset. Its request checks (0.103, #128; the
+cross-site check 0.104, #134), in this order:
 
 - **Host allowlist, always on (DNS rebinding).** A web page on another site can point its own DNS
   name at 127.0.0.1 (or at the server's LAN address) and then read the answers through a visitor's
@@ -81,6 +82,22 @@ binds `127.0.0.1` by default; the `/ui` HTML is served with a strict same-origin
   `CAMBER_API_ALLOWED_HOSTS` entry (a bare name on any port, `NAME:PORT` exactly). Binding
   `0.0.0.0` or `::` refuses to start without an explicit allowlist. `--allow-host '*'` answers any
   `Host`; it turns this defence off and is meant only behind a proxy that checks `Host` itself.
+- **Cross-site check, always on (0.104, #134).** The same check as `camber lab` (§11, shared code
+  in `camber._access`), so another site cannot use a visitor's browser against the server:
+  - a request whose `Sec-Fetch-Site` is `cross-site` (or any value other than `same-origin`,
+    `same-site` or `none`) is 403;
+  - so is a request whose `Origin` is not `http://` or `https://` followed by an allowed `Host`
+    value from the list above (`null` included).
+
+  It runs on every route and method, `/health` included, after the Host check and before the
+  token check, so a cross-site page never gets the session cookie. A request with neither header
+  passes: `curl`, scripts, the container `HEALTHCHECK` and Kubernetes `httpGet` probes send
+  neither. The trend viewer's own requests pass: it is opened from the address bar or a bookmark
+  (`Sec-Fetch-Site: none`), and its fetches are `same-origin`. Unlike the lab, `same-site` is
+  accepted, so a link from a page on a sibling name (or another port of the same host) still
+  opens the viewer. Following a link from **another site** to `camber serve` is refused; open its
+  URL directly. Behind a proxy that rewrites `Host`, list the proxy's public name with
+  `--allow-host` so that a browser's `Origin` matches.
 - **Token auth, opt-in (`--auth token`).** The same model as `camber lab` (§11, shared code in
   `camber._access`): a random 256-bit access token per run (or `CAMBER_API_TOKEN`, 16+ characters,
   from the environment, never argv); a launch URL `http://127.0.0.1:<port>/ui?token=...` printed
@@ -90,19 +107,34 @@ binds `127.0.0.1` by default; the `/ui` HTML is served with a strict same-origin
   Every route needs the cookie or the token (401 without, 403 for a wrong one), except that a bare
   `GET /health` answers `{"ok": true}` and nothing else, for container health checks. Secrets are
   compared with `hmac.compare_digest`.
-- **Default off in 0.103.** Without `--auth token` the server has **no authentication**: on a
+- **Default off, for now.** Without `--auth token` the server has **no authentication**: on a
   computer shared by several accounts, any local user can read every facility, point and history
   it serves, and bound to another interface, anyone who can reach that address can. It prints a
-  warning when bound to anything but loopback without `--auth token`. A later release may make
-  token auth the default on loopback.
+  warning when bound to anything but loopback without `--auth token`. `--auth none` (0.104)
+  chooses no authentication explicitly.
+- **Planned default switch (announced in 0.104, #134).** A future release will make `--auth
+  token` the default when `camber serve` (or `make_server` / `serve` with `auth` left unset) is
+  bound to **loopback**. Nothing changes in 0.104: it only prints a one-line notice on loopback
+  when `--auth` is not given. Timeline:
+  - **0.104:** the notice; `--auth none` accepted.
+  - **No earlier than 0.105.0:** loopback without `--auth` requires the token. That release will
+    list the change under **Changed** in the CHANGELOG.
+
+  Binding to another interface keeps its current default (no authentication, with the warning)
+  under this plan; the container image binds `0.0.0.0` and is not affected. To prepare, pass
+  `--auth token` now, or `--auth none` (`CAMBER_API_AUTH=none` for `python -m
+  camber.api.server`, `auth="none"` from Python) to keep an open server deliberately after the
+  switch, for example behind an authenticating proxy. Either choice hides the notice.
 
 Residual risks: the server speaks plain HTTP (no TLS), so the token and the cookie cross the
 network in clear text when it is bound beyond loopback; terminate TLS at a proxy. The cookie has no
 `Secure` flag for the same reason. A token is per process, so several replicas behind a load
 balancer do not share one; use an authenticating ingress there. There are no user accounts, roles
 or per-facility permissions: whoever holds the token reads everything. A bare `--allow-host`
-name matches any port. The Host check does not stop a client that can reach the port directly and
-sends an allowed `Host` itself; it stops browsers being used as a proxy. Binding beyond loopback
+name matches any port. The Host and cross-site checks do not stop a client that can reach the port
+directly and sends an allowed `Host` itself (and no `Origin`); they stop browsers being used as a
+proxy. A browser too old to send `Sec-Fetch-Site` is covered by the Host check and, for
+cross-origin fetches, by the `Origin` check. Binding beyond loopback
 (`--host` / `CAMBER_API_HOST`) remains your decision; put it behind your own authenticating
 reverse proxy and network controls. The container image binds `0.0.0.0` with
 `CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1` (see DOCKER.md and DEPLOY.md). The catalog UI,
@@ -321,7 +353,9 @@ that accepts writes. It is built for one person on their own machine:
   interface.
 - **DNS-rebinding guard.** Every request's `Host` header must be `127.0.0.1:<port>` or
   `localhost:<port>`, else 403. A page on another domain that re-points its name at 127.0.0.1
-  therefore gets nothing.
+  therefore gets nothing. Since 0.104 (#134) this and the Origin check below use the same code
+  as `camber serve` (§3, `camber._access`), with the lab's narrower settings. Matching ignores
+  letter case, as host names do.
 - **Origin allowlist.** A request that carries an `Origin` must come from one of those two
   origins, and every POST must carry one. A browser's `Sec-Fetch-Site` other than `same-origin` or
   `none` is refused. The lab answers no CORS preflight (`OPTIONS` is 405), so no other origin can

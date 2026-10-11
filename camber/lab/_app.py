@@ -22,6 +22,7 @@ import re
 import secrets
 import threading
 
+from .._access import HostAllowlist
 from ..api.read import ReadAPI
 from ..store import ParquetStore, valid_facility_id
 from ._jobs import JobQueue
@@ -106,15 +107,21 @@ class LabApp:
         self.port: int | None = None
         self.allowed_hosts: frozenset = frozenset()
         self.allowed_origins: frozenset = frozenset()
+        # a camber._access.HostAllowlist once bound (0.104, #134)
+        self.host_allowlist: HostAllowlist | None = None
         self._report_lock = threading.Lock()
         self._reports: dict = {}
 
     # ------------------------------------------------------------------ binding
 
     def bind(self, port: int) -> None:
-        """Set the Host / Origin allowlist for the bound port (loopback names only)."""
+        """Set the Host / Origin allowlist for the bound port: ``127.0.0.1:<port>`` and
+        ``localhost:<port>`` only, as a shared :class:`camber._access.HostAllowlist` (0.104,
+        #134). ``allowed_hosts`` / ``allowed_origins`` list the same values for reading."""
         self.port = int(port)
-        hosts = {f"{LAB_HOST}:{self.port}", f"localhost:{self.port}"}
+        allowlist = HostAllowlist(LAB_HOST, self.port, loopback_names=(LAB_HOST, "localhost"))
+        self.host_allowlist = allowlist
+        hosts = allowlist.exact
         self.allowed_hosts = frozenset(hosts)
         self.allowed_origins = frozenset(f"http://{h}" for h in hosts)
 

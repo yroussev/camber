@@ -6,7 +6,8 @@ CAMBER server that accepts writes, so it is a **separate** server with its own, 
 - **Loopback only.** It binds ``127.0.0.1`` and refuses any other address -- there is no
   ``--host``. :func:`make_lab_server` raises ``ValueError`` for anything else.
 - **Host allowlist** (DNS rebinding): every request's ``Host`` must be ``127.0.0.1:<port>`` or
-  ``localhost:<port>``, else 403.
+  ``localhost:<port>``, else 403. Since 0.104 (#134) this and the Origin check below are the
+  shared :class:`camber._access.HostAllowlist` and :func:`camber._access.cross_site_refusal`.
 - **Origin allowlist**: a request carrying an ``Origin`` must come from those two origins; a POST
   must carry one. A browser's ``Sec-Fetch-Site`` other than ``same-origin`` / ``none`` is refused.
 - **Authentication on every route** (0.102, #127): another account on the same computer can
@@ -50,6 +51,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from .._access import STRICT_FETCH_SITES, cross_site_refusal
 from ..api.server import _UI_CSP, dispatch
 from . import _auth
 from ._app import DEFAULT_PORT, LAB_HOST, LabApp, LabError
@@ -59,7 +61,7 @@ from ._ui import LAB_CSP, lab_page_html
 BODY_LIMIT = 16 * 1024
 TOKEN_HEADER = "X-Camber-Lab-Token"
 READ_ROUTES = ("/ui", "/ui/", "/facilities", "/points", "/history")
-_FETCH_SITES = ("same-origin", "none")
+_FETCH_SITES = STRICT_FETCH_SITES  # ("same-origin", "none")
 _FETCH_KEYS = {"ids", "subset", "ingest", "acknowledge"}
 _INGEST_KEYS = {"ids", "subset", "force", "acknowledge"}
 _FROM_DIR_KEYS = {"id", "dir", "subset", "force", "acknowledge"}
@@ -105,16 +107,22 @@ def _err(status: int, message: str):
 
 
 def _check_origin(app: LabApp, method: str, h: dict):
-    """Host / Sec-Fetch-Site / Origin, for every route; ``None`` when the request may proceed."""
-    if h.get("host") not in app.allowed_hosts:
+    """Host / Sec-Fetch-Site / Origin, for every route; ``None`` when the request may proceed.
+
+    0.104 (#134): the Host and cross-site checks are the shared ones in :mod:`camber._access`
+    (also used by ``camber serve``), with the lab's narrower settings: ``127.0.0.1`` /
+    ``localhost`` at the bound port, ``http`` origins, ``Sec-Fetch-Site`` ``same-origin`` /
+    ``none`` only."""
+    hosts = app.host_allowlist
+    if hosts is None or not hosts.allows(h.get("host")):
         return _err(403, "host not allowed: the lab answers only 127.0.0.1 / localhost")
-    site = h.get("sec-fetch-site")
-    if site is not None and site not in _FETCH_SITES:
-        return _err(403, f"cross-site request refused (Sec-Fetch-Site: {site})")
-    origin = h.get("origin")
-    if origin is not None and origin not in app.allowed_origins:
+    refused = cross_site_refusal(hosts, h, fetch_sites=_FETCH_SITES, schemes=("http",))
+    if refused is not None:
+        header, value = refused
+        if header == "sec-fetch-site":
+            return _err(403, f"cross-site request refused (Sec-Fetch-Site: {value})")
         return _err(403, "origin not allowed")
-    if method == "POST" and origin is None:
+    if method == "POST" and h.get("origin") is None:
         return _err(403, "a POST must carry an Origin header")
     return None
 

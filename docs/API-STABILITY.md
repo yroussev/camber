@@ -650,6 +650,34 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `--data`. The guards and the default may be retuned in a minor release.
 <!-- /0101-suggester-ts -->
 
+### The read API server: `camber.api.server`
+
+The HTTP server behind `camber serve` (#134 records its surface). Its public names and their
+stability:
+
+| Name | Since | Stability |
+|---|---|---|
+| `dispatch(api, method, path, query)` | 0.1 | stable: the pure router, `(status, body)` |
+| `make_server(store, *, host, port, ...)` | 0.1 | stable; the keywords below are newer |
+| `serve(store, *, host, port, ...)` | 0.1 | stable; same arguments as `make_server` |
+| `ReadAPIHandler` | 0.1 | stable as a class name; its methods are internal |
+| `make_server` / `serve` keywords `allowed_hosts=`, `auth=`, `access_token=` | 0.103 | provisional |
+| `check_request(access, method, path, query, headers)` | 0.103 | provisional: `None` or `(status, body, headers)` |
+| `ALLOWED_HOSTS_ENV` (`"CAMBER_API_ALLOWED_HOSTS"`) | 0.103 | provisional |
+
+`check_request`'s `access` argument is the server's `server.access` object, whose class is
+private; its attributes are not API. The routes (`/`, `/about`, `/health`, `/ui`, `/facilities`,
+`/sites`, `/points`, `/history`) and their JSON fields follow the read API in `camber.api.read`.
+The request checks are behaviour, not names: the Host allowlist (0.103) and the cross-site check
+(0.104) may tighten in a minor release, with a CHANGELOG entry.
+
+**Planned default change for `auth`.** Today `auth=None` (the default) and `auth="none"` both
+mean no authentication. A future release, 0.105.0 at the earliest, will make `auth=None` mean
+`"token"` when the server is bound to loopback (`127.0.0.1`, `localhost`, `::1`); other binds keep
+no authentication. `camber serve` prints a notice about it on loopback from 0.104. To keep
+today's behaviour after the switch, pass `auth="none"` (`--auth none`, `CAMBER_API_AUTH=none`);
+to opt in now, pass `auth="token"`. Code that already passes `auth` explicitly is unaffected.
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a
