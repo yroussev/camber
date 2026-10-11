@@ -22,6 +22,15 @@ row filter on ts/equip/role), then pivot to the wide, role-named frames the rule
 already consume -- so the store is a drop-in source behind ``resolve``-style data
 without changing rule code.
 
+**Single writer (0.104, #135).** Every write method (``write_long`` / ``write_role_frame``,
+``register_facility``, ``write_rollup``, ``prune``, ``drop_partition``, ``drop_facility``,
+``migrate_partitions(apply=True)``) holds the store's single-writer lock
+(:func:`camber.store._lock.store_lock`: ``<store>/_lock``, or the workspace's lock for a workspace
+store) for its duration. A second process waits up to ``lock_timeout`` seconds, then gets
+``StoreLocked`` naming the holder. The lock is re-entrant within a process, so a bulk load takes it
+once around the whole operation with :meth:`ParquetStore.lock` and every write inside re-enters it
+cheaply. Reads never take it.
+
 Dependencies: pandas + pyarrow only (no SQL engine), consistent with the rest of
 the package.
 """
@@ -200,6 +209,14 @@ def _role_slug(r) -> str:
     return r.value if isinstance(r, Role) else str(r)
 
 
+def _scratch_store(root: str) -> ParquetStore:
+    """A store whose writes take no lock of their own: an ingest's staging area or a workspace
+    rollup, written only under the lock its caller already holds on the store it belongs to."""
+    st = ParquetStore(root)
+    st._self_lock = False
+    return st
+
+
 def role_frame_to_long(frame: pd.DataFrame, *, equip: str, equip_class: str = "") -> pd.DataFrame:
     """Melt a wide role-named frame (``resolve`` output) to the store's long form.
 
@@ -234,13 +251,41 @@ class PointKey:
 
 
 class ParquetStore:
-    """Read/write normalized point history as a partitioned Parquet dataset."""
+    """Read/write normalized point history as a partitioned Parquet dataset.
 
-    def __init__(self, root: str):
+    ``lock_timeout`` is how long a write waits for another process's store lock (``None``: the
+    default of :func:`camber.store._lock.store_lock` -- ``--lock-timeout``, else
+    ``$CAMBER_LOCK_TIMEOUT``, else 30 s; ``0`` fails at once). See the module docstring.
+    """
+
+    def __init__(self, root: str, *, lock_timeout: float | None = None):
         self.root = root
+        self.lock_timeout = lock_timeout
+        # False only for a scratch store (an ingest's staging area, a workspace rollup) written
+        # under a lock its caller already holds on the store it belongs to.
+        self._self_lock = True
 
     def _registry(self) -> FacilityRegistry:
-        return FacilityRegistry(self.root)
+        return FacilityRegistry(self.root, lock_timeout=self.lock_timeout)
+
+    def lock(self, timeout: float | None = None):
+        """Context manager holding this store's single-writer lock for a whole operation.
+
+        Re-entrant within a process: the write methods called inside it re-enter it instead of
+        locking per call, so a bulk load takes the lock once. ``timeout`` defaults to the store's
+        ``lock_timeout``. Raises ``StoreLocked`` (or ``PortfolioLocked`` for a workspace store)
+        naming the holder if another process keeps it longer.
+        """
+        from ._lock import store_lock  # lazy: it imports the portfolio, which imports the store
+
+        return store_lock(self.root, timeout=self.lock_timeout if timeout is None else timeout)
+
+    def _write_lock(self, *, create: bool = True):
+        """The lock a write method holds: :meth:`lock`, or nothing for a scratch store or (with
+        ``create=False``, for a deletion) a store directory that does not exist yet."""
+        if not self._self_lock or (not create and not os.path.isdir(self.root)):
+            return _nullcontext()
+        return self.lock()
 
     # ------------------------------------------------------------------ write
     def write_long(self, long: pd.DataFrame, *, facility_id: str, name=None, **meta) -> int:
@@ -251,9 +296,13 @@ class ParquetStore:
         keyword metadata) to record the facility's display name in the registry. Partitions by
         ``facility_id``/``year``/``month`` (0.95; year only before); each call writes new part
         files (a per-call basename counter avoids clobbering prior writes), so repeated calls
-        accumulate. Returns rows written.
+        accumulate. Returns rows written. Holds the store lock (see :meth:`lock`).
         """
         require_facility_id(facility_id)
+        with self._write_lock():
+            return self._write_long(long, facility_id=facility_id, name=name, **meta)
+
+    def _write_long(self, long, *, facility_id: str, name=None, **meta) -> int:
         reg = self._registry()
         reg._guard_write(facility_id)  # tombstoned id / case-variant of a known id -> ValueError
         if name is not None or meta:
@@ -307,8 +356,9 @@ class ParquetStore:
         )
 
     def register_facility(self, facility_id: str, name=None, **meta) -> None:
-        """Record a facility's display ``name``/metadata without writing data."""
-        self._registry().register(facility_id, name=name, **meta)
+        """Record a facility's display ``name``/metadata without writing data (under the lock)."""
+        with self._write_lock():
+            self._registry().register(facility_id, name=name, **meta)
 
     def facility_name(self, facility_id: str) -> str:
         """Display name for ``facility_id`` (falls back to the id when unregistered)."""
@@ -688,13 +738,15 @@ class ParquetStore:
     def write_rollup(
         self, freq: str, dest: ParquetStore, *, agg: str = "mean", facility_id=None
     ) -> int:
-        """Compute a rollup and write it to another store; returns rows written."""
+        """Compute a rollup and write it to another store; returns rows written. Reads this store
+        without a lock and holds ``dest``'s lock once for all its writes."""
         rolled = self.rollup(freq, facility_id=facility_id, agg=agg)
         if rolled.empty:
             return 0
         total = 0
-        for s, sub in rolled.groupby(_FACILITY):
-            total += dest.write_long(sub.drop(columns=[_FACILITY]), facility_id=s)
+        with dest._write_lock():
+            for s, sub in rolled.groupby(_FACILITY):
+                total += dest.write_long(sub.drop(columns=[_FACILITY]), facility_id=s)
         return total
 
     def prune(self, *, before_year: int, facility_id=None) -> int:
@@ -703,12 +755,16 @@ class ParquetStore:
         Removes ``facility_id=*/year=Y`` directories with Y < ``before_year``, each by one atomic
         rename before removal (a crash never leaves a half-deleted year visible). Returns the
         number of year partitions removed. Month-level, policy-driven retention is
-        ``camber retention apply`` (:mod:`camber.portfolio`).
+        ``camber retention apply`` (:mod:`camber.portfolio`). Holds the store lock.
         """
-        from . import _swap
-
         if not os.path.isdir(self.root):
             return 0
+        with self._write_lock(create=False):
+            return self._prune(before_year, facility_id)
+
+    def _prune(self, before_year: int, facility_id) -> int:
+        from . import _swap
+
         removed = 0
         fac_dirs = (
             [f"{_FACILITY}={facility_id}"]
@@ -820,18 +876,19 @@ class ParquetStore:
         path = os.path.join(self.root, f"{_FACILITY}={facility_id}", f"{_YEAR}={int(year)}")
         if month is not None:
             path = os.path.join(path, f"{_MONTH}={int(month)}")
-        if not os.path.isdir(path):
-            return 0
-        try:
-            rows = int(ds.dataset(path, format="parquet").count_rows())
-        except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
-            rows = 0
-        _swap.discard(path)
-        self._invalidate_catalog()
-        from ..resolve import clear_store_cache
+        with self._write_lock(create=False):
+            if not os.path.isdir(path):
+                return 0
+            try:
+                rows = int(ds.dataset(path, format="parquet").count_rows())
+            except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
+                rows = 0
+            _swap.discard(path)
+            self._invalidate_catalog()
+            from ..resolve import clear_store_cache
 
-        clear_store_cache(self.root, facility_id)
-        return rows
+            clear_store_cache(self.root, facility_id)
+            return rows
 
     def migrate_partitions(self, *, apply: bool = False, reason=None) -> dict:
         """Convert pre-0.95 year-only partitions to ``year=/month=`` partitions.
@@ -842,8 +899,8 @@ class ParquetStore:
         add up, and swaps it in (crash-safe: an interrupted migration leaves each year either as it
         was or fully migrated, and re-running finishes it). Each month file is written in the
         canonical part layout (rows sorted timestamp first; see docs/SCALE.md).
-        Inside a portfolio workspace ``apply`` takes the lock and is audited
-        (``store.migrate_partitions``) and needs a ``reason``. Idempotent. Returns
+        ``apply`` holds the store lock (the workspace's inside a portfolio workspace, where it is
+        also audited as ``store.migrate_partitions`` and needs a ``reason``). Idempotent. Returns
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
         """
         from . import _swap
@@ -852,7 +909,7 @@ class ParquetStore:
         ws = reg._workspace()
         if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
             raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
-        with reg._locked() if apply else _nullcontext():
+        with self._write_lock(create=False) if apply else _nullcontext():
             if apply:
                 _swap.recover_tree(self.root, max_depth=3)
             todo = [p for p in self.partitions() if p["legacy"]]
@@ -986,6 +1043,10 @@ class ParquetStore:
         ``forget=True``. An unknown facility is a no-op returning 0.
         """
         require_facility_id(facility_id)
+        with self._write_lock(create=forget):
+            return self._drop_facility(facility_id, forget)
+
+    def _drop_facility(self, facility_id: str, forget: bool) -> int:
         fdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
         rows = 0
         if os.path.isdir(fdir):

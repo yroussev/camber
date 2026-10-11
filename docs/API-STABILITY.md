@@ -649,6 +649,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   The example `real_names.dataset_points` takes `keep_series`, and `catalog_names.py` takes
   `--data`. The guards and the default may be retuned in a minor release.
 <!-- /0101-suggester-ts -->
+- **Store lock wait** (0.104; #135), additive and provisional: `ParquetStore(root, lock_timeout=)`
+  and `ParquetStore.lock(timeout=None)`; the `lock_timeout=` keywords of
+  `camber.interop.openfdd.ingest_package` and `camber.lab.LabApp`; and the environment variable
+  `CAMBER_LOCK_TIMEOUT`. The default of `FacilityRegistry(lock_timeout=)` is now `None` (the
+  store-lock default, 30 s unless the variable says otherwise). **Behaviour change:** every
+  `ParquetStore` write method and the facility registry of a plain store hold the store's
+  single-writer lock (`<store>/_lock`), so a plain store gets a `_lock` file on its first write
+  and a second process writing the same store waits, then gets `StoreLocked`.
 
 ### The read API server: `camber.api.server`
 

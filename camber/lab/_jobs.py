@@ -117,7 +117,10 @@ class Job:
 class JobQueue:
     """A FIFO of :class:`Job` s run by a single daemon worker thread."""
 
-    def __init__(self, *, name: str = "camber-lab-worker"):
+    def __init__(self, *, name: str = "camber-lab-worker", job_context=None):
+        # job_context(): a context manager each job runs inside, on the worker thread (the lab's
+        # store / cache lock wait, which a context variable cannot carry across threads)
+        self._job_context = job_context
         self._q: queue.Queue = queue.Queue()
         self._jobs: collections.OrderedDict = collections.OrderedDict()
         self._lock = threading.Lock()
@@ -189,7 +192,11 @@ class JobQueue:
                 continue
             job._set(state=RUNNING, started_at=_now(), message="started")
             try:
-                result = job.work(job)
+                if self._job_context is None:
+                    result = job.work(job)
+                else:
+                    with self._job_context():
+                        result = job.work(job)
             except JobCancelled:
                 job._set(state=CANCELLED, message="cancelled")
             except Exception as exc:  # the job's error is shown on the page, never re-raised

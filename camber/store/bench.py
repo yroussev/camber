@@ -39,15 +39,16 @@ def synth_portfolio(
     n = max(1, int(pd.Timedelta(days=days) / pd.Timedelta(freq)))
     idx = pd.date_range(start, periods=n, freq=freq)
     rows = 0
-    for s in range(facilities):
-        facility_id = f"facility_{s:03d}"
-        for e in range(equips):
-            frame = pd.DataFrame(
-                {r: 50.0 + rng.normal(0, 5, len(idx)) for r in role_list}, index=idx
-            )
-            rows += store.write_role_frame(
-                frame, facility_id=facility_id, equip=f"AHU_{e:02d}", equip_class="ahu"
-            )
+    with store.lock():  # once for the whole load; each write re-enters it
+        for s in range(facilities):
+            facility_id = f"facility_{s:03d}"
+            for e in range(equips):
+                frame = pd.DataFrame(
+                    {r: 50.0 + rng.normal(0, 5, len(idx)) for r in role_list}, index=idx
+                )
+                rows += store.write_role_frame(
+                    frame, facility_id=facility_id, equip=f"AHU_{e:02d}", equip_class="ahu"
+                )
     return rows
 
 

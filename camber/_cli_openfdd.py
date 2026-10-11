@@ -61,6 +61,17 @@ def add_parser(sub) -> None:
     ing.add_argument("--force", action="store_true", help="re-ingest even if unchanged")
     ing.add_argument("--config-out", dest="config_out", help="also write a starting run config")
     ing.add_argument("--json", help="also write the ingest result (coverage, unmapped) as JSON")
+    from .cli import _lock_seconds  # cli is loaded: it is what builds this parser
+
+    ing.add_argument(
+        "--lock-timeout",
+        dest="lock_timeout",
+        type=_lock_seconds,
+        default=None,
+        metavar="SECONDS",
+        help="seconds to wait for the store lock another process holds (0: fail at once; "
+        "default: --store $CAMBER_LOCK_TIMEOUT, else 30; --workspace 0)",
+    )
     ing.set_defaults(func=_cmd_ingest)
 
     ins = ofsub.add_parser(
@@ -111,7 +122,13 @@ def _print_coverage(cov: dict, unmapped: dict) -> None:
 
 def _cmd_ingest(args) -> int:
     from .interop.openfdd import ingest_package
+    from .portfolio._lock import LockHeld, default_lock_timeout
 
+    try:
+        default_lock_timeout()  # a bad $CAMBER_LOCK_TIMEOUT stops here, before anything is read
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     try:
         res = ingest_package(
             args.package,
@@ -128,8 +145,9 @@ def _cmd_ingest(args) -> int:
             reason=args.reason,
             equip_types=_equip_types(args.equip_types),
             config_out=args.config_out,
+            lock_timeout=args.lock_timeout,
         )
-    except (ValueError, FileNotFoundError) as e:
+    except (ValueError, FileNotFoundError, LockHeld) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     if res.skipped:

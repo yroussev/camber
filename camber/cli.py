@@ -519,6 +519,53 @@ def _cmd_edge_selftest(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------- store / cache lock wait
+#
+# 0.104 (#135): the commands that take a store or dataset-cache lock accept --lock-timeout SECONDS
+# (0 = fail at once). Without it the wait is $CAMBER_LOCK_TIMEOUT, else 30 s.
+
+
+def _lock_seconds(value: str) -> float:
+    """argparse type for --lock-timeout: a number of seconds >= 0."""
+    from .portfolio._lock import parse_lock_timeout
+
+    try:
+        return parse_lock_timeout(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def _add_lock_timeout(p, what: str = "the store or dataset-cache lock") -> None:
+    p.add_argument(
+        "--lock-timeout",
+        dest="lock_timeout",
+        type=_lock_seconds,
+        default=None,
+        metavar="SECONDS",
+        help=f"seconds to wait for {what} another process holds (0: fail at once; "
+        "default $CAMBER_LOCK_TIMEOUT, else 30)",
+    )
+
+
+def _lock_scoped(fn):
+    """Run ``fn`` with its ``--lock-timeout`` as the store / cache lock wait; a bad
+    ``$CAMBER_LOCK_TIMEOUT`` is a usage error (exit 2) before anything runs."""
+
+    def wrapped(args) -> int:
+        from .portfolio._lock import default_lock_timeout, lock_wait
+
+        with lock_wait(getattr(args, "lock_timeout", None)):
+            try:
+                default_lock_timeout()
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 2
+            return fn(args)
+
+    wrapped.__name__ = fn.__name__
+    return wrapped
+
+
 # --------------------------------------------------------------------------- datasets subcommands
 #
 # The open dataset catalog (camber.datasets). Exit codes: 2 = checksum mismatch (a changed upstream
@@ -736,6 +783,7 @@ def _progress_printer():
 
 
 @_ds_errors
+@_lock_scoped
 def _cmd_datasets_fetch(args) -> int:
     from . import datasets as ds
 
@@ -805,6 +853,7 @@ def _cmd_datasets_fetch(args) -> int:
 
 
 @_ds_errors
+@_lock_scoped
 def _cmd_datasets_ingest(args) -> int:
     from . import datasets as ds
 
@@ -876,6 +925,7 @@ def _cmd_datasets_status(args) -> int:
 
 
 @_ds_errors
+@_lock_scoped
 def _cmd_datasets_remove(args) -> int:
     from . import datasets as ds
 
@@ -993,6 +1043,7 @@ def _lab_target(args):
     return (None, ws) if ws else ("lab_store", None)
 
 
+@_lock_scoped
 def _cmd_lab(args) -> int:
     from .lab import LabApp, announce, make_lab_server
     from .lab._auth import remove_launch_file
@@ -1001,7 +1052,13 @@ def _cmd_lab(args) -> int:
     app = None
     try:
         store, ws = _lab_target(args)
-        app = LabApp(store=store, workspace=ws, data_dir=args.dir, docs_dir=args.docs)
+        app = LabApp(
+            store=store,
+            workspace=ws,
+            data_dir=args.dir,
+            docs_dir=args.docs,
+            lock_timeout=args.lock_timeout,
+        )
         httpd = make_lab_server(app, port=args.port)
     except PortInUse as e:  # 0.103 (#123): say what to do, not just the errno
         print(f"error: {e}", file=sys.stderr)
@@ -1658,6 +1715,7 @@ def _cmd_retention_apply(args) -> int:
     return 1 if r.get("problems") else 0
 
 
+@_lock_scoped
 def _cmd_store_migrate_partitions(args) -> int:
     from .store import ParquetStore
 
@@ -3043,6 +3101,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="acknowledge a research-only (NC/ND) licence; recorded in acknowledgements.json",
     )
+    _add_lock_timeout(dsf, "the dataset-cache lock")
     dsf.set_defaults(func=_cmd_datasets_fetch)
 
     dsg = dssub.add_parser("ingest", help="normalize fetched data into a Parquet store")
@@ -3070,6 +3129,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="skip the catalog's fix quirks and ingest the data exactly as published "
         "(`datasets info <id>` lists what each fix corrects); recorded in the provenance",
     )
+    _add_lock_timeout(dsg)
     dsg.set_defaults(func=_cmd_datasets_ingest)
 
     dss = dssub.add_parser("status", help="what is fetched, its size on disk, what is ingested")
@@ -3085,6 +3145,7 @@ def _build_parser() -> argparse.ArgumentParser:
     dsr.add_argument(
         "--purge-store", dest="purge_store", action="store_true", help="also drop its facilities"
     )
+    _add_lock_timeout(dsr)
     dsr.set_defaults(func=_cmd_datasets_remove)
 
     dsc = dssub.add_parser("config", help="write a ready-to-run config for an ingested dataset")
@@ -3160,6 +3221,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="docs source tree to serve workbook exercise pages from offline (default: docs/ "
         "beside the package in a source checkout; else exercise links go to the docs site)",
     )
+    _add_lock_timeout(plab, "a dataset cache or plain-store lock (fetch, ingest, remove jobs)")
     plab.set_defaults(func=_cmd_lab)
     # ----- /lab
 
@@ -3349,10 +3411,14 @@ def _build_parser() -> argparse.ArgumentParser:
     rta.add_argument("--facility", help="only this facility_id")
     rta.add_argument("--now", help="evaluate the policy as of this date (default: now)")
     rta.add_argument(
+        "--lock-timeout",
         "--wait",
-        type=float,
+        dest="wait",
+        type=_lock_seconds,
         default=0.0,
-        help="seconds to wait for the portfolio lock (default 0; exit 75 if still held)",
+        metavar="SECONDS",
+        help="seconds to wait for the workspace lock (default 0; exit 75 if still held); "
+        "--wait is the older name",
     )
     rta.add_argument("--json", action="store_true")
     rta.set_defaults(func=_cmd_retention_apply)
@@ -3370,6 +3436,7 @@ def _build_parser() -> argparse.ArgumentParser:
     stm.add_argument("--yes", action="store_true", help="confirm --apply")
     stm.add_argument("--reason", help="why (audited; required with --apply inside a workspace)")
     stm.add_argument("--json", action="store_true")
+    _add_lock_timeout(stm, "the store lock (--apply)")
     stm.set_defaults(func=_cmd_store_migrate_partitions)
 
     fce = fcsub.add_parser("export", help="write a verified export bundle now (changes nothing)")

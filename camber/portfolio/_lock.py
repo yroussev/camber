@@ -16,13 +16,20 @@ lock; other processes are refused (or wait, with ``timeout``).
 :func:`exclusive_lock` is the same lock under another name and error, for directories that are not
 portfolios: a plain store (:func:`camber.store._lock.store_lock`) and a dataset cache
 (:func:`camber.datasets._paths.cache_lock`) take it on ``<dir>/_lock`` (0.103, #124).
+
+**How long a store or cache writer waits (0.104, #135).** :func:`default_lock_timeout` is the wait
+the store and cache locks use when no ``timeout`` is passed: a :func:`lock_wait` scope (what the
+CLI's ``--lock-timeout SECONDS`` sets), else ``$CAMBER_LOCK_TIMEOUT``, else 30 seconds. ``0``
+fails at once. Portfolio admin commands keep their own wait (``--wait``, default 0).
 """
 
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import datetime as _dt
 import json
+import math
 import os
 import socket
 import sys
@@ -30,6 +37,52 @@ import threading
 import time
 
 LOCK_FILE = "_lock"
+LOCK_TIMEOUT_ENV = "CAMBER_LOCK_TIMEOUT"
+DEFAULT_LOCK_TIMEOUT = 30.0  # seconds a second store or cache writer waits before it is refused
+
+# The wait set by lock_wait() for this thread / task (None: not set).
+_WAIT: contextvars.ContextVar = contextvars.ContextVar("camber_lock_wait", default=None)
+
+
+def parse_lock_timeout(value, *, source: str = "--lock-timeout") -> float:
+    """``value`` as a lock wait in seconds: a finite number >= 0, else ``ValueError`` naming
+    ``source`` (the flag or variable it came from)."""
+    try:
+        seconds = float(str(value).strip()) if isinstance(value, str) else float(value)
+    except (TypeError, ValueError):
+        seconds = math.nan
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError(
+            f"{source} must be a number of seconds >= 0 (0 fails at once), not {value!r}"
+        )
+    return seconds
+
+
+def default_lock_timeout(fallback: float = DEFAULT_LOCK_TIMEOUT) -> float:
+    """The store / cache lock wait when none is passed: the innermost :func:`lock_wait`, else
+    ``$CAMBER_LOCK_TIMEOUT`` (``ValueError`` if it is not a number >= 0), else ``fallback``."""
+    wait = _WAIT.get()
+    if wait is not None:
+        return wait
+    env = os.environ.get(LOCK_TIMEOUT_ENV, "").strip()
+    if env:
+        return parse_lock_timeout(env, source=f"${LOCK_TIMEOUT_ENV}")
+    return fallback
+
+
+@contextlib.contextmanager
+def lock_wait(seconds):
+    """Within the block, store and cache locks taken without an explicit ``timeout`` wait
+    ``seconds`` (validated; ``None`` leaves the current default in force). Per thread: a worker
+    thread starts without it, so wrap the worker's job in its own scope."""
+    if seconds is None:
+        yield
+        return
+    token = _WAIT.set(parse_lock_timeout(seconds))
+    try:
+        yield
+    finally:
+        _WAIT.reset(token)
 
 
 class LockHeld(RuntimeError):

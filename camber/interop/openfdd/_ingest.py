@@ -15,7 +15,6 @@ written to the entry's ``"timezone"`` (0.99.1, #96), the standard place for a fa
 
 from __future__ import annotations
 
-import contextlib
 import datetime as _dt
 import hashlib
 import json
@@ -29,6 +28,7 @@ from ... import __version__
 from ...model.equipclass import equip_family
 from ...model.roles import Role
 from ...store import FacilityRegistry, ParquetStore, make_facility_id, require_facility_id
+from ...store.parquet_store import _scratch_store
 from ._crosswalk import load_crosswalk
 from ._historian import is_historian_root, read_historian
 from ._reader import WEATHER_EQUIP, OpenFddPackage, read_package
@@ -142,7 +142,7 @@ def openfdd_meta(meta: dict) -> dict:
 
 
 def _write_staged(pkg: OpenFddPackage, staging: str, fid: str) -> int:
-    st = ParquetStore(staging)
+    st = _scratch_store(staging)  # under the store lock its caller holds
     rows = 0
     for e in pkg.equipment.values():
         if e.frame is not None and not e.frame.empty:
@@ -185,6 +185,7 @@ def ingest_package(
     reason: str | None = None,
     equip_types: dict | None = None,
     config_out: str | None = None,
+    lock_timeout: float | None = None,
 ) -> OpenFddIngestResult:
     """Read an open-fdd package or historian root and write it into CAMBER (provisional, 0.99).
 
@@ -196,6 +197,12 @@ def ingest_package(
     activates a ``provisioning`` one); otherwise it starts ``provisioning`` and ``camber run``
     skips it until activated. ``config_out`` also writes a starting run config
     (:func:`package_config`). ``equip_types`` classifies historian equipment.
+
+    The write holds the store's single-writer lock once for the whole ingest: the workspace's
+    lock (``lock_timeout`` seconds to wait, default 0 like every workspace admin command) or,
+    since 0.104 (#135), a plain store's ``<store>/_lock`` (default: ``--lock-timeout``, else
+    ``$CAMBER_LOCK_TIMEOUT``, else 30 s). A held lock raises ``PortfolioLocked`` /
+    ``StoreLocked`` naming the holder.
     """
     from ...datasets._ingest import _staging_root, _swap_in
     from ...portfolio import Portfolio, is_workspace
@@ -220,10 +227,10 @@ def ingest_package(
                 f"{workspace} is not a portfolio workspace "
                 "(create one with `camber portfolio init`)"
             )
-        port = Portfolio(workspace)
+        port = Portfolio(workspace, lock_timeout=0.0 if lock_timeout is None else lock_timeout)
         st = port.store
     else:
-        st = ParquetStore(os.path.abspath(os.fspath(store)))
+        st = ParquetStore(os.path.abspath(os.fspath(store)), lock_timeout=lock_timeout)
     res = OpenFddIngestResult(
         facility_id=fid,
         building_id=pkg.building_id,
@@ -238,8 +245,7 @@ def ingest_package(
     )
     res.equipment = len(pkg.equipment)
     why = reason or f"open-fdd ingest of building {pkg.building_id}"
-    lock = port.lock() if port else contextlib.nullcontext()
-    with lock:
+    with port.lock() if port else st.lock():
         reg = port.registry if port else FacilityRegistry(st.root)
         entry = reg.get(fid)
         if entry:

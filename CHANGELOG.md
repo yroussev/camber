@@ -20,6 +20,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `CAMBER_API_AUTH=none` the `python -m camber.api.server` form.
 - **A `camber.api.server` entry in `docs/API-STABILITY.md` (#134):** its public names, their
   stability, and the planned change of the `auth` default.
+- **`--lock-timeout SECONDS` and `CAMBER_LOCK_TIMEOUT` (#135)** set how long a command waits for a
+  store or dataset-cache lock that another process holds, on `camber datasets fetch|ingest|remove`,
+  `camber lab`, `camber interop openfdd ingest` and `camber store migrate-partitions`. `0` fails at
+  once, naming the holder. Without the flag, the environment variable sets the wait, else it is 30
+  seconds as before. A value that is not a number of seconds >= 0 is refused (exit 2).
+  `camber retention apply` takes `--lock-timeout` too, as the new name for `--wait`, which still
+  works; its default stays 0. In Python: `ParquetStore(root, lock_timeout=…)`, `ParquetStore.lock()`
+  for holding the lock across a bulk load, `lock_timeout=` on `ingest_package`, and
+  `LabApp(lock_timeout=…)`.
 
 ### Changed
 - **`camber serve` refuses cross-site browser requests (#134), as `camber lab` does.** A request
@@ -36,6 +45,20 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `same-origin` or `none`. The lab answers the same requests with the same errors; host names are
   now matched without regard to letter case.
 
+- **Every write to a plain store takes the store lock (#135).** In 0.103 only the dataset
+  catalog's writers locked a plain store. Now every `ParquetStore` write method holds the store's
+  single-writer lock (`<store>/_lock`, or the workspace's lock for a workspace store):
+  `write_long`, `write_role_frame`, `register_facility`, `write_rollup` (on the destination),
+  `prune`, `drop_partition`, `drop_facility` and `migrate_partitions(apply=True)`. So do the
+  facility registry's changes on a plain store. The lock is re-entrant within a process.
+  `camber interop openfdd ingest --store`, `camber store migrate-partitions --apply`, the dataset
+  ingests and `synth_portfolio()` take it once for the whole command, and the writes inside
+  re-enter it. Reads still take no lock. A plain store now gets a `_lock` file on its first write.
+  A script that writes many times can hold `with store.lock():` around the whole load, so the
+  lock is taken once; otherwise each write takes it on its own, which costs under a millisecond.
+  An ingest's staging area and a workspace's rollup stores take no lock of their own, because the
+  lock on the store they belong to already covers them.
+
 ### Deprecated
 - **No authentication by default for `camber serve` on loopback (#134).** A future release, 0.105.0
   at the earliest, will make `--auth token` the default when the server is bound to loopback
@@ -45,6 +68,11 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   other interfaces, including the container image's `0.0.0.0`, are not part of this change.
 
 ### Fixed
+- **Writers of a plain store could race each other (#135).** `camber interop openfdd ingest
+  --store`, `camber store migrate-partitions --apply` and any script writing through
+  `ParquetStore` did not take the store lock, so they could interleave with a `camber datasets
+  ingest`, a lab job or each other on the same store. Each now waits for the lock (30 s by
+  default), then stops with `store … is locked by <pid>@<host> since <time>`.
 - **A flaky portfolio-migrate test (#139).** `test_ambiguous_label_is_refused_and_nothing_is_written`
   compared the whole workspace before and after a refused apply, including `_lock`. A refused apply
   still takes the lock and rewrites its holder line, which carries the time to the second, so the

@@ -423,6 +423,7 @@ camber interop openfdd ingest PKG --timezone TZ --units ip|si (--store DIR | --w
                         [--activate] [--facility-id ID] [--name NAME] [--building B]
                         [--resample 15min|native] [--equip-types FILE] [--reason TEXT]
                         [--force] [--config-out run.json] [--json result.json]
+                        [--lock-timeout SECONDS]
 camber interop openfdd inspect PKG --timezone TZ --units ip|si [--building B] [--json FILE]
 camber interop openfdd crosswalk [--json]           # the open-fdd -> CAMBER role table
 camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-' = stdout)
@@ -431,7 +432,9 @@ camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-
 - **`ingest`** registers the building as one facility. In a workspace that goes through the
   lifecycle (`provisioning` unless `--activate`) and is audited. It records provenance (file
   sha256s, crosswalk version, zone, units) and prints the column coverage. An unchanged package
-  is skipped.
+  is skipped. It holds the store lock while it writes (0.104 for a plain store; see
+  [Store and cache locks](#store-and-cache-locks)). Into a workspace it does not wait by
+  default, like every workspace change.
 - **`inspect`** is the same read with nothing written.
 - **`findings`** runs a config (rules, M&V, drift) and writes one JSON document for a separate
   process to read back.
@@ -445,10 +448,11 @@ them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DA
 camber datasets list [--licence commercial|all] [--kind simulated|real|lab|synthetic] [--labeled] [--json]
 camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
+                        [--lock-timeout SECONDS]
 camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
-                        [--from-dir DIR] [--accept-noncommercial]
+                        [--from-dir DIR] [--accept-noncommercial] [--lock-timeout SECONDS]
 camber datasets status [--dir D] [--store DIR] [--json]
-camber datasets remove <id> [--dir D] [--store DIR --purge-store]
+camber datasets remove <id> [--dir D] [--store DIR --purge-store] [--lock-timeout SECONDS]
 camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
                         [--facility ID] [--exercise EX]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
@@ -486,8 +490,10 @@ estimated size. Exit codes: `2` checksum mismatch (a download is kept as `.bad`;
 **Locks and a read-only cache (0.103).** `fetch`, `ingest` and `remove` take a single-writer
 lock on the cache (`<dir>/_lock`) and, for `ingest` and `remove --purge-store`, on the store
 (`<store>/_lock`, or the portfolio workspace's lock for a workspace store). A second writer waits
-up to 30 seconds, then exits 1 with `dataset cache … is locked by <pid>@<host> since <time>` (or
-`store … is locked by …`). Reads such as `status` take no lock. A cache you cannot write works for
+up to 30 seconds (`--lock-timeout SECONDS` or `$CAMBER_LOCK_TIMEOUT` changes that; see
+[Store and cache locks](#store-and-cache-locks)), then exits 1 with
+`dataset cache … is locked by <pid>@<host> since <time>` (or `store … is locked by …`). Reads such
+as `status` take no lock. A cache you cannot write works for
 `fetch` of files that are already there and verify (nothing is written) and for `ingest`; see
 [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache). A typical session:
 
@@ -521,7 +527,7 @@ events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` 
 ### The local catalog UI: `camber lab` (provisional, 0.96)
 
 ```
-camber lab [--workspace W | --store S] [--dir D] [--port 8765] [--docs DIR]
+camber lab [--workspace W | --store S] [--dir D] [--port 8765] [--docs DIR] [--lock-timeout SECONDS]
 ```
 
 This starts a local web page for the same catalog and prints its launch URL,
@@ -566,6 +572,32 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
 
+## Store and cache locks
+
+A store has one writer at a time (0.103 for the dataset commands, 0.104 for everything that writes
+a plain store). Every command that writes a Parquet store holds the store's single-writer lock for
+the whole operation: `datasets ingest` and `remove --purge-store`, the lab's ingest and remove
+jobs, `interop openfdd ingest`, `store migrate-partitions --apply`, and any script that writes
+through `ParquetStore` (each write method takes the lock, and re-enters it when its caller already
+holds it). A plain store's lock is `<store>/_lock`; a store inside a portfolio workspace uses the
+workspace's lock. The dataset cache has its own, `<dir>/_lock`. Reads take no lock.
+
+A second writer waits, then exits 1 naming the holder:
+`store <path> is locked by <pid>@<host> since <time>`. The wait is:
+
+- `--lock-timeout SECONDS` on `datasets fetch|ingest|remove`, `lab`, `interop openfdd ingest` and
+  `store migrate-partitions`. `0` fails at once; a negative or non-numeric value is a usage error
+  (exit 2);
+- else the `CAMBER_LOCK_TIMEOUT` environment variable (same rules; a bad value exits 2 before
+  anything runs);
+- else 30 seconds.
+
+Workspace administration keeps its own default of not waiting: `camber facility`, `camber
+portfolio` and `retention apply` refuse at once unless given a wait (`retention apply
+--lock-timeout S`, formerly `--wait S`), and `interop openfdd ingest --workspace` waits 0 unless
+`--lock-timeout` is given. The lab never waits on a workspace's lock. See
+[DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+
 ## Portfolio and facility lifecycle
 
 `camber portfolio` manages a **workspace**: one directory holding a portfolio's store, retention
@@ -598,8 +630,8 @@ camber retention set CLASS KEY=VALUE... --reason R      # e.g. set raw_trends ke
 camber retention override ID CLASS (KEY=VALUE... | --clear) --reason R
 camber retention hold|release ID --reason R              # legal hold
 camber retention apply [--facility ID] [--now DATE] [--json]            # dry run: the plan
-camber retention apply --apply --reason R --yes [--wait S]              # roll up, verify, prune
-camber store migrate-partitions STORE [--apply --yes] [--reason R]      # year= -> year=/month=
+camber retention apply --apply --reason R --yes [--lock-timeout S]      # roll up, verify, prune
+camber store migrate-partitions STORE [--apply --yes] [--reason R] [--lock-timeout S]
 ```
 
 Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
@@ -625,9 +657,11 @@ hourly and daily rollups, verifies the rollups against the raw row count, and on
 it also trims old closed faults, drift baseline history and old reports, and archives offboarding
 facilities whose grace period has ended. It is a dry run unless `--apply --reason R --yes`, skips
 facilities under a legal hold, is idempotent, and is safe from cron: exit code 0 (done or nothing
-to do), 1 (a verification kept data), 75 (the lock is held; retry next run). `store
-migrate-partitions` converts a pre-0.95 year-only store to month partitions. See
-[PORTFOLIO.md](PORTFOLIO.md#retention).
+to do), 1 (a verification kept data), 75 (the lock is held; retry next run). Its lock wait is
+`--lock-timeout S` (0.104; `--wait S` is the older name), default 0. `store migrate-partitions`
+converts a pre-0.95 year-only store to month partitions; `--apply` holds the store lock (a plain
+store's own since 0.104), waiting as described in [Store and cache locks](#store-and-cache-locks).
+See [PORTFOLIO.md](PORTFOLIO.md#retention).
 
 Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
 warns and finds no equipment unless the config source sets `"include_inactive": true`.

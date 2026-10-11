@@ -42,8 +42,9 @@ order: `--workspace PATH`, then `$CAMBER_PORTFOLIO`, then the current directory.
 
 ### Existing stores keep working
 
-A plain `ParquetStore` directory that is not in a workspace works exactly as before: no lock, no
-audit log. Registry entries written by older versions have no lifecycle fields. They read as
+A plain `ParquetStore` directory that is not in a workspace works as before, with no audit log.
+Since 0.104 its writes take the store's own lock, `<store>/_lock` (see
+[the lock](#the-lock)). Registry entries written by older versions have no lifecycle fields. They read as
 `state: "active"` with unknown (`null`) dates, and nothing is rewritten until the entry is next
 changed.
 
@@ -396,8 +397,16 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
   and manifest update.
 - Since 0.95 the applied lifecycle and retention commands (`camber facility
   offboard|archive|restore|purge --apply`, `camber retention set|override|hold|release`,
-  `camber retention apply --apply`, `camber store migrate-partitions --apply` inside a workspace)
-  fail at once too; `retention apply --wait S` waits up to S seconds, for cron.
+  `camber retention apply --apply`) fail at once too; `retention apply --lock-timeout S` (0.104;
+  `--wait S` is the older name) waits up to S seconds, for cron.
+- `camber store migrate-partitions --apply` waits 30 seconds by default since 0.104, like the
+  other store writers; `--lock-timeout S` or `$CAMBER_LOCK_TIMEOUT` changes the wait, and `0`
+  fails at once. `$CAMBER_LOCK_TIMEOUT` does not change the no-wait default of the admin
+  commands above.
+- **Plain stores (0.104).** A store outside a workspace has the same kind of lock on
+  `<store>/_lock`, held by every write (`ParquetStore` write methods, the facility registry,
+  dataset and open-fdd ingests, `store migrate-partitions --apply`). See
+  [CLI.md](CLI.md#store-and-cache-locks).
 - The lock is re-entrant within one process.
 - **Stale locks.** The operating system drops the lock when the holding process exits, including
   after a crash or `kill -9`. A leftover `_lock` file therefore never blocks anyone. Its holder
@@ -479,7 +488,7 @@ nothing. `--now` evaluates the policy as of another date (for planning).
 ```
 
 Exit codes: 0 done (or nothing to do), 1 a verification kept data (see the output), 75 the lock
-is held by another writer (try again next run; `--wait S` waits up to S seconds first).
+is held by another writer (try again next run; `--lock-timeout S` waits up to S seconds first).
 
 **Year-only partitions.** A pre-0.95 `year=` partition is rolled up and pruned only when the
 whole year has expired. One straddling the cutoff, or a year that holds both year-only files and
@@ -492,8 +501,9 @@ camber store migrate-partitions <ws>/store --apply --yes --reason "0.95 partitio
 ```
 
 Each year is rebuilt in a staging directory (legacy rows split by month, existing month
-partitions carried over), the rows are counted, and it is swapped in. Inside a workspace it takes
-the lock and is audited (`store.migrate_partitions`). Re-running is a no-op.
+partitions carried over), the rows are counted, and it is swapped in. It holds the store lock (the
+workspace's, inside a workspace, where it is also audited as `store.migrate_partitions`).
+Re-running is a no-op.
 
 ### The policy document (for edge and cloud tooling)
 

@@ -118,6 +118,29 @@ case is refused. See [PORTFOLIO.md](PORTFOLIO.md).
    file is invisible to reads. `rebuild_catalog()` materializes it for a store that predates
    the cache.)
 
+## One writer at a time (0.104)
+
+Every `ParquetStore` write method (`write_long`, `write_role_frame`, `register_facility`,
+`write_rollup`, `prune`, `drop_partition`, `drop_facility`, `migrate_partitions(apply=True)`)
+holds the store's single-writer lock while it writes: `<store>/_lock` for a plain store, the
+workspace's lock for a workspace store. Another process that writes the same store waits (30 s by
+default; `--lock-timeout`, `$CAMBER_LOCK_TIMEOUT` or `ParquetStore(root, lock_timeout=…)` change
+it), then gets `StoreLocked` naming the holder. Reads never take it.
+
+Taking the lock afresh costs a file open, an `flock` and a short holder record (under a
+millisecond on a local disk). For a bulk load, take it once around the whole load. The writes
+inside re-enter it, which costs microseconds:
+
+```python
+st = ParquetStore("lake")
+with st.lock():  # once for the whole load
+    for fid, equip, frame in frames:
+        st.write_role_frame(frame, facility_id=fid, equip=equip)
+```
+
+`camber datasets ingest`, the lab, `camber interop openfdd ingest` and `synth_portfolio()` already
+do this: each takes the store lock once per command.
+
 ## Measuring it
 
 A synthetic generator + benchmark ships in the package:

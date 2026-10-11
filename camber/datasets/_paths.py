@@ -21,8 +21,9 @@ Everything here is plain stdlib; JSON writes are atomic (tmp + ``os.replace``).
 ``ingest --from-dir`` placing files, an ingest extracting archive members or recording an
 acknowledgement, ``remove`` -- holds :func:`cache_lock`, the single-writer lock of
 :mod:`camber.portfolio._lock` on ``<root>/_lock``. A second process waits up to
-:data:`CACHE_LOCK_TIMEOUT` seconds, then gets :class:`CacheLocked` naming the holder. Reads take no
-lock: files are published with ``os.replace``, so a reader sees a whole file or none.
+:data:`CACHE_LOCK_TIMEOUT` seconds (since 0.104: ``--lock-timeout``, else ``$CAMBER_LOCK_TIMEOUT``,
+else that), then gets :class:`CacheLocked` naming the holder. Reads take no lock: files are
+published with ``os.replace``, so a reader sees a whole file or none.
 
 **Read-only caches.** A cache the current user cannot write (:func:`writable` is false) -- one
 shared read-only across a classroom -- works for everything that needs no write: a fetch whose
@@ -40,7 +41,7 @@ import datetime as _dt
 import json
 import os
 
-from ..portfolio._lock import LockHeld, exclusive_lock
+from ..portfolio._lock import LockHeld, default_lock_timeout, exclusive_lock
 
 MANIFEST = "manifest.json"
 ACKS = "acknowledgements.json"
@@ -110,10 +111,11 @@ def require_writable(root: str, dataset_id: str | None, what: str) -> None:
 def cache_lock(root: str, *, timeout: float | None = None):
     """Context manager holding the cache's single-writer lock (``<root>/_lock``; see the module).
 
-    ``timeout`` defaults to :data:`CACHE_LOCK_TIMEOUT`. Re-entrant within a process. Creates
-    ``root`` if needed.
+    ``timeout`` defaults to :func:`~camber.portfolio._lock.default_lock_timeout` (a
+    ``--lock-timeout`` scope, else ``$CAMBER_LOCK_TIMEOUT``, else :data:`CACHE_LOCK_TIMEOUT`).
+    Re-entrant within a process. Creates ``root`` if needed.
     """
-    timeout = CACHE_LOCK_TIMEOUT if timeout is None else timeout
+    timeout = default_lock_timeout(CACHE_LOCK_TIMEOUT) if timeout is None else timeout
     os.makedirs(root, exist_ok=True)
     return exclusive_lock(
         root,

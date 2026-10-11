@@ -64,7 +64,8 @@ from .. import __version__
 from ..model.mapping import MappingProvider
 from ..model.roles import Role
 from ..store import FacilityRegistry, ParquetStore
-from ..store._lock import STORE_LOCK_TIMEOUT, store_lock
+from ..store._lock import store_lock
+from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
 from . import _licence, _paths
 from ._archive import archive_kind, safe_extract
@@ -714,7 +715,7 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
     sources = {r["id"]: _run_sources(r, paths, inputs) for r in runs}
     reader = _plan_reads(runs, spec, sources)
     fid = spec["facility"]
-    st = ParquetStore(staging)
+    st = _scratch_store(staging)  # under the store lock its caller holds
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
     labels, onsets, excluded, context, notes, warns = {}, {}, {}, {}, [], []
@@ -887,7 +888,7 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
     roles = spec.get("meter_roles") or {}
     default_role = Role(spec.get("default_meter_role", "energy_rate"))
     rule = spec.get("resample", "1h")
-    st = ParquetStore(staging)
+    st = _scratch_store(staging)  # under the store lock its caller holds
     out: dict = {}
     series: dict = {}
     for m, path in files.items():
@@ -993,7 +994,7 @@ def ingest_dataset(
     corrections: bool = True,
     accept_noncommercial: bool = False,
     via: str = "ingest",
-    lock_timeout: float = STORE_LOCK_TIMEOUT,
+    lock_timeout: float | None = None,
 ) -> IngestResult:
     """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
 
@@ -1004,8 +1005,9 @@ def ingest_dataset(
 
     0.103 (#124): the store's writes run under its single-writer lock
     (:func:`camber.store._lock.store_lock` -- the workspace's lock for a workspace store). A
-    second writer waits up to ``lock_timeout`` seconds, then gets ``StoreLocked`` (or
-    ``PortfolioLocked``) naming the holder. The cache may be read-only (see :mod:`._paths`).
+    second writer waits up to ``lock_timeout`` seconds (``None``: ``--lock-timeout``, else
+    ``$CAMBER_LOCK_TIMEOUT``, else 30), then gets ``StoreLocked`` (or ``PortfolioLocked``) naming
+    the holder. The cache may be read-only (see :mod:`._paths`).
     """
     st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
     sname = subset or "default"

@@ -305,9 +305,10 @@ def policy_document(pf, *, now=None) -> dict:
 
 
 def _rollup_store(pf, freq: str):
-    from ..store import ParquetStore
+    from ..store.parquet_store import _scratch_store
 
-    return ParquetStore(os.path.join(pf.root, ROLLUPS_DIR, freq))
+    # written only under the workspace lock (apply holds it), so no lock file of its own
+    return _scratch_store(os.path.join(pf.root, ROLLUPS_DIR, freq))
 
 
 def _part_path(root: str, fid: str, year: int, month: int) -> str:

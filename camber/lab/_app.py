@@ -57,6 +57,9 @@ class LabApp:
     ``entries`` replaces the packaged catalog and ``opener`` the HTTPS opener -- both for tests.
     ``access_token`` fixes the secret behind the launch URL (for tests and scripts; at least 16
     characters; default: a fresh random one per run). ``token`` fixes the CSRF token likewise.
+    ``lock_timeout`` is how long a job waits for a dataset cache or plain-store lock another
+    process holds (``None``: ``$CAMBER_LOCK_TIMEOUT``, else 30 s; ``0`` fails at once); a
+    workspace's lock is never waited on.
     """
 
     def __init__(
@@ -70,6 +73,7 @@ class LabApp:
         token: str | None = None,
         docs_dir=None,
         access_token: str | None = None,
+        lock_timeout: float | None = None,
     ):
         if (store is None) == (workspace is None):
             raise ValueError("pass exactly one of store= or workspace=")
@@ -103,7 +107,10 @@ class LabApp:
         from ._docs import default_docs_dir
 
         self.docs_dir = os.fspath(docs_dir) if docs_dir is not None else default_docs_dir()
-        self.jobs = JobQueue()
+        from ..portfolio._lock import lock_wait, parse_lock_timeout
+
+        self.lock_timeout = None if lock_timeout is None else parse_lock_timeout(lock_timeout)
+        self.jobs = JobQueue(job_context=lambda: lock_wait(self.lock_timeout))
         self.port: int | None = None
         self.allowed_hosts: frozenset = frozenset()
         self.allowed_origins: frozenset = frozenset()

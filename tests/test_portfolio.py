@@ -375,10 +375,12 @@ def test_case_insensitive_collisions_are_refused(tmp_path):
         reg.register("X-1", name="X again")
 
 
-def test_registry_without_workspace_takes_no_lock_and_writes_no_audit(tmp_path):
+def test_registry_without_workspace_uses_the_store_lock_and_writes_no_audit(tmp_path):
     st = ParquetStore(str(tmp_path / "db"))
     st.write_role_frame(_frame(), facility_id="f", equip="AHU_1", name="F")
-    assert not os.path.exists(tmp_path / "db" / "_lock")
+    # 0.104 (#135): a plain store's writes take its own lock, never a workspace's
+    assert os.path.exists(tmp_path / "db" / "_lock")
+    assert not os.path.exists(tmp_path / "_lock")
     assert not os.path.exists(tmp_path / "_audit.ndjson")
     # a marker pointing at a missing / non-workspace directory is ignored
     json.dump({"portfolio": ".."}, open(tmp_path / "db" / "_workspace.json", "w"))

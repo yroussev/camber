@@ -509,6 +509,10 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   `dataset cache … is locked by <pid>@<host> since <time>` or `store … is locked by …`
   (`camber datasets` exits 1; a lab job fails with that message). Run it again once the other
   job finishes;
+- since 0.104, `--lock-timeout SECONDS` on `camber datasets fetch|ingest|remove` and
+  `camber lab` sets that wait, and `0` fails at once. Without the flag, the
+  `CAMBER_LOCK_TIMEOUT` environment variable sets it, else it is 30 seconds. A value that is not
+  a number of seconds >= 0 is refused (exit 2). The lab never waits on a workspace's lock;
 - reads take no lock: `status`, the lab's catalog, trends and reports, and `camber run` on the
   store. Files and partitions are swapped in whole, so a reader sees the old data or the new;
 - the lock is the kernel's (`flock`, or `msvcrt` on Windows), the same one the portfolio uses. It
@@ -517,8 +521,10 @@ lab and `camber datasets ingest`, no longer get in each other's way:
 - advisory locks are unreliable on some network filesystems (older NFS, SMB without byte-range
   locks). Keep a cache that several machines write on a local disk, or give each machine its own.
 
-The lock covers what `camber datasets` and `camber lab` write. Other commands that write a plain
-store, such as `camber ingest` of a CSV export, do not take it.
+Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
+`camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, and any
+script that writes through `ParquetStore`. Each write method takes the lock, and re-enters it when
+its caller already holds it. See [CLI.md](CLI.md#store-and-cache-locks).
 
 **A read-only shared cache (0.103).** A cache that you can read but not write, such as a course
 folder on a shared drive that one person filled, now works:

@@ -16,7 +16,6 @@ raw name causes as a partition directory.
 
 from __future__ import annotations
 
-import contextlib
 import datetime as _dt
 import hashlib
 import json
@@ -101,12 +100,14 @@ class FacilityRegistry:
     registration of a tombstoned id -- or of an id that differs from a known one only by letter
     case, which would share a directory on a case-insensitive filesystem -- is refused.
 
-    When the store root belongs to a portfolio workspace (``camber portfolio init``), every
-    read-modify-write takes the workspace's single-writer lock (waiting up to ``lock_timeout``
-    seconds) and every new registration or removal is appended to its audit log.
+    Every read-modify-write takes the store's single-writer lock (waiting up to ``lock_timeout``
+    seconds; ``None``: the default of :func:`camber.store._lock.store_lock`): the workspace's lock
+    when the store root belongs to a portfolio workspace (``camber portfolio init``), else, since
+    0.104, the store's own ``<store>/_lock``. Inside a workspace every new registration or removal
+    is also appended to its audit log.
     """
 
-    def __init__(self, root: str, *, lock_timeout: float = 30.0):
+    def __init__(self, root: str, *, lock_timeout: float | None = None):
         self.root = root
         self.lock_timeout = lock_timeout
 
@@ -120,12 +121,9 @@ class FacilityRegistry:
         return _workspace_of_store(self.root)
 
     def _locked(self):
-        ws = self._workspace()
-        if ws is None:
-            return contextlib.nullcontext()
-        from ..portfolio._lock import portfolio_lock  # lazy: portfolio imports the store
+        from ._lock import store_lock  # lazy: it imports the portfolio, which imports the store
 
-        return portfolio_lock(ws, timeout=self.lock_timeout)
+        return store_lock(self.root, timeout=self.lock_timeout)
 
     def _audit(self, action: str, **kw) -> None:
         ws = self._workspace()
