@@ -739,6 +739,8 @@ SCENARIOS: dict = {
     "source_loop_deltat": _source_loop,  # 0.93 (#40)
     # 0.98 (#85): promoted with the maintainer's sign-off (S3)
     "actuator_stuck": _actuator_stuck,
+    # 0.103: promoted with the maintainer's sign-off
+    "hw_pump_summer_lockout": _hw_pump_summer,  # 0.103 (#132)
 }
 
 
@@ -748,12 +750,10 @@ SCENARIOS: dict = {
 # reads with strict_new: moving one into SCENARIOS adds baseline keys, a maintainer decision. Empty
 # after 0.93, when reheat_capacity_shortfall (#44) and the five single-equipment DX / heat-pump
 # rules (#40) were signed off and promoted (the 0.92 promotion was condenser_bypass_leak, #15).
-# 0.103: hw_pump_summer_lockout (#132) waits here for its sign-off.
+# hw_pump_summer_lockout (#132) was promoted at the 0.103 sign-off; empty again.
 
 #: Scenarios pending sign-off as gated synthetic keys (see the note above).
-PENDING_SCENARIOS: dict = {
-    "hw_pump_summer_lockout": _hw_pump_summer,  # 0.103 (#132)
-}
+PENDING_SCENARIOS: dict = {}
 
 
 # --------------------------------------------------------------------------- harness

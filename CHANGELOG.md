@@ -117,8 +117,8 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   point (it may serve another loop). Wired through the parameter registry and `THRESHOLDS.md`,
   the references, the scorecard, a recommended action and a walk-down item (both new for
   `boiler_summer_lockout` too), the RCx report's cause chains (a boiler and its pump on one
-  plant are one issue), the G36 plant sequence (`g36_plant`) and a faultlab scenario pending
-  sign-off as a gated benchmark key. See `docs/PLANT-DETECTORS.md`.
+  plant are one issue), the G36 plant sequence (`g36_plant`) and a faultlab scenario, now a
+  gated synthetic benchmark key (TPR 1.0, FPR 0.0; `coverage.n_scored` 46 → 47). See `docs/PLANT-DETECTORS.md`.
 - **Synthetic catalog entries (#133).** A catalog entry of `kind: "synthetic"` is generated
   locally by one of CAMBER's own generators instead of downloaded: `camber datasets fetch` (and
   the lab's **Fetch & ingest**) writes it into the cache from a fixed seed, the same bytes on

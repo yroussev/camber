@@ -137,8 +137,8 @@ pump's own check, built-in and single-period, on hot-water plants and pumps.
   freeze protection needs the loop in warm weather: set the lockout to its sequence, or leave the
   rule out.
 
-It is scored on a synthetic injected fault (`camber.faultlab.PENDING_SCENARIOS`, TPR 1.0 and FPR
-0.0) but not yet a gated benchmark key, and no open dataset shows the fault; the
+It is scored on a synthetic injected fault (`camber.faultlab.SCENARIOS`, TPR 1.0 and FPR 0.0),
+a gated synthetic benchmark key since 0.103; no open dataset shows the fault, so the
 [`plant-lockout`](workbook/plant-lockout.md) exercise works it on the synthetic catalog entry
 `synthetic-hw-plant-lockout`.
 

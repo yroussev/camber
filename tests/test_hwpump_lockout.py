@@ -225,18 +225,22 @@ def test_soo_plant_sequence_locks_the_pump_out_too():
     assert sev == {"boiler_summer_lockout": "ok", "hw_pump_summer_lockout": "fault"}
 
 
-def test_faultlab_scores_it_pending_sign_off():
+def test_faultlab_scores_it_as_a_gated_scenario():
     from camber.eval import benchmark
 
-    assert "hw_pump_summer_lockout" in faultlab.PENDING_SCENARIOS
-    assert "hw_pump_summer_lockout" not in faultlab.SCENARIOS  # no gated key without sign-off
-    pend = faultlab.PENDING_SCENARIOS
-    rep = benchmark(faultlab.labeled_records(scenarios=pend), faultlab.targets(pend))
+    # promoted from PENDING_SCENARIOS at the 0.103 sign-off: a gated synthetic key now
+    assert "hw_pump_summer_lockout" in faultlab.SCENARIOS
+    assert "hw_pump_summer_lockout" not in faultlab.PENDING_SCENARIOS
+    one = {"hw_pump_summer_lockout": faultlab.SCENARIOS["hw_pump_summer_lockout"]}
+    rep = benchmark(faultlab.labeled_records(scenarios=one), faultlab.targets(one))
     c = rep.per_detector["hw_pump_summer_lockout"]
     assert (c.true_positive_rate, c.false_positive_rate) == (1.0, 0.0)
-    assert faultlab.cross_fire(scenarios=pend) == {}
-    # nor does it fire on any gated scenario's faulty frame
-    assert not [k for k, v in faultlab.cross_fire().items() if "hw_pump_summer_lockout" in v]
+    # it fires on no other gated scenario's faulty frame
+    assert not [
+        k
+        for k, v in faultlab.cross_fire().items()
+        if k != "hw_pump_summer_lockout" and "hw_pump_summer_lockout" in v
+    ]
 
 
 # --------------------------------------------------------------------------- the shared lockout
