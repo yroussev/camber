@@ -427,6 +427,15 @@ Version numbers are given only where a release is already planned.
     - [x] #120 `free_cooling_missed` is fan-gated; workbook answers updated;
     - [x] #121 `docs/LAB.md`, a step-by-step guide to `camber lab`;
     - [x] #127 `camber lab` requires a per-run access token on every route.
+  - **0.103 — numpy 2, `camber serve` hardening, viewer and lab, reproducible stores, HW pump lockout** (released 2026-10-11). Closes #122–#126, #128–#130, #132, #133:
+    - [x] #122 trend viewer: whole span with min/max thinning, date range, brush-to-zoom, honest time axis;
+    - [x] #123, #125 lab: disk check, extras gating, remove / from-folder / force, evidence in its report;
+    - [x] #124, #126 locks on plain stores and caches, a read-only shared cache, no ingest DtypeWarning;
+    - [x] #128 `camber serve` Host allowlist (default on) and opt-in `--auth token`;
+    - [x] #129 numpy>=2 (breaking) and numpy-2 dependency floors;
+    - [x] #130 byte-reproducible store part files;
+    - [x] #132 `hw_pump_summer_lockout`, a gated synthetic scenario;
+    - [x] #133 a `synthetic` catalog kind and the `plant-lockout` exercise.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
