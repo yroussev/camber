@@ -21,9 +21,9 @@ search. Everything below is a summary of it.
 
 ## A look at the output
 
-| [![Fault-annotated multi-trend: cooling and heating valves with the simultaneous-heat/cool afternoons shaded](docs/img/thumbs/multitrend.png)](https://yroussev.github.io/camber/VISUALIZATION/) | [![Chiller condenser approach on its frozen drift baseline, the current period above the band](docs/img/thumbs/chiller-drift.png)](https://yroussev.github.io/camber/CHILLER-DRIFT/) | [![Cumulative M&V savings against a projected baseline with a 90 percent uncertainty band](docs/img/thumbs/savings.png)](https://yroussev.github.io/camber/MANDV/) |
+| [![Fault-annotated multi-trend: cooling and heating valves with the simultaneous-heat/cool afternoons shaded](https://raw.githubusercontent.com/yroussev/camber/main/docs/img/thumbs/multitrend.png)](https://yroussev.github.io/camber/VISUALIZATION/) | [![Chiller condenser approach on its frozen drift baseline, the current period above the band](https://raw.githubusercontent.com/yroussev/camber/main/docs/img/thumbs/chiller-drift.png)](https://yroussev.github.io/camber/CHILLER-DRIFT/) | [![Cumulative M&V savings against a projected baseline with a 90 percent uncertainty band](https://raw.githubusercontent.com/yroussev/camber/main/docs/img/thumbs/savings.png)](https://yroussev.github.io/camber/MANDV/) |
 |:---:|:---:|:---:|
-| Fault-annotated trends ([Visualization](docs/VISUALIZATION.md)) | Drift against a frozen baseline ([Chiller drift](docs/CHILLER-DRIFT.md)) | M&V savings with uncertainty ([M&V](docs/MANDV.md)) |
+| Fault-annotated trends ([Visualization](https://github.com/yroussev/camber/blob/main/docs/VISUALIZATION.md)) | Drift against a frozen baseline ([Chiller drift](https://github.com/yroussev/camber/blob/main/docs/CHILLER-DRIFT.md)) | M&V savings with uncertainty ([M&V](https://github.com/yroussev/camber/blob/main/docs/MANDV.md)) |
 
 All three are drawn by CAMBER's own chart code on synthetic data; `scripts/docs_figures.py`
 renders every figure in the docs.
@@ -31,14 +31,14 @@ renders every figure in the docs.
 ## What it does
 
 Full API-level detail — every capability, its flags, and the standard it cites — is in
-**[docs/CAPABILITIES.md](docs/CAPABILITIES.md)**
+**[docs/CAPABILITIES.md](https://github.com/yroussev/camber/blob/main/docs/CAPABILITIES.md)**
 ([on the site](https://yroussev.github.io/camber/CAPABILITIES/)).
 
 - **Ingest** — per-point and wide/tabular CSV, a long/tall adapter, named **vendor profiles** and a
   multi-format timestamp/value parser (ISO / US / EU-dayfirst / BAS / epoch / Excel-serial), a
   Project-Haystack `hisRead` client, SQL/historian readers, and **read-only network adapters**
   (Modbus, MQTT/Sparkplug, BACnet incl. experimental BACnet/SC, OPC-UA) — read-only *by
-  construction*, lazy-imported, historian-first ([SECURITY](docs/SECURITY.md)).
+  construction*, lazy-imported, historian-first ([SECURITY](https://github.com/yroussev/camber/blob/main/docs/SECURITY.md)).
 - **Semantic model** — a vendor-neutral `Role` vocabulary + mapping provider, a site/equipment/point
   entity model with **completeness validation**, a **served-by topology** populated from Brick,
   Haystack or naming, and interop both ways with **Brick**, **Haystack** tags and **ASHRAE 223P**.
@@ -47,21 +47,21 @@ Full API-level detail — every capability, its flags, and the standard it cites
   refrigerant-side** rules (RTU, heat-pump/VRF, DOAS, FCU); a **Sequence-of-Operations conformance
   engine** with a packaged G36 clause library; **cohort/peer** and topology-scoped **fleet** rules.
 - **Drift detection** — the complement to "is this value wrong?": *has this equipment been drifting
-  away from its own frozen baseline?* Six families — [chiller](docs/CHILLER-DRIFT.md),
-  condenser, evaporator, [pump/hydronic](docs/PUMP-DRIFT.md), [AHU air-side](docs/AHU-DRIFT.md) and
-  [VAV zone-terminal](docs/VAV-DRIFT.md) — each comparing at *matched load or duty*, each rolling up
+  away from its own frozen baseline?* Six families — [chiller](https://github.com/yroussev/camber/blob/main/docs/CHILLER-DRIFT.md),
+  condenser, evaporator, [pump/hydronic](https://github.com/yroussev/camber/blob/main/docs/PUMP-DRIFT.md), [AHU air-side](https://github.com/yroussev/camber/blob/main/docs/AHU-DRIFT.md) and
+  [VAV zone-terminal](https://github.com/yroussev/camber/blob/main/docs/VAV-DRIFT.md) — each comparing at *matched load or duty*, each rolling up
   to one localized verdict, and each driveable from a config or `camber drift`
-  ([CLI](docs/CLI.md#drift-baselines)).
+  ([CLI](https://github.com/yroussev/camber/blob/main/docs/CLI.md#drift-baselines)).
 - **Trim-and-Respond / G36 reset analytics** — does the plant's reset logic do what G36 intends?
   Reset compliance and effectiveness, plus a **rogue-zone census** (which zone monopolizes the reset)
-  and its common-mode twin, **cohort starvation**. See [TR-RESET.md](docs/TR-RESET.md).
+  and its common-mode twin, **cohort starvation**. See [TR-RESET.md](https://github.com/yroussev/camber/blob/main/docs/TR-RESET.md).
 - **Data trust** — sensor faults are not equipment faults: physical bounds, cross-sensor
   consistency, sensor **drift vs an external reference**, and mapping confidence, wired as a **gate**
   so a rule that cannot trust its inputs declines to fire rather than reporting a false fault.
 - **M&V** — IPMVP **Options A / B / C / D**: change-point models (2P–5P + zero variants), LBNL TOWT,
   G14 fit statistics and fractional savings uncertainty, CUSUM, weather normalization, normalized
   annual savings, non-routine adjustment, retrofit isolation, variable-base degree-day, and a
-  1R1C/2R2C grey-box calibrated to metered energy ([OPTION-D](docs/OPTION-D.md)). CalTRACK-aligned.
+  1R1C/2R2C grey-box calibrated to metered energy ([OPTION-D](https://github.com/yroussev/camber/blob/main/docs/OPTION-D.md)). CalTRACK-aligned.
 - **Commissioning** — RCx/MBCx: functional-test scoring, before/after persistence checks, and a
   measure register grading each fix to verified / regressed / inconclusive.
 - **Money & compliance** — a native tariff engine + OpenEI URDB, bill validation, ECM NPV/IRR/SIR,
@@ -71,12 +71,12 @@ Full API-level detail — every capability, its flags, and the standard it cites
 - **Domain analytics** — Std-55 comfort, CO₂/62.1 ventilation, cost, carbon, water, load profiling
   and disaggregation, schedule inference, PV (+ pvlib), psychrometrics (+ PsychroLib), lighting.
 - **Weather** — two keyless providers (NASA POWER's global grid, NOAA/ISD's real stations) plus a
-  geocoder, so you can fetch outdoor conditions by address ([WEATHER](docs/WEATHER.md)).
+  geocoder, so you can fetch outdoor conditions by address ([WEATHER](https://github.com/yroussev/camber/blob/main/docs/WEATHER.md)).
 - **Advisory & synthesis** — impact prioritization, root-cause grouping, fault-lifecycle tracking,
   advisory setpoint/sequence suggestions (ASO), action plans, and a building health **scorecard**.
 - **AI-assist (advisory, provider-agnostic)** — assisted point mapping and **grounded** explanation
   and Q&A over the deterministic layers, citing the rule and data behind every claim. Fully useful
-  with no LLM wired; no vendor named, no SDK, no network ([AGENT](docs/AGENT.md)).
+  with no LLM wired; no vendor named, no SDK, no network ([AGENT](https://github.com/yroussev/camber/blob/main/docs/AGENT.md)).
 - **Reporting & visualization** — ASHRAE/ACCA Standard 211 audits, a portfolio rollup ranked by
   recoverable dollars, ten chart patterns where **every rule renders its own evidence**, a
   self-contained HTML dashboard with cross-panel brush linking, and a live web UI.
@@ -84,7 +84,7 @@ Full API-level detail — every capability, its flags, and the standard it cites
   (validated to portfolio scale), a plugin API, findings → CMMS + notifiers, a read-only HTTP API,
   and a one-way **edge forwarder** for cybersecure edge→cloud collection.
 - **Validation** — accuracy scored against labeled public data and CI-gated, plus `camber validate`,
-  a single credibility dossier. Honest about its limits: [VALIDATION.md](docs/VALIDATION.md) states
+  a single credibility dossier. Honest about its limits: [VALIDATION.md](https://github.com/yroussev/camber/blob/main/docs/VALIDATION.md) states
   per detector family which claims rest on real data and which are synthetic-only.
 
 ## Install
@@ -113,7 +113,7 @@ python -m pytest -q                 # run the test suite
 python examples/synthetic_demo.py   # data-free FDD demo on generated trends
 ```
 
-To learn on open building datasets in a browser, run `camber lab`: [Using the lab](docs/LAB.md)
+To learn on open building datasets in a browser, run `camber lab`: [Using the lab](https://github.com/yroussev/camber/blob/main/docs/LAB.md)
 walks through a first session, from picking a dataset to reading its report.
 
 CAMBER installs a `camber` console script. A whole analysis is one JSON config
@@ -127,8 +127,8 @@ camber serve  ./store                  # read-only API + live dashboard at /ui
 ```
 
 Drift detection needs a frozen reference, so it has its own verbs — see
-[docs/CLI.md](docs/CLI.md#drift-baselines) and the runnable
-[`examples/drift/`](examples/drift/) walkthrough:
+[docs/CLI.md](https://github.com/yroussev/camber/blob/main/docs/CLI.md#drift-baselines) and the runnable
+[`examples/drift/`](https://github.com/yroussev/camber/tree/main/examples/drift/) walkthrough:
 
 ```sh
 camber drift freeze config.json        # establish the baselines (the only create path)
@@ -190,8 +190,8 @@ section and the same command scores baseline-vs-current drift alongside the rule
 `camber rules params [RULE]` lists each one with its default, where that default comes from, and
 how to calibrate it from your own data, plus a ready-to-paste config snippet. Configs may be
 YAML (`pip install "camber-toolkit[yaml]"`) so a calibration note can sit beside its value; JSON
-needs nothing extra. See [docs/THRESHOLDS.md](docs/THRESHOLDS.md) and
-[Tuning thresholds with your own data](docs/TUNING.md).
+needs nothing extra. See [docs/THRESHOLDS.md](https://github.com/yroussev/camber/blob/main/docs/THRESHOLDS.md) and
+[Tuning thresholds with your own data](https://github.com/yroussev/camber/blob/main/docs/TUNING.md).
 
 ## Docker
 
@@ -205,7 +205,7 @@ Mount a building's CSV export at `/data` to run analytics on real trends.
 
 ## Learn re-tuning with CAMBER
 
-The **[re-tuning workbook](docs/workbook/index.md)**
+The **[re-tuning workbook](https://github.com/yroussev/camber/blob/main/docs/workbook/index.md)**
 ([on the site](https://yroussev.github.io/camber/workbook/)) is a hands-on course that follows
 PNNL's free *Building Re-tuning* training. Each exercise pairs a PNNL chapter or guide, linked
 and never copied, with an open dataset from the catalog: read the guide, open the building in
@@ -221,7 +221,7 @@ camber run econ.json
 A separate instructor page holds the answer keys. Every answer on it is pinned by the test suite,
 on synthetic stand-ins and (with `pytest -m network`) on the real data, so the workbook cannot
 silently drift from what CAMBER reports. The first worked example is
-[a stuck outdoor-air damper](docs/workbook/air-economizer.md); the curriculum map lists the rest.
+[a stuck outdoor-air damper](https://github.com/yroussev/camber/blob/main/docs/workbook/air-economizer.md); the curriculum map lists the rest.
 
 ## Public datasets
 
@@ -233,13 +233,13 @@ The toolkit is data-agnostic. Two open sources are wired as runnable examples
   completeness, round-trips through the Parquet store, and scores the detector suite across five
   wired subsets: single-duct AHU, fan-coil unit, dual-duct AHU, the VAV fan-power-unit set
   (`--fpu`) and the chiller-plant set (`--chiller`). Which detectors each subset can *honestly*
-  test — and which stay synthetic-only — is stated in [VALIDATION.md](docs/VALIDATION.md).
+  test — and which stay synthetic-only — is stated in [VALIDATION.md](https://github.com/yroussev/camber/blob/main/docs/VALIDATION.md).
 - **[Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2)**
   (CC-BY-SA 4.0) — 3,053 whole-building hourly meters. `examples/bdg2/` fits the
   G14/IPMVP change-point engine to the publisher's cleaned meters (textbook 3PC on cooling
   energy, R² 0.70–0.88) and ingests the portfolio into the store.
 
-Both are also in the dataset catalog (`camber datasets`, [DATASETS.md](docs/DATASETS.md)), which
+Both are also in the dataset catalog (`camber datasets`, [DATASETS.md](https://github.com/yroussev/camber/blob/main/docs/DATASETS.md)), which
 links each dataset exactly as published and lists every problem found in the published data —
 with its evidence, the documentation it contradicts and how CAMBER handles it.
 
@@ -249,12 +249,12 @@ a runnable script. See the per-example READMEs.
 ## Contributing
 
 Contributions are welcome — new diagnostics, ingest adapters, M&V models, ontology
-interop, docs, and fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup
-and conventions, [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for a full capability
-reference (API + option flags per feature), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-for the layered design, [ROADMAP.md](ROADMAP.md) for what's planned and where to help,
-[docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the OSS-integration strategy, and the
-[Code of Conduct](CODE_OF_CONDUCT.md). Security reports: see [SECURITY.md](SECURITY.md).
+interop, docs, and fixes. See [CONTRIBUTING.md](https://github.com/yroussev/camber/blob/main/CONTRIBUTING.md) for the dev setup
+and conventions, [docs/CAPABILITIES.md](https://github.com/yroussev/camber/blob/main/docs/CAPABILITIES.md) for a full capability
+reference (API + option flags per feature), [docs/ARCHITECTURE.md](https://github.com/yroussev/camber/blob/main/docs/ARCHITECTURE.md)
+for the layered design, [ROADMAP.md](https://github.com/yroussev/camber/blob/main/ROADMAP.md) for what's planned and where to help,
+[docs/ECOSYSTEM.md](https://github.com/yroussev/camber/blob/main/docs/ECOSYSTEM.md) for the OSS-integration strategy, and the
+[Code of Conduct](https://github.com/yroussev/camber/blob/main/CODE_OF_CONDUCT.md). Security reports: see [SECURITY.md](https://github.com/yroussev/camber/blob/main/SECURITY.md).
 
 ## Community & support
 
@@ -271,8 +271,8 @@ PNNL Building Re-tuning; NIST APAR. No third-party source code is included.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0. See [LICENSE](https://github.com/yroussev/camber/blob/main/LICENSE) and [NOTICE](https://github.com/yroussev/camber/blob/main/NOTICE).
 
 > Status: pre-release (v0.x). The public surface is settled and locked by a snapshot test, and
-> changes follow the deprecation policy in [docs/API-STABILITY.md](docs/API-STABILITY.md) — but
+> changes follow the deprecation policy in [docs/API-STABILITY.md](https://github.com/yroussev/camber/blob/main/docs/API-STABILITY.md) — but
 > until 1.0 it can still move.
