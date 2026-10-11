@@ -12,7 +12,7 @@ Subcommands:
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
-    camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]  # read API + /ui
+    camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth A]  # read API + /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
@@ -2669,8 +2669,10 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["none", "token"],
         default=None,
         help="'token': require this run's access token on every route (the launch URL printed "
-        "at startup sets a session cookie; scripts send Authorization: Bearer). Default none; "
-        "env CAMBER_API_TOKEN fixes the token",
+        "at startup sets a session cookie; scripts send Authorization: Bearer); env "
+        "CAMBER_API_TOKEN fixes the token. 'none': no authentication, chosen explicitly. Not "
+        "given: no authentication for now, with a notice on loopback; a future release makes "
+        "token the default on loopback, and --auth none keeps an open server",
     )
     psv.set_defaults(func=_cmd_serve)
 

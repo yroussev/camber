@@ -11,9 +11,16 @@ Request checks (0.103, #128), in :func:`check_request` before ``dispatch``:
   port when bound to loopback (or every interface), the bound host, and any ``--allow-host`` /
   ``CAMBER_API_ALLOWED_HOSTS`` name; anything else is 403. Binding ``0.0.0.0`` / ``::`` needs an
   explicit allowlist.
+- **Cross-site check** (0.104, #134), as ``camber lab`` has: a browser request with
+  ``Sec-Fetch-Site: cross-site`` (or an unknown value), or with an ``Origin`` whose host is not on
+  the allowlist, is 403. ``same-origin``, ``same-site`` and ``none`` pass; a request with neither
+  header (curl, a script, a container health probe) passes.
 - **Optional token auth** (``auth="token"`` / ``camber serve --auth token``): the ``camber lab``
   model (:mod:`camber._access`) -- a printed launch URL with ``?token=``, exchanged for an
   ``HttpOnly; SameSite=Strict`` session cookie, or ``Authorization: Bearer <token>``.
+  ``auth="none"`` (``--auth none``, 0.104) chooses no authentication explicitly. Leaving it unset
+  is no authentication today; a future release makes token auth the default on loopback (see
+  docs/SECURITY.md section 3), and ``camber serve`` prints a notice until then.
 
 Endpoints (facility_id addresses a facility; the legacy ``site=`` param is still accepted):
   GET /            | /about | /health   -> service info
@@ -81,6 +88,12 @@ def dispatch(api: ReadAPI, method: str, path: str, query: dict):
 
 
 _AUTH_MODES = ("none", "token")
+#: printed by ``camber serve`` on loopback when ``--auth`` is not given (0.104, #134)
+_AUTH_DEFAULT_NOTICE = (
+    "notice: a future camber release will make token auth the default for `camber serve` on "
+    "loopback; pass --auth token to opt in now, or --auth none to keep serving without "
+    "authentication after the switch (either one hides this notice)."
+)
 #: the env var with extra allowed ``Host`` names (comma-separated), like ``--allow-host``
 ALLOWED_HOSTS_ENV = "CAMBER_API_ALLOWED_HOSTS"
 _COOKIE_PREFIX = "camber-serve-"
@@ -100,6 +113,8 @@ class _ServeAccess:
         self.port = int(port)
         self.hosts = HostAllowlist(bind_host, self.port, allowed_hosts)
         self.auth = auth or "none"
+        #: ``True`` when ``auth`` was passed (``"none"`` or ``"token"``), not left to the default
+        self.auth_explicit = auth is not None
         self.access_token: str | None = None
         self.session_id: str | None = None
         if self.auth == "token":
@@ -152,7 +167,10 @@ def check_request(access, method: str, path: str, query: dict, headers: dict):
 
     1. **Host allowlist** (every request, every method): a ``Host`` not in ``access.hosts`` is 403
        -- a DNS-rebinding page sends its own name.
-    2. **Token auth** (``auth="token"`` only): a ``GET`` with ``?token=`` exchanges a valid token
+    2. **Cross-site check** (every request, 0.104): ``Sec-Fetch-Site`` other than
+       ``same-origin`` / ``same-site`` / ``none``, or an ``Origin`` whose host is not in
+       ``access.hosts`` (``http`` or ``https``), is 403. Neither header: passes.
+    3. **Token auth** (``auth="token"`` only): a ``GET`` with ``?token=`` exchanges a valid token
        for the session cookie and a 303 to the same URL without it (a wrong one is 403); else the
        request needs the session cookie or ``Authorization: Bearer <access token>`` (401 without,
        403 for a wrong bearer token). ``GET /health`` without credentials answers ``{"ok": true}``
@@ -171,6 +189,23 @@ def check_request(access, method: str, path: str, query: dict, headers: dict):
             "--allow-host NAME (or CAMBER_API_ALLOWED_HOSTS) for a proxy or DNS name.",
             auth=False,
         )
+    crossed = _access.cross_site_refusal(
+        access.hosts, h, fetch_sites=_access.SERVE_FETCH_SITES, schemes=("http", "https")
+    )
+    if crossed is not None:
+        header, value = crossed
+        if header == "sec-fetch-site":
+            why = (
+                f"Cross-site request refused (Sec-Fetch-Site: {value}). Open camber serve's URL "
+                "directly (type it or use a bookmark), not from a page on another site."
+            )
+        else:
+            why = (
+                "Origin not allowed. camber serve answers browser requests only from the names "
+                "it is bound to; add --allow-host NAME (or CAMBER_API_ALLOWED_HOSTS) for a "
+                "proxy's public name."
+            )
+        return _refusal(403, path, why, auth=False)
     if access.auth != "token":
         return None
     if method == "GET" and _access.TOKEN_PARAM in (query or {}):
@@ -316,6 +351,12 @@ def make_server(
     interface (``0.0.0.0`` / ``::``) without an explicit allowlist raises ``ValueError``.
     ``auth="token"`` requires the per-run access token (``server.access.launch_url()``) or its
     session cookie on every route; ``access_token`` fixes the token (16+ characters).
+    ``auth="none"`` turns authentication off explicitly. ``auth=None`` (the default) is no
+    authentication too, for now: a future release makes it token auth when bound to loopback,
+    so pass ``auth="none"`` to keep an open server (docs/API-STABILITY.md).
+
+    0.104 (#134): a cross-site browser request (``Sec-Fetch-Site: cross-site``, or an ``Origin``
+    not on the Host allowlist) is 403 on every route.
     """
     from .._access import is_wildcard
 
@@ -364,6 +405,8 @@ def _announce(httpd, *, out=None, launch_dir=None):
     else:
         print(f"camber read-api serving on {url}  (read-only, GET-only)", file=out)
     print(f"allowed Host values: {access.hosts.describe()}", file=out)
+    if _access.is_loopback(access.bind_host) and not access.auth_explicit:
+        print(_AUTH_DEFAULT_NOTICE, file=sys.stderr)
     if not _access.is_loopback(access.bind_host) and access.auth != "token":
         print(
             f"warning: bound to {access.bind_host or '0.0.0.0'} with no authentication: anyone "
@@ -414,8 +457,8 @@ if __name__ == "__main__":  # pragma: no cover
     from ..store import ParquetStore
 
     # argv wins; otherwise env (CAMBER_STORE / _API_HOST / _API_PORT / _API_ALLOWED_HOSTS /
-    # _API_AUTH / _API_TOKEN) -- the container sets HOST=0.0.0.0 to be reachable, plus an
-    # allowlist; a bare `python -m` stays on localhost.
+    # _API_AUTH ("none" or "token") / _API_TOKEN) -- the container sets HOST=0.0.0.0 to be
+    # reachable, plus an allowlist; a bare `python -m` stays on localhost.
     root = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CAMBER_STORE", "tsdb")
     host = os.environ.get("CAMBER_API_HOST", "127.0.0.1")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("CAMBER_API_PORT", "8080"))

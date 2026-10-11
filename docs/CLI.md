@@ -12,7 +12,7 @@ camber ask "<question>" --config <config.json>  # grounded natural-language Q&A 
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
-camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]   # read-only API + live /ui
+camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token|none]   # read-only API + live /ui
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
@@ -30,7 +30,7 @@ camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge 
 and polling). Read-only (GET-only), localhost-bound by default; see
 [VISUALIZATION.md](VISUALIZATION.md) and [SECURITY.md](SECURITY.md).
 
-Who may connect (0.103):
+Who may connect (0.103; the cross-site check and `--auth none` 0.104):
 
 - **Host allowlist, always on.** A request whose `Host` header is not an allowed name is refused
   (403), so a web page on another site cannot read the store through your browser by pointing its
@@ -41,6 +41,11 @@ Who may connect (0.103):
 - **Every interface needs a list.** `--host 0.0.0.0` (or `::`) refuses to start unless an
   allowlist is given. `--allow-host '*'` answers any `Host` and turns the rebinding check off; it
   is unsafe and meant only behind a proxy that checks `Host` itself.
+- **Cross-site requests refused, always on (0.104).** A browser request with
+  `Sec-Fetch-Site: cross-site`, or with an `Origin` that is not an allowed name, is 403, as in
+  `camber lab`. Requests with neither header (curl, scripts, container and Kubernetes health
+  probes) and the viewer's own requests are unaffected. A link to the viewer from a page on
+  another site is refused: open the URL directly or from a bookmark.
 - **`--auth token` (opt-in).** Every route needs this run's access token, as in `camber lab`: the
   command prints a launch URL ending in `?token=...` and saves it, readable by you only, in
   `serve-<port>.url` (in `$XDG_RUNTIME_DIR/camber`, else `~/.config/camber`). Opening it sets an
@@ -49,11 +54,18 @@ Who may connect (0.103):
   wrong token), except `GET /health`, which then answers only `{"ok": true}` for health checks.
   `CAMBER_API_TOKEN` (16 or more characters) fixes the token instead of a fresh one per run; use
   an environment variable, never the command line, which other accounts can read.
+- **`--auth none` (0.104)** chooses no authentication explicitly. Leaving `--auth` out is the
+  same today, but on loopback it prints a one-line notice: a future release (0.105.0 at the
+  earliest) will make `--auth token` the default on loopback. Pass `--auth token` to opt in now,
+  or `--auth none` to keep the open server after the switch; either one hides the notice. See
+  [SECURITY.md](SECURITY.md) section 3. `python -m camber.api.server` reads the same choice from
+  `CAMBER_API_AUTH` (`none` or `token`).
 - Bound to anything but loopback without `--auth token`, it prints a warning: anyone who can reach
   the address can read every facility. Put an authenticating reverse proxy in front.
 
 ```sh
-camber serve ./store                                   # http://127.0.0.1:8080/ui, no token
+camber serve ./store                                   # http://127.0.0.1:8080/ui, no token (notice)
+camber serve ./store --auth none                       # the same, chosen explicitly (no notice)
 camber serve ./store --auth token                      # prints the launch URL with ?token=
 camber serve ./store --host 0.0.0.0 --allow-host camber.example.org   # behind a proxy
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/facilities

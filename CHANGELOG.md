@@ -14,6 +14,36 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 ## [0.104.0] — Unreleased
 
+### Added
+- **`camber serve --auth none` (#134)** chooses no authentication explicitly: the same open
+  server as leaving `--auth` out, without the notice below. `auth="none"` is the Python form and
+  `CAMBER_API_AUTH=none` the `python -m camber.api.server` form.
+- **A `camber.api.server` entry in `docs/API-STABILITY.md` (#134):** its public names, their
+  stability, and the planned change of the `auth` default.
+
+### Changed
+- **`camber serve` refuses cross-site browser requests (#134), as `camber lab` does.** A request
+  with `Sec-Fetch-Site: cross-site` (or an unknown value), or with an `Origin` that is not `http://`
+  or `https://` plus an allowed `Host` name, is 403 on every route and method, after the Host check
+  and before the token check. `same-origin`, `same-site` and `none` pass. Requests with neither
+  header pass, so `curl`, scripts, the image's `HEALTHCHECK` and the Kubernetes `/health` probes
+  are unaffected, and so are the trend viewer's own requests. A link to the viewer from a page on
+  another site is now refused: open the URL directly. Behind a proxy that rewrites `Host`, list the
+  public name with `--allow-host`, since browsers send it in `Origin`.
+- **One Host and Origin check for both servers (#134).** `camber lab`'s own Host and Origin check
+  now uses the shared `HostAllowlist` and cross-site check in `camber._access`, with its narrower
+  settings: `127.0.0.1` and `localhost` at the bound port, `http` origins, and `Sec-Fetch-Site`
+  `same-origin` or `none`. The lab answers the same requests with the same errors; host names are
+  now matched without regard to letter case.
+
+### Deprecated
+- **No authentication by default for `camber serve` on loopback (#134).** A future release, 0.105.0
+  at the earliest, will make `--auth token` the default when the server is bound to loopback
+  (`make_server` / `serve` with `auth` unset too). Nothing changes in 0.104: `camber serve` on
+  loopback without `--auth` prints a one-line notice. Pass `--auth token` to opt in now, or
+  `--auth none` to keep an open server after the switch; either one hides the notice. Binds to
+  other interfaces, including the container image's `0.0.0.0`, are not part of this change.
+
 ### Fixed
 - **A flaky portfolio-migrate test (#139).** `test_ambiguous_label_is_refused_and_nothing_is_written`
   compared the whole workspace before and after a refused apply, including `_lock`. A refused apply

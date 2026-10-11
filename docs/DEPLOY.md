@@ -15,6 +15,12 @@ forwards** (comma-separated; a bare name matches any port), or the API answers i
 auth (`CAMBER_API_AUTH=token`) is per process, so it does not suit several replicas; use the
 authenticating ingress there.
 
+**Cross-site check (0.104).** A browser request with `Sec-Fetch-Site: cross-site`, or with an
+`Origin` whose host is not on that allowlist, is refused with 403. The `/health` probes send
+neither header, so they are unaffected. If the ingress rewrites `Host` to a Service name, still
+list the **public** hostname: browsers send it in `Origin`. The planned switch to token auth by
+default applies to loopback binds only, so the image (bound to `0.0.0.0`) is not affected.
+
 *Runtime topology: a separate writer populates the store out-of-band; the API pods only read.*
 
 ```mermaid

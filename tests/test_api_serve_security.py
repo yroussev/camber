@@ -266,3 +266,156 @@ def test_announce_writes_private_launch_file_and_warns(running, tmp_path, capsys
     star = running(allowed_hosts=["*"])
     _announce(star)
     assert "Host check off" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- cross-site (0.104)
+
+
+def test_allows_origin_and_cross_site_refusal_values():
+    a = _access.HostAllowlist("127.0.0.1", 8080, ["camber.example.org"])
+    for ok in (
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://[::1]:8080",
+        "https://camber.example.org",  # a TLS proxy's public name (bare name: any port or none)
+        "https://camber.example.org:8443",
+    ):
+        assert a.allows_origin(ok), ok
+    for bad in (
+        None,
+        "",
+        "null",  # a sandboxed frame, a file:// page
+        "http://evil.example:8080",
+        "http://127.0.0.1:9999",  # another local port
+        "http://127.0.0.1",
+        "ftp://127.0.0.1:8080",
+        "http://127.0.0.1:8080/x",
+        "http://user@127.0.0.1:8080",
+    ):
+        assert not a.allows_origin(bad), bad
+    assert not a.allows_origin("https://127.0.0.1:8080", schemes=("http",))
+    sites = _access.SERVE_FETCH_SITES
+    ok = _access.cross_site_refusal
+    assert ok(a, {}, fetch_sites=sites) is None  # curl, a script, a health probe
+    for site in ("same-origin", "same-site", "none"):
+        assert ok(a, {"sec-fetch-site": site}, fetch_sites=sites) is None
+    assert ok(a, {"sec-fetch-site": "cross-site"}, fetch_sites=sites) == (
+        "sec-fetch-site",
+        "cross-site",
+    )
+    assert ok(a, {"sec-fetch-site": "weird"}, fetch_sites=sites)[0] == "sec-fetch-site"
+    assert ok(a, {"origin": "http://evil.example"}, fetch_sites=sites) == (
+        "origin",
+        "http://evil.example",
+    )
+    # the lab's stricter default refuses same-site
+    assert ok(a, {"sec-fetch-site": "same-site"})[0] == "sec-fetch-site"
+
+
+def test_cross_site_requests_are_refused(running):
+    httpd = running()
+    port = httpd.server_address[1]
+    for path in ROUTES + ("/health",):
+        status, h, body = _req(httpd, path, headers={"Sec-Fetch-Site": "cross-site"})
+        assert status == 403, path
+        assert h["cache-control"] == "no-store"
+        text = body.decode()
+        assert "Sec-Fetch-Site: cross-site" in text
+        if path == "/ui":
+            assert h["content-type"].startswith("text/html")
+            assert "default-src 'none'" in h["content-security-policy"]
+        else:
+            assert "cross-site" in json.loads(body)["error"].lower()
+    for origin in ("http://evil.example", f"http://127.0.0.1:{port + 1}", "null"):
+        status, _, body = _req(httpd, "/facilities", headers={"Origin": origin})
+        assert status == 403, origin
+        assert "origin not allowed" in json.loads(body)["error"].lower()
+    # a cross-site page that sends both: refused on Sec-Fetch-Site first
+    both = {"Sec-Fetch-Site": "cross-site", "Origin": "http://evil.example"}
+    assert "Sec-Fetch-Site" in json.loads(_req(httpd, "/points", headers=both)[2])["error"]
+    # the Host check still comes first
+    status, _, body = _req(httpd, "/facilities", host="rebind.example", headers=both)
+    assert status == 403 and "host not allowed" in json.loads(body)["error"].lower()
+    # a cross-site POST is 403, not 405 (refused before the method check)
+    assert _req(httpd, "/facilities", method="POST", headers=both)[0] == 403
+
+
+def test_same_origin_browser_and_non_browser_requests_pass(running):
+    httpd = running()
+    port = httpd.server_address[1]
+    me = f"http://127.0.0.1:{port}"
+    # the trend viewer opened from the address bar, then its own same-origin fetches (a GET
+    # fetch() sends no Origin; send one too, as a browser may)
+    nav = {"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document"}
+    assert _req(httpd, "/ui", headers=nav)[0] == 200
+    fetch = {"Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Dest": "empty"}
+    for path in ROUTES:
+        assert _req(httpd, path, headers=fetch)[0] == 200, path
+        assert _req(httpd, path, headers={**fetch, "Origin": me})[0] == 200, path
+    host_l = f"localhost:{port}"
+    assert _req(httpd, "/facilities", host=host_l, headers={"Origin": f"http://{host_l}"})[0] == 200
+    # a link from a sibling name / another port of this host (same-site navigation)
+    assert _req(httpd, "/ui", headers={"Sec-Fetch-Site": "same-site"})[0] == 200
+    # neither header: curl, a script
+    assert _req(httpd, "/history?facility_id=S&limit=2")[0] == 200
+
+
+def test_container_and_k8s_health_probes_pass(running, monkeypatch):
+    import urllib.request
+
+    # the Dockerfile HEALTHCHECK: urllib against 127.0.0.1:<port>/health, bound to 0.0.0.0 with
+    # CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1 (urllib sends Host 127.0.0.1:<port>, no Origin)
+    monkeypatch.setenv(ALLOWED_HOSTS_ENV, "localhost,127.0.0.1")
+    httpd = running(host="0.0.0.0")
+    port = httpd.server_address[1]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # no CI proxy
+    with opener.open(f"http://127.0.0.1:{port}/health", timeout=5) as r:
+        assert r.status == 200
+    # deploy/k8s: kubelet's httpGet with the header `Host: localhost` (and its own User-Agent)
+    probe = {"User-Agent": "kube-probe/1.30", "Accept": "*/*"}
+    assert _req(httpd, "/health", host="localhost", headers=probe)[0] == 200
+    # with token auth, the bare liveness answer still needs no secret
+    tok = running(auth="token", access_token=TOKEN)
+    status, _, body = _req(tok, "/health", headers=probe)
+    assert status == 200 and json.loads(body) == {"ok": True}
+
+
+def test_cross_site_launch_url_gets_no_cookie(running):
+    httpd = running(auth="token", access_token=TOKEN)
+    status, h, _ = _req(httpd, f"/ui?token={TOKEN}", headers={"Sec-Fetch-Site": "cross-site"})
+    assert status == 403 and "set-cookie" not in h
+    status, h, _ = _req(httpd, f"/ui?token={TOKEN}", headers={"Sec-Fetch-Site": "none"})
+    assert status == 303 and "set-cookie" in h
+    # a valid bearer token does not open a cross-site request either
+    bearer = {"Authorization": f"Bearer {TOKEN}", "Origin": "http://evil.example"}
+    assert _req(httpd, "/facilities", headers=bearer)[0] == 403
+
+
+# --------------------------------------------------------------------------- the default notice
+
+
+def test_auth_default_notice_on_loopback(running, capsys, monkeypatch, tmp_path):
+    from camber.api.server import _AUTH_DEFAULT_NOTICE
+
+    assert "\n" not in _AUTH_DEFAULT_NOTICE
+    assert "--auth token" in _AUTH_DEFAULT_NOTICE and "--auth none" in _AUTH_DEFAULT_NOTICE
+    implicit = running()
+    assert implicit.access.auth == "none" and not implicit.access.auth_explicit
+    _announce(implicit)
+    out, err = capsys.readouterr()
+    assert err.count(_AUTH_DEFAULT_NOTICE) == 1 and "notice" not in out
+    # --auth none: the same open server, chosen explicitly -- no notice, no behaviour change
+    explicit = running(auth="none")
+    assert explicit.access.auth == "none" and explicit.access.auth_explicit
+    _announce(explicit)
+    assert "notice" not in capsys.readouterr().err
+    for path in ROUTES:
+        assert _req(explicit, path)[0] == 200, path
+    # --auth token: no notice
+    _announce(running(auth="token", access_token=TOKEN), launch_dir=tmp_path / "run")
+    assert "notice" not in capsys.readouterr().err
+    # not loopback: the existing no-authentication warning, not the notice
+    monkeypatch.setenv(ALLOWED_HOSTS_ENV, "camber.lan")
+    _announce(running(host="0.0.0.0"))
+    err = capsys.readouterr().err
+    assert "no authentication" in err and "notice" not in err

@@ -50,6 +50,12 @@ docker run --rm -p 8080:8080 -v "$PWD/data/store:/data/store:ro" \
 (`Authorization: Bearer`, or `/ui?token=...` once for a session cookie) on every route except a
 bare `GET /health`.
 
+Since 0.104 the API also refuses cross-site browser requests (403): a `Sec-Fetch-Site:
+cross-site` header, or an `Origin` whose host is not on the allowlist. The `HEALTHCHECK` and
+`curl` send neither header and pass. Behind a proxy that rewrites `Host`, still list the public
+name the browser uses, since it arrives in `Origin`. The planned switch to token auth by default
+covers loopback binds only, so the image (bound to `0.0.0.0`) keeps its current behaviour.
+
 ## Run any command / a shell
 
 ```sh

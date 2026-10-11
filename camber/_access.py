@@ -12,7 +12,11 @@ Shared by ``camber lab`` (:mod:`camber.lab._auth`, 0.102, #127) and ``camber ser
   ``Authorization: Bearer <access token>`` (:func:`bearer_token`) instead;
 - every secret comparison is :func:`hmac.compare_digest` on bytes (:func:`same_secret`);
 - a **Host allowlist** against DNS rebinding (:class:`HostAllowlist`): a page on another site whose
-  name resolves to this machine still sends its own name in ``Host``, so it is refused.
+  name resolves to this machine still sends its own name in ``Host``, so it is refused;
+- a **cross-site check** (:func:`cross_site_refusal`, 0.104, #134): a browser's
+  ``Sec-Fetch-Site`` must be one the server accepts, and an ``Origin``, when sent, must name an
+  allowed host (:meth:`HostAllowlist.allows_origin`). A request with neither header (curl, a
+  script, a health probe) passes.
 
 The launch file lives in ``$XDG_RUNTIME_DIR/camber`` when that is set (Linux), else
 ``$XDG_CONFIG_HOME/camber`` or ``~/.config/camber``, as ``<prefix>-<port>.url`` (``lab-8765.url``,
@@ -224,16 +228,19 @@ class HostAllowlist:
       ``name:port``. A bare name matches that name on any port or none (a proxy, a remapped
       container port); ``name:port`` matches exactly. ``*`` allows any ``Host`` (unsafe: it turns
       the rebinding defence off).
+
+    ``loopback_names`` narrows the loopback names (``camber lab`` answers ``127.0.0.1`` and
+    ``localhost`` only, not ``[::1]``).
     """
 
-    def __init__(self, bind_host: str, port: int, extra=()):
+    def __init__(self, bind_host: str, port: int, extra=(), *, loopback_names=LOOPBACK_NAMES):
         self.port = int(port)
         self.any = False
         self.exact: set = set()
         self.names: set = set()
         bind = str(bind_host or "").strip()
         if is_loopback(bind) or is_wildcard(bind):
-            self.exact.update(f"{n}:{self.port}" for n in LOOPBACK_NAMES)
+            self.exact.update(f"{n}:{self.port}" for n in loopback_names)
         if not is_wildcard(bind):
             self.exact.add(f"{host_name(bind)}:{self.port}")
         for raw in extra or ():
@@ -261,6 +268,17 @@ class HostAllowlist:
         name, _ = split_host(value)
         return name in self.names
 
+    def allows_origin(self, origin: str | None, schemes=("http", "https")) -> bool:
+        """``True`` when an ``Origin: origin`` header names an allowed host: ``scheme://host[:port]``
+        with ``scheme`` in ``schemes`` and ``host[:port]`` passing :meth:`allows`. ``null``, a path,
+        userinfo or another scheme is refused."""
+        scheme, sep, rest = str(origin or "").strip().partition("://")
+        if not sep or scheme.lower() not in schemes or not rest:
+            return False
+        if any(c in rest for c in "/?#@\\ "):
+            return False
+        return self.allows(rest)
+
     def describe(self) -> str:
         """A one-line summary for the startup banner."""
         if self.any:
@@ -271,3 +289,37 @@ class HostAllowlist:
 def parse_host_list(value: str | None) -> list:
     """``"a, b:8080,,c"`` -> ``["a", "b:8080", "c"]`` (the ``CAMBER_API_ALLOWED_HOSTS`` form)."""
     return [p.strip() for p in str(value or "").split(",") if p.strip()]
+
+
+# --------------------------------------------------------------------------- cross-site check
+
+#: ``Sec-Fetch-Site`` values ``camber lab`` accepts: its own page, or a URL typed / bookmarked
+STRICT_FETCH_SITES = ("same-origin", "none")
+#: ``Sec-Fetch-Site`` values ``camber serve`` accepts: also ``same-site`` (a link from a page on
+#: a sibling name or another port); only ``cross-site`` (and any unknown value) is refused
+SERVE_FETCH_SITES = ("same-origin", "same-site", "none")
+
+
+def cross_site_refusal(
+    hosts: HostAllowlist,
+    headers: dict,
+    *,
+    fetch_sites=STRICT_FETCH_SITES,
+    schemes=("http", "https"),
+):
+    """Refuse a cross-site browser request. ``headers`` has lower-case keys.
+
+    Returns ``None`` when the request may proceed, else ``(header, value)`` naming the header that
+    refused it: ``("sec-fetch-site", value)`` for a ``Sec-Fetch-Site`` not in ``fetch_sites``, or
+    ``("origin", value)`` for an ``Origin`` that :meth:`HostAllowlist.allows_origin` refuses. A
+    request with neither header (curl, a script, a container health probe) passes: current
+    browsers send ``Sec-Fetch-Site`` on every request, so a client that omits both is not a
+    browser acting for another site. The Host check (:class:`HostAllowlist`) still applies to it.
+    """
+    site = headers.get("sec-fetch-site")
+    if site is not None and site not in fetch_sites:
+        return "sec-fetch-site", site
+    origin = headers.get("origin")
+    if origin is not None and not hosts.allows_origin(origin, schemes):
+        return "origin", origin
+    return None
