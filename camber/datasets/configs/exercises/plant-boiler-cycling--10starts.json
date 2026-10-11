@@ -1,0 +1,27 @@
+{
+  "_comment": "Workbook exercise plant-boiler-cycling, the threshold lesson: boiler_short_cycle with max_starts_per_day at 10 instead of the generic 6 (warn at 10, fault at 20), as a boiler maker's minimum cycle time might set it. The limit belongs to the boiler, not to CAMBER: take it from the boiler's documentation.",
+  "_dataset": "synthetic-hw-plant-cycling",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-hw-plant-cycling"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "HW_PLANT",
+      "marker_role": "hw_supply_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "boiler_short_cycle",
+      "params": {
+        "max_starts_per_day": 10.0
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise plant-boiler-cycling, the resolution lesson: boiler_short_cycle on the same 15-minute data resampled to 1h. A resampled firing status is the hour's maximum, so an hour with any firing in it reads as firing all hour and the short cycles inside it disappear.",
+  "_dataset": "synthetic-hw-plant-cycling",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-hw-plant-cycling"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "HW_PLANT",
+      "marker_role": "hw_supply_temp"
+    }
+  ],
+  "rules": [
+    "boiler_short_cycle"
+  ],
+  "report": {
+    "level": 2
+  }
+}

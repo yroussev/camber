@@ -95,6 +95,9 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "bts",
         # 0.103 (#133): generated locally by CAMBER (kind "synthetic")
         "synthetic-hw-plant-lockout",
+        # 0.104 (#137): more synthetic lab cases
+        "synthetic-hw-plant-cycling",
+        "synthetic-chw-plant-staging",
     ]
 
 
@@ -185,7 +188,7 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 25
+    assert len(datasets.catalog()) == 27
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
@@ -207,17 +210,21 @@ def test_catalog_filters_and_get():
         "nist-ibal",
         "ornl-supermarket-fdd",
     ]
-    assert [e.id for e in datasets.catalog(kind="synthetic")] == ["synthetic-hw-plant-lockout"]
+    assert [e.id for e in datasets.catalog(kind="synthetic")] == [
+        "synthetic-hw-plant-lockout",
+        "synthetic-hw-plant-cycling",
+        "synthetic-chw-plant-staging",
+    ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
     assert len(datasets.catalog(labeled=False)) == 14
-    assert len(datasets.catalog(labeled=True)) == 11
+    assert len(datasets.catalog(labeled=True)) == 13
     # the open tier: research-only entries (an NC/ND licence, or a stated access_reason) are out
     commercial = datasets.catalog(licence="commercial")
     assert [e.id for e in datasets.catalog() if e.research_only] == [
         "rbc-g36-ahu",  # CC BY, held research-only for its stated access_reason
         "at-30bldg-sensors",  # CC-BY-NC-SA
     ]
-    assert len(commercial) == 23 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 25 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):

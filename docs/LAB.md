@@ -440,8 +440,10 @@ room. See [DATASETS.md](DATASETS.md#manual-downloads).
 ### Synthetic datasets
 
 A row with a **synthetic** badge (kind `synthetic`, 0.103) is a dataset CAMBER generates on your
-computer instead of downloading: a constructed case for a fault no open dataset shows, such as
-`synthetic-hw-plant-lockout` for the [`plant-lockout`](workbook/plant-lockout.md) exercise. Tick
+computer instead of downloading: a constructed case for a fault no open dataset shows. There are
+three: `synthetic-hw-plant-lockout` for the [`plant-lockout`](workbook/plant-lockout.md) exercise,
+`synthetic-hw-plant-cycling` for [`plant-boiler-cycling`](workbook/plant-boiler-cycling.md) and
+`synthetic-chw-plant-staging` for [`plant-chiller-staging`](workbook/plant-chiller-staging.md). Tick
 it and press **Fetch & ingest** as for any other: the job generates the file (the same bytes on
 every machine), then ingests it, and the row's **how it is made** link explains the generator.
 Nothing is downloaded, so it works in an offline room without pre-fetching. Its reports say it is

@@ -173,6 +173,219 @@ def _hw_plant_lockout(seed: int) -> dict:
     return {"hw_plant_lockout.csv": text}
 
 
+# ------------------------------------------------- shared: a heating / cooling source that cycles
+
+_STEP_H = 0.25  # the cycling generators run on a 15-minute clock
+
+
+def _occupied(idx: pd.DatetimeIndex, start: int = 6, end: int = 18) -> np.ndarray:
+    hour = np.asarray(idx.hour)
+    return (np.asarray(idx.dayofweek) < 5) & (hour >= start) & (hour < end)
+
+
+def _cycle(load: np.ndarray, cap: float, min_frac: float, band_f: float, k_f: float, on=None):
+    """A source on its loop-temperature hysteresis: ``(firing, deviation_f)`` per step.
+
+    ``load`` is the loop's demand (a fraction of design), ``cap`` the source's capacity and
+    ``min_frac`` its lowest stable output as a fraction of ``cap`` (1.0 for an on/off machine).
+    While it runs it follows the load down to ``min_frac * cap``; below that it overheats (or
+    overcools) the loop by ``k_f`` °F per step per unit of surplus, stops at ``+band_f / 2`` and
+    restarts when the load has pulled the loop back to ``-band_f / 2``. ``on`` (a boolean mask)
+    forces the source off outside it (a plant schedule). Deterministic: no noise in here.
+    """
+    n = len(load)
+    fire = np.zeros(n, dtype=bool)
+    dev = np.zeros(n)
+    state, t = True, 0.0
+    lo = min_frac * cap
+    for i in range(n):
+        if on is not None and not on[i]:
+            state, t = False, 0.0
+            dev[i] = 0.0
+            continue
+        if on is not None and i and not on[i - 1]:
+            state, t = True, 0.0  # the scheduled start
+        if state:
+            out = min(max(load[i], lo), cap)
+            t += k_f * (out - load[i])
+            if t >= band_f / 2.0:
+                state = False
+        else:
+            t -= k_f * load[i]
+            if t <= -band_f / 2.0:
+                state = True
+        fire[i] = state
+        dev[i] = t
+    return fire, dev
+
+
+# --------------------------------------------------------------- hot-water plant: cycling, delta-T
+
+#: The four plants of the ``hw_plant_cycling`` generator: scenario -> (boiler capacity as a
+#: fraction of design load, lowest stable firing as a fraction of capacity, loop differential °F,
+#: loop response °F per step per unit surplus, three-way valves + constant-speed pump).
+_CYCLING_PLANTS = {
+    "well_tuned": (1.2, 0.25, 8.0, 1.0, False),
+    "short_cycling": (2.0, 1.0, 1.5, 1.5, False),
+    "marginal": (1.5, 0.6, 3.0, 1.5, False),
+    "low_delta_t": (1.2, 0.25, 8.0, 1.0, True),
+}
+_CYC_START = "2025-03-03"  # a Monday
+_CYC_DAYS = 21
+
+
+def _hw_plant_cycling(seed: int) -> dict:
+    """One CSV, 15-minute, the four plants stacked with a ``scenario`` column."""
+    idx = pd.date_range(_CYC_START, periods=_CYC_DAYS * 96, freq="15min")
+    n = len(idx)
+    hour = np.asarray(idx.hour) + np.asarray(idx.minute) / 60.0
+    day = np.arange(n) * _STEP_H / 24.0
+    diurnal = 8.0 * np.sin((hour - 9.0) / 24.0 * 2.0 * np.pi)
+    swing = 6.0 * _smooth(_noise(n, seed, 1), 96 * 3)
+    jitter = 1.2 * (_noise(n, seed, 2) - 0.5)
+    oat = np.round(30.0 + 10.0 * day / _CYC_DAYS + diurnal + swing + jitter, 1)
+    occ = _occupied(idx)
+    warmup = (np.asarray(idx.dayofweek) < 5) & (hour >= 5) & (hour < 7)
+    # the building's heating demand, a fraction of design: weather, occupancy and the warm-up
+    base = np.clip((62.0 - oat) / 52.0, 0.05, 1.0)
+    load = base * np.where(occ, 1.0, 0.8) + np.where(warmup, 0.25, 0.0)
+    load = np.clip(load * (1.0 + 0.12 * (_smooth(_noise(n, seed, 3), 8))), 0.04, 1.0)
+    hws_sp = np.clip(180.0 - 1.25 * (oat - 20.0), 130.0, 180.0)  # the plant's own OA reset
+    frames = []
+    for k, (scenario, (cap, min_frac, band, kf, three_way)) in enumerate(_CYCLING_PLANTS.items()):
+        fire, dev = _cycle(load, cap, min_frac, band, kf)
+        jitter = 0.8 * (_noise(n, seed, 20 + k) - 0.5)
+        hws = hws_sp + dev + jitter
+        if three_way:  # constant flow through three-way valves: a small, flat loop delta-T
+            dt = 6.0 + 6.0 * load
+            speed = 95.0 + 3.0 * (_noise(n, seed, 30 + k) - 0.5)
+            dp_sp = np.full(n, 12.0)
+        else:  # two-way valves, a variable-speed pump on a reset DP setpoint
+            dt = 18.0 + 14.0 * load
+            speed = 28.0 + 52.0 * load + 2.0 * (_noise(n, seed, 30 + k) - 0.5)
+            dp_sp = np.round(4.0 + 8.0 * load, 1)
+        dp = dp_sp + 0.4 * (_noise(n, seed, 40 + k) - 0.5)
+        hwr = hws - dt * np.where(fire, 1.0, 0.8)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "Timestamp": idx.strftime("%Y-%m-%d %H:%M"),
+                    "scenario": scenario,
+                    "OAT": oat,
+                    "BLR_FIRE": fire.astype(int),
+                    "HWS_T": np.round(hws, 1),
+                    "HWR_T": np.round(hwr, 1),
+                    "HWP_SPD": np.round(speed, 1),
+                    "HW_DP": np.round(dp, 1),
+                    "HW_DP_SP": np.round(dp_sp, 1),
+                }
+            )
+        )
+    text = pd.concat(frames, ignore_index=True).to_csv(
+        index=False, float_format="%.1f", lineterminator="\n"
+    )
+    return {"hw_plant_cycling.csv": text}
+
+
+# ----------------------------------------------------- chilled-water plant: staging, CW reset
+
+#: The five plants of the ``chw_plant_staging`` generator: scenario -> (chiller capacity as a
+#: fraction of design load, lowest stable output as a fraction of capacity, loop differential °F,
+#: loop response °F per step per unit surplus, runs around the clock, the lowest condenser water
+#: the tower is asked for, °F). The tower resets its leaving water to the wet-bulb plus 7 °F
+#: between that floor and 85 °F, so a floor of 85 °F is a fixed setpoint.
+_STAGING_PLANTS = {
+    "well_staged": (1.1, 0.2, 2.0, 1.0, False, 65.0),
+    "short_cycling": (2.5, 0.4, 0.1, 1.0, False, 65.0),
+    "left_on": (1.1, 0.05, 2.0, 1.0, True, 65.0),
+    "fixed_cw": (1.1, 0.2, 2.0, 1.0, False, 85.0),
+    "high_floor": (1.1, 0.2, 2.0, 1.0, False, 80.0),
+}
+_STG_START = "2025-07-07"  # a Monday
+_STG_DAYS = 21
+_STG_HEAT = (14, 19)  # the heat wave, days from the start
+_DESIGN_TONS = 300.0
+_CHW_GPM = 600.0  # constant primary flow: 300 tons at a 12 °F design delta-T
+_CW_SP_F = 85.0  # the fixed condenser-water setpoint
+
+
+def _staging_weather(seed: int, idx: pd.DatetimeIndex) -> tuple:
+    n = len(idx)
+    hour = np.asarray(idx.hour) + np.asarray(idx.minute) / 60.0
+    day = np.arange(n) * _STEP_H / 24.0
+    heat = np.clip(np.minimum(day - _STG_HEAT[0], _STG_HEAT[1] - day), 0.0, 1.0)  # ramps in/out
+    wb = (
+        63.0
+        + 3.0 * np.sin((hour - 10.0) / 24.0 * 2.0 * np.pi)
+        + 4.0 * _smooth(_noise(n, seed, 1), 96 * 3)
+        + 13.0 * heat
+        + 0.8 * (_noise(n, seed, 2) - 0.5)
+    )
+    depression = 12.0 + 7.0 * np.sin((hour - 9.0) / 24.0 * 2.0 * np.pi) - 3.0 * heat
+    oat = wb + np.clip(depression, 2.0, None)
+    return np.round(oat, 1), np.round(wb, 1)
+
+
+def _chw_plant_staging(seed: int) -> dict:
+    """One CSV, 15-minute, the five plants stacked with a ``scenario`` column."""
+    idx = pd.date_range(_STG_START, periods=_STG_DAYS * 96, freq="15min")
+    n = len(idx)
+    oat, wb = _staging_weather(seed, idx)
+    occ = _occupied(idx, 6, 19)
+    # the building's cooling load, a fraction of design: weather and people in occupied hours, the
+    # envelope's small residual load at night and over the weekend
+    occ_load = 0.25 + 0.65 * np.clip((oat - 68.0) / 30.0, 0.0, 1.0)
+    load = np.where(occ, occ_load, 0.06 + 0.06 * np.clip((oat - 70.0) / 20.0, 0.0, 1.0))
+    load = np.clip(load * (1.0 + 0.1 * _smooth(_noise(n, seed, 3), 8)), 0.03, 1.0)
+    frames = []
+    for k, (scenario, spec) in enumerate(_STAGING_PLANTS.items()):
+        cap, min_frac, band, kf, always, cw_floor = spec
+        on = None if always else occ
+        run, dev = _cycle(load, cap, min_frac, band, kf, on=on)
+        out = np.where(run, np.clip(load, min_frac * cap, cap), 0.0)  # delivered, of design
+        tons = out * _DESIGN_TONS
+        jit = _noise(n, seed, 20 + k) - 0.5
+        # off between cycles the loop warms by the deficit; off on its schedule it drifts to 58 °F
+        idle = 44.0 + 2.0 + np.maximum(-dev, 0.0)
+        if on is not None:
+            idle = np.where(on, idle, 58.0 + 2.0 * jit)
+        chws = np.where(run, 44.0 + 0.3 * jit, idle)
+        dt = np.where(run, tons * 24.0 / _CHW_GPM, 0.4)
+        chwr = chws + dt
+        kw = np.where(run, 15.0 + 0.6 * tons + 0.002 * tons * (oat - 75.0), 0.0)
+        # condenser water: the tower can only get within its approach of the wet-bulb
+        floor = wb + 5.0 + 4.0 * out
+        target = np.clip(wb + 7.0, cw_floor, _CW_SP_F)
+        cws = np.maximum(target, floor)
+        # the fan works harder the closer the tower is asked to get to the wet-bulb
+        effort = np.clip(1.0 - (target - floor) / 12.0, 0.0, 1.0)
+        fan = np.clip(15.0 + 50.0 * out * (0.4 + 0.6 * effort) + 30.0 * effort, 0.0, 100.0)
+        cws = np.where(run, cws + 0.3 * jit, np.nan)
+        cwr = cws + 10.0 * out
+        fan = np.where(run, fan, 0.0)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "Timestamp": idx.strftime("%Y-%m-%d %H:%M"),
+                    "scenario": scenario,
+                    "OAT": oat,
+                    "WB": wb,
+                    "CH_KW": np.round(kw, 1),
+                    "CHWS_T": np.round(chws, 1),
+                    "CHWR_T": np.round(chwr, 1),
+                    "CHW_GPM": np.where(run, _CHW_GPM, 0.0),
+                    "CWS_T": np.round(cws, 1),
+                    "CWR_T": np.round(cwr, 1),
+                    "CT_FAN": np.round(fan, 1),
+                }
+            )
+        )
+    text = pd.concat(frames, ignore_index=True).to_csv(
+        index=False, float_format="%.1f", lineterminator="\n"
+    )
+    return {"chw_plant_staging.csv": text}
+
+
 #: name -> :class:`Generator`. A synthetic catalog entry names one in ``generator.name``.
 GENERATORS: dict = {
     "hw_plant_lockout": Generator(
@@ -184,6 +397,31 @@ GENERATORS: dict = {
             "loop supply and return temperatures), hourly for eight weeks of late spring with a "
             "warm spell, as four plants: locked out at 65 F, left enabled through the warm "
             "spell, the pump left running, and locked out at 58 F"
+        ),
+    ),
+    "hw_plant_cycling": Generator(
+        version=1,
+        files=("hw_plant_cycling.csv",),
+        build=_hw_plant_cycling,
+        description=(
+            "a hot-water plant (OAT, boiler firing, loop supply and return temperatures, pump "
+            "speed, loop DP and its setpoint), every 15 minutes for three weeks of early spring, "
+            "as four plants: a well-tuned modulating boiler, an oversized on/off boiler that "
+            "short-cycles, a boiler that cycles a little too often, and a loop with three-way "
+            "valves and a constant-speed pump (low delta-T)"
+        ),
+    ),
+    "chw_plant_staging": Generator(
+        version=1,
+        files=("chw_plant_staging.csv",),
+        build=_chw_plant_staging,
+        description=(
+            "a chilled-water plant with one chiller and its cooling tower (OAT, wet-bulb, "
+            "chiller power, chilled-water supply, return and flow, condenser-water supply and "
+            "return, tower fan speed), every 15 minutes for three summer weeks with a heat "
+            "wave, as four plants: a well-staged chiller, an oversized chiller that "
+            "short-cycles, a chiller left on around the clock, and a tower held at a fixed "
+            "85 F instead of reset with the wet-bulb"
         ),
     ),
 }

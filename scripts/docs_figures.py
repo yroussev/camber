@@ -932,6 +932,63 @@ def _wb_lockout():
     return _evidence_fig("hw_pump_summer_lockout", "PLANT__pump_left_on", frame, figsize=WIDE)
 
 
+def _synthetic_plant(generator: str, seed: int, scenario: str):
+    """One scenario plant of a synthetic catalog entry's generator, indexed by its timestamps."""
+    import io
+
+    import pandas as pd
+
+    from camber.datasets._synthetic import GENERATORS
+
+    text = next(iter(GENERATORS[generator].build(seed).values()))
+    raw = pd.read_csv(io.StringIO(text), parse_dates=["Timestamp"])
+    return raw[raw["scenario"] == scenario].set_index("Timestamp")
+
+
+@figure("workbook/plant-boiler-cycling.png")
+def _wb_boiler_cycling():
+    """The plant-boiler-cycling exercise's own synthetic plant (#137): two days of firing."""
+    import pandas as pd
+
+    from camber.model.roles import Role
+
+    raw = _synthetic_plant("hw_plant_cycling", 137, "short_cycling").loc["2025-03-12":"2025-03-13"]
+    frame = pd.DataFrame({Role.BOILER_STATUS: raw["BLR_FIRE"].astype(float), Role.OAT: raw["OAT"]})
+    return _evidence_fig("boiler_short_cycle", "PLANT__short_cycling", frame, figsize=WIDE)
+
+
+@figure("workbook/plant-chiller-staging.png")
+def _wb_chiller_staging():
+    """The plant-chiller-staging exercise's own synthetic plant (#137): condenser water against
+    the wet-bulb, against a reset that follows the wet-bulb plus 5 to 9 °F."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from camber.charts.diagnostic import DiagnosticTemplate, diagnostic_scatter
+    from camber.model.roles import Role
+
+    raw = _synthetic_plant("chw_plant_staging", 137, "fixed_cw").dropna(subset=["CWS_T"])
+    frame = raw.rename(columns={"WB": Role.WETBULB_TEMP, "CWS_T": Role.CW_SUPPLY_TEMP})
+
+    def expected(xv):
+        mid = np.clip(np.asarray(xv, float) + 7.0, 65.0, 85.0)
+        return mid - 2.0, mid + 2.0
+
+    template = DiagnosticTemplate(
+        "cw_reset",
+        Role.WETBULB_TEMP,
+        Role.CW_SUPPLY_TEMP,
+        expected,
+        "wet-bulb (°F)",
+        "condenser water supply (°F)",
+        "PNNL re-tuning ch. 8: reset with the wet-bulb",
+    )
+    fig, ax = plt.subplots(figsize=STD)
+    diagnostic_scatter(frame, template, ax=ax)
+    fig.tight_layout()
+    return fig
+
+
 @figure("workbook/plant-sensor-vs-equipment.png")
 def _wb_sensor_vs_equipment():
     import numpy as np

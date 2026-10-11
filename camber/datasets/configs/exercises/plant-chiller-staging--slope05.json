@@ -1,0 +1,27 @@
+{
+  "_comment": "Workbook exercise plant-chiller-staging, the threshold lesson: condenser_water_reset with reset_slope_flat at 0.5 instead of 0.3, i.e. the tower's leaving water has to follow at least half of each degree of wet-bulb to count as a reset.",
+  "_dataset": "synthetic-chw-plant-staging",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-chw-plant-staging"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    {
+      "name": "condenser_water_reset",
+      "params": {
+        "reset_slope_flat": 0.5
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

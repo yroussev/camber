@@ -5,8 +5,8 @@ A hands-on course in building re-tuning, run on open data with CAMBER. It follow
 chapter or a guide there, then open a real or simulated building in [`camber lab`](../DATASETS.md#the-lab-camber-lab)
 and find the problems it teaches you to look for.
 
-> **Status (0.97, provisional).** All 20 exercises in the map below are written: five on the air
-> side, five on terminal units and ventilation, six on the central plant, and four on data
+> **Status (0.97, provisional).** All 22 exercises in the map below are written: five on the air
+> side, five on terminal units and ventilation, eight on the central plant, and four on data
 > quality, M&V and the capstone. Start with the worked example,
 > [Economizer: a stuck outdoor-air damper and missed free cooling](air-economizer.md).
 
@@ -19,7 +19,8 @@ and find the problems it teaches you to look for.
   [catalog](../DATASETS.md). A research-only dataset appears only as a marked optional extra.
   Where no open dataset shows a fault, an exercise uses a
   [synthetic dataset](../DATASETS.md#synthetic-datasets) that CAMBER generates on your computer,
-  labelled synthetic wherever it appears (0.103: [`plant-lockout`](plant-lockout.md)).
+  labelled synthetic wherever it appears (0.103: [`plant-lockout`](plant-lockout.md); 0.104:
+  [`plant-boiler-cycling`](plant-boiler-cycling.md) and [`plant-chiller-staging`](plant-chiller-staging.md)).
 - **Two ways in.** Every exercise gives the steps both in the lab (a local web page:
   `camber lab`, then **Fetch & ingest**, **trends**, **report**) and on the command line.
 - **Tuned configs.** Where the dataset's default config doesn't fit an exercise, the exercise
@@ -102,6 +103,8 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chw-reset-pumping`: chilled-water reset, low delta-T and pumping](plant-chw-reset-pumping.md) | `lbnl-chiller` |
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-boiler`: hot-water reset, summer lockout, pumping and a fouling gap](plant-boiler.md) | `lbnl-boiler` |
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-lockout`: a boiler and a pump left on in warm weather, and choosing the lockout](plant-lockout.md) | `synthetic-hw-plant-lockout` (synthetic) |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-boiler-cycling`: boiler short-cycling, low hot-water delta-T, and how the trend interval hides cycles](plant-boiler-cycling.md) | `synthetic-hw-plant-cycling` (synthetic) |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chiller-staging`: a short-cycling chiller, a chiller left on, and condenser-water reset](plant-chiller-staging.md) | `synthetic-chw-plant-staging` (synthetic) |
 | [Ch. 8][pnnl-retuning-ch8] | [`plant-sensor-vs-equipment`: sensor faults vs equipment faults](plant-sensor-vs-equipment.md) | `lbnl-chiller` |
 <!-- END workbook-plant (#82) -->
 

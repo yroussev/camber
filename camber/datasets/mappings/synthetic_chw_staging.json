@@ -1,0 +1,14 @@
+{
+  "_comment": "Synthetic chilled-water plant (generator chw_plant_staging, camber.datasets._synthetic; 0.104, #137) -> CAMBER Role mapping. Every column is CAMBER's own: CH_KW is the chiller's electric power in kW (0 when it is off), CHWS_T / CHWR_T the chilled-water supply and return in F and CHW_GPM the chiller's chilled-water flow in gpm, CWS_T / CWR_T the condenser water leaving and returning to the tower in F (blank while the chiller is off), CT_FAN the tower fan speed in %, OAT and WB the outdoor dry-bulb and wet-bulb in F. The scenario column selects one plant per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "WB": "wetbulb_temp",
+    "CH_KW": "power",
+    "CHWS_T": "chw_supply_temp",
+    "CHWR_T": "chw_return_temp",
+    "CHW_GPM": "chw_flow",
+    "CWS_T": "cw_supply_temp",
+    "CWR_T": "cw_return_temp",
+    "CT_FAN": "tower_fan_speed"
+  }
+}
