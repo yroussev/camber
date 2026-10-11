@@ -61,12 +61,18 @@ def _legacy_baselines(path, *sites, frozen_at="2025-06-01"):
     return str(path)
 
 
-def _tree(root):
+def _tree(root, *, skip_lock=False):
+    """Every file under ``root`` and its bytes. ``skip_lock`` leaves out the workspace's ``_lock``:
+    an apply that is refused still takes the lock, and the holder line it writes carries the time
+    to the second, so comparing it made the test flaky across a second boundary (#139)."""
     out = {}
     for d, _dirs, names in os.walk(root):
         for n in names:
             p = os.path.join(d, n)
-            out[os.path.relpath(p, root)] = open(p, "rb").read()
+            rel = os.path.relpath(p, root)
+            if skip_lock and os.path.basename(rel) == "_lock":
+                continue
+            out[rel] = open(p, "rb").read()
     return out
 
 
@@ -176,12 +182,12 @@ def test_ambiguous_label_is_refused_and_nothing_is_written(tmp_path):
     pf, (a, b) = _ws(tmp_path, "Annex", "Annex West")
     pf.rename(b, "Annex", reason="both now display 'Annex'")
     fp = _legacy_faults(tmp_path / "faults.json", "Annex")
-    before = _tree(tmp_path)
+    before = _tree(tmp_path, skip_lock=True)
     r = pf.migrate([fp], apply=True, reason="try")
     row = r["labels"]["Annex"]
     assert r["blocked"] and not r["applied"] and row["problem"] == "ambiguous"
     assert sorted(row["candidates"]) == sorted([a, b])
-    assert _tree(tmp_path) == before
+    assert _tree(tmp_path, skip_lock=True) == before
     # an explicit mapping is an operator decision, not a guess
     r = pf.migrate([fp], mapping=[f"Annex={b}"], apply=True, reason="it was the west wing")
     assert r["applied"] and r["labels"]["Annex"]["via"] == "map"

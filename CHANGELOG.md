@@ -15,6 +15,12 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 ## [0.104.0] — Unreleased
 
 ### Fixed
+- **A flaky portfolio-migrate test (#139).** `test_ambiguous_label_is_refused_and_nothing_is_written`
+  compared the whole workspace before and after a refused apply, including `_lock`. A refused apply
+  still takes the lock and rewrites its holder line, which carries the time to the second, so the
+  test failed only when the two writes fell in different seconds. The comparison now leaves `_lock`
+  out, as the lock-contention test already did; a clock that ticks on every call reproduced the
+  failure and passes with the fix. Test-only change.
 - **The README's links and images work on PyPI (#138).** PyPI's project page is the README, where
   relative paths do not resolve, so the gallery thumbnails and the 35 links into `docs/` were
   broken there. They now use absolute GitHub URLs (images from `raw.githubusercontent.com`), and
