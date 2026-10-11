@@ -482,7 +482,9 @@ rejects their earlier spellings and names the key to use:
   versions gives byte-identical part files with the same names, in any archive member order; on
   another pyarrow version the rows are the same but the bytes may differ. A store ingested
   before 0.103 reads the same and is not re-ingested; `ingest --force` rewrites it in the
-  canonical layout. See [SCALE.md](SCALE.md#reproducible-part-files).
+  canonical layout. Without a re-ingest, `camber store normalize` (0.104) rewrites a store's
+  older parts in place, with the same rows and names, and `camber store verify` shows which parts
+  are still in the older layout. See [SCALE.md](SCALE.md#reproducible-part-files).
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).
@@ -522,8 +524,8 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   locks). Keep a cache that several machines write on a local disk, or give each machine its own.
 
 Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
-`camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, and any
-script that writes through `ParquetStore`. Each write method takes the lock, and re-enters it when
+`camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, `camber
+store normalize --apply`, and any script that writes through `ParquetStore`. Each write method takes the lock, and re-enters it when
 its caller already holds it. See [CLI.md](CLI.md#store-and-cache-locks).
 
 **A read-only shared cache (0.103).** A cache that you can read but not write, such as a course

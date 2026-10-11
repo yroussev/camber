@@ -21,6 +21,7 @@ camber portfolio init|adopt|status|audit|migrate                  # portfolio wo
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
 camber store migrate-partitions STORE [--apply --yes]   # year= -> year=/month= partitions
+camber store verify|normalize STORE [--facility ID]     # canonical part files (0.104)
 camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder (device)
 camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing (central)
 ```
@@ -577,7 +578,8 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
 A store has one writer at a time (0.103 for the dataset commands, 0.104 for everything that writes
 a plain store). Every command that writes a Parquet store holds the store's single-writer lock for
 the whole operation: `datasets ingest` and `remove --purge-store`, the lab's ingest and remove
-jobs, `interop openfdd ingest`, `store migrate-partitions --apply`, and any script that writes
+jobs, `interop openfdd ingest`, `store migrate-partitions --apply` and `store normalize --apply`,
+and any script that writes
 through `ParquetStore` (each write method takes the lock, and re-enters it when its caller already
 holds it). A plain store's lock is `<store>/_lock`; a store inside a portfolio workspace uses the
 workspace's lock. The dataset cache has its own, `<dir>/_lock`. Reads take no lock.
@@ -585,8 +587,8 @@ workspace's lock. The dataset cache has its own, `<dir>/_lock`. Reads take no lo
 A second writer waits, then exits 1 naming the holder:
 `store <path> is locked by <pid>@<host> since <time>`. The wait is:
 
-- `--lock-timeout SECONDS` on `datasets fetch|ingest|remove`, `lab`, `interop openfdd ingest` and
-  `store migrate-partitions`. `0` fails at once; a negative or non-numeric value is a usage error
+- `--lock-timeout SECONDS` on `datasets fetch|ingest|remove`, `lab`, `interop openfdd ingest`,
+  `store migrate-partitions` and `store normalize`. `0` fails at once; a negative or non-numeric value is a usage error
   (exit 2);
 - else the `CAMBER_LOCK_TIMEOUT` environment variable (same rules; a bad value exits 2 before
   anything runs);
@@ -632,6 +634,8 @@ camber retention hold|release ID --reason R              # legal hold
 camber retention apply [--facility ID] [--now DATE] [--json]            # dry run: the plan
 camber retention apply --apply --reason R --yes [--lock-timeout S]      # roll up, verify, prune
 camber store migrate-partitions STORE [--apply --yes] [--reason R] [--lock-timeout S]
+camber store verify STORE [--facility ID] [--strict] [--limit N] [--json]   # read-only, no lock
+camber store normalize STORE [--facility ID] [--apply --yes] [--reason R] [--lock-timeout S] [--json]
 ```
 
 Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
@@ -662,6 +666,27 @@ to do), 1 (a verification kept data), 75 (the lock is held; retry next run). Its
 converts a pre-0.95 year-only store to month partitions; `--apply` holds the store lock (a plain
 store's own since 0.104), waiting as described in [Store and cache locks](#store-and-cache-locks).
 See [PORTFOLIO.md](PORTFOLIO.md#retention).
+
+`store verify` (0.104) reports, per part file, whether it is in the canonical layout of 0.103 (the
+`camber.layout` marker, no pandas metadata, one row group, rows sorted by the canonical key, the
+store columns first) and which parts fail to read, with counts by origin: `legacy` (no marker:
+written before 0.103), `edge` (an edge forwarder's part) and `rollup`. A workspace's store includes
+its rollup stores. It reads every part, takes no lock and changes nothing. Exit code 0 when every
+part is readable, canonical or not; 1 when a part fails to read, or, with `--strict`, when a part
+is not canonical.
+
+`store normalize` (0.104) rewrites the non-canonical parts in the canonical layout. It is a dry run
+unless `--apply --yes` (and `--reason`, audited as `store.normalize`, inside a workspace), holds
+the store lock (`--lock-timeout` as above), and reports the parts, rows and bytes before and after
+per partition. Each part keeps its name and its rows: it is written to a stage inside its
+partition, read back and compared, then moved over the original. A crash at any point leaves every
+part either old or new, never lost or twice, and the next run finishes; a re-run with nothing to do
+changes nothing. It leaves alone, with a reason: canonical parts, edge parts (their name is the
+sha256 of their bytes; see [EDGE-DEPLOY.md](EDGE-DEPLOY.md#2-data-flow-landing-format)), year-only
+parts (`migrate-partitions` rewrites those), unreadable parts, and facilities that do not accept
+data (suspended, offboarding, archived, retired ids) or are under a legal hold. Asked for one of
+those facilities with `--facility`, it refuses (exit 1). See
+[SCALE.md](SCALE.md#reproducible-part-files).
 
 Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
 warns and finds no equipment unless the config source sets `"include_inactive": true`.

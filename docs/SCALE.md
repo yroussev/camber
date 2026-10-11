@@ -65,13 +65,42 @@ holds on every pyarrow version, and a byte golden pinned to one pyarrow release.
 **Older stores.** Parts written before 0.103 (pandas metadata, a large part in about ten row groups,
 rows in thread order) read back exactly like canonical ones, and a store may mix both. Nothing needs re-ingesting.
 The ingest content hash is unchanged, so an already-ingested dataset is still skipped;
-`camber datasets ingest <id> --force` rewrites it in the canonical layout. Sorted rows in one row
+`camber datasets ingest <id> --force` rewrites it in the canonical layout, and so does `camber
+store normalize` for any store. Sorted rows in one row
 group also make large ingests smaller on disk: 2 to 3.4 times smaller for the LBNL simulation
 archives, `irish-ahu` and `nuig-ahu101`, and 1.8 times smaller across all the workbook's dataset stores
 (537 MB to 291 MB).
 
-The edge forwarder's parts are content-addressed but not canonicalised: see
-[EDGE-DEPLOY.md](EDGE-DEPLOY.md#2-data-flow-landing-format).
+**Checking and converting a store (0.104).** `camber store verify STORE` reports which parts are
+canonical, how many are legacy (no `camber.layout` marker), edge or rollup parts, and which fail to
+read. It takes no lock and changes nothing; `--strict` exits 1 on any non-canonical part.
+`camber store normalize STORE` rewrites the rest:
+
+```
+camber store verify <ws>/store [--facility ID] [--json]
+camber store normalize <ws>/store                                     # dry run: what and why
+camber store normalize <ws>/store --apply --yes --reason "0.103 layout"
+```
+
+- **Content-identical, same names.** Each part is rewritten under its own name with exactly its
+  rows (a rollup part keeps its `camber.rollup.covers` key). Names stay because a rollup's
+  `covers` lists raw part names: renamed raw parts would be rolled up a second time.
+- **Crash-safe.** Per partition, the new parts are written to a `_trash-normalize-*` stage inside
+  the partition, which readers do not see, fsynced and read back; they must equal the original
+  rows, sorted, with the same types. Then each is moved over its original with one atomic rename,
+  and the stage is removed. Old and new hold the same rows, so a reader or a crash at any point
+  sees every row exactly once. The next run removes a leftover stage and rewrites what is left.
+- **Idempotent**, under the store lock (the workspace's lock in a workspace, where it is audited
+  as `store.normalize` and also covers the rollup stores), and it invalidates the catalog. It
+  reports the bytes of the rewritten parts before and after.
+- **Left alone**, each with its reason: canonical parts; edge parts (see below); year-only parts
+  (`migrate-partitions` rewrites them, recording their sha256 for the edge landing); unreadable
+  parts; and facilities that do not accept data (suspended, offboarding, archived, retired ids)
+  or are under a legal hold, whose bytes stay as they are, so an offboarding facility's export
+  bundle keeps matching its data.
+
+The edge forwarder's parts are content-addressed but not canonicalised, and `normalize` leaves
+them so: see [EDGE-DEPLOY.md](EDGE-DEPLOY.md#2-data-flow-landing-format).
 
 ## Facility identity (why an id, not a name)
 

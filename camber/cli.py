@@ -21,6 +21,7 @@ Subcommands:
                     offboard|restore|archive|purge|export|bundles
     camber retention show|set|override|hold|release|apply             # retention policy (0.95)
     camber store migrate-partitions STORE [--apply --yes]             # year= -> year=/month=
+    camber store verify|normalize STORE [--facility ID]               # canonical parts (0.104)
     camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
     camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
@@ -1741,6 +1742,78 @@ def _cmd_store_migrate_partitions(args) -> int:
     return 0
 
 
+def _cmd_store_verify(args) -> int:
+    """Report which part files are canonical (read-only, no lock); exit 1 on an unreadable part,
+    or with --strict on any non-canonical one."""
+    from .store import _normalize
+
+    try:
+        r = _normalize.verify(args.store, facility_id=args.facility)
+    except (ValueError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    c = r["counts"]
+    bad = c["unreadable"] > 0 or (args.strict and c["noncanonical"] > 0)
+    if args.json:
+        print(json.dumps(r, indent=2))
+        return 1 if bad else 0
+    print(f"store verify {r['store']} ({', '.join(r['stores'])}; read-only)")
+    print(
+        f"  {c['parts']} part(s): {c['canonical']} canonical, {c['noncanonical']} not canonical, "
+        f"{c['unreadable']} unreadable"
+    )
+    print(
+        f"  by origin: {c['legacy']} legacy (pre-0.103, no layout marker), {c['edge']} edge, "
+        f"{c['rollup']} rollup; {c['bytes']} bytes"
+    )
+    shown = [p for p in r["parts"] if not p["canonical"]]
+    for p in shown[: args.limit]:
+        why = p["error"] or "; ".join(p["problems"])
+        print(f"  {p['store']}/{p['path']} [{p['origin']}]: {why}")
+    if len(shown) > args.limit:
+        print(f"  ... and {len(shown) - args.limit} more (--json lists every part)")
+    if c["noncanonical"]:
+        print("\n`camber store normalize` rewrites them (edge and year-only parts excepted)")
+    return 1 if bad else 0
+
+
+@_lock_scoped
+def _cmd_store_normalize(args) -> int:
+    from .store import _normalize
+
+    if args.apply and not args.yes:
+        print("error: --apply needs --yes (part files are rewritten in place)", file=sys.stderr)
+        return 1
+    try:
+        r = _normalize.normalize(
+            args.store, facility_id=args.facility, apply=args.apply, reason=args.reason
+        )
+    except (ValueError, OSError, RuntimeError) as e:  # RuntimeError: a held lock (LockHeld)
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(r, indent=2))
+        return 0
+    head = "dry run -- nothing changed" if r["dry_run"] else "applied"
+    print(f"store normalize {r['store']} ({', '.join(r['stores'])}; {head})")
+    for p in r["partitions"]:
+        after = "" if p["bytes_after"] is None else f" -> {p['bytes_after']}"
+        print(
+            f"  {p['store']} {p['facility_id']} {p['year']}-{p['month']:02d}: {p['parts']} "
+            f"part(s), {p['rows']} rows, {p['bytes_before']}{after} bytes"
+        )
+    for s in r["skipped"]:
+        print(f"  left alone: {s['store']} {s['facility_id']}: {s['parts']} part(s), {s['reason']}")
+    if not r["partitions"]:
+        print("  nothing to rewrite")
+    else:
+        after = "" if r["bytes_after"] is None else f" -> {r['bytes_after']}"
+        print(f"  total: {r['parts']} part(s), {r['rows']} rows, {r['bytes_before']}{after} bytes")
+        if r["dry_run"]:
+            print("\nre-run with --apply --yes (and --reason inside a workspace) to rewrite them")
+    return 0
+
+
 # ---- 0.95 edge lifecycle (#18 step 5): central reconciliation -----------------------------------
 def _edge_ws(p) -> None:
     p.add_argument(
@@ -3423,7 +3496,7 @@ def _build_parser() -> argparse.ArgumentParser:
     rta.add_argument("--json", action="store_true")
     rta.set_defaults(func=_cmd_retention_apply)
 
-    pst = sub.add_parser("store", help="store maintenance: migrate-partitions")
+    pst = sub.add_parser("store", help="store maintenance: migrate-partitions, verify, normalize")
     stsub = pst.add_subparsers(dest="store_cmd", required=True)
     stm = stsub.add_parser(
         "migrate-partitions",
@@ -3438,6 +3511,40 @@ def _build_parser() -> argparse.ArgumentParser:
     stm.add_argument("--json", action="store_true")
     _add_lock_timeout(stm, "the store lock (--apply)")
     stm.set_defaults(func=_cmd_store_migrate_partitions)
+    stv = stsub.add_parser(
+        "verify",
+        help="report which part files are in the canonical layout (read-only, no lock)",
+    )
+    stv.add_argument(
+        "store", help="ParquetStore directory (a workspace store includes its rollups)"
+    )
+    stv.add_argument("--facility", help="only this facility")
+    stv.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit 1 on a non-canonical part, not only on an unreadable one",
+    )
+    stv.add_argument(
+        "--limit", type=int, default=20, help="non-canonical parts to list (default 20)"
+    )
+    stv.add_argument("--json", action="store_true")
+    stv.set_defaults(func=_cmd_store_verify)
+    stn = stsub.add_parser(
+        "normalize",
+        help="rewrite non-canonical part files in the canonical layout (dry run unless --apply)",
+    )
+    stn.add_argument(
+        "store", help="ParquetStore directory (a workspace store includes its rollups)"
+    )
+    stn.add_argument("--facility", help="only this facility")
+    nmode = stn.add_mutually_exclusive_group()
+    nmode.add_argument("--dry-run", action="store_true", help="list what would change (default)")
+    nmode.add_argument("--apply", action="store_true", help="rewrite the parts")
+    stn.add_argument("--yes", action="store_true", help="confirm --apply")
+    stn.add_argument("--reason", help="why (audited; required with --apply inside a workspace)")
+    stn.add_argument("--json", action="store_true")
+    _add_lock_timeout(stn, "the store lock (--apply)")
+    stn.set_defaults(func=_cmd_store_normalize)
 
     fce = fcsub.add_parser("export", help="write a verified export bundle now (changes nothing)")
     _ws(fce)

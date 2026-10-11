@@ -67,7 +67,27 @@ layout** so the cloud reads it with the existing `ParquetStore.read_long` / `rea
   [SCALE.md](SCALE.md#reproducible-part-files)). The forwarder does not: its part keeps the
   batch's row order and pyarrow's default writer metadata, so its name follows those bytes. The
   same batch re-sent by the same forwarder still lands the same key, and the store reads both
-  kinds of part the same way.
+  kinds of part the same way. `camber store verify` counts them as `edge` parts, and `camber store
+  normalize` leaves them as they are. This is deliberate (0.104, #136):
+  - **Why the forwarder does not canonicalise.** The key is the sha256 of the bytes, and the
+    forwarder keeps no record of what it already sent: every poll re-reads the source's window, and
+    a month it sent before lands on the same key again, overwriting itself. Canonical bytes would
+    give every such batch a new key after the upgrade, so each month a source still returns would
+    land a second time under a second name, with the same rows. Reads would return those rows twice
+    (a wide read averages them away, but counts do not), and a retention rollup would count them
+    twice in `n` for good. Batches already in the spool are not affected either way: they keep the
+    bytes and key they were enqueued with.
+  - **Why the store keeps the names and the bytes.** `camber edge land` checks that an object's
+    sha256 starts with the `<sha16>` in its name (`hash_mismatch`), and `edge quarantine release`
+    compares bytes with the store's copy. Rewriting a landed part in place would break that check;
+    renaming it would bring the duplicate problem above back, since a re-sent batch would land on
+    the old name.
+  - **What would make it safe.** The cloud side would have to recognise the same rows arriving
+    under a second name: a digest of the rows, independent of the bytes, recorded for each stored
+    part and checked before a new one is stored. Presigned uploads go straight to the bucket
+    without passing through CAMBER, so that check has nowhere to run yet. Until it does, edge parts
+    stay content-addressed. Upgrading pandas or pyarrow on the edge device can also change these
+    bytes, and with them the keys of re-sent batches, so plan those upgrades with the same care.
 - **Per-batch manifest** (sink metadata): facility, window, rows, roles, equips, quality summary,
   full `content_sha256`, `schema_version` — for cloud-side reconciliation and audit.
 - **NDJSON** (`wire_format="ndjson"`) is a documented compatibility fallback for endpoints that can't

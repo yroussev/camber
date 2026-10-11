@@ -24,7 +24,7 @@ without changing rule code.
 
 **Single writer (0.104, #135).** Every write method (``write_long`` / ``write_role_frame``,
 ``register_facility``, ``write_rollup``, ``prune``, ``drop_partition``, ``drop_facility``,
-``migrate_partitions(apply=True)``) holds the store's single-writer lock
+``migrate_partitions(apply=True)``, ``normalize(apply=True)``) holds the store's single-writer lock
 (:func:`camber.store._lock.store_lock`: ``<store>/_lock``, or the workspace's lock for a workspace
 store) for its duration. A second process waits up to ``lock_timeout`` seconds, then gets
 ``StoreLocked`` naming the holder. The lock is re-entrant within a process, so a bulk load takes it
@@ -1018,6 +1018,27 @@ class ParquetStore:
                     },
                 )
             return report
+
+    def verify(self, *, facility_id=None) -> dict:
+        """Which part files are in the canonical layout (#136): read-only, takes no lock. See
+        :func:`camber.store._normalize.verify` (``camber store verify``)."""
+        from . import _normalize
+
+        return _normalize.verify(self.root, facility_id=facility_id)
+
+    def normalize(self, *, facility_id=None, apply: bool = False, reason=None) -> dict:
+        """Rewrite non-canonical part files in the canonical layout, in place and content-identical
+        (#136); a dry run unless ``apply``. See :func:`camber.store._normalize.normalize`
+        (``camber store normalize``)."""
+        from . import _normalize
+
+        return _normalize.normalize(
+            self.root,
+            facility_id=facility_id,
+            apply=apply,
+            reason=reason,
+            lock_timeout=self.lock_timeout,
+        )
 
     def migrated_files(self, facility_id: str, year: int) -> dict:
         """``{legacy part name: sha256}`` of the year-only files ``migrate_partitions`` split into

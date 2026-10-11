@@ -657,6 +657,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `ParquetStore` write method and the facility registry of a plain store hold the store's
   single-writer lock (`<store>/_lock`), so a plain store gets a `_lock` file on its first write
   and a second process writing the same store waits, then gets `StoreLocked`.
+- **Store verify and normalize** (0.104; #136), additive and provisional: `ParquetStore.verify()`
+  and `ParquetStore.normalize()` (both in `camber.store._normalize`, with `check_part`), their
+  report shapes, the audit action `store.normalize`, and the CLI `camber store verify|normalize`.
 
 ### The read API server: `camber.api.server`
 

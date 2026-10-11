@@ -29,6 +29,26 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   works; its default stays 0. In Python: `ParquetStore(root, lock_timeout=…)`, `ParquetStore.lock()`
   for holding the lock across a bulk load, `lock_timeout=` on `ingest_package`, and
   `LabApp(lock_timeout=…)`.
+- **`camber store verify` and `camber store normalize` (#136).** `verify` reports, for a store or
+  one facility (`--facility`), whether each part file is in the canonical layout of 0.103 (the
+  `camber.layout` marker, no pandas metadata, one row group, rows sorted by the canonical key),
+  with counts of canonical, legacy (pre-0.103, no marker), edge and rollup parts, and lists any
+  part that fails to read. It takes no lock and changes nothing; `--json`; exit code 0 when every
+  part is readable, 1 when one is not, or with `--strict` when one is not canonical. `normalize`
+  rewrites the non-canonical parts, partition by partition, under the store lock
+  (`--lock-timeout`). It is a dry run unless `--apply --yes`, with `--reason` inside a workspace,
+  where it is audited as `store.normalize` and covers the rollup stores too. Each part keeps its
+  name and exactly its rows (a rollup part keeps `camber.rollup.covers`). The new part is staged
+  inside the partition, read back and compared, then moved over the original, so a crash at any
+  point loses and duplicates no row and the next run finishes. It is idempotent, invalidates the
+  catalog and reports the bytes before and after. It leaves alone canonical parts, edge parts,
+  year-only parts (`migrate-partitions` rewrites those), unreadable parts and facilities that do
+  not accept data or are under a legal hold, each with its reason, and refuses such a facility
+  named with `--facility`. In Python: `ParquetStore.verify()` and `ParquetStore.normalize()`.
+- **The edge forwarder's parts stay content-addressed (#136), and `docs/EDGE-DEPLOY.md` says
+  why.** Canonical bytes would give a batch the forwarder re-sends after an upgrade a new key, so
+  its rows would land twice; and the landing checks each name against the sha256 of its bytes.
+  `store verify` counts edge parts on their own and `store normalize` leaves them as they are.
 
 ### Changed
 - **`camber serve` refuses cross-site browser requests (#134), as `camber lab` does.** A request

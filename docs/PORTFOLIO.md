@@ -399,13 +399,14 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
   offboard|archive|restore|purge --apply`, `camber retention set|override|hold|release`,
   `camber retention apply --apply`) fail at once too; `retention apply --lock-timeout S` (0.104;
   `--wait S` is the older name) waits up to S seconds, for cron.
-- `camber store migrate-partitions --apply` waits 30 seconds by default since 0.104, like the
-  other store writers; `--lock-timeout S` or `$CAMBER_LOCK_TIMEOUT` changes the wait, and `0`
+- `camber store migrate-partitions --apply` and `camber store normalize --apply` wait 30 seconds
+  by default since 0.104, like the other store writers; `--lock-timeout S` or `$CAMBER_LOCK_TIMEOUT` changes the wait, and `0`
   fails at once. `$CAMBER_LOCK_TIMEOUT` does not change the no-wait default of the admin
   commands above.
 - **Plain stores (0.104).** A store outside a workspace has the same kind of lock on
   `<store>/_lock`, held by every write (`ParquetStore` write methods, the facility registry,
-  dataset and open-fdd ingests, `store migrate-partitions --apply`). See
+  dataset and open-fdd ingests, `store migrate-partitions --apply` and `store normalize
+  --apply`). See
   [CLI.md](CLI.md#store-and-cache-locks).
 - The lock is re-entrant within one process.
 - **Stale locks.** The operating system drops the lock when the holding process exits, including
@@ -504,6 +505,16 @@ Each year is rebuilt in a staging directory (legacy rows split by month, existin
 partitions carried over), the rows are counted, and it is swapped in. It holds the store lock (the
 workspace's, inside a workspace, where it is also audited as `store.migrate_partitions`).
 Re-running is a no-op.
+
+**Older part files (0.104).** `camber store normalize <ws>/store --apply --yes --reason R`
+rewrites part files written before 0.103 in the canonical layout, in place and with the same rows,
+in the store and in `rollups/hourly|daily` (a rollup part keeps the raw file names it covers, so
+retention still recognises its own parts). It is audited as `store.normalize`. It follows the
+lifecycle: only `provisioning` and `active` facilities are rewritten. Suspended, offboarding and
+archived facilities, retired ids and facilities under a legal hold are skipped with the reason,
+and naming one with `--facility` is refused. An offboarding facility's export bundle therefore
+keeps matching its data. `camber store verify <ws>/store` shows what is left. See
+[SCALE.md](SCALE.md#reproducible-part-files).
 
 ### The policy document (for edge and cloud tooling)
 
