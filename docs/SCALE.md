@@ -141,6 +141,13 @@ with st.lock():  # once for the whole load
 `camber datasets ingest`, the lab, `camber interop openfdd ingest` and `synth_portfolio()` already
 do this: each takes the store lock once per command.
 
+A read that rebuilds the cached catalog (`points()`, `equipment()`, `rebuild_catalog()`) still
+takes no lock. Instead, each writer stamps a fresh random generation token in `_catalog.gen` when
+it invalidates the catalog. A rebuild records the token before it scans and stamps it into the
+catalog it writes. It skips the write-back if the token has changed by then, and a catalog whose
+token is no longer current is never served. A rebuild that races a write can therefore never hide
+that write (#141).
+
 ## Measuring it
 
 A synthetic generator + benchmark ships in the package:

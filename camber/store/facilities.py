@@ -25,7 +25,6 @@ import shutil
 import urllib.parse
 
 _FACILITIES = "_facilities.json"  # leading "_" -> ignored by pyarrow dataset discovery
-_CATALOG = "_catalog.json"
 _TOMBSTONES = "_tombstones.json"  # ids removed from the registry; never reusable
 _WORKSPACE_MARKER = "_workspace.json"  # in a portfolio's store: points back at the workspace
 _LIFECYCLE_KEYS = ("state", "created_at", "state_changed_at")
@@ -475,10 +474,7 @@ def migrate_site_to_facility(root: str, *, derive_ids: bool = False) -> int:
         reg.register(fid, name=value)
         migrated += 1
     if migrated:
-        cat = os.path.join(root, _CATALOG)
-        if os.path.isfile(cat):
-            try:
-                os.remove(cat)  # invalidate; next points() rebuilds for the new keys
-            except OSError:
-                pass
+        from .parquet_store import _invalidate_catalog_at  # lazy: parquet_store imports this
+
+        _invalidate_catalog_at(root)  # next points() rebuilds for the new keys
     return migrated

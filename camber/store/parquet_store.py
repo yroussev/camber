@@ -29,7 +29,8 @@ without changing rule code.
 store) for its duration. A second process waits up to ``lock_timeout`` seconds, then gets
 ``StoreLocked`` naming the holder. The lock is re-entrant within a process, so a bulk load takes it
 once around the whole operation with :meth:`ParquetStore.lock` and every write inside re-enters it
-cheaply. Reads never take it.
+cheaply. Reads never take it; a read that rebuilds the cached ``_catalog.json`` guards its
+write-back with the catalog's write generation instead (#141, see ``_CATALOG_GEN``).
 
 Dependencies: pandas + pyarrow only (no SQL engine), consistent with the rest of
 the package.
@@ -40,6 +41,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import threading
 from collections import OrderedDict
 from contextlib import nullcontext as _nullcontext
@@ -68,6 +70,58 @@ _PART_RE = re.compile(r"^part-(\d+)-\d+\.parquet$")
 # points() needn't rescan every partition. Arrow's dataset discovery ignores leading-"_"
 # paths, so this file is invisible to reads.
 _CATALOG = "_catalog.json"
+
+# The catalog's write generation (#141): a random token every invalidation replaces (under the
+# store lock, after the data change). A catalog records the token current when its scan began and
+# is served only while that token is still current, so a read-side rebuild that raced a write and
+# wrote back a pre-write catalog is ignored rather than served. A random token, not a counter: a
+# lost or reset generation file can never make an old catalog look current again (no ABA).
+_CATALOG_GEN = "_catalog.gen"
+_GEN_UNKNOWN = object()  # an unreadable generation file: serve and cache nothing
+
+
+def _read_gen(root: str):
+    """The store's current catalog generation token: ``None`` for a store no write has
+    invalidated since #141 (its legacy catalog stays valid), :data:`_GEN_UNKNOWN` if unreadable."""
+    try:
+        with open(os.path.join(root, _CATALOG_GEN), encoding="ascii") as fh:
+            return fh.read().strip() or None
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError):
+        return _GEN_UNKNOWN
+
+
+def _replace_atomically(root: str, name: str, text: str, *, keep=lambda: True) -> bool:
+    """Write ``text`` to ``root/name`` via a unique temp file and ``os.replace``, if ``keep()``
+    still holds just before the rename. Returns whether the file was replaced."""
+    fd, tmp = tempfile.mkstemp(prefix=f"{name}.", suffix=".tmp", dir=root)  # "_..." -> unseen
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        if keep():
+            os.replace(tmp, os.path.join(root, name))
+            return True
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return False
+
+
+def _invalidate_catalog_at(root: str) -> None:
+    """Mark the catalog of the store at ``root`` stale: a fresh generation token, then drop the
+    catalog file (O(1)). Called by every writer after its data change, under the store lock."""
+    if not os.path.isdir(root):
+        return
+    try:
+        _replace_atomically(root, _CATALOG_GEN, os.urandom(16).hex())
+    except OSError:
+        pass
+    try:
+        os.remove(os.path.join(root, _CATALOG))
+    except OSError:
+        pass
+
 
 # Written into a year directory by migrate_partitions (0.95): the legacy part files it split into
 # month partitions, by original name, with their sha256. The edge landing reads it so a year-only
@@ -392,8 +446,9 @@ class ParquetStore:
     def _catalog_path(self) -> str:
         return os.path.join(self.root, _CATALOG)
 
-    def _read_catalog_payload(self):
-        """The parsed ``_catalog.json`` dict, or None when absent/corrupt."""
+    def _read_catalog_payload(self, *, validate: bool = True):
+        """The parsed ``_catalog.json`` dict, or None when absent, corrupt or (``validate``) built
+        under a generation a write has since replaced (#141)."""
         p = self._catalog_path()
         if not os.path.isfile(p):
             return None
@@ -402,7 +457,11 @@ class ParquetStore:
                 data = json.load(fh)
         except (json.JSONDecodeError, OSError):
             return None
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        if validate and data.get("gen") != _read_gen(self.root):
+            return None  # a stale write-back that landed after a writer's invalidation
+        return data
 
     def _read_catalog(self):
         """Return cached :class:`PointKey` list, or None if there is no (valid) catalog."""
@@ -417,32 +476,49 @@ class ParquetStore:
         except (KeyError, TypeError):
             return None  # treat a corrupt/old catalog as absent -> fall back to a scan
 
-    def _write_catalog(self, keys, equipment=None) -> None:
-        """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``.
+    def _write_catalog(self, keys, equipment=None, *, gen, check: bool = True) -> bool:
+        """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``, stamped with
+        ``gen``: the generation read *before* the scan that produced ``keys``.
 
         ``equipment`` (``{facility_id: {equip: equip_class}}``) is cached alongside the point keys
-        when known, so :meth:`equipment` needs no scan either.
+        when known, so :meth:`equipment` needs no scan either. With ``check``, the catalog is
+        written only if ``gen`` is still current just before the rename; a write that lands in the
+        window after that check carries the old ``gen`` and is never served. Best effort: returns
+        False (nothing cached) when skipped or the store is not writable -- the caller already
+        holds its result.
         """
-        os.makedirs(self.root, exist_ok=True)
+        if gen is _GEN_UNKNOWN:
+            return False
         rows = sorted({(k.facility_id, k.equip, k.role) for k in keys})
         payload: dict = {"points": [{"facility_id": s, "equip": e, "role": r} for s, e, r in rows]}
         if equipment is not None:
             payload["equipment"] = {
                 fid: dict(sorted(eqs.items())) for fid, eqs in sorted(equipment.items())
             }
-        tmp = self._catalog_path() + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh)
-        os.replace(tmp, self._catalog_path())
+        if gen is not None:
+            payload["gen"] = gen
+        try:
+            os.makedirs(self.root, exist_ok=True)
+            return _replace_atomically(
+                self.root,
+                _CATALOG,
+                json.dumps(payload),
+                keep=(lambda: _read_gen(self.root) == gen) if check else (lambda: True),
+            )
+        except OSError:
+            return False
 
     def _invalidate_catalog(self) -> None:
         """Mark the cached catalog stale (O(1)); the next :meth:`points` rebuilds it."""
-        p = self._catalog_path()
-        if os.path.isfile(p):
-            try:
-                os.remove(p)
-            except OSError:
-                pass
+        _invalidate_catalog_at(self.root)
+
+    def _rebuild(self):
+        """Scan and cache the catalog without the store lock; returns (keys, equipment). The
+        generation is read before the scan, so a write that lands during it voids the result."""
+        gen = _read_gen(self.root)
+        keys, equipment = self._scan()
+        self._write_catalog(keys, equipment, gen=gen)
+        return keys, equipment
 
     def _scan(self):
         """One projected scan (no ts/value payload) -> (point keys, equipment classes)."""
@@ -468,8 +544,10 @@ class ParquetStore:
     def rebuild_catalog(self) -> int:
         """Rebuild the catalog from a projected scan (for stores predating it, or to resync
         after manual edits). Returns the number of distinct keys."""
-        keys, equipment = self._scan()
-        self._write_catalog(keys, equipment)
+        if os.path.isdir(self.root):
+            # a fresh generation first: voids a catalog an unlocked manual edit left current
+            _invalidate_catalog_at(self.root)
+        keys, _ = self._rebuild()
         return len(keys)
 
     # ------------------------------------------------------------------- read
@@ -658,8 +736,7 @@ class ParquetStore:
         if cached is None:
             if not os.path.isdir(self.root):
                 return []
-            cached, equipment = self._scan()
-            self._write_catalog(cached, equipment)  # memoize until the next write invalidates it
+            cached, _ = self._rebuild()  # memoize until the next write invalidates it
         return [k for k in cached if facility_id is None or k.facility_id == facility_id]
 
     def equipment(self, *, facility_id=None) -> dict:
@@ -676,8 +753,7 @@ class ParquetStore:
         if not isinstance(equipment, dict):
             if not os.path.isdir(self.root):
                 return {}
-            keys, equipment = self._scan()
-            self._write_catalog(keys, equipment)
+            _, equipment = self._rebuild()
         if facility_id is not None:
             eqs = equipment.get(facility_id)
             return {facility_id: dict(eqs)} if eqs else {}

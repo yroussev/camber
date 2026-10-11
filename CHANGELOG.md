@@ -84,6 +84,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   broken there. They now use absolute GitHub URLs (images from `raw.githubusercontent.com`), and
   `tests/test_readme_links.py` fails on any relative README link or image, or an image path that
   is not in the repository.
+- **A catalog rebuild could hide a write that raced it (#141).** `points()`, `equipment()` and
+  `rebuild_catalog()` rebuild `_catalog.json` without the store lock. A rebuild that scanned just
+  before a writer's change, and wrote its result back just after, cached a catalog without the new
+  points until the next write. Writers now stamp a fresh generation token (`_catalog.gen`) when
+  they invalidate the catalog. A rebuild caches its result only if the token it read before
+  scanning is still current, and a catalog stamped with an old token is never served. Reads still
+  take no lock, a warm `points()` costs the same, and a store that can't be written to still
+  answers (it just isn't cached). Two readers rebuilding at once also no longer fail on a shared
+  temp file.
 
 ## [0.103.0] — 2026-10-11
 
