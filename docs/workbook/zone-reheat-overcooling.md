@@ -71,7 +71,8 @@ The box trends both the controller's reheat *demand* and the valve's measured *p
 0.98, `reheat_penalty` and `overcooling_min_flow` read the position (their findings say so in
 `valve_signal`), because they ask whether heat was actually delivered; the rules that ask how hard
 the controller calls for heat keep reading the demand. Keep that in mind for question 5. `camber report fpu.json --out fpu.html` gives the same findings as a
-report; add `--layout rcx` for the printable RCx report with evidence charts.
+report, with their evidence charts; add `--layout rcx` for the printable RCx report, with a
+page per issue.
 
 ## Steps
 

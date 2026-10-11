@@ -438,6 +438,22 @@ def _boiler_summer(idx, *, faulty):
     )
 
 
+def _hw_pump_summer(idx, *, faulty):
+    """0.103 (#132): the boiler locked out above 65F in both frames; the fault leaves the
+    hot-water pump running through the warm hours (the boiler signal marks it a hot-water pump)."""
+    oat = _oat_wave(idx, center=72.0, amp=15.0)  # swings above/below the 65F lockout
+    boiler = (oat < 65).astype(float)
+    pump = np.ones(len(idx)) if faulty else boiler
+    return pd.DataFrame(
+        {
+            Role.PUMP_STATUS: pd.Series(pump, index=idx),
+            Role.BOILER_STATUS: pd.Series(boiler, index=idx),
+            Role.OAT: pd.Series(oat, index=idx),
+        },
+        index=idx,
+    )
+
+
 def _hw_deltat(idx, *, faulty):
     n = len(idx)
     supply = np.full(n, 140.0)
@@ -723,6 +739,8 @@ SCENARIOS: dict = {
     "source_loop_deltat": _source_loop,  # 0.93 (#40)
     # 0.98 (#85): promoted with the maintainer's sign-off (S3)
     "actuator_stuck": _actuator_stuck,
+    # 0.103: promoted with the maintainer's sign-off
+    "hw_pump_summer_lockout": _hw_pump_summer,  # 0.103 (#132)
 }
 
 
@@ -732,6 +750,7 @@ SCENARIOS: dict = {
 # reads with strict_new: moving one into SCENARIOS adds baseline keys, a maintainer decision. Empty
 # after 0.93, when reheat_capacity_shortfall (#44) and the five single-equipment DX / heat-pump
 # rules (#40) were signed off and promoted (the 0.92 promotion was condenser_bypass_leak, #15).
+# hw_pump_summer_lockout (#132) was promoted at the 0.103 sign-off; empty again.
 
 #: Scenarios pending sign-off as gated synthetic keys (see the note above).
 PENDING_SCENARIOS: dict = {}

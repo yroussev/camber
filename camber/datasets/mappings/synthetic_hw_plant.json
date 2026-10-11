@@ -1,0 +1,12 @@
+{
+  "_comment": "Synthetic hot-water plant (generator hw_plant_lockout, camber.datasets._synthetic; 0.103, #133) -> CAMBER Role mapping. Every column is CAMBER's own: BLR_FIRE is the burner firing (1 = firing, not an enable), BLR_GAS_KW the boiler's gas input in kW, HWP_STS the hot-water pump's run status and HWP_SPD its speed in %, HWS_T / HWR_T the loop supply and return in F, OAT the outdoor temperature in F. The scenario column selects one plant per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "BLR_FIRE": "boiler_status",
+    "BLR_GAS_KW": "gas_input_rate",
+    "HWP_STS": "pump_status",
+    "HWP_SPD": "hw_pump_speed",
+    "HWS_T": "hw_supply_temp",
+    "HWR_T": "hw_return_temp"
+  }
+}

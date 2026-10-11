@@ -93,7 +93,9 @@
     "ReadAPI"
   ],
   "camber.api.server": [
+    "ALLOWED_HOSTS_ENV",
     "ReadAPIHandler",
+    "check_request",
     "dispatch",
     "make_server",
     "serve"
@@ -1100,6 +1102,7 @@
     "LAB_HOST",
     "LabApp",
     "LabError",
+    "PortInUse",
     "TOKEN_HEADER",
     "announce",
     "dispatch_lab",
@@ -1530,7 +1533,13 @@
   "camber.plant": [
     "HWPLANT_MEASURES",
     "HWPlantResult",
-    "analyze_hw_plant"
+    "HWPumpLockoutResult",
+    "LOCKOUT_FAULT_PCT",
+    "LOCKOUT_WARN_PCT",
+    "SUMMER_LOCKOUT_OAT_F",
+    "analyze_hw_plant",
+    "analyze_hw_pump_lockout",
+    "lockout_severity"
   ],
   "camber.plantdrift": [
     "PlantDriftDiagnosis",
@@ -1690,9 +1699,11 @@
     "AuditReport",
     "Benchmark",
     "ECM",
+    "EVIDENCE_LIMIT",
     "REPORT_CSS",
     "RESEARCH_ONLY_BANNER",
     "SHARE_ALIKE_NOTE",
+    "SYNTHETIC_NOTE",
     "data_sources_html",
     "data_sources_text",
     "html_document"
@@ -2060,6 +2071,12 @@
   ],
   "camber.rules.hwplant_deltat_rule": [
     "HWPlantDeltaT"
+  ],
+  "camber.rules.hwpump_lockout_rule": [
+    "HWPumpSummerLockout",
+    "PUMP_RUN_FLOW_FRAC",
+    "PUMP_RUN_SPEED_PCT",
+    "pump_run"
   ],
   "camber.rules.hwpump_rule": [
     "HWPumpDPReset"

@@ -2321,6 +2321,38 @@ def _with_site_elevation(name: str, params: dict, elevation_ft: float | None) ->
     return {**params, "elevation_ft": elevation_ft}
 
 
+#: 0.103 (#132): rules that read a parameter of another rule's when the config sets it there and
+#: not on them: ``{rule: (param, source rule)}``. One site heating lockout judges the boiler and
+#: its hot-water pump alike.
+_INHERITED_PARAMS = {"hw_pump_summer_lockout": ("summer_lockout_oat_f", "boiler_summer_lockout")}
+
+
+def _inherited_params(config: dict) -> dict:
+    """``{rule: (param, value, source rule)}`` for each :data:`_INHERITED_PARAMS` rule whose
+    source rule sets the parameter in this config's ``rules``."""
+    set_on: dict = {}
+    for entry in config.get("rules", []):
+        if isinstance(entry, dict) and isinstance(entry.get("params"), dict):
+            set_on[entry.get("name")] = entry["params"]
+    out = {}
+    for rule, (param, src) in _INHERITED_PARAMS.items():
+        if param in (set_on.get(src) or {}):
+            out[rule] = (param, set_on[src][param], src)
+    return out
+
+
+def _inherit(name: str, params: dict, basis, inherited: dict):
+    """``(params, basis)`` with the parameter ``name`` inherits (see :data:`_INHERITED_PARAMS`)
+    added when the entry does not set it itself; the basis records where the value came from."""
+    if name not in inherited:
+        return params, basis
+    param, value, src = inherited[name]
+    if param in params:
+        return params, basis
+    note = {"value": value, "basis": f"inherited from {src} in this config"}
+    return {**params, param: value}, {**(basis or {}), param: note}
+
+
 def _param_basis(name: str, params: dict, basis) -> dict | None:
     """A rule entry's ``"basis"`` ({param: where its value came from}) as finding metrics.
 
@@ -2371,6 +2403,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     if vent_rule is not None:
         reg.register(vent_rule)
     site_elev = site_elevation_ft(config)  # 0.98 (#92)
+    inherited = _inherited_params(config)  # 0.103 (#132)
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
@@ -2381,6 +2414,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             basis = _param_basis(name, params, entry.get("basis"))
         else:
             name, params = entry, {}
+        # 0.103 (#132): the pump's lockout defaults to the boiler's when only that one is set
+        params, basis = _inherit(name, params, basis, inherited)
         # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
         params = _with_site_elevation(name, params, site_elev)
         if params:

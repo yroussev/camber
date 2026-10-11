@@ -401,17 +401,24 @@ synchronized multitrend links to a timestamp readout exactly like the static pan
 
 ```sh
 camber serve /path/to/store          # read-only API + live dashboard at http://127.0.0.1:8080/ui
+camber serve /path/to/store --auth token   # open the printed URL (it ends in ?token=...) instead
 python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints unchanged
 ```
 
-![Screenshot of the live trend viewer: facility and equipment selectors, role checkboxes and two unit panels](img/shots/trend-viewer.png)
+Open the viewer at `http://127.0.0.1:8080/ui` or `http://localhost:8080/ui`. Since 0.103 the
+server answers only the names it is bound to (a DNS-rebinding defence); for any other name, add
+`--allow-host NAME`. With `--auth token`, open the launch URL the command prints; it sets a session
+cookie, so later visits in that browser need no token (see [CLI.md](CLI.md)).
 
-*Synthetic data: the `/ui` trend viewer on a demo store, with one panel per unit (% and inH₂O) on a shared time axis.*
+![Screenshot of the live trend viewer: facility and equipment selectors, role checkboxes, date range and zoom controls, a line giving the span and sample count, and two unit panels on a time axis labelled local time (no time zone recorded)](img/shots/trend-viewer.png)
+
+*Synthetic data: the `/ui` trend viewer on a demo store, with one panel per unit (% and inH₂O) on a shared time axis. The store records no time zone for this facility, so the axis says so instead of claiming UTC.*
 
 Framework-free and dependency-light: stdlib `http.server` + inline vanilla JS/SVG, **no framework, no
 CDN, no external asset** (a strict `Content-Security-Policy` header is sent on the HTML route). It is
-**read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on a public interface is your
-decision and adds no auth (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
+**read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on another interface is your
+decision; it checks the `Host` header and offers opt-in token auth (`--auth token`), but no user
+accounts or TLS (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
 **carpet/heatmap** panel; the live multitrend + selectors + cross-panel linking + polling ship now.
 
 **Units, axes and a legend (0.96, #78).** Series of different scales no longer share one axis
@@ -428,11 +435,45 @@ asset.
 
 **Site time (0.96).** The store holds each site's naive wall clock. When the facility's zone is
 known, the time axis and the hover readout show that wall clock as **site time**, labelled with
-the zone (e.g. `time (Australia/Sydney)`), and a **UTC** box converts both to UTC. The zone comes
-from `/facilities`, whose rows carry a `timezone` key only when one is recorded: a `timezone` on
-the facility's registry entry, or, for a catalog dataset, the zone it was ingested into, or the
-zone an open-fdd ingest recorded. Config runs on a store source use the same lookup (0.100, #104).
-Without a zone the axis reads the stored clock as UTC, as before.
+the zone (e.g. `local time (Australia/Sydney)` since 0.103), and a **UTC** box converts both to
+UTC. The zone comes from `/facilities`, whose rows carry a `timezone` key only when one is
+recorded: a `timezone` on the facility's registry entry, or, for a catalog dataset, the zone it
+was ingested into, or the zone an open-fdd ingest recorded. Config runs on a store source use the same lookup (0.100, #104).
+
+**Honest time axis (0.103, #122).** Without a recorded zone the stored clock cannot be placed on
+UTC, so the axis is labelled `local time (no time zone recorded)`, the hover readout says the same,
+and there is no **UTC** box. Before 0.103 that axis was labelled UTC although it showed the
+publisher's local clock (most LBNL and ORNL datasets). With a zone the axis reads `local time
+(<zone>)`, and `time (UTC)` only while the **UTC** box is ticked. The page takes these labels from
+`/points?facility_id=…`, whose reply carries a `time_axis` object: `timezone` (or `null`),
+`local_label`, and `utc_label` (`null` when no zone is recorded).
+
+**Date range, zoom and fresh lists (0.103, #122).** Before 0.103 the viewer drew each point's
+first 5,000 samples, so a long series showed only its start and series that began at different
+times showed different spans. Now:
+
+- **Whole span, thinned.** The page opens on every sample of each ticked series, thinned on the
+  server to at most 2,000 per series. Each of 1,000 equal time buckets keeps its minimum and its
+  maximum sample, so a one-sample spike, a dip and a flatline all stay visible. A line under the
+  controls gives the span shown, its time-axis label, and how many samples were drawn out of how
+  many stored (`4,000 of 172,800 samples drawn (min and max of each time bucket kept)`).
+- **Date range.** **From** and **to** dates, and **Last 7 days**, **Last 30 days** (counted back
+  from the last stored sample, not from today) and **All**. A chosen window is read at full
+  resolution, up to 20,000 samples per series; past that it is thinned the same way and the line
+  says so. Dates are read in the clock the axis shows (site time, or UTC with the box ticked).
+- **Brush to zoom.** Dragging across a panel zooms to that span, reads it again at full
+  resolution, and selects its samples: the `N selected` readout under the chart counts them.
+  **Zoom out** steps back through the spans viewed; **All** returns to the whole span.
+- **Fresh lists.** The facility and equipment lists are read again when either list is opened,
+  on **Reload lists** or **Refresh**, and on each live poll, so a facility ingested after the
+  page opened appears without a reload. The ticked roles and the chosen equipment are kept.
+
+The read side behind this is `/history`'s optional `max_points` parameter, the per-series budget
+for that min/max envelope. Its reply also gives `source_count` (the rows in the window before
+thinning), `downsampled`, and `first` / `last` (the window's first and last stored timestamp).
+`start` and `end` name the store's wall clock; an offset on them is dropped, not converted, and a
+malformed `start`, `end`, `limit` or `max_points` is a 400. A request without `max_points` returns
+what it did before.
 
 ## Scope
 

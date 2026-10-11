@@ -2,7 +2,7 @@
 # exactly. CI's min-deps job installs with `-c .github/min-deps.txt` and runs the full suite, so a
 # floor that no longer works fails CI instead of failing users. Keep in sync with pyproject.toml
 # (tests/test_public_api.py checks this).
-numpy==1.24.1
-pandas==2.2.1
-matplotlib==3.7.0
-pyarrow==14.0.2
+numpy==2.0.0
+pandas==2.2.2
+matplotlib==3.8.4
+pyarrow==16.0.0

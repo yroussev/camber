@@ -20,7 +20,9 @@ CAMBER server that accepts writes, so it is a **separate** server with its own, 
   cannot read and which itself needs the session.
 - **JSON only** (415 otherwise), **16 KiB body cap** (413, checked on the declared length before
   the body is read), unknown body keys refused (400), and catalog ids only.
-- **Writes are jobs**: the only POST routes queue a fetch / ingest job or cancel one.
+- **Writes are jobs**: the only POST routes queue a fetch / ingest / remove job or cancel one.
+  A remove needs the typed dataset id (``confirm``); an ingest from a local folder takes an
+  absolute folder path that is validated server-side and only read (0.103, #123).
 - **Strict CSP** on every HTML response (the lab page pins its script and stylesheet by hash);
   ``nosniff``, ``no-referrer``, ``no-store`` and ``frame-ancestors 'none'`` on everything.
 
@@ -35,11 +37,14 @@ Routes (every one needs the session cookie or the bearer token)::
     GET  /ui /facilities /points /history    delegated unchanged to camber.api.server.dispatch
     POST /lab/jobs/fetch          {"ids": [...], "subset"?, "ingest"?, "acknowledge"?}
     POST /lab/jobs/ingest         {"ids": [...], "subset"?, "force"?, "acknowledge"?}
+    POST /lab/jobs/from-dir       {"id", "dir", "subset"?, "force"?, "acknowledge"?}  (0.103)
+    POST /lab/jobs/remove         {"id", "confirm", "purge_store"?}                   (0.103)
     POST /lab/jobs/<id>/cancel    {}
 """
 
 from __future__ import annotations
 
+import errno
 import html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,6 +62,9 @@ READ_ROUTES = ("/ui", "/ui/", "/facilities", "/points", "/history")
 _FETCH_SITES = ("same-origin", "none")
 _FETCH_KEYS = {"ids", "subset", "ingest", "acknowledge"}
 _INGEST_KEYS = {"ids", "subset", "force", "acknowledge"}
+_FROM_DIR_KEYS = {"id", "dir", "subset", "force", "acknowledge"}
+_REMOVE_KEYS = {"id", "confirm", "purge_store"}
+_JOB_ROUTES = ("/lab/jobs/fetch", "/lab/jobs/ingest", "/lab/jobs/from-dir", "/lab/jobs/remove")
 
 # A report is standalone HTML built by CAMBER's report code; it is served sandboxed (an opaque
 # origin: it cannot call the lab API) and may not load or send anything.
@@ -212,7 +220,7 @@ def _parse_body(body, allowed: set) -> dict:
         isinstance(ack, dict) and all(isinstance(v, str) for v in ack.values())
     ):
         raise LabError(400, "acknowledge must map dataset ids to the typed ids")
-    for flag in ("ingest", "force"):
+    for flag in ("ingest", "force", "purge_store"):
         if flag in data and not isinstance(data[flag], bool):
             raise LabError(400, f"{flag} must be true or false")
     return data
@@ -253,9 +261,7 @@ def _get(app: LabApp, path: str, query: dict):
         return _json(200, app.catalog_view())
     if path == "/lab/jobs":
         return _json(200, {"jobs": [j.view() for j in app.jobs.jobs()]})
-    if path in ("/lab/jobs/fetch", "/lab/jobs/ingest") or (
-        path.startswith("/lab/jobs/") and path.endswith("/cancel")
-    ):
+    if path in _JOB_ROUTES or (path.startswith("/lab/jobs/") and path.endswith("/cancel")):
         return _err(405, "use POST")
     if path.startswith("/lab/jobs/") and path.count("/") == 3:
         return _json(200, {"job": app.job(path.rsplit("/", 1)[1])})
@@ -288,6 +294,24 @@ def _post(app: LabApp, path: str, body):
             subset=data.get("subset"),
             force=bool(data.get("force", False)),
             acknowledge=data.get("acknowledge"),
+        )
+        return _json(202, {"job": job.view()})
+    if path == "/lab/jobs/from-dir":
+        data = _parse_body(body, _FROM_DIR_KEYS)
+        job = app.submit_from_dir(
+            data.get("id"),
+            data.get("dir"),
+            subset=data.get("subset"),
+            force=bool(data.get("force", False)),
+            acknowledge=data.get("acknowledge"),
+        )
+        return _json(202, {"job": job.view()})
+    if path == "/lab/jobs/remove":
+        data = _parse_body(body, _REMOVE_KEYS)
+        job = app.submit_remove(
+            data.get("id"),
+            purge_store=bool(data.get("purge_store", False)),
+            confirm=data.get("confirm"),
         )
         return _json(202, {"job": job.view()})
     parts = path.split("/")
@@ -351,7 +375,7 @@ class LabHandler(BaseHTTPRequestHandler):
         self._handle("GET")
 
     def do_POST(self):  # noqa: N802
-        """POST: queue a fetch / ingest job or cancel one (token + JSON + allowlists)."""
+        """POST: queue a fetch / ingest / remove job or cancel one (token + JSON + allowlists)."""
         self._handle("POST")
 
     def do_PUT(self):  # noqa: N802
@@ -383,12 +407,30 @@ class _LabHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
 
+class PortInUse(OSError):
+    """The lab's port is taken (another ``camber lab`` or another program); the message says
+    how to pick another one."""
+
+    def __init__(self, port: int):
+        self.port = int(port)
+        super().__init__(
+            errno.EADDRINUSE,
+            f"port {self.port} on {LAB_HOST} is already in use (another `camber lab`, or another "
+            f"program, is listening there). Stop it, or pick a free port: "
+            f"`camber lab --port {self.port + 1}` (or any free port number)",
+        )
+
+    def __str__(self) -> str:
+        return str(self.args[1])
+
+
 def make_lab_server(app: LabApp, *, port: int = DEFAULT_PORT, host: str = LAB_HOST):
     """Create (but don't start) the lab server for ``app`` on ``127.0.0.1:port``.
 
     ``host`` exists only to be refused: anything but ``127.0.0.1`` raises ``ValueError`` -- the
     lab downloads and writes data, so it is never reachable from another machine. ``port=0``
-    binds an ephemeral port; the Host / Origin allowlist follows the bound port.
+    binds an ephemeral port; the Host / Origin allowlist follows the bound port. A port that is
+    already in use raises :class:`PortInUse` (an ``OSError``) with a hint to use ``--port``.
     """
     if host != LAB_HOST:
         raise ValueError(
@@ -396,7 +438,12 @@ def make_lab_server(app: LabApp, *, port: int = DEFAULT_PORT, host: str = LAB_HO
             "data, so it is never exposed beyond this machine. Use `camber serve` for a "
             "read-only API on another interface."
         )
-    httpd = _LabHTTPServer((LAB_HOST, int(port)), LabHandler)
+    try:
+        httpd = _LabHTTPServer((LAB_HOST, int(port)), LabHandler)
+    except OSError as exc:
+        if exc.errno in (errno.EADDRINUSE, getattr(errno, "WSAEADDRINUSE", -1)):
+            raise PortInUse(int(port)) from None
+        raise
     httpd.app = app  # type: ignore[attr-defined]
     app.bind(httpd.server_address[1])
     return httpd

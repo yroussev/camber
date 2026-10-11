@@ -12,6 +12,10 @@ oplocks disabled). Keep the portfolio root on a local disk or a filesystem with 
 The lock is **re-entrant within a process**: a CLI command that holds it can call the registry,
 which takes it again, without deadlocking. Other threads of the same process wait on an in-process
 lock; other processes are refused (or wait, with ``timeout``).
+
+:func:`exclusive_lock` is the same lock under another name and error, for directories that are not
+portfolios: a plain store (:func:`camber.store._lock.store_lock`) and a dataset cache
+(:func:`camber.datasets._paths.cache_lock`) take it on ``<dir>/_lock`` (0.103, #124).
 """
 
 from __future__ import annotations
@@ -28,7 +32,11 @@ import time
 LOCK_FILE = "_lock"
 
 
-class PortfolioLocked(RuntimeError):
+class LockHeld(RuntimeError):
+    """Another process holds a directory's single-writer lock (see :func:`exclusive_lock`)."""
+
+
+class PortfolioLocked(LockHeld):
     """Another process holds the portfolio's single-writer lock."""
 
 
@@ -149,7 +157,6 @@ def _open(path: str):
     return os.fdopen(fd, "r+b")
 
 
-@contextlib.contextmanager
 def portfolio_lock(root: str, *, timeout: float = 0.0, poll: float = 0.1):
     """Hold ``<root>/_lock`` for the ``with`` block; raise :class:`PortfolioLocked` if taken.
 
@@ -157,13 +164,32 @@ def portfolio_lock(root: str, *, timeout: float = 0.0, poll: float = 0.1):
     line left behind by a dead process is stale text, not a held lock (see the module docstring);
     it is overwritten on acquire.
     """
+    return exclusive_lock(root, timeout=timeout, poll=poll)
+
+
+@contextlib.contextmanager
+def exclusive_lock(
+    root: str,
+    *,
+    timeout: float = 0.0,
+    poll: float = 0.1,
+    what: str = "portfolio",
+    error: type = PortfolioLocked,
+    hint: str = "",
+):
+    """Hold ``<root>/_lock`` for the ``with`` block; raise ``error`` if another process keeps it.
+
+    The single-writer lock behind :func:`portfolio_lock`, for any directory: ``what`` names it in
+    the refusal (``"<what> is locked by <pid>@<host> since <ts>"``) and ``hint`` is appended to
+    that message. ``root`` must exist. Re-entrant within a process; see the module docstring.
+    """
     path = os.path.realpath(os.path.join(root, LOCK_FILE))
     slot = _slot(path)
     deadline = time.monotonic() + max(0.0, timeout)
     got = slot.rlock.acquire(timeout=timeout) if timeout > 0 else slot.rlock.acquire(False)
     if not got:
-        raise PortfolioLocked(  # pragma: no cover - another thread of this process holds it
-            f"portfolio is locked by {describe_holder(read_holder(root))} (this process)"
+        raise error(  # pragma: no cover - another thread of this process holds it
+            f"{what} is locked by {describe_holder(read_holder(root))} (this process){hint}"
         )
     try:
         if slot.depth == 0:
@@ -176,7 +202,7 @@ def portfolio_lock(root: str, *, timeout: float = 0.0, poll: float = 0.1):
                     if holder and holder.get("host") == socket.gethostname():
                         if not _pid_alive(holder.get("pid")):  # pragma: no cover - racy
                             note = " (that pid has exited; retry -- the lock is released)"
-                    raise PortfolioLocked(f"portfolio is locked by {describe_holder(holder)}{note}")
+                    raise error(f"{what} is locked by {describe_holder(holder)}{note}{hint}")
                 time.sleep(poll)
             _write_holder(fh)
             slot.fh = fh

@@ -734,7 +734,8 @@ attribute for tooling, and its docstring gains a deprecation note.
 
 ## Support
 
-- **Python:** the versions in `requires-python` and the CI matrix (currently 3.10–3.11; widening
-  to 3.13 in the `0.9.x` series). Dropping a Python version is a MINOR-release change announced
+- **Python:** the versions in `requires-python` and the CI matrix (currently 3.10–3.13). Dropping a Python version is a MINOR-release change announced
   in the CHANGELOG.
 - **Dependencies:** NumPy / pandas / pyarrow / matplotlib within the ranges in `pyproject.toml`.
+  NumPy 2 is required from 0.103.0; NumPy 1.x is not supported. Raising a dependency floor is a
+  MINOR-release change announced in the CHANGELOG.

@@ -45,7 +45,8 @@ headers repeat, and the screen-only table of contents is hidden in print.
 
 The report ranks **issues**, not findings. `camber.rules.triage.link_findings` groups the findings
 on one equipment that share a causal chain (`CAUSE_CHAINS`: the SAT chain from reset to overcooling
-to reheat to simultaneous heating and cooling; the economizer chain; the static-pressure chain),
+to reheat to simultaneous heating and cooling; the economizer chain; the heating-plant lockout
+chain, boiler then hot-water pump (0.103); the static-pressure chain),
 with the most upstream finding as the root. An issue's key is the root finding's fingerprint, so it
 stays the same from run to run.
 

@@ -84,6 +84,8 @@ class Reference:
         """A short link text: ``PNNL guide: <measure>``, ``PNNL re-tuning ch. N`` or the title."""
         if self.kind == GUIDE and ": " in self.title:
             return "PNNL guide: " + self.title.split(": ", 1)[1]
+        if self.kind == TRAINING and self.id.startswith("pnnl-small-retuning-"):
+            return "PNNL small-building re-tuning ch. " + self.id.rsplit("ch", 1)[1]
         if self.kind == TRAINING:
             return "PNNL re-tuning ch. " + self.id.rsplit("ch", 1)[1]
         return self.title
@@ -206,6 +208,19 @@ _ALL = (
     _chapter(8, "Central Utility Plant: Pre-Re-Tuning and Re-Tuning", "ch8_central_plant.pdf"),
     _chapter(9, "Building Walk Down", "ch9_building_walkdown.pdf"),
     _chapter(10, "Re-Tuning Building Controls and Systems", "ch10_retuning_building.pdf"),
+    # --- the small-building course (packaged units without a BAS) -----------------------------
+    Reference(
+        "pnnl-small-retuning-ch3",
+        "Small/Medium-Sized Commercial Building Re-tuning Training, chapter 3: Identifying and "
+        "Implementing Re-tuning Measures",
+        _PNNL,
+        "PNNL-SA-92685",
+        _BASE + "ch3_sm_identifying_and_implementing_retuning_measures.pdf",
+        TRAINING,
+        "2026-10-10",
+        "Building HVAC Implementation: Different HVAC System General Guidance Examples (packaged "
+        "units); Building HVAC Implementation: Thermostats",
+    ),
     # --- other resources -----------------------------------------------------------------------
     Reference(
         "pnnl-trending-requirements",
@@ -317,9 +332,12 @@ RULE_REFERENCES: dict = {
     "static_cohort_starvation": ("pnnl-guide-static-pressure", _CH5, _CH7),
     # Left unmapped (no guide or chapter clearly covers them): the G36 reset-effectiveness rules
     # (sat_/static_reset_effectiveness, trim-and-respond, a G36 sequence the guides predate),
-    # filter_fouling, g36_afdd (cites Guideline 36 itself), the DX and heat-pump rules and
-    # source_loop_deltat (the course covers built-up air handlers and central plants), and the
-    # drift detectors other than the two plant ones mapped below.
+    # filter_fouling, g36_afdd (cites Guideline 36 itself), the DX and heat-pump rules other than
+    # compressor_short_cycle and source_loop_deltat (the course covers built-up air handlers and
+    # central plants), and the drift detectors other than the two plant ones mapped below.
+    # packaged units (0.103, #125): the small-building course's measures chapter covers packaged
+    # units and the thermostats that cycle them
+    "compressor_short_cycle": ("pnnl-small-retuning-ch3",),
     # central plant, cooling
     "chw_plant_reset": ("pnnl-guide-plant-cooling", _CH8),
     "chw_pump_dp_reset": ("pnnl-guide-plant-cooling", _CH8),
@@ -337,6 +355,8 @@ RULE_REFERENCES: dict = {
     "hw_pump_dp_reset": ("pnnl-guide-plant-heating", _CH8),
     "boiler_short_cycle": (_CH8,),
     "boiler_summer_lockout": (_CH8,),
+    # 0.103 (#132): the heating guide's warm-weather shutdown and ch. 8's pump lockout
+    "hw_pump_summer_lockout": ("pnnl-guide-plant-heating", _CH8),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
 

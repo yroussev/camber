@@ -77,6 +77,54 @@ _FRAG_INDEX: OrderedDict = OrderedDict()
 _FRAG_LOCK = threading.Lock()
 
 
+# Canonical part layout (#130): the same rows written by the same CAMBER and pyarrow versions give
+# byte-identical part files. Rows are sorted timestamp first, written single-threaded into one row
+# group per part (up to 2**20 rows), with fixed writer options and no pandas metadata (which embeds
+# the pandas and pyarrow versions); a ``camber.layout`` key marks a part written this way. Parts
+# written before carry pandas metadata and read back the same.
+_LAYOUT_KEY = b"camber.layout"
+_LAYOUT = b"1"
+_COLUMNS = (_TS, _EQUIP, _CLASS, _ROLE, _VALUE)
+_SORT_KEYS = (_TS, _EQUIP, _ROLE, _CLASS, _VALUE)
+_ROWS_PER_GROUP = 1 << 20
+_PARQUET_OPTIONS = {
+    "compression": "snappy",
+    "use_dictionary": True,
+    "write_statistics": True,
+    "version": "2.6",
+    "data_page_version": "1.0",
+}
+
+
+def _canonicalize(table: pa.Table, *, keep_meta=()) -> pa.Table:
+    """``table`` in the canonical part layout: the store columns first in a fixed order (any other
+    column after them, by name), rows sorted by ``(ts, equip, role, equip_class, value)`` (a stable
+    sort, so fully identical rows need no further key), and schema metadata reduced to the layout
+    marker plus the ``keep_meta`` keys."""
+    names = table.column_names
+    order = [c for c in _COLUMNS if c in names] + sorted(c for c in names if c not in _COLUMNS)
+    table = table.select(order)
+    keys = [(c, "ascending") for c in _SORT_KEYS if c in names]
+    if keys and table.num_rows > 1:
+        table = table.sort_by(keys)
+    old = table.schema.metadata or {}
+    meta = {k: old[k] for k in keep_meta if k in old}
+    meta[_LAYOUT_KEY] = _LAYOUT
+    return table.replace_schema_metadata(meta)
+
+
+def _canonical_table(df: pd.DataFrame) -> pa.Table:
+    """A long-form frame as a canonical Arrow table (see :func:`_canonicalize`)."""
+    return _canonicalize(pa.Table.from_pandas(df, preserve_index=False))
+
+
+def _write_part(table: pa.Table, path: str) -> None:
+    """Write one canonical part file with the store's fixed writer options."""
+    import pyarrow.parquet as pq
+
+    pq.write_table(table, path, row_group_size=_ROWS_PER_GROUP, **_PARQUET_OPTIONS)
+
+
 def _sha256_file(path: str) -> str:
     import hashlib
 
@@ -217,8 +265,11 @@ class ParquetStore:
         df[_FACILITY] = facility_id
         df[_YEAR] = df[_TS].dt.year.astype("int32")
         df[_MONTH] = df[_TS].dt.month.astype("int32")
-        table = pa.Table.from_pandas(df, preserve_index=False)
+        table = _canonical_table(df)
         seq = self._next_seq(facility_id)
+        # Single-threaded (so batches keep their order), one row group per part: the default
+        # threaded write lands batches in completion order, so the same rows would give different
+        # bytes (#130).
         ds.write_dataset(
             table,
             self.root,
@@ -227,6 +278,10 @@ class ParquetStore:
             partitioning_flavor="hive",
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
+            file_options=ds.ParquetFileFormat().make_write_options(**_PARQUET_OPTIONS),
+            use_threads=False,  # also keeps order; preserve_order is not in pyarrow 16
+            min_rows_per_group=_ROWS_PER_GROUP,
+            max_rows_per_group=_ROWS_PER_GROUP,
         )
         # Invalidate the cached catalog (cheap, O(1)); the next points() rebuilds it once.
         # (Merging keys into the catalog on every write would be O(n^2) over a bulk load.)
@@ -785,7 +840,8 @@ class ParquetStore:
         ``apply=True`` rebuilds each such year directory in a staging directory -- the legacy rows
         split by month, the year's existing month partitions carried over -- checks that the rows
         add up, and swaps it in (crash-safe: an interrupted migration leaves each year either as it
-        was or fully migrated, and re-running finishes it). Row order within a month is kept.
+        was or fully migrated, and re-running finishes it). Each month file is written in the
+        canonical part layout (rows sorted timestamp first; see docs/SCALE.md).
         Inside a portfolio workspace ``apply`` takes the lock and is audited
         (``store.migrate_partitions``) and needs a ``reason``. Idempotent. Returns
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
@@ -899,7 +955,7 @@ class ParquetStore:
                 dst = os.path.join(mdir, f"part-legacy-{src_sha[:16]}-{k}.parquet")
                 while os.path.exists(dst):  # pragma: no cover - identical content twice
                     dst = dst[: -len(".parquet")] + "x.parquet"
-                pq.write_table(part, dst + ".tmp")
+                _write_part(_canonicalize(part), dst + ".tmp")
                 os.replace(dst + ".tmp", dst)
                 written += part.num_rows
         if migrated:

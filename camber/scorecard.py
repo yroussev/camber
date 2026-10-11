@@ -38,6 +38,7 @@ RULE_CATEGORY = {
     "hw_plant_deltat": "energy",
     "boiler_short_cycle": "energy",
     "boiler_summer_lockout": "energy",
+    "hw_pump_summer_lockout": "energy",  # 0.103 (#132)
     "chw_pump_dp_reset": "energy",
     "hw_pump_dp_reset": "energy",
     "night_weekend_setback": "energy",

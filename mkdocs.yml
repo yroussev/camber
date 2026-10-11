@@ -80,6 +80,7 @@ nav:
       - "Central plant: cooling tower": workbook/plant-cooling-tower.md
       - "Central plant: chilled-water reset and pumping": workbook/plant-chw-reset-pumping.md
       - "Central plant: boiler plant": workbook/plant-boiler.md
+      - "Central plant: warm-weather lockout": workbook/plant-lockout.md
       - "Central plant: sensor vs equipment faults": workbook/plant-sensor-vs-equipment.md
       # END workbook-plant (#82)
       #

@@ -167,7 +167,8 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     with the resample interval; `how="any"` keeps the old "on at any moment" bins.
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
-  CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
+  CHW reset + low-ΔT, boiler summer-lockout + short-cycle, hot-water pump warm-weather lockout
+  (`hw_pump_summer_lockout`, 0.103). Flags include design targets
   (`design_kw_per_ton`, `max_starts_per_day`, …).
 - **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
   direction excessively (unstable loop) by counting reversals per *observed* hour beyond a deadband
@@ -459,9 +460,11 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
 - **Read-only API + live web UI** — `api.server` (`camber serve <store>` or
   `python -m camber.api.server <store> [port]`): GET `/about` `/health` `/facilities` `/points`
   `/history`, plus a live vanilla-JS dashboard at **`/ui`** (facility/equip/role selectors + a
-  synchronized multitrend, brush-linked via `window.CAMBER`, polling for fresh data). Read-only,
-  localhost-bound, CSP-locked, no framework. Env: `CAMBER_STORE` / `CAMBER_API_HOST` /
-  `CAMBER_API_PORT`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
+  synchronized multitrend, brush-linked via `window.CAMBER`, polling for fresh data; a date range
+  and brush-to-zoom over a min/max-thinned whole span, 0.103). Read-only,
+  localhost-bound, CSP-locked, no framework; a `Host` allowlist against DNS rebinding and opt-in
+  token auth (`--auth token`, 0.103). Env: `CAMBER_STORE` / `CAMBER_API_HOST` / `CAMBER_API_PORT` /
+  `CAMBER_API_ALLOWED_HOSTS` / `CAMBER_API_AUTH` / `CAMBER_API_TOKEN`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
 
 ## Orchestration & distribution
 

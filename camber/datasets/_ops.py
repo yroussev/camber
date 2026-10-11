@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field
 
 from .. import __version__
 from ..store import ParquetStore
+from ..store._lock import store_lock
 from . import _licence, _paths
 from ._catalog import DatasetEntry, package_text
 from ._fetch import (
@@ -83,8 +84,18 @@ def fetch_dataset(
     manifest. There is deliberately no environment-variable bypass. ``progress(name, done, total)``
     reports each file's bytes. ``via`` names the action in the ledger record (``"lab fetch"`` when
     the acknowledgement was given in ``camber lab``'s modal).
+
+    0.103 (#124): downloads run under the cache lock (:func:`._paths.cache_lock`). When every file
+    is already present and verifies, and the manifest already records them (or the cache is
+    read-only), the fetch writes nothing -- not even the manifest -- so a read-only shared cache
+    works; a fetch that would download into a read-only cache raises
+    :class:`._paths.CacheReadOnly`.
     """
     sname = subset or "default"
+    if entry.synthetic:  # 0.103 (#133): generated locally, never downloaded
+        from ._synthetic import ensure_generated
+
+        return ensure_generated(entry, subset=sname, data_dir=data_dir, progress=progress)
     files = entry.subset_files(sname)
     if entry.manual:
         raise ManualDownload(
@@ -97,9 +108,6 @@ def fetch_dataset(
         # acknowledged: nothing is downloaded before the gate
         raise _licence.refusal(entry, "download")
     root = _paths.data_dir(data_dir)
-    check_disk(_paths.downloads_dir(root, entry.id), _pending_bytes(root, entry, files))
-    if entry.research_only:  # recorded before the first byte is downloaded
-        _licence.acknowledge(root, entry, subset=sname, via=via)
     res = FetchResult(
         dataset_id=entry.id,
         subset=sname,
@@ -107,6 +115,76 @@ def fetch_dataset(
         citation=entry.citation,
         licence=entry.licence,
     )
+    writable = _paths.cache_writable(root, entry.id)
+    present = _present_and_verified(root, entry, files)
+    if present is None:
+        _paths.require_writable(root, entry.id, f"fetching {entry.id}")
+    elif not writable or _manifest_has(root, entry, sname, present):
+        # 0.103 (#124): every file is already here and verifies -- nothing to download, and the
+        # manifest already says so (or cannot be written): a no-op that writes nothing, so a
+        # cache shared read-only works. A research-only acknowledgement is still recorded.
+        if entry.research_only:
+            _licence.acknowledge(root, entry, subset=sname, via=via)
+        for f, dest, n, digest in present:
+            _unpinned_warning(res, f, digest)
+            res.files.append(
+                {
+                    "name": f["name"],
+                    "path": dest,
+                    "bytes": n,
+                    "sha256": digest,
+                    "skipped": True,
+                    "resumed": False,
+                }
+            )
+        res.acknowledged = entry.research_only
+        return res
+    with _paths.cache_lock(root):
+        _fetch_locked(entry, res, files, root, sname, progress, opener, timeout, via)
+    return res
+
+
+def _present_and_verified(root: str, entry: DatasetEntry, files: list):
+    """``[(file, dest, bytes, sha256), ...]`` when every file is in the cache and verifies against
+    its pinned size + sha256 (an unpinned file only has to be present); else ``None``. Reads
+    only: a mismatched file is left for :func:`._fetch.download` to move aside."""
+    out = []
+    for f in files:
+        dest = _dest(root, entry, f["name"])
+        if not os.path.isfile(dest):
+            return None
+        n = os.path.getsize(dest)
+        if f.get("sha256") and f.get("size") is not None and n != f["size"]:
+            return None
+        digest = sha256_file(dest)
+        if f.get("sha256") and digest != f["sha256"]:
+            return None
+        out.append((f, dest, n, digest))
+    return out
+
+
+def _manifest_has(root: str, entry: DatasetEntry, sname: str, present: list) -> bool:
+    """True when the manifest already records ``sname`` and every present file's sha256."""
+    rec = _paths.read_manifest(root).get(entry.id) or {}
+    recorded = rec.get("files") or {}
+    return sname in (rec.get("subsets") or []) and all(
+        (recorded.get(f["name"]) or {}).get("sha256") == digest for f, _d, _n, digest in present
+    )
+
+
+def _unpinned_warning(res: FetchResult, f: dict, digest: str) -> None:
+    if not f.get("sha256"):
+        res.warnings.append(
+            f"{f['name']} is not pinned in the catalog: its sha256 ({digest}) was recorded "
+            "but not verified against a known value"
+        )
+
+
+def _fetch_locked(entry, res, files, root, sname, progress, opener, timeout, via) -> None:
+    """The writing part of :func:`fetch_dataset`; the caller holds the cache lock."""
+    check_disk(_paths.downloads_dir(root, entry.id), _pending_bytes(root, entry, files))
+    if entry.research_only:  # recorded before the first byte is downloaded
+        _licence.acknowledge(root, entry, subset=sname, via=via)
     manifest = _paths.read_manifest(root)
     rec = manifest.get(entry.id) or {}
     recorded = dict(rec.get("files") or {})
@@ -128,10 +206,7 @@ def fetch_dataset(
             timeout=timeout,
         )
         if not pinned:
-            res.warnings.append(
-                f"{f['name']} is not pinned in the catalog: its sha256 ({out.sha256}) was recorded "
-                "but not verified against a known value"
-            )
+            _unpinned_warning(res, f, out.sha256)
         if not out.skipped:
             res.downloaded_bytes += out.bytes
         res.files.append(
@@ -145,6 +220,8 @@ def fetch_dataset(
             }
         )
         recorded[f["name"]] = {"sha256": out.sha256, "bytes": out.bytes, "etag": out.etag}
+    manifest = _paths.read_manifest(root)  # re-read: the acknowledgement may have changed it
+    rec = manifest.get(entry.id) or {}
     rec.update(
         {
             "licence": entry.licence,
@@ -158,7 +235,6 @@ def fetch_dataset(
     res.acknowledged = entry.research_only
     manifest[entry.id] = rec
     _paths.write_manifest(root, manifest)
-    return res
 
 
 def _local_source(from_dir: str, name: str) -> str | None:
@@ -200,6 +276,11 @@ def adopt_local_files(
     data still needs an acknowledgement).
     """
     sname = subset or "default"
+    if entry.synthetic:
+        raise ValueError(
+            f"{entry.id} is synthetic: CAMBER generates its files, so there is nothing to take "
+            f"from a folder (run `camber datasets fetch {entry.id}`)"
+        )
     files = entry.subset_files(sname)
     src_root = os.path.abspath(os.fspath(from_dir))
     if not os.path.isdir(src_root):
@@ -237,30 +318,32 @@ def adopt_local_files(
                 "not verified against a known value"
             )
         checked.append((f, src, size, sha))
-    manifest = _paths.read_manifest(root)
-    rec = manifest.get(entry.id) or {}
-    recorded = dict(rec.get("files") or {})
-    for f, src, size, sha in checked:
-        dest = _dest(root, entry, f["name"])
-        _place(src, dest)
-        recorded[f["name"]] = {"sha256": sha, "bytes": size, "etag": None, "source": "local"}
-        res.files.append(
-            {"name": f["name"], "path": dest, "bytes": size, "sha256": sha, "skipped": False}
+    _paths.require_writable(root, entry.id, f"ingest --from-dir of {entry.id}")
+    with _paths.cache_lock(root):
+        manifest = _paths.read_manifest(root)
+        rec = manifest.get(entry.id) or {}
+        recorded = dict(rec.get("files") or {})
+        for f, src, size, sha in checked:
+            dest = _dest(root, entry, f["name"])
+            _place(src, dest)
+            recorded[f["name"]] = {"sha256": sha, "bytes": size, "etag": None, "source": "local"}
+            res.files.append(
+                {"name": f["name"], "path": dest, "bytes": size, "sha256": sha, "skipped": False}
+            )
+        rec.update(
+            {
+                "licence": entry.licence,
+                "access": entry.access,
+                "fetched_at": _paths.utc_now(),
+                "source": "local",
+                "from_dir": src_root,
+                "files": recorded,
+                "subsets": sorted(set(rec.get("subsets") or []) | {sname}),
+                "camber_version": __version__,
+            }
         )
-    rec.update(
-        {
-            "licence": entry.licence,
-            "access": entry.access,
-            "fetched_at": _paths.utc_now(),
-            "source": "local",
-            "from_dir": src_root,
-            "files": recorded,
-            "subsets": sorted(set(rec.get("subsets") or []) | {sname}),
-            "camber_version": __version__,
-        }
-    )
-    manifest[entry.id] = rec
-    _paths.write_manifest(root, manifest)
+        manifest[entry.id] = rec
+        _paths.write_manifest(root, manifest)
     return res
 
 
@@ -317,25 +400,32 @@ def remove_dataset(
 ) -> dict:
     """Delete a dataset's downloads + extractions (and, with ``purge_store``, its facilities).
 
-    The acknowledgement ledger is an audit trail and is never trimmed.
+    The acknowledgement ledger is an audit trail and is never trimmed. Holds the cache lock while
+    it deletes (and the store lock while it purges); a read-only cache raises
+    :class:`._paths.CacheReadOnly`.
     """
     if purge_store and store is None:
         raise ValueError("purge_store needs the store to purge")
     root = _paths.data_dir(data_dir)
     ddir = _paths.dataset_dir(root, entry.id)
-    freed = _dir_bytes(ddir)
-    if os.path.isdir(ddir):
-        shutil.rmtree(ddir)
-    manifest = _paths.read_manifest(root)
-    if manifest.pop(entry.id, None) is not None:
-        _paths.write_manifest(root, manifest)
+    freed = 0
+    if os.path.isdir(ddir) or entry.id in _paths.read_manifest(root):
+        _paths.require_writable(root, entry.id, f"removing {entry.id}")
+        with _paths.cache_lock(root):
+            freed = _dir_bytes(ddir)
+            if os.path.isdir(ddir):
+                shutil.rmtree(ddir)
+            manifest = _paths.read_manifest(root)
+            if manifest.pop(entry.id, None) is not None:
+                _paths.write_manifest(root, manifest)
     dropped = []
     if purge_store:
         st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
-        for fid, m in sorted(st.facilities_meta().items()):
-            if dataset_meta(m).get("dataset_id") == entry.id:
-                st.drop_facility(fid, forget=True)
-                dropped.append(fid)
+        with store_lock(st.root):
+            for fid, m in sorted(st.facilities_meta().items()):
+                if dataset_meta(m).get("dataset_id") == entry.id:
+                    st.drop_facility(fid, forget=True)
+                    dropped.append(fid)
     return {"dataset_id": entry.id, "freed_bytes": freed, "facilities_dropped": dropped}
 
 

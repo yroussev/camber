@@ -907,6 +907,31 @@ def _wb_boiler():
     return _evidence_fig("boiler_short_cycle", "BLR-1", frame, figsize=WIDE)
 
 
+@figure("workbook/plant-lockout.png")
+def _wb_lockout():
+    """The plant-lockout exercise's own synthetic plant (CAMBER's generator, not a download)."""
+    import io
+
+    import pandas as pd
+
+    from camber.datasets._synthetic import GENERATORS
+    from camber.model.roles import Role
+
+    text = GENERATORS["hw_plant_lockout"].build(133)["hw_plant_lockout.csv"]
+    raw = pd.read_csv(io.StringIO(text), parse_dates=["Timestamp"])
+    raw = raw[raw["scenario"] == "pump_left_on"].set_index("Timestamp")
+    raw = raw.loc["2025-05-19":"2025-06-08"]  # three weeks around the warm spell
+    frame = pd.DataFrame(
+        {
+            Role.OAT: raw["OAT"],
+            Role.PUMP_STATUS: raw["HWP_STS"].astype(float),
+            Role.HW_PUMP_SPEED: raw["HWP_SPD"],
+            Role.BOILER_STATUS: raw["BLR_FIRE"].astype(float),
+        }
+    )
+    return _evidence_fig("hw_pump_summer_lockout", "PLANT__pump_left_on", frame, figsize=WIDE)
+
+
 @figure("workbook/plant-sensor-vs-equipment.png")
 def _wb_sensor_vs_equipment():
     import numpy as np
@@ -1158,40 +1183,49 @@ def screenshots() -> list:
             )
             lab_dir = os.path.join(tmp, "demo")  # the lab prints the store's last two path parts
             os.makedirs(os.path.join(lab_dir, "cache"), exist_ok=True)
-            servers.append(
-                subprocess.Popen(
-                    [
-                        py,
-                        "-c",
-                        boot,
-                        "lab",
-                        "--store",
-                        "lab_store",
-                        "--dir",
-                        "cache",
-                        "--port",
-                        str(p_lab),
-                    ],  # fmt: skip
-                    cwd=lab_dir,
-                    env=env,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+            # every lab route needs the access token (#127): read the launch URL the lab prints
+            # (its launch file goes to a folder inside the temporary directory)
+            lab_env = dict(
+                env,
+                XDG_CONFIG_HOME=os.path.join(tmp, "cfg"),
+                XDG_RUNTIME_DIR=os.path.join(tmp, "run"),
             )
-            for port, path in ((p_api, "/ui"), (p_lab, "/lab")):
-                for _ in range(100):
-                    try:
-                        urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=2)
-                        break
-                    except OSError:
-                        time.sleep(0.2)
+            lab = subprocess.Popen(
+                [
+                    py,
+                    "-c",
+                    boot,
+                    "lab",
+                    "--store",
+                    "lab_store",
+                    "--dir",
+                    "cache",
+                    "--port",
+                    str(p_lab),
+                ],  # fmt: skip
+                cwd=lab_dir,
+                env=lab_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            servers.append(lab)
+            lab_url = next((ln.strip() for ln in lab.stdout if "?token=" in ln), None)
+            if lab_url is None:
+                raise RuntimeError("camber lab printed no launch URL")
+            for _ in range(100):
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{p_api}/ui", timeout=2)
+                    break
+                except OSError:
+                    time.sleep(0.2)
             _chrome_shot(
                 f"http://127.0.0.1:{p_api}/ui?facility_id=demo-site",
                 out["shots/trend-viewer.png"],
                 size=(1280, 900),
                 wait_ms=6000,
             )
-            _chrome_shot(f"http://127.0.0.1:{p_lab}/lab", out["shots/lab.png"], size=(1280, 1000))
+            _chrome_shot(lab_url, out["shots/lab.png"], size=(1280, 1000))
             done += ["shots/trend-viewer.png", "shots/lab.png"]
         finally:
             for s in servers:

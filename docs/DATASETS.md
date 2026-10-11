@@ -9,6 +9,8 @@ rules find, and how many false alarms did they raise?
 CAMBER redistributes none of the data. The catalog (`camber/datasets/catalog.json`, package data)
 records where each dataset is published, its licence and citation, and the size and SHA-256 of
 every file; `camber datasets fetch` downloads the files from the publisher onto your machine.
+A [synthetic entry](#synthetic-datasets) (0.103) is the one exception: CAMBER generates its data on
+your machine instead.
 
 > **Status:** 0.86 shipped the first seven entries and the command-line workflow; 0.89 adds the
 > research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra), Brick-grouped
@@ -52,25 +54,46 @@ troubleshooting.
 
 ![Screenshot of the camber lab catalog table: dataset rows with kind, licence badge, sizes, status and links](img/shots/lab.png)
 
-*The `camber lab` catalog page on an empty store: each dataset's kind, licence tier, download and store sizes, status, and its exercise and publisher links.*
+*The `camber lab` catalog page on an empty store: each dataset's kind, licence tier, download and store sizes, status, and its exercise and publisher links. A manual download has a **From a folder…** button.*
 
 **The catalog table.** Each dataset shows its kind, its licence **tier** (a green *open* badge,
 or a red *research-only* one), its download size and its estimated size once ingested. It also
 shows what is already fetched or ingested. Filter by licence tier, kind, labelled faults or
 ingested, and search by id, title or what the dataset teaches (each row's *what it teaches*
 list is collapsed until you open it, or until your search matches it; 0.96, #78). Pick a subset (`default` or
-`full`) and tick datasets. The page adds up what they need and compares it with the free space
-on the cache's disk and the store's disk; **Fetch & ingest** is disabled while the selection
-does not fit.
+`full`) and tick datasets. The page adds up what they need (0.103, #123): the download still to
+fetch, the archive members the ingest extracts into the cache, and the store estimate, each with
+the fetch's own 5 % headroom. It compares the cache's needs with the free space on the cache's
+disk and the store's with the store's disk, or their sum when both are one disk. **Fetch &
+ingest** is disabled while the selection does not fit, and **Ingest (already fetched)** while its
+extraction and store do not. The server runs the same check before it queues a job (*not
+enough disk space*, HTTP 507). A row whose `requires_extras` names an extra that is not installed
+shows it in red with the install command and cannot be ticked; the server refuses its fetch or
+ingest (409) before anything is downloaded.
 
 **Jobs.** A fetch (and the ingest that follows it) runs as a job on a single background worker,
 one job at a time, with a progress bar, a log line and a **Cancel** button. A cancelled download
 keeps its partial file, so the next fetch resumes it. A cancelled ingest leaves the store as it
 was. When a job finishes, the page shows the dataset's citation. Please cite it.
+**force re-ingest** (next to **Ingest (already fetched)**) re-ingests data whose inputs have not
+changed, which an ingest otherwise skips.
+
+**Remove and ingest from a folder** (0.103, #123). **Remove…** in a row does what `camber datasets
+remove` does: after you type the dataset id, a job deletes the dataset's downloads and
+extractions from the cache, and, when you tick it, drops its facilities from the store
+(`--purge-store`). In a workspace the purge respects the facility lifecycle: a facility under a
+legal hold, or one that is suspended, offboarding or archived, is not purged, and the dialog says
+why. A manual entry's **From a folder…** does what `camber datasets ingest --from-dir` does. It
+takes the absolute path of a folder with the files you downloaded. The lab checks that the folder
+exists and refuses a file that links outside it. It only reads the folder, then verifies the
+files, copies them into the cache and ingests them. [Using the lab](LAB.md#cleaning-up) shows
+both.
 
 **Research-only datasets.** Selecting one opens a dialog that states the licence terms. You tick
 *I accept* and **type the dataset id**; only then is the fetch queued. The acceptance is recorded
-in `acknowledgements.json`, exactly like `--accept-noncommercial` (with `via: "lab fetch"`).
+in `acknowledgements.json`, exactly like `--accept-noncommercial` (with `via: "lab fetch"`): in
+the cache's, or in your own when the cache is read-only (see
+[a read-only shared cache](#caches-locks-and-a-read-only-shared-cache)).
 Every fetch asks again. An ingest of data already fetched with an acknowledgement does not.
 
 **Trends and reports.** An ingested dataset's row links to:
@@ -79,8 +102,9 @@ Every fetch asks again. An ingest of data already fetched with an acknowledgemen
   `camber serve`; one panel per unit with axes, a legend and a normalised view, see
   [the live web UI](VISUALIZATION.md#live-web-ui-072));
 - **report**: the audit report of the dataset's config template, built on demand and cached until
-  the data changes. It carries the dataset's *Data source & licence* block and, for
-  research-only data, the non-commercial / do-not-redistribute banner;
+  the data changes. It carries the dataset's *Data source & licence* block, the evidence charts
+  of its worst findings (0.103) and, for research-only data, the non-commercial /
+  do-not-redistribute banner;
 - **publisher**: the publisher's landing page;
 - **exercise**: the dataset's [workbook](workbook/index.md) exercise, when the entry names one
   (served offline by the lab from a source checkout, else linked on the docs site).
@@ -91,10 +115,12 @@ facility goes through the [lifecycle](PORTFOLIO.md):
 1. Its first ingest registers `ds-<id>` as `provisioning`. The ingest runs under the workspace's
    single-writer lock, and the facility is activated afterwards.
 2. Every fetch, acknowledgement and ingest appends a `lab.fetch`, `lab.acknowledge` or
-   `lab.ingest` line to the audit log. `camber portfolio audit` shows them next to the
+   `lab.ingest` line to the audit log; an ingest from a folder adds `lab.adopt`, a removal
+   `lab.remove` and each purged facility `lab.purge`. `camber portfolio audit` shows them next to the
    `facility.add` and `facility.activate` lines.
 3. Retention, offboarding and archiving then apply to it as to any facility. A suspended,
-   offboarding or archived dataset facility is not re-ingested: resume or restore it first.
+   offboarding or archived dataset facility is not re-ingested, nor purged from the lab: resume or
+   restore it first, or retire it with `camber facility offboard|archive|purge`.
 
 Without a workspace, the lab writes to a plain store (`--store`, default `./lab_store`).
 
@@ -103,7 +129,8 @@ Without a workspace, the lab writes to a plain store (`--store`, default `./lab_
 launch URL `camber lab` prints (`http://127.0.0.1:8765/lab?token=...`, also saved in a launch
 file only you can read), and the browser keeps a session cookie for it (0.102). Other accounts
 on a shared computer get 401. It accepts writes only from its own page, which also sends a
-per-run CSRF token with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
+per-run CSRF token with each one. The only writes it accepts are queueing (fetch, ingest, ingest
+from a folder, remove) or cancelling a job, for **catalog ids**.
 The full list is in [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096). From
 Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 
@@ -135,6 +162,7 @@ Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 | `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
 | `cofactor-drammen` | 45 Norwegian public buildings (schools, kindergartens, nursing homes, offices): hourly electricity import, sub-meters and district heat, 4 years | real | no | CC-BY-4.0 | every building's import meters (48 meters) |
 | `bts` | BTS: 3 Australian buildings, ~20,000 Brick-labelled BMS streams, 2021-2023 (0.96) | real | no | CC-BY-4.0 | the metadata and Brick models of all 3 sites + site B's streams (1.5 GB) |
+| `synthetic-hw-plant-lockout` | **synthetic**, generated by CAMBER: one hot-water plant as 4 scenario plants (warm-weather lockout), 8 weeks hourly (0.103) | synthetic | yes | Apache-2.0 (CAMBER's own) | all 4 plants (generated, about 0.3 MB) |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -171,7 +199,9 @@ Each entry carries an SPDX licence id and a licence **tier** (`access`), shown b
   commercially or redistribute it (or anything built from it). CAMBER makes that an explicit act:
   - `fetch` refuses it unless you pass `--accept-noncommercial` -- on every fetch; there is no
     environment-variable bypass. The acceptance is appended to `acknowledgements.json` in the
-    cache (and to the manifest) before anything downloads.
+    cache (and to the manifest) before anything downloads. Against a cache you cannot write, it
+    goes to your own ledger instead (see
+    [a read-only shared cache](#caches-locks-and-a-read-only-shared-cache)).
   - `fetch --all` covers the **open tier only**; research-only entries need `--licence all`
     **and** `--accept-noncommercial`.
   - `ingest` needs an acknowledgement of the entry's current licence (from the fetch, or its own
@@ -191,6 +221,44 @@ labelled open, with or without a reason), that an open-licence entry is `researc
 a non-empty `access_reason`, and that `access_reason` appears nowhere else; and that every URL is
 HTTPS. Files are pinned (size + SHA-256) unless an entry says why not.
 
+## Synthetic datasets
+
+Some faults appear in no open dataset: a boiler left enabled through a warm spell, a hot-water
+pump left running all summer. A **synthetic** entry (`kind: "synthetic"`, 0.103) lets a learner
+work such a case through the normal lab and workbook flow. Its data is not downloaded:
+CAMBER's own generator (`camber.datasets._synthetic`, named by the entry's `generator` with a
+fixed `seed`) writes it into the cache when you fetch it, and the same seed gives the same bytes
+on every machine. From there it is ingested like any other entry, into a `ds-<id>` facility
+whose equipment are `<equip>__<scenario>`.
+
+```
+camber datasets fetch synthetic-hw-plant-lockout       # generates the file; nothing is downloaded
+camber datasets ingest synthetic-hw-plant-lockout --store lab_store
+```
+
+(`ingest` also generates the file when it is not in the cache yet.) What differs from a
+downloaded entry:
+
+- **No download, no pin.** The entry's files carry no URL, size or SHA-256. The generator's name,
+  version and seed are the pin, recorded in the manifest with `source: "generated"`.
+  `--from-dir` does not apply, and the maintainers' refresh and link checks skip the entry.
+- **CAMBER's own licence.** The data is generated by your copy of CAMBER, so it carries CAMBER's
+  licence, Apache-2.0, in the open tier: you may share it and anything built from it.
+- **Labelled synthetic everywhere.** `camber datasets list` shows its kind as `synthetic`, its
+  download as `generated` and a `[synthetic: generated locally]` note; `info` names the generator
+  and seed; the lab shows a **synthetic** badge and a *Kind: synthetic* filter; and every report
+  built from it has a "synthetic data" banner and a `synthetic:` line in its "Data source &
+  licence" block. It describes no real building: never cite its figures as evidence about one.
+- **Still validated.** The catalog check requires a known generator, exactly the files that
+  generator writes, no download fields, CAMBER's licence, the open tier and no manual download.
+
+The one entry so far, `synthetic-hw-plant-lockout`, is the dataset of the workbook exercise
+[`plant-lockout`](workbook/plant-lockout.md): one weather series (eight weeks from early May with
+a warm spell) driving four plants (OAT, burner firing and gas input, hot-water pump status and
+speed, loop supply and return temperatures): `PLANT__locked_out`, `PLANT__warm_spell`,
+`PLANT__pump_left_on` and `PLANT__low_lockout`. Its run template runs `boiler_summer_lockout` and
+`hw_pump_summer_lockout` at the default 65 °F lockout.
+
 ## Manual downloads
 
 Some publishers hand files out only through a portal with terms to accept. Such an entry is
@@ -206,7 +274,8 @@ name, **verifies every pinned file** (size + SHA-256; a mismatch is refused with
 your file is left untouched), hashes unpinned ones with a warning, and hard-links (or copies) them
 into the cache, recorded in the manifest as `source: "local"` -- from then on `status`, `remove`
 and re-ingest treat them like fetched files. `--from-dir` works for any entry whose files you
-already have. A research-only manual entry also needs `--accept-noncommercial`.
+already have. A research-only manual entry also needs `--accept-noncommercial`. In `camber lab`, a
+manual entry's **From a folder…** button does the same (0.103).
 
 ### Running the workbook answer checks on local files
 
@@ -265,7 +334,9 @@ pip install "camber-toolkit[xlsx]"      # openpyxl, imported only when a workboo
 ```
 
 Such an entry lists `"requires_extras": ["xlsx"]` (the validator requires it whenever a run reads a
-workbook), and `ingest` stops with that install command when the extra is missing. A run names its
+workbook), and `ingest` stops with that install command when the extra is missing. `camber lab`
+shows the extra on the entry's row and, when it is missing, refuses the fetch before downloading
+anything (0.103). A run names its
 worksheet with `"sheet"` (default: the first). Legacy `.xls` files are **not** covered by the extra:
 the only one published beside a planned entry (a heat-pump test report's appendix) is a transposed
 steady-state summary table, not time-series data, so the entry does not use it. CAMBER reads an
@@ -407,9 +478,75 @@ rejects their earlier spellings and names the key to use:
 - **Idempotent.** Re-running `ingest` with the same inputs is skipped; `--force`, a different
   subset or a different corrections mode (the content hash covers it) replaces the dataset's
   facilities atomically (staged, then swapped in).
+- **Reproducible.** Since 0.103, ingesting the same files with the same CAMBER and pyarrow
+  versions gives byte-identical part files with the same names, in any archive member order; on
+  another pyarrow version the rows are the same but the bytes may differ. A store ingested
+  before 0.103 reads the same and is not re-ingested; `ingest --force` rewrites it in the
+  canonical layout. See [SCALE.md](SCALE.md#reproducible-part-files).
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).
+
+## Caches, locks and a read-only shared cache
+
+**The cache.** Downloads go to the dataset cache: `--dir`, else `$CAMBER_DATA_DIR`, else
+`$XDG_CACHE_HOME/camber/datasets`, else `~/.cache/camber/datasets`. Each dataset has a folder,
+`<cache>/<id>/downloads/` for the files as published and `<cache>/<id>/extracted/` for the
+archive members an ingest needed. Beside them are `manifest.json` (what was fetched, with which
+SHA-256), `acknowledgements.json` (the research-only acceptances) and, since 0.103, `_lock`.
+
+**Locks (0.103).** Two processes writing one cache or one store, such as two `camber lab`s or a
+lab and `camber datasets ingest`, no longer get in each other's way:
+
+- every write to a cache holds the cache's single-writer lock, `<cache>/_lock`. That covers a
+  fetch that downloads, `ingest --from-dir` placing files, an ingest extracting archive members
+  or recording an acknowledgement, and `remove`;
+- an ingest, and `remove --purge-store`, hold the store's lock for as long as they write it.
+  A plain store's lock is `<store>/_lock`. A store inside a
+  [portfolio workspace](PORTFOLIO.md) uses the workspace's own lock, never a second one, so a
+  command that already holds it (the lab's workspace ingest) carries on without deadlocking;
+- a second writer **waits up to 30 seconds**, then stops with an error that names the holder:
+  `dataset cache … is locked by <pid>@<host> since <time>` or `store … is locked by …`
+  (`camber datasets` exits 1; a lab job fails with that message). Run it again once the other
+  job finishes;
+- reads take no lock: `status`, the lab's catalog, trends and reports, and `camber run` on the
+  store. Files and partitions are swapped in whole, so a reader sees the old data or the new;
+- the lock is the kernel's (`flock`, or `msvcrt` on Windows), the same one the portfolio uses. It
+  is released when its process exits, even after a crash or `kill -9`. A `_lock` file left behind
+  is not a stale lock, only stale text, and the next writer takes it over;
+- advisory locks are unreliable on some network filesystems (older NFS, SMB without byte-range
+  locks). Keep a cache that several machines write on a local disk, or give each machine its own.
+
+The lock covers what `camber datasets` and `camber lab` write. Other commands that write a plain
+store, such as `camber ingest` of a CSV export, do not take it.
+
+**A read-only shared cache (0.103).** A cache that you can read but not write, such as a course
+folder on a shared drive that one person filled, now works:
+
+- **Fetch** checks that every file of the subset is present and matches its pinned size and
+  SHA-256. If so, it downloads nothing and writes nothing, not even the manifest; a writable
+  cache whose manifest already records the files is left alone the same way. If a file is
+  missing or does not verify, the fetch stops with *the dataset cache … is read-only for this
+  user*: ask whoever maintains the cache to fetch it there, or use a cache you can write.
+- **Ingest** reads the downloads where they are. Archive members already extracted in the cache
+  are used as they are. Members it still needs are extracted into a scratch folder next to the
+  ingest's staging area in the **store** (`<store>/_staging/`), which is deleted when the ingest
+  ends. So the store's disk needs room for them while the ingest runs, and each ingest extracts
+  them again. To avoid that, whoever fills the cache can ingest each dataset once, which leaves
+  its members extracted there.
+- **Research-only acknowledgements are per user.** Against a read-only cache, your
+  acknowledgement goes to your own ledger, `$XDG_STATE_HOME/camber/datasets/acknowledgements.json`
+  (else `~/.local/state/camber/datasets/acknowledgements.json`). The record names the cache. Only
+  your own ledger counts there: the cache's manifest records the acceptance of the person who
+  filled it, which does not stand in for yours. So the first fetch or ingest of a research-only
+  dataset from a shared cache asks you to accept its terms. A cache you can write keeps its
+  acknowledgements in its own `acknowledgements.json` and manifest, as before. Everyone who
+  writes a *writable* shared cache shares those.
+- **What still needs a writable cache:** downloading, `ingest --from-dir`, and `remove`. They
+  stop with the read-only message and change nothing.
+
+"Read-only" means the current user cannot create files in the cache folder (or in the dataset's
+folder inside it).
 
 ## Scoring
 
@@ -1673,6 +1810,10 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** 136 of site C's points carry two stream-id literals: the UUID the metadata lists and a second one that is a BMS object path rather than a UUID; sites A and B have one UUID per point.
 - **Contradicts:** Data card, Collection: identifiers for both the point and the timeseries were anonymised by generating UUIDs (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
 - **Handling: none** -- described only. CAMBER matches points only through the ids the metadata index lists; the second literal is never read into a store or a report.
+
+### `synthetic-hw-plant-lockout`: Synthetic hot-water plant: warm-weather lockout (generated by CAMBER)
+
+Synthetic: CAMBER generates this dataset (see [synthetic datasets](#synthetic-datasets)), so there is no published data to have issues.
 
 <!-- END data-issues -->
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..plant import analyze_hw_plant
+from ..plant import SUMMER_LOCKOUT_OAT_F, analyze_hw_plant, lockout_severity
 from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
@@ -37,7 +37,7 @@ class BoilerSummerLockout:
     roles_any_of = BOILER_RUN_ANY_OF
     roles_optional = (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.OAT)
 
-    def __init__(self, summer_lockout_oat_f: float = 65.0):
+    def __init__(self, summer_lockout_oat_f: float = SUMMER_LOCKOUT_OAT_F):
         # climate-dependent knob; default generic, override per climate zone
         self.summer_lockout_oat_f = summer_lockout_oat_f
 
@@ -63,7 +63,7 @@ class BoilerSummerLockout:
             caveats.append("summer lockout not evaluated: no OAT")
             severity = "info"
         else:
-            severity = "fault" if sp >= 20.0 else ("warn" if sp >= 5.0 else "ok")
+            severity = lockout_severity(sp)  # warn >= 5 %, fault >= 20 % (camber.plant)
         reset = res.hws_reset_present  # True / False / None
         if reset is None:
             caveats.append("HWS reset not evaluated: no/insufficient OAT")
@@ -97,6 +97,7 @@ class BoilerSummerLockout:
                 "hws_reset_present": res.hws_reset_present,
                 "n_running": res.n_running,
                 "n_considered": res.n_considered,
+                "max_oat_running_f": res.max_oat_running_f,  # 0.103 (#133)
                 **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
             summary=(

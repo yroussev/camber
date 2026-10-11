@@ -21,6 +21,9 @@ services:
       CAMBER_STORE: /data/store
       CAMBER_API_HOST: 0.0.0.0
       CAMBER_API_PORT: 8080
+      # the Host names the API answers (0.103, DNS-rebinding defence); add the DNS name
+      # clients use if it is not localhost, e.g. "localhost,127.0.0.1,camber.example.org"
+      CAMBER_API_ALLOWED_HOSTS: localhost,127.0.0.1
     volumes:
       - ./data/store:/data/store:ro
     restart: unless-stopped

@@ -10,7 +10,9 @@ For every file URL of every entry it issues a HEAD request (falling back to a on
 when a host refuses HEAD) and compares the served size and ETag with the catalog's pins. Where an
 entry sets ``licence_check`` it also fetches that page and checks that the licence it states still
 matches (``expect``, a case-insensitive substring; ``json_path`` walks a JSON API response first).
-Manual-download entries (``manual: true``) are checked only for their landing page.
+Manual-download entries (``manual: true``) are checked only for their landing page. Synthetic
+entries (``kind: "synthetic"``, 0.103) are skipped: CAMBER generates their data, there is no
+publisher URL to check.
 
 It also checks the linked references of :mod:`camber.references` (0.96, #78: the PNNL Building
 Re-tuning guides, chapters and tool guides the reports link to): each URL must still answer. A
@@ -151,6 +153,8 @@ def run(data: dict, ids=None, *, opener=None, timeout: float = 30.0) -> list:
     rows = []
     for d in data["datasets"]:
         if ids and d["id"] not in ids:
+            continue
+        if d.get("kind") == "synthetic":  # 0.103 (#133): generated locally, nothing to check
             continue
         rows.extend(check_entry(d, opener=opener, timeout=timeout))
     return rows

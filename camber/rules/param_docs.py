@@ -1880,6 +1880,27 @@ PARAM_DOCS["boiler_summer_lockout"] = {
     ),
 }
 
+# 0.103 (#132): the hot-water pump's warm-weather lockout shares the boiler's parameter
+PARAM_DOCS["hw_pump_summer_lockout"] = {
+    "summer_lockout_oat_f": _P(
+        "°F",
+        "CAMBER judgment: the same generic mild-climate lockout as boiler_summer_lockout; the "
+        "check follows PNNL Re-tuning Ch.8 (lock out the hot-water pumps, not only the boiler, in "
+        "warm weather), which gives no single value",
+        "Use the same heating lockout as boiler_summer_lockout: the one the sequence of "
+        "operations specifies, or the outdoor temperature above which no zone has called for heat "
+        "in a known-good year of trends. A plant that serves dehumidification reheat or domestic "
+        "hot water in summer needs a higher value, or none of this check.",
+        (50.0, 80.0),
+        "Severity is fixed in code, as for the boiler: warn when the pump runs at OAT above this "
+        "for >= 5 % of its occupied running hours, fault at >= 20 %. Without an OAT point the "
+        "check is not evaluated. A config that sets this on boiler_summer_lockout but not here "
+        "passes the boiler's value on (recorded in the finding's param_basis). Running comes "
+        "from the pump status, else the speed above 5 %, else the loop flow above 5 % of its own "
+        "95th percentile (fixed in code).",
+    ),
+}
+
 PARAM_DOCS["boiler_short_cycle"] = {
     "max_starts_per_day": _P(
         "per day",

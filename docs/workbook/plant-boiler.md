@@ -145,3 +145,6 @@ Its `drift` section adds the boiler drift family with a **declared reference**:
   questions, answered from different points.
 - See [the sensor exercise](plant-sensor-vs-equipment.md) for why a sensor bias is scored as a
   negative.
+- This plant's boiler always passes `boiler_summer_lockout`. See
+  [the lockout exercise](plant-lockout.md) for a boiler, and a pump, left on in warm weather, on
+  a synthetic plant.

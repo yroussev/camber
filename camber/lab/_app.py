@@ -20,7 +20,6 @@ from __future__ import annotations
 import os
 import re
 import secrets
-import shutil
 import threading
 
 from ..api.read import ReadAPI
@@ -44,16 +43,9 @@ class LabError(Exception):
 
 def _free_bytes(path: str) -> int | None:
     """Free bytes on the filesystem that holds ``path`` (its nearest existing ancestor)."""
-    p = os.path.abspath(path)
-    while not os.path.exists(p):
-        parent = os.path.dirname(p)
-        if parent == p:
-            return None
-        p = parent
-    try:
-        return int(shutil.disk_usage(p).free)
-    except OSError:  # pragma: no cover - unreadable mount
-        return None
+    from ._checks import free_bytes
+
+    return free_bytes(path)
 
 
 class LabApp:
@@ -189,6 +181,8 @@ class LabApp:
     def catalog_view(self) -> dict:
         """The JSON behind the catalog table: entries, what is fetched / ingested, free disk."""
         from ..datasets import _licence, _ops
+        from ..datasets._fetch import DISK_MARGIN
+        from . import _checks
         from ._docs import exercise_href
 
         entries = self.entries()
@@ -198,6 +192,7 @@ class LabApp:
         for e in entries:
             st = status.get(e.id) or {}
             sugg = e.suggested_analyses or {}
+            needs = {name: _checks.needs(e, name, self.data_dir) for name in e.subsets}
             rows.append(
                 {
                     "id": e.id,
@@ -215,13 +210,20 @@ class LabApp:
                     "commercial_ok": e.commercial_ok,
                     "labeled_faults": e.labeled_faults,
                     "manual": e.manual,
+                    "manual_instructions": e.manual_instructions if e.manual else "",
+                    # 0.103 (#133): generated locally by CAMBER, never downloaded
+                    "synthetic": e.synthetic,
                     "equipment": e.equipment,
                     "requires_extras": list(e.requires_extras),
+                    # 0.103 (#123): an extra that is not installed disables the row's fetch
+                    "missing_extras": _checks.missing_extras(e),
                     "subsets": {
                         name: {
                             "description": (spec or {}).get("description", ""),
                             "download_bytes": e.download_bytes(name),
                             "store_bytes": e.store_bytes(name),
+                            # what a job would still need: download, archive extraction, store
+                            "needs": needs[name],
                         }
                         for name, spec in e.subsets.items()
                     },
@@ -235,6 +237,8 @@ class LabApp:
                     # 0.97 (#79): the resolved link (local /lab/docs/... or the docs site)
                     "exercise": exercise_href(sugg.get("exercise"), self.docs_dir),
                     "data_issues": len(e.data_issues),
+                    # 0.103 (#123): why the store's facilities cannot be purged from the lab
+                    "purge_blocked": self._purge_blockers(e),
                 }
             )
         return {
@@ -246,6 +250,10 @@ class LabApp:
                 "data_dir": _free_bytes(self.data_dir),
                 "store": _free_bytes(self.store.root),
             },
+            # 0.103 (#123): the page's disk check is the fetch's own (same headroom), and adds
+            # the cache's and the store's needs when they share a filesystem
+            "disk_margin": DISK_MARGIN,
+            "same_disk": _checks.same_disk(self.data_dir, self.store.root),
             # 0.96 (#78): what the page shows -- home-relative (~/...) and shortened; the full
             # paths above stay in the JSON and the startup log
             "display": {
@@ -292,6 +300,7 @@ class LabApp:
                 )
             if e.research_only and ack.get(e.id) != e.id:
                 raise LabError(403, _refusal(e, "download"))
+        self._preflight(entries, subset, download=True, ingest=ingest)
         self._check_room()
         accepted = {e.id for e in entries if e.research_only}
         params = {"ids": [e.id for e in entries], "subset": subset or "default", "ingest": ingest}
@@ -325,6 +334,7 @@ class LabApp:
                 accept.add(e.id)
             elif not _licence.acknowledged(self.data_dir, e):
                 raise LabError(403, _refusal(e, "ingest"))
+        self._preflight(entries, subset, download=False, ingest=True)
         self._check_room()
         params = {"ids": [e.id for e in entries], "subset": subset or "default", "force": force}
 
@@ -338,6 +348,195 @@ class LabApp:
             ]
 
         return self.jobs.submit("ingest", params, work)
+
+    def submit_from_dir(self, dataset_id, directory, *, subset=None, force=False, acknowledge=None):
+        """Queue an ingest of a ``manual`` entry from a local folder (``ingest --from-dir``).
+
+        ``directory`` is untrusted input: it must be an absolute path to an existing, readable
+        folder (:func:`._checks.local_folder`), and a file the catalog names that resolves
+        outside it is refused. The folder is only read: pinned files are verified (size +
+        sha256) and placed in the cache, then ingested. A research-only entry needs its licence
+        acknowledged (a recorded acknowledgement, or ``acknowledge[id] == id``): else 403.
+        """
+        from ..datasets import _licence
+        from . import _checks
+
+        entries = self._targets([dataset_id], subset)
+        e = entries[0]
+        if not e.manual:
+            raise LabError(
+                400, f"{e.id} is not a manual download: use Fetch & ingest, which verifies it"
+            )
+        try:
+            folder = _checks.local_folder(directory)
+            _checks.folder_files(e, subset or "default", folder)
+        except ValueError as exc:
+            raise LabError(400, str(exc)) from None
+        accept = bool(e.research_only and (acknowledge or {}).get(e.id) == e.id)
+        if e.research_only and not accept and not _licence.acknowledged(self.data_dir, e):
+            raise LabError(403, _refusal(e, "ingest"))
+        self._preflight(entries, subset, download=True, ingest=True)
+        self._check_room()
+        params = {
+            "ids": [e.id],
+            "subset": subset or "default",
+            "force": bool(force),
+            "dir": folder,
+        }
+
+        def work(job):
+            from ..datasets._ops import adopt_local_files
+
+            job.report(f"{e.id}: verifying the files in the folder")
+            _checks.folder_files(e, subset or "default", folder)  # again, as the job starts
+            res = adopt_local_files(e, folder, subset=subset, data_dir=self.data_dir)
+            if accept:
+                self._audit(
+                    "lab.acknowledge",
+                    reason=f"research-only licence {e.licence} acknowledged in camber lab",
+                    details={"dataset_id": e.id, "licence": e.licence, "subset": res.subset},
+                )
+            self._audit(
+                "lab.adopt",
+                reason=f"camber lab took dataset {e.id} from a local folder",
+                details={
+                    "dataset_id": e.id,
+                    "subset": res.subset,
+                    "files": [f["name"] for f in res.files],
+                },
+            )
+            fetch = {
+                "subset": res.subset,
+                "files": [{k: f.get(k) for k in ("name", "bytes", "sha256")} for f in res.files],
+                "citation": res.citation,
+                "licence": res.licence,
+                "warnings": list(res.warnings),
+            }
+            ingest = self._ingest_one(job, e, subset, accept=accept, force=bool(force))
+            return [{"id": e.id, "fetch": fetch, "ingest": ingest}]
+
+        return self.jobs.submit("ingest from folder", params, work)
+
+    def submit_remove(self, dataset_id, *, purge_store=False, confirm=None):
+        """Queue the removal of a dataset's downloads and extractions (``camber datasets remove``),
+        and with ``purge_store`` its facilities in the store (``--purge-store``).
+
+        ``confirm`` must be the dataset id (typed in the page's dialog): else 400. In a workspace
+        a purge follows the facility lifecycle: a facility that is suspended, offboarding or
+        archived, or under a legal hold, is not purged from the lab -- the request is refused
+        (409) with the reason instead (see :meth:`_purge_blockers`).
+        """
+        entries = self._targets([dataset_id], None)
+        e = entries[0]
+        if confirm != e.id:
+            raise LabError(400, f"type the dataset id {e.id!r} to confirm the removal")
+        blocked = self._purge_blockers(e) if purge_store else []
+        if blocked:
+            raise LabError(409, "; ".join(blocked))
+        self._check_room()
+        params = {"ids": [e.id], "purge_store": bool(purge_store)}
+
+        def work(job):
+            job.report(f"{e.id}: removing")
+            if self.portfolio is None:
+                res = self._remove(e, purge_store)
+            else:
+                with self.portfolio.lock(timeout=0.0):
+                    again = self._purge_blockers(e) if purge_store else []
+                    if again:  # the lifecycle moved since the request was queued
+                        raise PermissionError("; ".join(again))
+                    res = self._remove(e, purge_store)
+            job.report(f"{e.id}: removed")
+            return [{"id": e.id, "remove": res}]
+
+        return self.jobs.submit("remove", params, work)
+
+    def _remove(self, entry, purge_store: bool) -> dict:
+        from ..datasets._ops import remove_dataset
+
+        res = remove_dataset(
+            entry,
+            data_dir=self.data_dir,
+            store=self.store if purge_store else None,
+            purge_store=purge_store,
+        )
+        with self._report_lock:  # a purged facility's cached report goes with it
+            dropped = set(res["facilities_dropped"])
+            self._reports = {k: v for k, v in self._reports.items() if k[0] not in dropped}
+        reason = f"camber lab removed dataset {entry.id}" + (
+            " and purged its facilities" if purge_store else ""
+        )
+        self._audit(
+            "lab.remove",
+            reason=reason,
+            details={
+                "dataset_id": entry.id,
+                "freed_bytes": res["freed_bytes"],
+                "purge_store": purge_store,
+                "facilities_dropped": res["facilities_dropped"],
+            },
+        )
+        for fid in res["facilities_dropped"]:
+            self._audit(
+                "lab.purge", reason=reason, facility_id=fid, details={"dataset_id": entry.id}
+            )
+        return res
+
+    def _purge_blockers(self, entry) -> list:
+        """Why the lab may not purge ``entry``'s facilities from a workspace (``[]``: it may).
+
+        Outside a workspace nothing blocks it (``camber datasets remove --purge-store``). In one,
+        a facility under a legal hold keeps everything, and one that has left ``provisioning`` /
+        ``active`` (suspended, offboarding, archived) belongs to its lifecycle: its data is
+        removed by ``camber facility offboard|archive|purge``, never by a lab shortcut.
+        """
+        if self.portfolio is None:
+            return []
+        from ..datasets._ingest import dataset_meta
+
+        pf = self.portfolio
+        try:
+            known = pf.registry.all()
+            holds = pf.legal_holds()
+        except Exception as exc:  # noqa: BLE001 - an unreadable registry blocks a purge
+            return [f"the workspace registry could not be read ({type(exc).__name__})"]
+        out = []
+        for fid, meta in sorted(known.items()):
+            if dataset_meta(meta).get("dataset_id") != entry.id:
+                continue
+            state = meta.get("state") or "active"
+            if fid in holds:
+                out.append(
+                    f"{fid} is under a legal hold: nothing of it is deleted until the hold is "
+                    "released (`camber retention release`)"
+                )
+            elif state not in INGESTABLE_STATES:
+                out.append(
+                    f"{fid} is {state}: its lifecycle owns its data (`camber facility "
+                    "resume|restore`, or `offboard|archive|purge`), so the lab does not purge it"
+                )
+        return out
+
+    def _preflight(self, entries, subset, *, download: bool, ingest: bool) -> None:
+        """Refuse a job its environment cannot finish: a missing extra (409) or too little disk
+        (507), before anything is downloaded. The page runs the same checks (#123)."""
+        from . import _checks
+
+        for e in entries:
+            why = _checks.extras_refusal(e)
+            if why:
+                raise LabError(409, why)
+        plan = _checks.disk_plan(
+            entries,
+            subset or "default",
+            data_dir=self.data_dir,
+            store=self.store.root,
+            download=download,
+            extract=ingest,
+            store_write=ingest,
+        )
+        if not plan["ok"]:
+            raise LabError(507, "not enough disk space: " + "; ".join(plan["problems"]))
 
     def cancel(self, job_id: str) -> dict:
         """Cancel a job; :class:`LabError` 404 when it is unknown."""
@@ -378,10 +577,11 @@ class LabApp:
     def _fetch_one(self, job, entry, subset, accepted: bool) -> dict:
         from ..datasets._ops import fetch_dataset
 
-        job.report(f"{entry.id}: fetching")
+        job.report(f"{entry.id}: {'generating' if entry.synthetic else 'fetching'}")
+        verb = "generating" if entry.synthetic else "downloading"  # 0.103 (#133)
 
         def progress(name, done, total, _id=entry.id):
-            job.report(f"{_id}: downloading {name}", done, total)
+            job.report(f"{_id}: {verb} {name}", done, total)
 
         res = fetch_dataset(
             entry,
@@ -408,7 +608,7 @@ class LabApp:
                 "files": [f["name"] for f in res.files],
             },
         )
-        job.report(f"{entry.id}: fetched")
+        job.report(f"{entry.id}: {'generated' if entry.synthetic else 'fetched'}")
         return {
             "subset": res.subset,
             "downloaded_bytes": res.downloaded_bytes,
@@ -498,8 +698,9 @@ class LabApp:
 
     def report_html(self, facility_id: str) -> str:
         """The audit report for an ingested dataset facility, built on demand from the dataset's
-        config template (cached per content hash). :class:`LabError` 404 when ``facility_id`` is
-        not an ingested dataset facility, 409 when its dataset has no config template."""
+        config template (cached per content hash), with its "Finding evidence" charts.
+        :class:`LabError` 404 when ``facility_id`` is not an ingested dataset facility, 409 when
+        its dataset has no config template."""
         from ..datasets._ingest import dataset_meta
 
         if not valid_facility_id(facility_id or "") or facility_id not in self.store.facilities():
@@ -523,20 +724,15 @@ class LabApp:
         return html
 
     def _build_report(self, entry, facility_id: str) -> str:
-        from ..config import data_sources, run_config
+        from ..config import run_config
         from ..datasets._ops import build_config
-        from ..report.audit import AuditReport
+        from ..report.audit import _run_html
 
         cfg = build_config(entry, self.store, facility_id=facility_id)
         base = self.store.root
         res = run_config(cfg, base_dir=base)
-        report = res.report
-        if report is None:  # pragma: no cover - run_config always builds one for a store config
-            report = AuditReport(
-                building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
-            )
-            report.add_findings(res.findings)
-        return report.to_html_document(recommend=True)
+        # the same document `camber report` writes, evidence charts included (0.103, #125)
+        return _run_html(res, cfg, base)
 
 
 def display_path(path, *, home: str | None = None, limit: int = 48) -> str:

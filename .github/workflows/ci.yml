@@ -74,9 +74,10 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         numpy: [""]
         include:
-          # Pin the numpy floor on one leg so the lower bound (numpy 1.x) stays proven, not just 2.x.
+          # Pin numpy 2.0 on one leg under otherwise-newest dependencies, so the numpy floor stays
+          # proven against today's pandas / pyarrow / matplotlib (min-deps pins them all at once).
           - python-version: "3.11"
-            numpy: ">=1.24,<2"
+            numpy: ">=2.0,<2.1"
     steps:
       - uses: actions/checkout@v6
 
@@ -94,9 +95,7 @@ jobs:
 
       - name: Pin numpy ${{ matrix.numpy }}
         if: matrix.numpy != ''
-        # pyarrow 26 needs numpy 2 at import but does not declare it, so pinning numpy 1.x after
-        # the install would leave pyarrow 26 unimportable: pin a numpy-1-compatible pyarrow too.
-        run: pip install "numpy${{ matrix.numpy }}" "pyarrow<26"
+        run: pip install "numpy${{ matrix.numpy }}"
 
       - name: Test
         run: pytest -q

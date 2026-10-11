@@ -8,11 +8,15 @@ values (never parsed as HTML). The per-run CSRF token is the one dynamic value, 
 tag outside the hashed script.
 
 The page talks only to its own origin: ``GET /lab/catalog`` and ``/lab/jobs`` (polled), and
-``POST /lab/jobs/fetch|ingest`` and ``/lab/jobs/<id>/cancel`` with the token header and a JSON
-body. Research-only (NC / ND) entries open a modal that states the licence terms and asks the user
-to type the dataset id before a fetch is queued. Links go to the trend viewer
-(``/ui?facility_id=``), the on-demand report (``/lab/reports/<fid>``), the workbook exercise
-(0.97: the lab's ``/lab/docs/...`` copy or the docs site) and the publisher's page.
+``POST /lab/jobs/fetch|ingest|from-dir|remove`` and ``/lab/jobs/<id>/cancel`` with the token
+header and a JSON body. Before a fetch the page runs the server's own disk check (download, archive
+extraction and store, with the fetch's headroom) and disables a row whose optional extra is not
+installed (0.103, #123). Research-only (NC / ND) entries open a modal that states the licence
+terms and asks the user to type the dataset id before a fetch is queued. Links go to the trend
+viewer (``/ui?facility_id=``), the on-demand report (``/lab/reports/<fid>``), the workbook
+exercise (0.97: the lab's ``/lab/docs/...`` copy or the docs site) and the publisher's page. A
+row also has a "Remove…" button (a typed-id confirmation; optionally purging the store's
+facilities) and, for a manual entry, "From a folder…" (0.103).
 """
 
 from __future__ import annotations
@@ -55,7 +59,10 @@ color:var(--muted)}
 .badge{display:inline-block;border-radius:10px;padding:1px 8px;font-size:12px;white-space:nowrap;
 background:var(--chip)}
 .badge.open{color:var(--ok)}.badge.ro{color:var(--bad);font-weight:600}
-.badge.manual{color:var(--warn)}
+.badge.manual{color:var(--warn)}.badge.missing{color:var(--bad);font-weight:600}
+.badge.synthetic{color:var(--warn);font-weight:600}
+.lic{white-space:nowrap}.hint{font-size:12px;color:var(--bad);overflow-wrap:anywhere}
+td.links button{font-size:13px;padding:2px 8px;margin:2px 8px 2px 0}
 .links a{margin-right:8px;white-space:nowrap}
 .state{font-size:12px}.state.ok{color:var(--ok)}.state.warn{color:var(--warn)}
 .sum{font-size:14px}.sum.over{color:var(--bad);font-weight:600}
@@ -74,6 +81,8 @@ dialog .terms{border-left:3px solid var(--bad);padding:6px 10px;margin:10px 0;fo
 dialog input[type=text]{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;
 background:var(--bg);font-family:ui-monospace,Menlo,Consolas,monospace}
 dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+dialog .terms.info{border-left-color:var(--acc)}
+dialog .blocked{color:var(--bad);font-size:14px}
 .notice{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--card);
 font-size:14px}
 .notice.err{border-color:var(--bad);color:var(--bad)}
@@ -130,7 +139,9 @@ function render(){
     if(!visible(d))return;shown++;
     var tr=el('tr');
     var c0=el('td',{'class':'pick'}),cb=el('input',{type:'checkbox','aria-label':'select '+d.id});
-    cb.checked=!!selected[d.id];cb.disabled=d.manual;
+    var miss=d.missing_extras||[];
+    if(d.manual||miss.length)delete selected[d.id];
+    cb.checked=!!selected[d.id];cb.disabled=d.manual||miss.length>0;
     cb.addEventListener('change',function(){if(cb.checked)selected[d.id]=1;
       else delete selected[d.id];summary();});
     c0.appendChild(cb);tr.appendChild(c0);
@@ -152,13 +163,24 @@ function render(){
       title:d.research_only?(d.access_reason||'non-commercial / no-derivatives licence'):
       'open licence'},d.research_only?'research-only':'open'));
     c3.appendChild(document.createTextNode(' '));
-    c3.appendChild(el('span',{'class':'id'},d.licence));
+    c3.appendChild(el('span',{'class':'id lic'},d.licence));
     if(d.manual){c3.appendChild(document.createTextNode(' '));
       c3.appendChild(el('span',{'class':'badge manual',title:'download it yourself, then '+
-        'camber datasets ingest --from-dir'},'manual'));}
+        'ingest it from a folder'},'manual'));}
+    // 0.103 (#133): generated on this computer by CAMBER; no real building behind it
+    if(d.synthetic){c3.appendChild(document.createTextNode(' '));
+      c3.appendChild(el('span',{'class':'badge synthetic',title:'generated locally by CAMBER '+
+        '(nothing is downloaded); it describes no real building'},'synthetic'));}
+    // 0.103 (#123): the optional extras an entry needs; a missing one blocks the fetch
+    (d.requires_extras||[]).forEach(function(x){
+      var m=miss.filter(function(k){return k.extra===x;})[0];
+      c3.appendChild(document.createTextNode(' '));
+      c3.appendChild(el('span',{'class':'badge'+(m?' missing':''),title:m?('not installed: '+
+        (m.hint||x)):'optional extra '+x+' (installed)'},'needs '+x));
+      if(m)c3.appendChild(el('div',{'class':'hint'},'install first: '+(m.hint||x)));});
     tr.appendChild(c3);
     tr.appendChild(el('td',{'class':'num','data-label':'Download'},
-      bytes(sub(d).download_bytes)));
+      d.synthetic?'generated':bytes(sub(d).download_bytes)));
     tr.appendChild(el('td',{'class':'num hide-sm'},sub(d).store_bytes==null?'?':
       bytes(sub(d).store_bytes)));
     var c6=el('td',{'data-label':'Status'});
@@ -167,7 +189,8 @@ function render(){
       f.facility_id+(f.state&&f.state!=='active'?' ['+f.state+']':'')+' · '+
       (f.rows!=null?Number(f.rows).toLocaleString()+' rows':'')));});}
     else c6.appendChild(el('div',{'class':'state'+(fetched(d)?' warn':'')},
-      fetched(d)?'fetched, not ingested':'not fetched'));
+      fetched(d)?(d.synthetic?'generated, not ingested':'fetched, not ingested'):
+      (d.synthetic?'not generated':'not fetched')));
     tr.appendChild(c6);
     var c7=el('td',{'class':'links'});
     fac.forEach(function(f){
@@ -178,7 +201,13 @@ function render(){
     if(/^(https:\/\/|\/lab\/docs\/workbook\/)/.test(d.exercise||''))c7.appendChild(el('a',
       {href:d.exercise,target:'_blank',rel:'noopener noreferrer'},'exercise'));
     if(/^https:\/\//.test(d.landing_url||''))c7.appendChild(el('a',{href:d.landing_url,
-      target:'_blank',rel:'noopener noreferrer'},'publisher'));
+      target:'_blank',rel:'noopener noreferrer'},d.synthetic?'how it is made':'publisher'));
+    if(d.manual){var bf=el('button',{type:'button'},'From a folder…');bf.disabled=miss.length>0;
+      bf.addEventListener('click',function(){fromFolder(d);});c7.appendChild(bf);}
+    var have=fac.length||d.bytes_on_disk>0||Object.keys(d.fetched||{}).some(function(k){
+      return d.fetched[k];});
+    if(have){var br=el('button',{type:'button'},'Remove…');
+      br.addEventListener('click',function(){removeDialog(d);});c7.appendChild(br);}
     tr.appendChild(c7);
     body.appendChild(tr);
   });
@@ -186,17 +215,31 @@ function render(){
   summary();}
 
 function chosen(){return data.datasets.filter(function(d){return selected[d.id];});}
+// 0.103 (#123): the same disk check the server runs before it queues a job (and the fetch's own
+// headroom): download + archive extraction in the cache, the ingest's estimate in the store,
+// added together when both are on one filesystem
+function withMargin(n){return n>0?Math.ceil(n*(1+(data.disk_margin||0))):0;}
+function shortfall(cache,store){
+  var free=data.free_bytes||{},out=[];
+  function chk(label,need,fr){if(need&&fr!=null&&need>fr)out.push(label+' needs '+bytes(need)+
+    ', '+bytes(fr)+' free');}
+  if(data.same_disk)chk('cache + store',withMargin(cache+store),free.data_dir);
+  else{chk('cache',withMargin(cache),free.data_dir);chk('store',withMargin(store),free.store);}
+  return out;}
 function summary(){
-  var ch=chosen(),dl=0,st=0;
-  ch.forEach(function(d){if(!fetched(d))dl+=Number(sub(d).download_bytes||0);
-    st+=Number(sub(d).store_bytes||0);});
+  var ch=chosen(),dl=0,ex=0,st=0;
+  ch.forEach(function(d){var n=sub(d).needs||{};dl+=Number(n.download||0);
+    ex+=Number(n.extract||0);st+=Number(n.store||0);});
   var free=data.free_bytes||{},fd=free.data_dir,fs=free.store;
-  var s=$('sum');
-  s.textContent=ch.length?(ch.length+' selected · download '+bytes(dl)+' (free '+bytes(fd)+
-    ') · store ≈'+bytes(st)+' (free '+bytes(fs)+')'):'nothing selected';
-  var over=(fd!=null&&dl>fd)||(fs!=null&&st>fs);
-  s.className='sum'+(over?' over':'');
-  $('go').disabled=!ch.length||over;$('ing').disabled=!ch.length;}
+  var pf=shortfall(dl+ex,st),pi=shortfall(ex,st),s=$('sum');
+  var txt=ch.length?(ch.length+' selected · download '+bytes(dl)+(ex?' · extract ≈'+bytes(ex):'')+
+    ' · store ≈'+bytes(st)+' · free: cache '+bytes(fd)+(data.same_disk?' (same disk as the store)':
+    ', store '+bytes(fs))):'nothing selected';
+  if(ch.length&&pf.length)txt+=' — not enough disk to fetch & ingest: '+pf.join('; ');
+  if(ch.length&&!pf.length&&pi.length)txt+=' — not enough disk to ingest: '+pi.join('; ');
+  s.textContent=txt;
+  s.className='sum'+(ch.length&&pf.length?' over':'');
+  $('go').disabled=!ch.length||pf.length>0;$('ing').disabled=!ch.length||pi.length>0;}
 
 // the research-only modal: one entry at a time, the dataset id must be typed exactly
 function acknowledge(list){
@@ -227,10 +270,52 @@ function start(kind){
   acknowledge(needs).then(function(ack){
     var body={ids:ch.map(function(d){return d.id;}),subset:subset,acknowledge:ack};
     var url=kind==='fetch'?'/lab/jobs/fetch':'/lab/jobs/ingest';
-    if(kind==='fetch')body.ingest=true;
+    if(kind==='fetch')body.ingest=true;else body.force=$('force').checked;
     return post(url,body).then(function(r){notice('queued job '+r.job.id);selected={};
       render();pollJobs();});
   }).catch(function(e){notice(e.message==='cancelled'?'':e.message,e.message!=='cancelled');});}
+
+// 0.103 (#123): remove a dataset's local files (and, optionally, its facilities in the store);
+// the dataset id must be typed, and a workspace's lifecycle can forbid the purge
+function removeDialog(d){
+  var dlg=$('rm'),box=$('rm-purge'),typed=$('rm-typed'),ok=$('rm-ok'),blk=$('rm-blocked');
+  var fac=(d.facilities||[]).map(function(f){return f.facility_id;});
+  var blocked=d.purge_blocked||[];
+  $('rm-title').textContent=d.title;$('rm-id').textContent=d.id;
+  $('rm-what').textContent='Deletes its downloaded files and extractions from the cache ('+
+    bytes(d.bytes_on_disk)+' on disk). The acknowledgements ledger is kept.';
+  $('rm-fac').textContent=fac.length?fac.join(', '):'none ingested';
+  box.checked=false;box.disabled=!fac.length||blocked.length>0;
+  blk.textContent=blocked.length?('Cannot purge here: '+blocked.join('; ')):'';
+  typed.value='';ok.disabled=true;
+  function upd(){ok.disabled=typed.value!==d.id;}
+  typed.oninput=upd;
+  ok.onclick=function(){dlg.close('ok');};
+  $('rm-cancel').onclick=function(){dlg.close('cancel');};
+  dlg.onclose=function(){dlg.onclose=null;if(dlg.returnValue!=='ok')return;
+    post('/lab/jobs/remove',{id:d.id,confirm:typed.value,purge_store:box.checked})
+      .then(function(r){notice('queued job '+r.job.id);pollJobs();})
+      .catch(function(e){notice(e.message,true);});};
+  dlg.returnValue='';dlg.showModal();typed.focus();}
+
+// 0.103 (#123): a manual entry's files, downloaded by hand, ingested from a local folder
+// (camber datasets ingest --from-dir); the server checks the path and only reads it
+function fromFolder(d){
+  var dlg=$('fd'),path=$('fd-path'),ok=$('fd-ok');
+  $('fd-title').textContent=d.title;
+  $('fd-instr').textContent=d.manual_instructions||'Download the files from the publisher first.';
+  ok.disabled=!path.value.trim();
+  path.oninput=function(){ok.disabled=!path.value.trim();};
+  ok.onclick=function(){dlg.close('ok');};
+  $('fd-cancel').onclick=function(){dlg.close('cancel');};
+  dlg.onclose=function(){dlg.onclose=null;if(dlg.returnValue!=='ok')return;
+    var dir=path.value.trim();
+    acknowledge(d.research_only&&!d.acknowledged?[d]:[]).then(function(ack){
+      return post('/lab/jobs/from-dir',{id:d.id,dir:dir,subset:subset,
+        force:$('force').checked,acknowledge:ack});
+    }).then(function(r){notice('queued job '+r.job.id);pollJobs();})
+    .catch(function(e){notice(e.message==='cancelled'?'':e.message,e.message!=='cancelled');});};
+  dlg.returnValue='';dlg.showModal();path.focus();}
 
 function renderJobs(list){
   var box=$('jobs');clear(box);
@@ -258,6 +343,9 @@ function renderJobs(list){
     (j.result||[]).forEach(function(r){
       if(r.fetch&&r.fetch.citation)d.appendChild(el('div',{'class':'msg'},
         r.id+' — please cite: '+r.fetch.citation));
+      if(r.remove)d.appendChild(el('div',{'class':'msg'},r.id+': freed '+
+        bytes(r.remove.freed_bytes)+((r.remove.facilities_dropped||[]).length?
+        '; dropped from the store: '+r.remove.facilities_dropped.join(', '):'')));
       if(r.ingest)d.appendChild(el('div',{'class':'msg'},r.id+': '+(r.ingest.skipped?
         'already up to date':('ingested '+Number(r.ingest.rows).toLocaleString()+' rows into '+
         (r.ingest.facilities||[]).join(', ')))));});
@@ -308,7 +396,8 @@ reports. Loopback only. <span id="where"></span></div>
 <label>Licence <select id="lic"><option value="">all</option><option value="open">open</option>
 <option value="research">research-only</option></select></label>
 <label>Kind <select id="kind"><option value="">all</option><option value="simulated">simulated
-</option><option value="real">real</option><option value="lab">lab</option></select></label>
+</option><option value="real">real</option><option value="lab">lab</option>
+<option value="synthetic">synthetic</option></select></label>
 <label><input type="checkbox" id="labeled"> labelled faults</label>
 <label><input type="checkbox" id="have"> ingested</label>
 <span id="shown" class="muted"></span>
@@ -321,6 +410,8 @@ reports. Loopback only. <span id="where"></span></div>
 <label>Subset <select id="subset"></select></label>
 <button id="go" class="primary" disabled>Fetch &amp; ingest</button>
 <button id="ing" disabled>Ingest (already fetched)</button>
+<label title="ingest again even when the data and the mapping are unchanged"><input
+type="checkbox" id="force"> force re-ingest</label>
 <span id="sum" class="sum"></span>
 </div>
 <p class="muted">Research-only datasets (non-commercial or no-derivatives licences) ask you to
@@ -342,6 +433,29 @@ from the publisher for you; the acknowledgement is recorded in the acknowledgeme
 <input type="text" id="ack-typed" autocomplete="off" spellcheck="false"></p>
 <div class="row"><button id="ack-cancel">Cancel</button>
 <button id="ack-ok" class="primary" disabled>Acknowledge</button></div>
+</dialog>
+<dialog id="rm" aria-labelledby="rm-h">
+<h3 id="rm-h">Remove a dataset</h3>
+<div class="title" id="rm-title"></div>
+<div class="terms" id="rm-what"></div>
+<p><label><input type="checkbox" id="rm-purge"> Also drop its facilities from the store
+(<span id="rm-fac"></span>). Its trends and reports go with them; the ids stay reserved.</label></p>
+<div class="blocked" id="rm-blocked"></div>
+<p><label for="rm-typed">Type the dataset id <code id="rm-id"></code> to confirm:</label>
+<input type="text" id="rm-typed" autocomplete="off" spellcheck="false"></p>
+<div class="row"><button id="rm-cancel">Cancel</button>
+<button id="rm-ok" class="primary" disabled>Remove</button></div>
+</dialog>
+<dialog id="fd" aria-labelledby="fd-h">
+<h3 id="fd-h">Ingest from a folder</h3>
+<div class="title" id="fd-title"></div>
+<div class="terms info" id="fd-instr"></div>
+<p><label for="fd-path">The folder that holds the downloaded files (an absolute path; CAMBER
+only reads it, verifies each file and copies it into the cache):</label>
+<input type="text" id="fd-path" autocomplete="off" spellcheck="false"
+placeholder="/path/to/the/downloaded/files"></p>
+<div class="row"><button id="fd-cancel">Cancel</button>
+<button id="fd-ok" class="primary" disabled>Ingest</button></div>
 </dialog>
 """
 

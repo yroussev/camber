@@ -64,7 +64,14 @@ def render_markdown(entries) -> str:
     for e in entries:
         issues = list(getattr(e, "data_issues", ()) or ())
         out += [f"### `{e.id}`: {e.title}", ""]
-        if not issues:
+        if getattr(e, "synthetic", False) and not issues:  # 0.103 (#133)
+            out += [
+                "Synthetic: CAMBER generates this dataset (see "
+                "[synthetic datasets](#synthetic-datasets)), so there is no published data to "
+                "have issues.",
+                "",
+            ]
+        elif not issues:
             out += ["No published-data issues are recorded for this dataset.", ""]
             continue
         for iss in issues:

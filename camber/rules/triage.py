@@ -167,6 +167,15 @@ CAUSE_CHAINS = [
         ],
     ),
     (
+        # 0.103 (#132): a heating plant not locked out in warm weather -- the boiler enabled (or
+        # firing) above the lockout keeps its hot-water pump running too, one fix for both.
+        "hw_lockout",
+        [
+            "boiler_summer_lockout",
+            "hw_pump_summer_lockout",
+        ],
+    ),
+    (
         # A static reset that does not trim -> rogue zones pin it -> the damper census shows
         # boxes throttled against excess static.
         "static",

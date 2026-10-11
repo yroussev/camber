@@ -80,6 +80,7 @@ RULE_EQUIP_CLASSES: dict = {
     "boiler_short_cycle": _HW,
     "hw_plant_deltat": _HW,
     "hw_pump_dp_reset": ("hw_plant", "pump"),
+    "hw_pump_summer_lockout": ("hw_plant", "pump"),  # 0.103 (#132)
     # --- 0.93 (#40) DX / heat-pump block (093-refrig)
     # subcooling means a refrigerant circuit; an RTU (air_handler family) has one too
     "dx_refrigerant_charge": ("heat_pump", "dx", "air_handler"),

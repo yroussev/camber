@@ -12,7 +12,7 @@ Subcommands:
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
-    camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
+    camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]  # read API + /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
@@ -148,16 +148,9 @@ def _cmd_report(args) -> int:
 
 
 def _audit_html(res, cfg, base) -> str:
-    from .config import data_sources
-    from .report.audit import AuditReport
+    from .report.audit import _run_html
 
-    report = res.report
-    if report is None:
-        report = AuditReport(
-            building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
-        )
-        report.add_findings(res.findings)
-    return report.to_html_document(recommend=True)
+    return _run_html(res, cfg, base)
 
 
 def _plugin_report(layout: str, res):
@@ -238,9 +231,23 @@ def _cmd_serve(args) -> int:  # pragma: no cover - blocking server loop
     from .api.server import serve
     from .store import ParquetStore
 
-    print(f"CAMBER read-only API + live dashboard on http://{args.host}:{args.port}/ui")
-    print("(read-only, GET-only; bind stays on localhost unless you change --host)")
-    serve(ParquetStore(args.store), host=args.host, port=args.port)
+    # no --allow-host: None, so make_server reads CAMBER_API_ALLOWED_HOSTS
+    allowed = list(args.allow_host) if args.allow_host else None
+    try:
+        serve(
+            ParquetStore(args.store),
+            host=args.host,
+            port=args.port,
+            allowed_hosts=allowed,
+            auth=args.auth,
+            access_token=os.environ.get("CAMBER_API_TOKEN") or None,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: cannot bind {args.host}:{args.port}: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -535,13 +542,18 @@ def _ds_errors(fn):
     def wrapped(args) -> int:
         from .datasets._archive import UnsafeArchive
         from .datasets._fetch import ChecksumMismatch, FetchError, InsufficientSpace
+        from .datasets._paths import CacheReadOnly
         from .datasets._readers import MissingExtra
+        from .portfolio._lock import LockHeld
 
         try:
             return fn(args)
         except ChecksumMismatch as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_CHECKSUM
+        except (LockHeld, CacheReadOnly) as e:  # 0.103 (#124): a busy or read-only cache/store
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         except PermissionError as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_LICENCE
@@ -582,10 +594,17 @@ def _cmd_datasets_list(args) -> int:
     for e in rows:
         print(
             f"{e.id:14s} {_ds_tier(e):13s} {e.licence:16s} {e.kind:9s} "
-            f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  "
+            f"{'yes' if e.labeled_faults else 'no':6s} "
+            f"{'generated' if e.synthetic else _mb(e.download_bytes()):>9s}  "
             f"{e.title}{' [manual download]' if e.manual else ''}"
+            f"{' [synthetic: generated locally]' if e.synthetic else ''}"
         )
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
+    if any(e.synthetic for e in rows):  # 0.103 (#133)
+        print(
+            "synthetic: CAMBER generates the data on this computer (nothing is downloaded); it "
+            "describes no real building."
+        )
     if any(e.research_only for e in rows):
         print(
             "research-only: NC/ND licence (or a stated access reason; see `datasets info`) -- "
@@ -633,6 +652,13 @@ def _cmd_datasets_info(args) -> int:
     if e.dois:
         print(f"doi       : {', '.join(e.dois)}")
     print(f"kind      : {e.kind}; labelled faults: {'yes' if e.labeled_faults else 'no'}")
+    if e.synthetic:  # 0.103 (#133)
+        gen = e.generator or {}
+        print(
+            f"            synthetic: generated locally by CAMBER (generator {gen.get('name')}, "
+            f"seed {gen.get('seed')}); `fetch` generates it, nothing is downloaded, and it "
+            "describes no real building"
+        )
     if e.equipment:
         print(f"equipment : {e.equipment}")
     if e.teaches:
@@ -750,7 +776,13 @@ def _cmd_datasets_fetch(args) -> int:
         if e.manual:
             print(f"skipping {e.id}: manual download (`camber datasets info {e.id}`)")
             continue
-        print(f"fetching {e.id} ({args.subset or 'default'}, {_mb(e.download_bytes(args.subset))})")
+        if e.synthetic:  # 0.103 (#133)
+            print(f"generating {e.id} (synthetic: CAMBER generates it, nothing is downloaded)")
+        else:
+            print(
+                f"fetching {e.id} ({args.subset or 'default'}, "
+                f"{_mb(e.download_bytes(args.subset))})"
+            )
         res = ds.fetch(
             e.id,
             subset=args.subset,
@@ -759,7 +791,10 @@ def _cmd_datasets_fetch(args) -> int:
             progress=None if args.quiet else _progress_printer(),
         )
         for f in res.files:
-            state = "verified (already present)" if f["skipped"] else "downloaded + verified"
+            if f.get("generated"):
+                state = "already generated" if f["skipped"] else "generated"
+            else:
+                state = "verified (already present)" if f["skipped"] else "downloaded + verified"
             print(f"  {f['name']}: {state}, sha256 {f['sha256'][:12]}…")
         for w in res.warnings:
             print(f"  warning: {w}")
@@ -961,13 +996,22 @@ def _lab_target(args):
 def _cmd_lab(args) -> int:
     from .lab import LabApp, announce, make_lab_server
     from .lab._auth import remove_launch_file
+    from .lab._server import PortInUse
 
+    app = None
     try:
         store, ws = _lab_target(args)
         app = LabApp(store=store, workspace=ws, data_dir=args.dir, docs_dir=args.docs)
         httpd = make_lab_server(app, port=args.port)
+    except PortInUse as e:  # 0.103 (#123): say what to do, not just the errno
+        print(f"error: {e}", file=sys.stderr)
+        if app is not None:
+            app.close()
+        return 1
     except (ValueError, FileNotFoundError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
+        if app is not None:
+            app.close()
         return 1
     where = f"workspace {app.portfolio.root}" if app.portfolio is not None else f"store {store}"
     print(f"camber lab: {where}; dataset cache {app.data_dir}", flush=True)
@@ -2611,6 +2655,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "--host", default="127.0.0.1", help="bind host (default 127.0.0.1 / localhost)"
     )
     psv.add_argument("--port", type=int, default=8080, help="bind port (default 8080)")
+    psv.add_argument(
+        "--allow-host",
+        action="append",
+        metavar="NAME",
+        help="also answer requests whose Host is NAME or NAME:PORT (repeatable; a proxy or DNS "
+        "name). Default: the loopback names and the bound host; env CAMBER_API_ALLOWED_HOSTS "
+        "(comma-separated) when not given. Binding 0.0.0.0 / :: needs one. '*' allows any Host "
+        "and turns the DNS-rebinding check off (unsafe)",
+    )
+    psv.add_argument(
+        "--auth",
+        choices=["none", "token"],
+        default=None,
+        help="'token': require this run's access token on every route (the launch URL printed "
+        "at startup sets a session cookie; scripts send Authorization: Bearer). Default none; "
+        "env CAMBER_API_TOKEN fixes the token",
+    )
     psv.set_defaults(func=_cmd_serve)
 
     pb = sub.add_parser(
@@ -2948,7 +3009,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     dsl = dssub.add_parser("list", help="list catalog datasets")
     dsl.add_argument("--licence", choices=["commercial", "all"], default="all")
-    dsl.add_argument("--kind", choices=["simulated", "real", "lab"])
+    dsl.add_argument("--kind", choices=["simulated", "real", "lab", "synthetic"])
     dsl.add_argument("--labeled", action="store_true", help="only datasets with fault labels")
     dsl.add_argument("--json", action="store_true")
     dsl.set_defaults(func=_cmd_datasets_list)

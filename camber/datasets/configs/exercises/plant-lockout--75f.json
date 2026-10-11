@@ -1,0 +1,28 @@
+{
+  "_comment": "Workbook exercise plant-lockout, the threshold lesson: the same two rules with the lockout raised to 75 F, as a hot-climate default would set it. Set on boiler_summer_lockout only; hw_pump_summer_lockout inherits it.",
+  "_dataset": "synthetic-hw-plant-lockout",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-hw-plant-lockout"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "HW_PLANT",
+      "marker_role": "hw_supply_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "boiler_summer_lockout",
+      "params": {
+        "summer_lockout_oat_f": 75.0
+      }
+    },
+    "hw_pump_summer_lockout"
+  ],
+  "report": {
+    "level": 2
+  }
+}

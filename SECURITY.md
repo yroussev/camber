@@ -11,8 +11,10 @@ rather than opening a public issue. We aim to acknowledge reports within a few d
 CAMBER is an analysis library that reads data files and can serve a **read-only**
 local HTTP API (`camber.api.server`). Please note:
 
-- The read API has **no authentication** and is intended for trusted/local use.
-  Do not expose it to untrusted networks.
+- The read API (`camber serve`) has **no authentication by default** and is intended for
+  trusted/local use. It refuses requests whose `Host` header is not on its allowlist (a
+  DNS-rebinding defence), and `--auth token` requires a per-run access token. Do not expose it
+  to untrusted networks; see [docs/SECURITY.md](docs/SECURITY.md) section 3.
 - The Haystack ingest client issues outbound HTTP via an injectable transport you
   supply; treat credentials/tokens as you would any secret.
 - CAMBER does not execute building-supplied data as code, but as with any tool,

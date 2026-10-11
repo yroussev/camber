@@ -12,7 +12,7 @@ camber ask "<question>" --config <config.json>  # grounded natural-language Q&A 
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
-camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
+camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token]   # read-only API + live /ui
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
@@ -29,6 +29,35 @@ camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge 
 `http://127.0.0.1:8080/ui` (facility/equip/role selectors + a synchronized multitrend, brush-linked
 and polling). Read-only (GET-only), localhost-bound by default; see
 [VISUALIZATION.md](VISUALIZATION.md) and [SECURITY.md](SECURITY.md).
+
+Who may connect (0.103):
+
+- **Host allowlist, always on.** A request whose `Host` header is not an allowed name is refused
+  (403), so a web page on another site cannot read the store through your browser by pointing its
+  own DNS name at your machine (DNS rebinding). Bound to loopback (the default), the allowed names
+  are `127.0.0.1`, `localhost` and `[::1]` at the bound port; bound to an address, that address
+  too. `--allow-host NAME` (repeatable), or `CAMBER_API_ALLOWED_HOSTS=name1,name2`, adds the names
+  a proxy or DNS alias uses: a bare `NAME` matches any port, `NAME:PORT` only that port.
+- **Every interface needs a list.** `--host 0.0.0.0` (or `::`) refuses to start unless an
+  allowlist is given. `--allow-host '*'` answers any `Host` and turns the rebinding check off; it
+  is unsafe and meant only behind a proxy that checks `Host` itself.
+- **`--auth token` (opt-in).** Every route needs this run's access token, as in `camber lab`: the
+  command prints a launch URL ending in `?token=...` and saves it, readable by you only, in
+  `serve-<port>.url` (in `$XDG_RUNTIME_DIR/camber`, else `~/.config/camber`). Opening it sets an
+  `HttpOnly; SameSite=Strict` session cookie and redirects to the same page without the token.
+  Scripts send `Authorization: Bearer <token>`. Without credentials a request is 401 (403 for a
+  wrong token), except `GET /health`, which then answers only `{"ok": true}` for health checks.
+  `CAMBER_API_TOKEN` (16 or more characters) fixes the token instead of a fresh one per run; use
+  an environment variable, never the command line, which other accounts can read.
+- Bound to anything but loopback without `--auth token`, it prints a warning: anyone who can reach
+  the address can read every facility. Put an authenticating reverse proxy in front.
+
+```sh
+camber serve ./store                                   # http://127.0.0.1:8080/ui, no token
+camber serve ./store --auth token                      # prints the launch URL with ?token=
+camber serve ./store --host 0.0.0.0 --allow-host camber.example.org   # behind a proxy
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/facilities
+```
 
 A **config** is the same declarative JSON that drives `camber.config.run_config` (source, mapping,
 equipment, rules — see the config examples). `run`/`report` execute it; `explain`/`ask` build the
@@ -111,7 +140,9 @@ difference (about 2.6 °F at 1,600 m in hot, dry air).
 
 `camber report` writes the **audit** report by default. It is titled as an ASHRAE Std-211 audit
 only when the config gives the Std-211 inputs (`report.benchmark`, and at Level 2 `report.ecms`);
-otherwise "Building analytics report" (0.96, #78; `report.title` sets one). `--layout rcx` writes the printable
+otherwise "Building analytics report" (0.96, #78; `report.title` sets one). Since 0.103 (#125) it
+includes a **Finding evidence** section: the chart of each of the 12 worst findings, drawn with
+the run's own rules and data. `--layout rcx` writes the printable
 [RCx report](RCX-REPORT.md) instead. Without the flag, the config's `report.layout` decides, and
 any other name is looked up in the `camber.reports` [plugin](PLUGINS.md) group.
 
@@ -399,7 +430,7 @@ camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-
 them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DATASETS.md)):
 
 ```
-camber datasets list [--licence commercial|all] [--kind simulated|real|lab] [--labeled] [--json]
+camber datasets list [--licence commercial|all] [--kind simulated|real|lab|synthetic] [--labeled] [--json]
 camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
 camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
@@ -425,6 +456,9 @@ running the YAML config needs the `[yaml]` extra.
 downloads). A named research-only id needs `--accept-noncommercial` on every fetch; each acceptance
 is recorded in `acknowledgements.json`. There is no environment-variable bypass. `ingest` of
 research-only data needs that recorded acknowledgement (or its own `--accept-noncommercial`).
+A **synthetic** entry (0.103) is generated, not downloaded: `fetch` writes it from CAMBER's own
+generator (`list` shows its download as `generated`), and `ingest` generates it when it is not in
+the cache yet; see [DATASETS.md](DATASETS.md#synthetic-datasets).
 A **manual** entry (files you download yourself, e.g. from a portal with terms) is never fetched:
 `fetch <id>` exits 1 with the instructions and `fetch --all` skips it; download the files, then
 `ingest <id> --from-dir DIR --store STORE`, which verifies every pinned file (size + SHA-256)
@@ -435,7 +469,15 @@ the published data (`info <id>` lists them) and ingests it exactly as published 
 store to compare the two; `ingest` warns when the store's disk is smaller than the subset's
 estimated size. Exit codes: `2` checksum mismatch (a download is kept as `.bad`; a
 `--from-dir` file is left untouched), `3` licence gate, `4` not enough disk, `1` any other error
-(including a manual entry named to `fetch`, or a missing extra). A typical session:
+(including a manual entry named to `fetch`, a missing extra, a busy lock or a read-only cache).
+
+**Locks and a read-only cache (0.103).** `fetch`, `ingest` and `remove` take a single-writer
+lock on the cache (`<dir>/_lock`) and, for `ingest` and `remove --purge-store`, on the store
+(`<store>/_lock`, or the portfolio workspace's lock for a workspace store). A second writer waits
+up to 30 seconds, then exits 1 with `dataset cache … is locked by <pid>@<host> since <time>` (or
+`store … is locked by …`). Reads such as `status` take no lock. A cache you cannot write works for
+`fetch` of files that are already there and verify (nothing is written) and for `ingest`; see
+[DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache). A typical session:
 
 ```
 camber datasets fetch lbnl-sdahu
@@ -476,11 +518,17 @@ step-by-step guide, with screenshots, a classroom setup and troubleshooting, see
 [Using the lab](LAB.md). From it you can:
 
 - filter the datasets by licence tier, kind, labels, or what you have ingested;
-- tick one or more, compare the download and store sizes with the free disk, and press **Fetch &
-  ingest**;
+- tick one or more, compare what they download, extract and take in the store with the free
+  disk (with the fetch's 5 % headroom; 0.103), and press **Fetch & ingest**, or **Ingest
+  (already fetched)**, with **force re-ingest** to re-run an unchanged ingest;
+- see the optional extras a dataset needs; one that is not installed blocks its fetch, with the
+  install command (0.103);
+- ingest a manual download **From a folder…** (`ingest --from-dir`), and **Remove…** a dataset's
+  cache files, optionally purging its facilities (`datasets remove [--purge-store]`), after typing
+  its id (0.103);
 - follow each job's progress, and cancel it;
 - open the **trends** (the live viewer at `/ui?facility_id=ds-<id>`), the **report** (the
-  dataset's config template, run on demand), or the publisher's page.
+  dataset's config template, run on demand, with its evidence charts), or the publisher's page.
 
 A research-only dataset opens a dialog: tick the terms and type the dataset id to acknowledge
 them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
@@ -501,6 +549,8 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   deleted when the lab stops. There is no option that takes the token on the command line. Writes
   also need a per-run CSRF token, from the lab's own origin, as JSON of at most 16 KiB (see
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
+- **Port in use.** When the port is taken, `camber lab` exits with code 1 and says so, suggesting
+  `--port` (0.103). `--port 0` picks a free port.
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
 

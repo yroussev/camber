@@ -30,7 +30,7 @@ when each one last answered.
 | [Occupancy Scheduling: Night and Weekend Temperature Set back and Supply Fan Cycling during Unoccupied Hours](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_85194.pdf) | PNNL-SA-85194 | `night_weekend_setback` | Is there night set back for unoccupied hours? | 2026-09-29 |
 | [Zone Heating and Cooling Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_85200.pdf) | PNNL-SA-85200 | `reheat_penalty`, `reheat_minimization_g36` | Is there significant reheat occurring at the interior zones? | 2026-09-29 |
 | [Central Utility Plant Cooling Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_89198.pdf) | PNNL-SA-89198 | `chw_plant_reset`, `chw_pump_dp_reset` | Is reset utilized on the chilled water supply temperature?; Is the loop delta-T (ChWRT-ChWST) low?; Is the loop differential pressure set point constant and if so, can it be reset at partial load conditions? | 2026-09-29 |
-| [Central Utility Plant Heating Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_89222.pdf) | PNNL-SA-89222 | `hw_plant_deltat`, `hw_pump_dp_reset` | Is the loop delta-T (HWST-HWRT) low?; Is the hot water loop differential pressure constant and if so, can it be reset at partial load conditions? | 2026-09-29 |
+| [Central Utility Plant Heating Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_89222.pdf) | PNNL-SA-89222 | `hw_plant_deltat`, `hw_pump_dp_reset`, `hw_pump_summer_lockout` | Is the loop delta-T (HWST-HWRT) low?; Is the hot water loop differential pressure constant and if so, can it be reset at partial load conditions? | 2026-09-29 |
 | [AHU Minimum Outdoor-Air Operation](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_88958.pdf) | PNNL-SA-88958 | `outdoor_air_fraction`, `dcv_verification`, `dcv_system_verification`, `co2_ventilation`, `co2_ventilation_system`, `ventilation_rate_62_1`, `ventilation_system_62_1` | Is outdoor air sufficient for ventilation or is over-ventilation occurring? | 2026-09-29 |
 | [AHU Heating and Cooling Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_88359.pdf) | PNNL-SA-88359 | `simultaneous_heat_cool`, `leaking_valve` | Is there simultaneous heating and cooling occurring? | 2026-09-29 |
 | [Trending Requirements for Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/trending_requirements_retuning.pdf) | — | — | — | 2026-09-29 |
@@ -48,11 +48,25 @@ The `pnnl-trending-requirements` guide lists the points to trend before re-tunin
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 5: Air Handling Units: Pre-Re-Tuning and Trending and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch5_air_handling.pdf) | PNNL-SA-85063 | `dcv_verification`, `dcv_system_verification`, `co2_ventilation`, `co2_ventilation_system`, `static_pressure_reset`, `damper_census`, `supply_air_reset`, `supply_air_reset_compliance`, `supply_air_control`, `simultaneous_heat_cool`, `leaking_valve`, `control_hunting`, `night_weekend_setback`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 6: Economizer Operations: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch6_economizer.pdf) | PNNL-SA-85063 | `outdoor_air_fraction`, `economizer_high_limit`, `free_cooling_missed` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 7: Terminal Units in Air Distribution System: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch7_terminal_units.pdf) | PNNL-SA-85063 | `damper_census`, `reheat_penalty`, `reheat_minimization_g36`, `overcooling_min_flow`, `overcooling_severity`, `unmet_setpoint_hours`, `airflow_tracking`, `zones_heat_cool_census`, `reheat_capacity_shortfall`, `actuator_stuck`, `cohort_airflow`, `cohort_space_temp`, `sat_rogue_zone_census`, `static_rogue_zone_census`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
-| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 8: Central Utility Plant: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch8_central_plant.pdf) | PNNL-SA-85063 | `chw_plant_reset`, `chw_pump_dp_reset`, `chw_supply_tracking`, `chiller_efficiency`, `chiller_staging`, `condenser_water_reset`, `cooling_tower_approach`, `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`, `cooling_tower_fan_effort_drift`, `hw_plant_deltat`, `hw_pump_dp_reset`, `boiler_short_cycle`, `boiler_summer_lockout`, `boiler_efficiency_drift` | 2026-09-29 |
+| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 8: Central Utility Plant: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch8_central_plant.pdf) | PNNL-SA-85063 | `chw_plant_reset`, `chw_pump_dp_reset`, `chw_supply_tracking`, `chiller_efficiency`, `chiller_staging`, `condenser_water_reset`, `cooling_tower_approach`, `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`, `cooling_tower_fan_effort_drift`, `hw_plant_deltat`, `hw_pump_dp_reset`, `boiler_short_cycle`, `boiler_summer_lockout`, `hw_pump_summer_lockout`, `boiler_efficiency_drift` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 9: Building Walk Down](https://www.pnnl.gov/sites/default/files/media/file/ch9_building_walkdown.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 10: Re-Tuning Building Controls and Systems](https://www.pnnl.gov/sites/default/files/media/file/ch10_retuning_building.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 
 Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them. Chapter 9 (Building Walk Down) is linked instead from the RCx report's **Verify on site** section (0.98): every walk-down item carries it (`camber.references.WALKDOWN_REFERENCES`), and the report's Further reading list adds it when that section is present.
+
+## Small/Medium-Sized Commercial Building Re-tuning
+
+PNNL's second course covers small buildings that have packaged rooftop units and thermostats and
+often no BAS. Its measures chapter is the closest match for a packaged unit's compressor.
+
+| Resource | Number | Rules | Checked against (headings) | Verified |
+|---|---|---|---|---|
+| [Small/Medium-Sized Commercial Building Re-tuning Training, chapter 3: Identifying and Implementing Re-tuning Measures](https://www.pnnl.gov/sites/default/files/media/file/ch3_sm_identifying_and_implementing_retuning_measures.pdf) | PNNL-SA-92685 | `compressor_short_cycle` | Building HVAC Implementation: Different HVAC System General Guidance Examples (packaged units); Building HVAC Implementation: Thermostats | 2026-10-10 |
+
+`compressor_short_cycle` maps here since 0.103 (#125). The chapter has no heading on compressor
+starts. Its packaged-unit and thermostat sections cover the settings that make a unit cycle: the
+thermostat's set points, its location and its fan mode. The large-building course's chapter 8
+covers chillers, but not their compressor starts.
 
 ## Other resources
 
@@ -75,8 +89,8 @@ These rules have no Re-tuning guide or chapter that clearly covers them, so they
   which check a trim-and-respond sequence the guides predate;
 - the G36 fault conditions (`g36_afdd`), which cite ASHRAE Guideline 36 itself;
 - `filter_fouling`;
-- the DX and heat-pump rules and `source_loop_deltat` (the course covers built-up air handlers
-  and central plants);
+- the DX and heat-pump rules other than `compressor_short_cycle`, and `source_loop_deltat` (the
+  course covers built-up air handlers and central plants);
 - the drift detectors, except `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift`,
   which map to chapter 8.
 

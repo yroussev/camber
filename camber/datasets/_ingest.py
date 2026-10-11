@@ -50,6 +50,7 @@ registry entry under the single namespaced key ``"dataset"`` (:data:`META_KEY`).
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import os
@@ -63,6 +64,7 @@ from .. import __version__
 from ..model.mapping import MappingProvider
 from ..model.roles import Role
 from ..store import FacilityRegistry, ParquetStore
+from ..store._lock import STORE_LOCK_TIMEOUT, store_lock
 from ..units import normalize_percent_frame
 from . import _licence, _paths
 from ._archive import archive_kind, safe_extract
@@ -84,6 +86,9 @@ from ._units import convert_frame, convert_series, plausibility_warnings
 
 INGEST_VERSION = 1
 _STAGING = "_staging"
+# 0.103 (#124): where this ingest extracts archive members the cache cannot take (a read-only
+# cache): a scratch directory beside its staging area in the store, removed when it ends.
+_EXTRACT_SCRATCH: contextvars.ContextVar = contextvars.ContextVar("extract_scratch", default=None)
 _ANY_ON = frozenset({Role.WARMUP, Role.COOLDOWN})
 
 
@@ -229,7 +234,13 @@ def _duplicate_runs(runs, inputs: dict) -> dict:
 
 
 def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
-    """Extract the archive members the runs need; returns ``{(file, member): path}``."""
+    """Extract the archive members the runs need; returns ``{(file, member): path}``.
+
+    Members go to ``<cache>/<id>/extracted/<archive stem>/`` and stay there for the next ingest;
+    the extraction holds the cache lock. Members already extracted there are used as they are
+    (no write, no lock). When the cache is read-only and a member is missing, the members are
+    extracted into this ingest's scratch directory in the store instead (0.103, #124).
+    """
     by_file: dict = {}
     for r in runs:
         for m in run_members(r):
@@ -238,11 +249,22 @@ def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
     out = {}
     for fname, members in by_file.items():
         path = inputs[fname][0]
-        dest = os.path.join(
-            _paths.extracted_dir(root, entry.id), os.path.splitext(os.path.basename(fname))[0]
-        )
-        check_disk(dest, _pending_bytes(path, members, dest))
-        safe_extract(path, dest, members=members)
+        stem = os.path.splitext(os.path.basename(fname))[0]
+        dest = os.path.join(_paths.extracted_dir(root, entry.id), stem)
+        pending = _pending_bytes(path, members, dest)
+        if not pending:
+            safe_extract(path, dest, members=members)  # validates names; every target present
+        elif _paths.cache_writable(root, entry.id):
+            with _paths.cache_lock(root):
+                check_disk(dest, _pending_bytes(path, members, dest))
+                safe_extract(path, dest, members=members)
+        else:
+            scratch = _EXTRACT_SCRATCH.get()
+            if scratch is None:
+                _paths.require_writable(root, entry.id, f"extracting {fname}")
+            dest = os.path.join(scratch, entry.id, stem)
+            check_disk(dest, _pending_bytes(path, members, dest))
+            safe_extract(path, dest, members=members)
         for m in members:
             out[(fname, m)] = os.path.join(dest, m)
     return out
@@ -615,7 +637,11 @@ def _existing_hashes(store: ParquetStore, dataset_id: str) -> dict:
     }
 
 
-def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: str) -> dict:
+def _base_meta(
+    entry: DatasetEntry, root: str, subset: str, shas: dict, chash: str, ack_at=None
+) -> dict:
+    """The provenance block. ``ack_at`` is the acknowledgement the licence gate found or recorded
+    (for a read-only cache, the user's own; see :mod:`._licence`)."""
     man = _paths.read_manifest(root).get(entry.id) or {}
     meta = entry.provenance()
     meta.update(
@@ -629,7 +655,10 @@ def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: s
             "ingest_version": INGEST_VERSION,
         }
     )
-    if man.get("acknowledged_at"):
+    if ack_at and ack_at != man.get("acknowledged_at"):
+        meta["acknowledgement"] = ack_at
+        meta["acknowledged_licence"] = entry.licence
+    elif man.get("acknowledged_at"):
         meta["acknowledgement"] = man["acknowledged_at"]
         meta["acknowledged_licence"] = man.get("acknowledged_licence", entry.licence)
     return meta
@@ -964,6 +993,7 @@ def ingest_dataset(
     corrections: bool = True,
     accept_noncommercial: bool = False,
     via: str = "ingest",
+    lock_timeout: float = STORE_LOCK_TIMEOUT,
 ) -> IngestResult:
     """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
 
@@ -971,13 +1001,18 @@ def ingest_dataset(
     research-only entry needs an acknowledgement of its current licence in the cache manifest (a
     ``fetch`` with ``accept_noncommercial``) or ``accept_noncommercial=True`` here, which records
     one; otherwise ``PermissionError``.
+
+    0.103 (#124): the store's writes run under its single-writer lock
+    (:func:`camber.store._lock.store_lock` -- the workspace's lock for a workspace store). A
+    second writer waits up to ``lock_timeout`` seconds, then gets ``StoreLocked`` (or
+    ``PortfolioLocked``) naming the holder. The cache may be read-only (see :mod:`._paths`).
     """
     st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
     sname = subset or "default"
     entry.subset(sname)  # KeyError on an unknown subset, before any work
     root = _paths.data_dir(data_dir)
     require_extras(entry.requires_extras, what=f"dataset {entry.id}")
-    _licence.require(
+    ack_at = _licence.require(
         root,
         entry,
         accept_noncommercial=accept_noncommercial,
@@ -985,10 +1020,24 @@ def ingest_dataset(
         via=via,
         action="ingest",
     )
+    if entry.synthetic:  # 0.103 (#133): generate the files if they are not in the cache yet
+        from ._synthetic import ensure_generated
+
+        ensure_generated(entry, subset=sname, data_dir=root)
     inputs = verified_inputs(entry, sname, root)
     shas = {k: v[1] for k, v in inputs.items()}
     mapping_text = mapping_texts(entry)
     chash = content_hash(entry, sname, shas, mapping_text, corrections=corrections)
+    with store_lock(st.root, timeout=lock_timeout):
+        return _ingest_locked(
+            st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at
+        )
+
+
+def _ingest_locked(
+    st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at
+) -> IngestResult:
+    """The writing part of :func:`ingest_dataset`; the caller holds the store lock."""
     existing = _existing_hashes(st, entry.id)
     result = IngestResult(
         dataset_id=entry.id, store=os.path.abspath(st.root), subset=sname, corrections=corrections
@@ -1005,11 +1054,12 @@ def ingest_dataset(
         result.notes.append("already ingested with identical inputs (use force to re-ingest)")
         return result
     staging = _staging_root(st)
+    scratch = _EXTRACT_SCRATCH.set(staging + ".extract")
     try:
         facs, _, warns = _ADAPTERS[entry.ingest["adapter"]](
             entry, sname, inputs, root, staging, progress, corrections
         )
-        base = _base_meta(entry, root, sname, shas, chash)
+        base = _base_meta(entry, root, sname, shas, chash, ack_at)
         base["corrections"] = "applied" if corrections else "skipped (published data as-is)"
         for fid, (name, rows, n_eq, extra) in facs.items():
             _swap_in(st, staging, fid)
@@ -1023,6 +1073,8 @@ def ingest_dataset(
                 st.drop_facility(fid, forget=True)
         result.warnings = list(warns)
     finally:
+        _EXTRACT_SCRATCH.reset(scratch)
         shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(staging + ".extract", ignore_errors=True)
     result.facilities.sort()
     return result

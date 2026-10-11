@@ -12,6 +12,230 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.103.0] — Unreleased
+
+### Added
+- **`camber serve --auth token`: optional token auth, like `camber lab` (#128).** Every route
+  (`/ui`, `/facilities`, `/points`, `/history`, `/about`) then needs this run's access token. The
+  command prints a launch URL ending in `?token=...` and saves it in a launch file
+  `serve-<port>.url` that only you can read (0600, in a 0700 folder). Opening it sets an
+  `HttpOnly; SameSite=Strict` session cookie `camber-serve-<port>` and redirects (303) to the same
+  page without the token; scripts send `Authorization: Bearer <token>`. Without credentials a
+  request is 401 (403 for a wrong token); a bare `GET /health` answers only `{"ok": true}`, for
+  health checks. `CAMBER_API_TOKEN` (16 or more characters) fixes the token. Python:
+  `make_server(..., auth="token", access_token=...)` and `serve(...)` take the same arguments;
+  `python -m camber.api.server` reads `CAMBER_API_AUTH` and `CAMBER_API_TOKEN`. **Off by default
+  in 0.103**, so existing deployments keep working; a later release may make token auth the
+  default on loopback.
+- **`camber serve --allow-host NAME` (repeatable) and `CAMBER_API_ALLOWED_HOSTS` (#128)**, the
+  extra `Host` names to answer for a proxy or DNS name: a bare name on any port, `NAME:PORT`
+  exactly. `make_server(..., allowed_hosts=[...])` is the Python form, and
+  `camber.api.server.check_request` the pure request check.
+- **Single-writer locks on plain stores and dataset caches (#124).** Two processes writing one
+  cache or one store, such as two `camber lab`s or a lab and `camber datasets ingest`, no longer
+  corrupt each other. Every write to a dataset cache holds `<cache>/_lock`: a fetch that
+  downloads, `ingest --from-dir`, an ingest extracting archive members or recording an
+  acknowledgement, and `remove`. An ingest and `remove --purge-store` hold the store's lock:
+  `<store>/_lock` for a plain store, or the workspace's own lock for a store in a portfolio
+  workspace, which is re-entered rather than doubled, so the lab's workspace ingest cannot
+  deadlock. It is the portfolio's kernel lock (`flock`, `msvcrt` on Windows), released when its
+  process exits, so a crash leaves no stale lock. A second writer waits up to 30 seconds, then
+  stops with `dataset cache … is locked by <pid>@<host> since <time>` (or `store … is locked by
+  …`); `camber datasets` exits 1. Reads take no lock. See
+  [DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+- **A read-only shared cache (#124).** A dataset cache the user cannot write, such as a course
+  folder shared read-only across a classroom, now works for `camber datasets` and `camber lab`.
+  A fetch whose files are all present and match their pinned SHA-256 downloads and writes
+  nothing. An ingest reads the downloads in place and uses the archive members already extracted
+  there. Members still needed are extracted into a scratch folder beside the ingest's staging
+  area in the store, deleted when the ingest ends. Downloading, `ingest --from-dir` and `remove`
+  stop with *the dataset cache … is read-only for this user* and change nothing.
+  [Using the lab](docs/LAB.md#sharing-one-cache-read-only) describes setting one up for a class.
+- **Trend viewer: date range, brush-to-zoom and a whole-span view (#122).** The `/ui` trend
+  viewer that `camber serve` and `camber lab` both serve gains **From** / **to** date inputs,
+  **Last 7 days** / **Last 30 days** presets (counted back from the last stored sample) and
+  **All**. Brushing a panel now zooms to that span and reads it again at full resolution (up to
+  20,000 samples per series), and still selects its samples for the `N selected` readout; **Zoom
+  out** steps back through the spans viewed. A line under the controls gives the span shown, its
+  time-axis label, and how many samples were drawn out of how many stored. See
+  [Visualization](docs/VISUALIZATION.md#live-web-ui-072) and [the lab guide](docs/LAB.md).
+- **`/history?max_points=` (#122).** The read API's `/history` takes an optional `max_points`, a
+  per-series budget: a longer series is cut into `max_points / 2` equal time buckets, and each
+  keeps its minimum and maximum sample, so spikes, dips and flatlines survive the thinning. The
+  reply adds `source_count` (rows in the window before thinning), `downsampled`, `max_points`,
+  and `first` / `last` (the window's first and last stored timestamp). A request without
+  `max_points` returns the same rows as before.
+- **`time_axis` on `/points` (#122).** `/points?facility_id=…` also returns how to label that
+  facility's time axis: `timezone` (or `null`), `local_label`, and `utc_label` (`null` when the
+  store records no time zone for the facility).
+- **`camber lab`: remove a dataset from the page (#123).** Each row with anything on disk has a
+  **Remove…** button. After you type the dataset id, a job deletes the dataset's downloads and
+  extractions from the cache, as `camber datasets remove` does. A tick box also drops its
+  facilities from the store, as `--purge-store` does. The route is `POST /lab/jobs/remove`, under
+  the lab's usual checks (access token, CSRF token, JSON only, catalog ids only), and needs
+  `confirm` equal to the id. In a portfolio workspace the purge follows the facility lifecycle:
+  it is refused, with the reason shown in the dialog, while a facility is under a legal hold or
+  is suspended, offboarding or archived, and it is checked again under the workspace lock.
+  Removals and purges are audited (`lab.remove`, `lab.purge`).
+- **`camber lab`: ingest a manual download from a folder (#123).** A `manual: true` entry has a
+  **From a folder…** button that does what `camber datasets ingest --from-dir` does
+  (`POST /lab/jobs/from-dir`). The server treats the path as untrusted input. It must be an
+  absolute path (`~` is expanded) of at most 4096 characters, with no control character, to a
+  readable folder. A catalog file that links outside the folder is refused. The folder is only
+  read: each pinned file is verified (size and SHA-256), then copied or hard-linked into the
+  cache and ingested. A research-only entry needs its acknowledgement; in a workspace the ingest
+  is audited (`lab.adopt`).
+- **`camber lab`: force re-ingest (#123).** A **force re-ingest** tick box next to **Ingest
+  (already fetched)**, also used by **From a folder…**, re-ingests data whose inputs are
+  unchanged, which an ingest otherwise skips.
+- **`camber lab` shows each dataset's optional extras (#123).** A row lists its
+  `requires_extras` (for example *needs xlsx*). When an extra is not installed the badge turns
+  red with the install command, the row cannot be ticked, and the server refuses its fetch or
+  ingest (409) before anything is downloaded. Before, an Excel dataset downloaded in full and
+  then failed at ingest.
+- **Evidence charts in the audit report (#125).** `camber report` (the default audit layout) and
+  the lab's **report** link now include a **Finding evidence** section. Each chart shows the
+  samples the rule judged, shaded where it flags them, drawn with the run's own rule instances
+  and data. To bound the report's size and build time, it draws the charts of the 12 worst
+  findings that have one (`camber.report.audit.EVIDENCE_LIMIT`; about 50 KB each) and says so
+  when there were more. The RCx layout (`--layout rcx`) still gives each issue its own page.
+- **`compressor_short_cycle` gets a recommended action and a Learn more link (#125).** The
+  recommended action covers the compressor's minimum on/off timers, the stage differential and
+  where the calling sensor is mounted, with a site check for the walk-down. The link goes to the
+  measures chapter of PNNL's small/medium-sized building re-tuning course (PNNL-SA-92685), new in
+  `camber.references` as `pnnl-small-retuning-ch3`. It covers packaged units and their
+  thermostats.
+- **`hw_pump_summer_lockout`: the hot-water pump's warm-weather lockout (#132).** PNNL's
+  heating-plant re-tuning locks out the hot-water pumps, not only the boiler, in warm weather; a
+  pump left running all summer with the boiler off passed `boiler_summer_lockout`. The new rule
+  reads when the pump runs (its status, else its speed above 5 %, else the loop flow) and
+  reports the share of its occupied running hours above the lockout, with the boiler check's
+  semantics and severity (warn at 5 %, fault at 20 %), plus `max_oat_running_f` and
+  `boiler_off_pct` (the pump running with the boiler off). It shares the boiler's
+  `summer_lockout_oat_f` (default 65 °F): a config that sets it on `boiler_summer_lockout` only
+  passes it on, recorded in the finding's `param_basis`. It declines on a pump with no hot-water
+  point (it may serve another loop). Wired through the parameter registry and `THRESHOLDS.md`,
+  the references, the scorecard, a recommended action and a walk-down item (both new for
+  `boiler_summer_lockout` too), the RCx report's cause chains (a boiler and its pump on one
+  plant are one issue), the G36 plant sequence (`g36_plant`) and a faultlab scenario, now a
+  gated synthetic benchmark key (TPR 1.0, FPR 0.0; `coverage.n_scored` 46 → 47). See `docs/PLANT-DETECTORS.md`.
+- **Synthetic catalog entries (#133).** A catalog entry of `kind: "synthetic"` is generated
+  locally by one of CAMBER's own generators instead of downloaded: `camber datasets fetch` (and
+  the lab's **Fetch & ingest**) writes it into the cache from a fixed seed, the same bytes on
+  every machine, and it is ingested like any other entry. It carries CAMBER's licence
+  (Apache-2.0, open tier), no URL, size or SHA-256, and is labelled synthetic in `camber datasets
+  list` / `info`, the lab (a **synthetic** badge and a kind filter) and every report's "Data
+  source & licence" block. The catalog check still validates it; the refresh and link-check
+  scripts skip it. See `docs/DATASETS.md`, "Synthetic datasets".
+- **`synthetic-hw-plant-lockout` and the `plant-lockout` workbook exercise (#133).** The first
+  synthetic entry: one hot-water plant, eight weeks hourly with a warm spell, as four plants
+  (locked out at 65 °F, left enabled through the warm spell, the pump left running, locked out
+  at 58 °F). The new exercise finds the boiler and the pump left on, then varies the lockout
+  (`plant-lockout--58f`, `plant-lockout--75f`) to show how the verdict rests on it and where
+  each plant really stops firing. Its answers are pinned by the workbook tests, with an
+  instructor key and a figure.
+
+### Changed
+- **Breaking: numpy 2 is now required; numpy 1.x is no longer supported (#129).** pyarrow 26
+  needs numpy 2 at import but does not declare it, so pip could pair it with numpy 1.x and
+  `import pyarrow` then failed. The core floors move to the first releases built for numpy 2:
+  `numpy>=2.0,<3`, `pandas>=2.2.2,<3`, `pyarrow>=16.0` and `matplotlib>=3.8.4`. The `ml` extra
+  moves to `scikit-learn>=1.4.2`. CI's numpy-1.x leg becomes a numpy-2.0 leg, the `pyarrow<26`
+  workaround is gone, and the min-deps job pins the new floors.
+- **`camber serve` binding `0.0.0.0` or `::` refuses to start without a Host allowlist (#128)**
+  (`--allow-host` or `CAMBER_API_ALLOWED_HOSTS`; `'*'` turns the check off and is unsafe). The
+  Docker image and `docker-compose.yml` now set `CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1`,
+  and `deploy/k8s/camber-api.yaml` lists the Service's names and probes `/health` with
+  `Host: localhost`: **add the hostname your proxy or ingress forwards**, or it gets 403. Bound to
+  anything but loopback without `--auth token`, `camber serve` prints a warning. `--host ::`
+  (IPv6) now binds. `HEAD`, `PUT`, `DELETE`, `PATCH` and `OPTIONS` get 405 like `POST` (they were
+  501); the API stays GET-only.
+- **The lab's token, cookie and launch-file helpers moved to `camber._access` (#128)**, shared with
+  `camber serve`; `camber.lab._auth` keeps its names and behaviour.
+- **A fetch of files already in the cache no longer rewrites the manifest (#124).** When every
+  file of the subset is present, verifies, and is already recorded, `camber datasets fetch` (and
+  the lab's **Fetch & ingest**) leaves `manifest.json` untouched; its `fetched_at` keeps the time
+  of the fetch that downloaded the files. A research-only fetch still records its
+  acknowledgement.
+- **Research-only acknowledgements against a read-only cache are per user (#124).** They go to
+  the user's own ledger, `$XDG_STATE_HOME/camber/datasets/acknowledgements.json` (else
+  `~/.local/state/camber/datasets/acknowledgements.json`), with the cache's path in each record.
+  Only that ledger counts for a read-only cache. The acceptance recorded in the cache by whoever
+  filled it does not stand in for another user's, so each learner accepts a research-only
+  dataset's terms once. A writable cache keeps its acknowledgements in its own ledger and
+  manifest, as before.
+- **The trend viewer draws each series' whole span, not its first 5,000 samples (#122).** It
+  opens on every stored sample, thinned on the server to at most 2,000 per series with a min/max
+  envelope, so a long series is no longer cut to its first few days and series that start at
+  different times share one axis.
+- **The trend viewer's facility and equipment lists refresh without a reload (#122).** They are
+  read again when either list is opened, on **Reload lists** or **Refresh**, and on each live
+  poll, so a facility ingested after the page opened appears; the chosen equipment and ticked
+  roles are kept.
+- **A facility with a recorded time zone has its trend axis labelled `local time (<zone>)`
+  (#122)**, and `time (UTC)` only while the **UTC** box is ticked. It was `time (<zone>)`.
+- **The lab's disk check counts everything a job writes (#123).** The page and the server now
+  add up the download still to fetch, the archive members the ingest extracts into the cache,
+  and the store estimate. Each gets the fetch's own 5 % headroom
+  (`camber.datasets._fetch.DISK_MARGIN`, which the fetch uses too), and the needs are added
+  together when the cache and the store share a disk. Extraction is exact from the zip's own
+  index once it is downloaded, and estimated from the catalog's `extracted_size` before.
+  **Fetch & ingest** is disabled for any selection the fetch would refuse. **Ingest (already
+  fetched)** is now checked against the store's disk too. The server refuses a job that does
+  not fit with HTTP 507 before anything is downloaded. Before, the check left out extraction
+  and the margin, so Fetch could be enabled and still fail.
+- **The workbook's report notes now say the audit report has evidence charts (#125)**
+  (`air-economizer`, `air-scheduling`, `air-static-pressure`, `zone-reheat-overcooling`,
+  `zone-reheat-saturated`), and `--layout rcx` adds a page per issue.
+- **`docs/LAB.md`, `docs/DATASETS.md`, `docs/CLI.md` and `docs/SECURITY.md` §11** describe the
+  new lab controls and POST routes, and the lab screenshots are re-rendered.
+- **`boiler_summer_lockout` reports `max_oat_running_f` (#133)**, the warmest outdoor
+  temperature at which the boiler fired: where the plant actually stops firing, to compare with
+  the lockout. Severities and the other metrics are unchanged.
+
+### Fixed
+- **Store part files are byte-reproducible (#130).** Ingesting the same files twice gave part
+  files with the same rows in a different order, because the writer stored rows in the order its
+  threads finished. Every part the store writes (`write_long`, `write_rollup`, dataset ingest,
+  `migrate-partitions` and retention rollups) now has its rows sorted by
+  `(ts, equip, role, equip_class, value)` and is written single-threaded as one row group, with
+  fixed writer options. It carries a `camber.layout = "1"` marker and no pandas metadata, which
+  recorded library versions. The same inputs with the same CAMBER and pyarrow versions now give
+  byte-identical files with the same names. On another pyarrow version only the rows are
+  guaranteed. Large ingests are up to about 3x smaller (2 to 3.4x for the LBNL simulation archives,
+  `irish-ahu` and `nuig-ahu101`). Existing stores read unchanged and need no re-ingest;
+  `camber datasets ingest <id> --force` rewrites one in the new layout. Edge forwarder parts are
+  unchanged. See [SCALE.md](docs/SCALE.md#reproducible-part-files).
+- **The trend viewer's UTC box stays hidden when no time zone is recorded (#122).** A `display`
+  rule on the control labels overrode the `hidden` attribute, so the box still showed.
+- **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row
+  under its header, and pandas' chunked CSV parsing typed each chunk of a column separately,
+  then warned that the columns had mixed types. The catalog's CSV reader now types each column
+  in one pass (`low_memory=False`). The stored values are unchanged: every value column goes
+  through `pd.to_numeric` either way, and re-ingesting all 23 locally cached dataset subsets
+  gives the same rows as 0.102. No other catalog dataset raised the warning.
+- **The trend viewer no longer labels a zone-less clock as UTC (#122).** For a facility with no
+  recorded time zone (most LBNL and ORNL datasets), the time axis and hover readout said UTC
+  although they showed the publisher's local clock. They now say `local time (no time zone
+  recorded)`, and there is no UTC box.
+- **`/history` answers a malformed `start`, `end`, `limit` or `max_points` with a 400 (#122)**,
+  naming the parameter, instead of a 500. An offset on `start` / `end` is dropped rather than
+  compared against the store's naive wall clock.
+- **`camber lab` on a port already in use (#123)** printed only `error: [Errno 48] Address
+  already in use`. It now says the port is taken and suggests `camber lab --port N`, and exits
+  with code 1, with no traceback. `make_lab_server` raises `camber.lab.PortInUse`, an `OSError`.
+- **`scripts/docs_figures.py --screenshots` captured the lab's 401 page for
+  `docs/img/shots/lab.png`** after 0.102 required an access token on every lab route. It now opens
+  the launch URL the lab prints.
+
+### Security
+- **`camber serve` checks the `Host` header against DNS rebinding (#128).** A web page on another
+  site could point its own DNS name at your machine and read the store through your browser. Every
+  request whose `Host` is not an allowed name is now refused with 403: `127.0.0.1`, `localhost`
+  and `[::1]` at the bound port when bound to loopback, the bound host, and any `--allow-host`.
+  On by default. [SECURITY.md](docs/SECURITY.md) section 3 describes the model and its residual
+  risks (plain HTTP, no accounts, a per-process token).
+
 ## [0.102.0] — 2026-10-10
 
 **0.102: follow-ups from 0.101, sample charts across the docs, a guide to the lab, and an access token on every lab route (#110–#121, #127).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue ranks first again (#112). The docs site gains charts and screenshots rendered by CAMBER's own chart code (#113) and a step-by-step guide to `camber lab` (#121). Evidence charts shade exactly what each rule flags and name roles with their units (#114–#117, #119). A stuck supply-air sensor on a scheduled fan is now flagged (#118). **Behaviour change (#120):** `free_cooling_missed` no longer judges fan-off hours, so missed shares rise on units whose fan runs only when occupied; the `air-economizer` and capstone answers move with it. **Security (#127):** `camber lab` now requires a per-run access token on every route; open the URL it prints.

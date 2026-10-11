@@ -33,7 +33,8 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     CAMBER_STORE=/data/store \
     CAMBER_API_HOST=0.0.0.0 \
-    CAMBER_API_PORT=8080
+    CAMBER_API_PORT=8080 \
+    CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1
 WORKDIR /app
 COPY --from=build /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
@@ -47,6 +48,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import os,sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:'+os.environ.get('CAMBER_API_PORT','8080')+'/health',timeout=2).status==200 else 1)"
 # Default: serve the read-only API over the mounted store (host/port/store from env).
+# Binding 0.0.0.0 needs a Host allowlist (0.103, DNS-rebinding defence): the default answers
+# localhost / 127.0.0.1 on any published port; add the DNS name clients use, e.g.
+#   -e CAMBER_API_ALLOWED_HOSTS=localhost,127.0.0.1,camber.example.org
+# No authentication here: front it with an authenticating proxy (docs/SECURITY.md section 3).
 CMD ["python", "-m", "camber.api.server"]
 
 ############################  test: proves the built wheel  ############################
