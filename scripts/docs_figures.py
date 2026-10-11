@@ -1395,6 +1395,8 @@ def _lab_walkthrough(tmp: str, out: dict) -> list:
 # --------------------------------------------------------------------------- --check
 
 _MD_IMG = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+#: The README's images are absolute (#138); this prefix maps one back to its repository file.
+_RAW_PREFIX = "https://raw.githubusercontent.com/yroussev/camber/main/"
 _HTML_IMG = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>", re.I)
 
 
@@ -1419,7 +1421,13 @@ def _image_refs(path: str) -> list:
         found = [(m.group(1), m.group(2)) for m in _MD_IMG.finditer(ln)]
         found += [("<img>", m.group(1)) for m in _HTML_IMG.finditer(ln)]
         for alt, target in found:
-            if re.match(r"^[a-z]+:", target):
+            if target.startswith(_RAW_PREFIX):
+                # the README's absolute image URLs (#138), so they render on PyPI: map them back
+                # to the repository file they name and check that like a relative path
+                target = os.path.relpath(
+                    os.path.join(ROOT, target[len(_RAW_PREFIX) :]), os.path.dirname(path)
+                )
+            elif re.match(r"^[a-z]+:", target):
                 continue  # a URL (badge, external image)
             # the caption is the next non-blank line, an italic paragraph of its own
             nxt = next((x.strip() for x in lines[i + 1 :] if x.strip()), "")
