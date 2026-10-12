@@ -1161,6 +1161,8 @@ def _in_units(d: dict, k: float | None, *, adjusted: bool = False) -> dict:
 
 
 def _version_row(rec) -> dict:
+    from .mandv.names import model_label
+
     p = rec.provenance or {}
     return {
         "version": version_label(rec),
@@ -1170,6 +1172,7 @@ def _version_row(rec) -> dict:
         "reason": rec.reason,
         "method": p.get("method"),
         "model": (p.get("model") or {}).get("kind"),
+        "model_label": model_label(p.get("model")),  # 0.105 (#163): the registry's label
         "trigger_ids": p.get("trigger_ids") or [],
         "adjustments": len(p.get("adjustments") or []),
         "verified": MVBaselineStore.verify(rec),

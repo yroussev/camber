@@ -12,7 +12,18 @@ standard "p-parameter" family:
   side). (p=4)
 * **5P** -- flat dead-band in the middle with a heating slope below ``Tc_lo`` and
   a cooling slope above ``Tc_hi``. (p=5)  The model for a building that both
-  heats in winter and cools in summer -- the mixed-mode signature.
+  heats in winter and cools in summer -- the mixed-mode signature. **Fallback:** when no
+  dead-band at least one grid step wide fits, the 5P (and 5PZ) fitter returns a 2P line but keeps
+  ``kind="5P"`` with ``change_points=()``; reports label it "2P (5P fallback)"
+  (:func:`camber.mandv.names.label`) and its ``p`` stays 5.
+
+**Zero-intercept kinds** (``3PHZ``, ``3PCZ``, ``5PZ``) are a **CAMBER extension**, not ASHRAE
+Guideline 14 / RP-1050 models: the intercept is fixed at zero (no base load), so ``p`` counts only
+the slopes and change points. They are opt-in, never in :func:`best_model`'s default set.
+
+**Names.** Reports show each kind by its registry label ("3P cooling", "3P heating, zero base
+(CAMBER)"; :mod:`camber.mandv.names`), which also gives the standard name and citation; the
+``kind`` codes here are what data and serialisation carry.
 
 Fitting follows the ASHRAE RP-1050 inverse-model approach: for models with change
 point(s), grid-search the change-point temperature(s) over the observed range and,
@@ -566,10 +577,14 @@ def best_model(
     weights=None,
     temp_bounds: tuple | None = None,
 ) -> ChangePointModel:
-    """Fit several model kinds and return the best by adjusted goodness of fit.
+    """Fit several model kinds and return the one with the lowest BIC.
 
-    Selection uses CV(RMSE) penalized for parameters (more parameters must earn
-    their keep) -- a simple BIC-like guard against overfitting with 5P. The
+    Selection is by the Bayesian information criterion, ``n ln(SSE/n) + p ln(n)`` with every
+    change point counted in ``p`` (more parameters must earn their keep), which guards against
+    overfitting with 5P; a kind whose BIC ties an earlier one within ``_BIC_TIE`` loses to it.
+    (Until 0.105 this docstring said CV(RMSE); the code has always used BIC.) BIC is CAMBER's
+    choice: ASHRAE Guideline 14 and the RP-1050 toolkit do not prescribe a selection criterion.
+    A 5P that fell back to a line competes with its fallback's SSE and 5P's ``p``. The
     "heating/cooling goes to zero" kinds (3PHZ/3PCZ) are not in the default set
     (they encode a modeling assumption -- no base load -- the caller opts into);
     pass them explicitly via ``kinds`` when appropriate. ``time_index`` and ``weights`` are

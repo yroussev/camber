@@ -11,6 +11,11 @@ A forecaster on top of — not replacing — the deterministic core. Two pieces,
   robust band (the residual's median/MAD), turning "unlike its own recent normal" into an FDD
   signal.
 
+**Name** (0.105, #163): ``seasonal_forecast`` is "Mean-Week + drift (LBNL M4 analogue), not an
+M&V method" -- the Mean-Week baseline of LBNL's M&V test reports plus a drift term, with no weather
+term, for forecasting and anomaly detection. Do not report it as an M&V baseline model
+(:mod:`camber.mandv.names`).
+
 numpy/pandas only.
 """
 

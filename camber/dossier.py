@@ -161,7 +161,8 @@ _REFERENCE: dict = {
         "provenance": "LBNL FDD (CC-BY); reproduce via examples/lbnl_fdd/benchmark.py",
     },
     "bdg2_mv": {
-        "title": "Real-data M&V — BDG2 (CC-BY-SA)",
+        # 0.105 (#163): the model by its registry name (camber.mandv.names "best_model")
+        "title": "Real-data M&V — BDG2, daily change-point (2P–5P, BIC) (CC-BY-SA)",
         "rates": {
             "acceptance": RateCI(0.1661, 0.1505, 0.183, 2011),  # pooled G14 baseline-model accept
             "acceptance_chilledwater": RateCI(0.3638, 0.3234, 0.4063, 514),
@@ -183,7 +184,10 @@ _REFERENCE: dict = {
     # Each RateCI is the committed savings-benchmark-baseline.json's uicf and n with a 95% Wilson
     # interval; tests/test_dossier.py recomputes and checks every value.
     "bdg2_mv_savings": {
-        "title": "Real-data M&V savings — BDG2 placebo and injection (CC-BY-SA)",
+        "title": (
+            "Real-data M&V savings — BDG2 placebo and injection, daily change-point (2P–5P, BIC) "
+            "(CC-BY-SA)"
+        ),
         "rates": {
             "placebo_uicf_g14_electricity": RateCI(0.3333, 0.3051, 0.3628, 1023),
             "placebo_uicf_g14_chilledwater": RateCI(0.518, 0.4645, 0.571, 334),

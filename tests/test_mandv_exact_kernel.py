@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv._design import design_rows, projection_variance  # noqa: E402
 from camber.mandv.coverage import ExtrapolationPolicy  # noqa: E402
-from camber.mandv.degreeday import fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import fit_mean_temp_degree_day  # noqa: E402
 from camber.mandv.models import N_PARAMS, ChangePointModel, fit_model  # noqa: E402
 from camber.mandv.normalized import normalized_savings  # noqa: E402
 from camber.mandv.retrofit_isolation import (  # noqa: E402
@@ -82,7 +82,7 @@ def test_in_sample_identity_for_driver_degree_day_and_towt():
     dm = fit_driver_model(x, 1 + x @ [2.0, -1.0] + rng.normal(0, 1, 100))
     assert projection_variance(dm, x).v_param == pytest.approx(dm._fit_record.s2 * 100, rel=1e-8)
     tm = rng.uniform(25, 85, 36)
-    dd = fit_degree_day(tm, 300 + 12 * np.maximum(0, 60 - tm) + rng.normal(0, 10, 36))
+    dd = fit_mean_temp_degree_day(tm, 300 + 12 * np.maximum(0, 60 - tm) + rng.normal(0, 10, 36))
     assert projection_variance(dd, tm).v_param == pytest.approx(dd._fit_record.s2 * 36, rel=1e-6)
     idx = pd.date_range("2024-01-01", periods=4 * 168, freq="1h")
     t = 60 + 10 * np.sin(np.arange(len(idx)) / 168 * 2 * np.pi) + rng.normal(0, 2, len(idx))

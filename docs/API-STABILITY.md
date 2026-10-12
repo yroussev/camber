@@ -672,9 +672,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the keyword-only `timezone=` of `hourly_energy_vs_temp`, `caltrack_savings` and
     `caltrack_savings_hourly`;
   - the private module `mandv._temperature` (`screen_temperature`); the keyword-only
-    `temp_bounds=` of `fit_model`, `best_model`, `fit_towt`, `fit_degree_day` and the
+    `temp_bounds=` of `fit_model`, `best_model`, `fit_towt`, `fit_mean_temp_degree_day` and the
     `intervalfit` frame builders; the trailing `n_temp_screened` field of `ChangePointModel`,
-    `TOWTModel` and `DegreeDayModel` (serialised only when non-zero).
+    `TOWTModel` and `MeanTempDegreeDayModel` (serialised only when non-zero).
 
   **Behaviour changes**, on by default: a daily frame drops days whose meter data cover less
   than 90 % of the day (`min_coverage=0` keeps them); temperatures outside -40 to 140 °F are
@@ -683,6 +683,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   without a zone averages duplicate timestamps into one hour (it summed energy) and warns with
   `TimezoneWarning`, and with `timezone=` returns a tz-aware local index. Clean data, with whole
   days and plausible temperatures, gives the same numbers as before.
+- **M&V names registry** (0.105; #163), additive and provisional: the module
+  `camber.mandv.names` (`MVName`, `MV_NAMES`, `GROUPS`, `mv_name`, `label`, `model_label`,
+  `citations`); in `camber.references` the kinds `PAPER` and `STANDARD`, `MV_REFERENCES`, the
+  trailing `Reference` fields `authors`, `year`, `venue` and `doi`, and `Reference.citation()`;
+  `camber.mandv.rc_model.OPTION_D_BASIS`; and `camber.mandv.degreeday.fit_mean_temp_degree_day` /
+  `MeanTempDegreeDayModel` (the old names are deprecated, below). The row set and its wording may
+  change; the `kind` codes in data do not. **Behaviour changes:** the M&V report's Model, Method
+  and Degree-day kind columns, the `mv_baseline` summary, the energy-signature and OAT-scatter
+  legends and titles show registry labels ("3P cooling", not "3PC"); `OptionDSavings.basis` of a
+  claimed saving reads "Option D-style modeled savings (calibrated 1R1C grey box;
+  pre-implementation estimate)". Metrics and serialised models keep the `kind` codes.
 
 ### The read API server: `camber.api.server`
 
@@ -721,6 +732,8 @@ Currently deprecated names and code paths, each with its replacement. Each emits
 |---|---|---|---|
 | Site-keyed fault and baseline records (fingerprint `sha1(site, equip, rule/kind)`), read through the compatibility path of a `FaultLifecycle` / `BaselineStore` opened with `facility_id=` | 0.86 | 2.0 | `camber portfolio migrate` (re-keys them to `facility_id` once, on disk) |
 | The ticket field `legacy_fingerprint` (present only when `facility_id=` is passed) | 0.86 | 2.0 | the facility-keyed `fingerprint` |
+| `camber.mandv.degreeday.fit_degree_day` | 0.105 | 2.0 | `fit_mean_temp_degree_day` (same arguments and result) |
+| `camber.mandv.degreeday.DegreeDayModel` | 0.105 | 2.0 | `MeanTempDegreeDayModel` (stored models keep `"type": "DegreeDayModel"` and read back unchanged) |
 
 Stores opened **without** a facility (plain stores outside a portfolio workspace) are not
 deprecated in this release and do not warn: nothing there can be migrated to a facility id yet.

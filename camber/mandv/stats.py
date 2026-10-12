@@ -71,16 +71,19 @@ class FitStats:
         return asdict(self)
 
 
-# ASHRAE Guideline 14 CV(RMSE) acceptance thresholds by modeling interval. Finer
-# resolution carries more non-temperature scatter, so the threshold is looser:
-# monthly ~15%, daily/hourly ~30% (per ASHRAE Guideline 14-2014).
+# CV(RMSE) acceptance thresholds by modeling interval. Finer resolution carries more
+# non-temperature scatter, so the threshold is looser. ASHRAE Guideline 14-2014 gives the monthly
+# (15%) and hourly (30%) values; the **daily 30% tier is CAMBER's interpolation**, not a G14
+# value, so a daily verdict means "meets CAMBER's daily tier".
 _CV_RMSE_MAX = {"monthly": 0.15, "daily": 0.30, "hourly": 0.30}
 
 
 def cv_rmse_max_for(interval: str) -> float:
-    """G14 CV(RMSE) acceptance threshold for a modeling interval.
+    """CV(RMSE) acceptance threshold for a modeling interval (G14 monthly / hourly).
 
-    ``interval`` in {"monthly","daily","hourly"}; unknown -> 0.20 (a middle value).
+    ``interval`` in {"monthly","daily","hourly"}; unknown -> 0.20 (a middle value). The monthly
+    (15%) and hourly (30%) values are ASHRAE Guideline 14's; the daily 30% is CAMBER's
+    interpolation, not a G14 value.
     Judging an hourly model by the monthly gate is incorrect -- use this.
     """
     return _CV_RMSE_MAX.get(interval, 0.20)

@@ -10,6 +10,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv.rc_model import (  # noqa: E402
+    OPTION_D_BASIS,
     Calibration,
     OptionDSavings,
     RCModel,
@@ -108,7 +109,7 @@ def test_option_d_savings_from_setback():
     assert isinstance(sv, OptionDSavings) and sv.valid
     assert sv.avoided_energy > 0 and 0 < sv.fractional_savings < 1
     assert sv.frac_savings_uncertainty == sv.frac_savings_uncertainty  # not NaN
-    assert sv.basis == "IPMVP Option D (calibrated simulation)"
+    assert sv.basis == OPTION_D_BASIS
 
 
 def test_savings_matches_direct_profile_difference():
@@ -147,4 +148,4 @@ def test_ecm_modeled_savings_bridges_to_option_d():
     cal = calibrate(oat, found, RCModel(0.8, 3.0, 24.0).predict(oat, found))
     sv = modeled_savings(cal, oat, found, corrected)
     assert isinstance(sv, OptionDSavings) and sv.valid
-    assert sv.basis == "IPMVP Option D (calibrated simulation)" and sv.avoided_energy > 0
+    assert sv.basis == OPTION_D_BASIS and sv.avoided_energy > 0

@@ -41,7 +41,7 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - **Baseline fits screen implausible temperatures (#159).** A placeholder such as -237 for a
   missing outdoor temperature became TOWT's first temperature breakpoint, or a change-point
   model's coldest point. `fit_towt`, `models.fit_model` / `best_model`,
-  `degreeday.fit_degree_day` and the `intervalfit` frames now treat values outside the
+  `degreeday.fit_mean_temp_degree_day` and the `intervalfit` frames now treat values outside the
   sensor-health outdoor-air range (-40 to 140 °F) as missing. The count is reported as
   `n_temp_screened` on the model and the frame, and in the savings caveats. `temp_bounds=` sets
   another range.
@@ -56,6 +56,22 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
   length on the site's clock).
+- **An M&V names registry (#163).** `camber.mandv.names` gives every model kind, degree-day kind,
+  savings method and M&V function one row: its CAMBER code, the label reports show, the
+  industry-standard name, the citation, the implementing function and the known differences from
+  the standard (`mv_name`, `label`, `model_label`, `citations`). The "Method correspondence"
+  table of `docs/MANDV.md` is generated from it (`scripts/mv_names_doc.py`, checked by the tests
+  and `scripts/gates.sh`), and a new "Naming and citations" section says how to cite a model by
+  its standard name and how to describe an ensemble by its components.
+- **M&V citations** in `camber.references`: ASHRAE Guideline 14-2014, the RP-1050 Inverse
+  Modeling Toolkit (Kissock, Haberl and Claridge 2003), PRISM (Fels 1986), TOWT (Mathieu, Price,
+  Kiliccote and Piette 2011), Granderson et al. 2015 (LBNL-187596), the LBNL M&V test-method
+  reports LBNL-187225 and LBNL-6963E, CalTRACK 2.0, IPMVP Core Concepts 2022 and the DOE SEP
+  50001 M&V Protocol 2019. New kinds `PAPER` and `STANDARD`, `MV_REFERENCES`, the `Reference`
+  fields `authors`, `year`, `venue` and `doi`, and `Reference.citation()`. `docs/REFERENCES.md`
+  lists them.
+- `mandv.degreeday.fit_mean_temp_degree_day` and `MeanTempDegreeDayModel`, the honest names of
+  the period-mean-temperature degree-day model (see Deprecated).
 
 ### Changed
 - Clean data (whole days, plausible temperatures, no duplicate stamps) gives the same numbers as
@@ -63,6 +79,32 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   M&V frames, fits and savings change as described under Fixed. The default `rate_is_energy_rate`
   differs between the frame builders (`True`) and the savings functions (`False`). It is now
   documented and is unchanged.
+- **Reports name M&V models by their registry labels (#163).** The M&V report's Model, Method and
+  Degree-day kind columns, the `mv_baseline` summary (daily and billing), the energy-signature
+  and OAT-scatter legends and titles say "3P cooling", "3P heating, zero base (CAMBER)" or
+  "2P (5P fallback)" instead of "3PC", "3PHZ" or a "5P" with no change points. The daily summary
+  says the 30 % daily CV(RMSE) tier is CAMBER's, not G14's. The validation dossier names the
+  BDG2 model "daily change-point (2P–5P, BIC)". The `kind` codes in metrics, JSON and stored
+  baselines are unchanged; the chained report's version rows gain `model_label`.
+- **Option D savings are labelled for what they are (#163).** A claimed
+  `OptionDSavings.basis` reads "Option D-style modeled savings (calibrated 1R1C grey box;
+  pre-implementation estimate)" (2R2C or multi-zone RC for those models), not "IPMVP Option D
+  (calibrated simulation)": the model is a calibrated grey box, not a simulation program. The
+  calibration gate is unchanged; the docs now say that NMBE is gated alongside CV(RMSE).
+- Docstrings and docs corrected (#163): `best_model` selects by BIC (its docstring said
+  CV(RMSE)); the 5P fallback to a line and the zero-intercept kinds (a CAMBER extension) are
+  documented; the daily 30 % CV(RMSE) tier is CAMBER's interpolation, not a Guideline 14 value;
+  TOWT is labelled "TOWT (CAMBER variant)" with its differences from the reference;
+  `seasonal_forecast` is "Mean-Week + drift (LBNL M4 analogue), not an M&V method"; and
+  `docs/MANDV.md` no longer says `caltrack_savings` is "exactly" CalTRACK Daily (it is not;
+  faithful CalTRACK methods follow, #156).
+
+### Deprecated
+- `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 2.0: the
+  names said "variable-base degree-day", but the model uses each period's mean temperature and one
+  shared balance point. Use `fit_mean_temp_degree_day` and `MeanTempDegreeDayModel`; the old
+  names keep working with a `DeprecationWarning`, and stored models keep `"type":
+  "DegreeDayModel"`.
 
 ## [0.104.0] — Unreleased
 

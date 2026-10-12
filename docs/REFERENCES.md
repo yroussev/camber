@@ -81,6 +81,32 @@ covers chillers, but not their compressor starts.
 ECAM, the Energy Charting and Metrics tool the PNNL interval-data guide uses, is a related tool
 listed in the [ecosystem](ECOSYSTEM.md); CAMBER neither ships nor wraps it.
 
+## Measurement and verification
+
+The standards, protocols and papers behind the names of CAMBER's M&V models and methods (0.105,
+#163). The [names registry](MANDV.md#method-correspondence) (`camber.mandv.names`) cites them for
+each model and method; `Reference.citation()` gives each in full, with its venue and DOI. Several
+are paywalled: the link is then a library or publisher record, never a copy. The same link policy
+applies.
+
+| Id | Title | Authors / publisher | Year | Number | Verified |
+|---|---|---|---|---|---|
+| `ashrae-g14-2014` | [ASHRAE Guideline 14-2014, Measurement of Energy, Demand, and Water Savings](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | ASHRAE | 2014 | Guideline 14-2014 | 2026-10-12 |
+| `ashrae-rp1050-imt` | [Inverse Modeling Toolkit: Numerical Algorithms (ASHRAE RP-1050)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Kissock, J.K., Haberl, J.S., Claridge, D.E. | 2003 | KC-03-02-1 | 2026-10-12 |
+| `fels-1986-prism` | [PRISM: An introduction](https://doi.org/10.1016/0378-7788(86)90003-4) | Fels, M.F. | 1986 | — | 2026-10-12 |
+| `mathieu-2011-towt` | [Quantifying Changes in Building Electricity Use, With Application to Demand Response](https://www.osti.gov/biblio/1048308) | Mathieu, J.L., Price, P.N., Kiliccote, S., Piette, M.A. | 2011 | LBNL-4944E | 2026-10-12 |
+| `granderson-2015-baselines` | [Automated measurement and verification: Performance of public domain whole-building electric baseline models](https://www.osti.gov/pages/biblio/1247594) | Granderson, J., Price, P.N., Jump, D., Addy, N., Sohn, M.D. | 2015 | LBNL-187596 | 2026-10-12 |
+| `lbnl-187225` | [Assessment of Automated Measurement and Verification (M&V) Methods](https://www.osti.gov/biblio/1236174) | Granderson, J., Touzani, S., Custodio, C., Sohn, M.D., Fernandes, S., Jump, D. | 2015 | LBNL-187225 | 2026-10-12 |
+| `lbnl-6963e` | [Performance Metrics and Objective Testing Methods for Energy Baseline Modeling Software](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | Granderson, J., Jump, D., Price, P.N., Sohn, M.D. | 2014 | LBNL-6963E | 2026-10-12 |
+| `caltrack-2` | [CalTRACK Technical Documentation: Methods (CalTRACK 2.0)](https://docs.caltrack.org/en/latest/methods.html) | CalTRACK (LF Energy OpenEEmeter) | 2018 | — | 2026-10-12 |
+| `evo-ipmvp-core-2022` | [International Performance Measurement and Verification Protocol (IPMVP) Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | Efficiency Valuation Organization (EVO) | 2022 | EVO 10000-1:2022 | 2026-10-12 |
+| `doe-sep-mv-2019` | [Superior Energy Performance 50001 Program Measurement & Verification Protocol: 2019 (Edition 2)](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | U.S. Department of Energy | 2023 | — | 2026-10-12 |
+
+Two links need care: the SEP 50001 M&V Protocol's host (`betterbuildingssolutioncenter.energy.gov`)
+serves an incomplete certificate chain, so the weekly link check may report it as an error while a
+browser opens it; and ASHRAE has no stable public page for Guideline 14-2014 (superseded by
+Guideline 14-2023), so the link is ASHRAE's titles-and-scopes list.
+
 ## Rules without a reference
 
 These rules have no Re-tuning guide or chapter that clearly covers them, so they carry no link:

@@ -1,4 +1,9 @@
-"""IPMVP Option D — a dependency-light grey-box RC building model + calibration + modeled savings.
+"""Option D-style modeled savings — a dependency-light grey-box RC model, calibration and savings.
+
+The savings are labelled **"Option D-style modeled savings (calibrated 1R1C grey box;
+pre-implementation estimate)"** (0.105, #163; :data:`OPTION_D_BASIS`): IPMVP Option D is
+calibrated *simulation*, and this is a calibrated grey box used to estimate a control change before
+it is made, so the result is reported in that standard's style rather than as Option D itself.
 
 Options A/B/C in this package are *inverse* models: they regress measured energy on temperature and
 cannot answer a **counterfactual** ("what would this building use if we fixed the control?"). Option
@@ -15,7 +20,9 @@ where ``tau`` sets how far the zone drifted, so the whole thing stays **linear i
 given ``tau``**. So calibration is exactly the change-point fitter's move (`camber.mandv.models`):
 **grid the one nonlinear parameter ``tau``, OLS the linear ones, keep the best CV(RMSE)** — no
 scipy. Acceptance uses the existing ASHRAE Guideline 14 gate
-(`stats.fit_stats` + `cv_rmse_max_for`).
+(`stats.fit_stats` + `cv_rmse_max_for`), which requires all three of CV(RMSE) within the
+interval's limit (30 % hourly), |NMBE| <= 0.5 % and R² >= 0.75: NMBE is gated alongside
+CV(RMSE).
 
 Identifiability note: energy alone cannot separate conductance from HVAC efficiency, so the
 calibrated parameters are the **effective** combinations (metered energy per °F·h, per
@@ -216,10 +223,28 @@ def calibrate(
 
 # --------------------------------------------------------------------------- Option-D savings
 
+#: ``OptionDSavings.basis`` of a claimed saving from a 1R1C calibration (0.105, #163; the label of
+#: the ``option_d`` row of :mod:`camber.mandv.names`). It was "IPMVP Option D (calibrated
+#: simulation)": the model is a calibrated grey box, not a building simulation program, and the
+#: saving is an estimate made before the change is implemented.
+OPTION_D_BASIS = (
+    "Option D-style modeled savings (calibrated 1R1C grey box; pre-implementation estimate)"
+)
+
+
+def _option_d_basis(model) -> str:
+    """The basis text for ``model``'s grey-box structure (1R1C, 2R2C or multi-zone)."""
+    structure = {"RC2Model": "2R2C", "MultiZoneModel": "multi-zone RC"}.get(type(model).__name__)
+    return OPTION_D_BASIS if structure is None else OPTION_D_BASIS.replace("1R1C", structure)
+
 
 @dataclass
 class OptionDSavings:
-    """Modeled avoided energy from an as-found → as-corrected control change (IPMVP Option D)."""
+    """Modeled avoided energy from an as-found → as-corrected control change (Option D-style).
+
+    ``basis`` names it: :data:`OPTION_D_BASIS` (or its 2R2C / multi-zone form) when a saving is
+    claimed, otherwise why none is.
+    """
 
     avoided_energy: float | None  # None when the calibration failed G14 acceptance
     energy_as_found: float
@@ -261,7 +286,7 @@ def option_d_savings(calibration, oat, as_found_schedule, as_corrected_schedule)
             p_fit=getattr(fit, "p", 2) or 2,
             rho=0.0 if rho is None else rho,
         ) / abs(frac)
-        basis = "IPMVP Option D (calibrated simulation)"
+        basis = _option_d_basis(model)
     else:
         fsu = float("nan")
         basis = (

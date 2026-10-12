@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import html as _html
 
+from ..mandv.names import label as _mv_label
+
 __all__ = ["mv_report_html"]
 
 _BANNER = (
@@ -107,8 +109,8 @@ def _meter(m, charts: bool) -> str:
                 [
                     _e(v["version"]),
                     _e(f"{v['window'][0]} .. {v['window'][1]}"),
-                    _e(v["model"]),
-                    _e(v["method"]),
+                    _e(v.get("model_label") or _mv_label(v["model"])),
+                    _e(_mv_label(v["method"])),
                     _e(v["frozen_at"]),
                     _e(v["accepted_by"]),
                     _e(v["reason"]),
@@ -219,7 +221,7 @@ def _billing_section(b: dict, en, unit: str) -> str:
                     _e(r.get("base_f")),
                     _e(_num(r.get("heating_base_f"), "{:g}")),
                     _e(_num(r.get("cooling_base_f"), "{:g}")),
-                    _e(r.get("dd_kind") or "–"),
+                    _e(_mv_label(r.get("dd_kind")) or "–"),
                 ]
                 for r in b.get("bases") or []
             ],

@@ -1227,8 +1227,10 @@
   ],
   "camber.mandv.degreeday": [
     "DegreeDayModel",
+    "MeanTempDegreeDayModel",
     "degree_days",
-    "fit_degree_day"
+    "fit_degree_day",
+    "fit_mean_temp_degree_day"
   ],
   "camber.mandv.ecm_savings": [
     "BTU_PER_THERM",
@@ -1273,6 +1275,15 @@
     "ChangePointDriverModel",
     "fit_cp_driver_model"
   ],
+  "camber.mandv.names": [
+    "GROUPS",
+    "MVName",
+    "MV_NAMES",
+    "citations",
+    "label",
+    "model_label",
+    "mv_name"
+  ],
   "camber.mandv.nonroutine": [
     "NonRoutineResult",
     "StepChange",
@@ -1302,6 +1313,7 @@
   "camber.mandv.rc_model": [
     "Calibration",
     "MultiZoneModel",
+    "OPTION_D_BASIS",
     "OptionDSavings",
     "RC2Model",
     "RCModel",
@@ -1627,12 +1639,15 @@
   "camber.references": [
     "GUIDE",
     "KINDS",
+    "MV_REFERENCES",
+    "PAPER",
     "PROJECT",
     "REFERENCES",
     "RELATED_TOOL",
     "REPORT",
     "RULE_REFERENCES",
     "Reference",
+    "STANDARD",
     "TOOL_GUIDE",
     "TRAINING",
     "WALKDOWN_REFERENCES",

@@ -326,13 +326,14 @@ Flags: persistence window, per-class spec.
 
 ## M&V — measurement & verification
 
-See **[MANDV.md](MANDV.md)**. Change-point models (`mandv.models`, 2P–5P + zero variants), LBNL
-TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv.stats`), CUSUM
+See **[MANDV.md](MANDV.md)**. Change-point models (`mandv.models`, 2P–5P + zero variants), a TOWT
+variant (`mandv.towt`, after LBNL's Mathieu et al. 2011), fit statistics + G14 fractional savings uncertainty (`mandv.stats`), CUSUM
 (`mandv.cusum`), weather normalization (`mandv.weather`), normalized annual savings
 (`mandv.normalized`), non-routine adjustment (`mandv.nonroutine`), Option-B retrofit isolation
-(`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **variable-base degree-day**
-baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), **IPMVP Option A**
-(`mandv.option_a`, measured Δparameter × stipulated duty), and **IPMVP Option D** (`mandv.rc_model`, a
+(`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **degree-day**
+baseline on period-mean temperature (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance
+point; the variable-base form on bills is `mandv.basetemp`), **IPMVP Option A**
+(`mandv.option_a`, measured Δparameter × stipulated duty), and **Option D-style modeled savings** (`mandv.rc_model`, a
 1R1C **or 2R2C** grey-box calibrated to metered energy — grid-τ + OLS, G14-gated — run as-found vs
 as-corrected for a modeled pre-implementation saving, with **multi-zone** stacked-OLS calibration and
 an optional **EnergyPlus** cross-validator (`interop.energyplus`); see **[OPTION-D.md](OPTION-D.md)**).

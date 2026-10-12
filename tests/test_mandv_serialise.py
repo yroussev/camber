@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv.coverage import assess_coverage  # noqa: E402
-from camber.mandv.degreeday import DegreeDayModel, fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import MeanTempDegreeDayModel, fit_mean_temp_degree_day  # noqa: E402
 from camber.mandv.models import N_PARAMS, ChangePointModel, fit_model  # noqa: E402
 from camber.mandv.retrofit_isolation import DriverModel, fit_driver_model  # noqa: E402
 from camber.mandv.towt import TOWTModel, fit_towt  # noqa: E402
@@ -98,14 +98,14 @@ def test_degree_day_round_trip():
     rng = np.random.default_rng(11)
     tm = rng.uniform(25, 85, 36)
     em = 300 + 12 * np.maximum(0, 60 - tm) + 9 * np.maximum(0, tm - 65) + rng.normal(0, 10, 36)
-    dd = fit_degree_day(tm, em)
-    again = _rt(dd, DegreeDayModel)
+    dd = fit_mean_temp_degree_day(tm, em)
+    again = _rt(dd, MeanTempDegreeDayModel)
     tq = np.linspace(0, 100, 40)
     assert np.array_equal(dd.predict(tq), again.predict(tq))
     assert again.fit.r2 == dd.fit.r2 and again._fit_record.s2 == dd._fit_record.s2
     d = dd.as_dict()
     d["fit"]["a_future_field"] = 1  # unknown FitStats keys are ignored
-    assert DegreeDayModel.from_dict(d).fit.n == dd.fit.n
+    assert MeanTempDegreeDayModel.from_dict(d).fit.n == dd.fit.n
 
 
 def test_towt_round_trip():

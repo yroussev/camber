@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..mandv.models import best_model
+from ..mandv.names import model_label
 
 
 def _r2(model, T, y):
@@ -46,13 +47,13 @@ def energy_signature(
 
     ax.scatter(T, y, s=18, alpha=0.6, color="#3366cc", label="measured")
     grid = np.linspace(T.min(), T.max(), 200)
-    ax.plot(grid, model.predict(grid), color="#cc3333", lw=2.0, label=f"{model.kind} fit")
+    ax.plot(grid, model.predict(grid), color="#cc3333", lw=2.0, label=f"{model_label(model)} fit")
     for cp in model.change_points:
         ax.axvline(float(cp), color="grey", lw=0.8, ls="--")
 
     r2 = _r2(model, T, y)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_title(title or f"Energy signature — {model.kind} model, R² {r2:.3f}")
+    ax.set_title(title or f"Energy signature — {model_label(model)} model, R² {r2:.3f}")
     ax.legend(loc="best", fontsize=8)
     return ax, model

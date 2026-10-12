@@ -7,6 +7,13 @@ D** answers the *counterfactual* — "what would this building use if we fixed t
 is a dependency-light, clean-room implementation (numpy only; ISO 13790 simple-hourly / ASHRAE
 inverse-modeling lineage). It completes the IPMVP set: **A, B, C, and now D** all ship.
 
+**What to call the result.** IPMVP Option D is calibrated *simulation*; this is a calibrated
+grey-box model used to estimate a control change before it is made. So a claimed saving's `basis`
+reads **"Option D-style modeled savings (calibrated 1R1C grey box; pre-implementation estimate)"**
+(2R2C or multi-zone RC in place of 1R1C for those models; until 0.105 it read "IPMVP Option D
+(calibrated simulation)"). Report it under that name; the [names registry](MANDV.md#naming-and-citations)
+lists the differences.
+
 *Calibrate a forward 1R1C model to metered energy, gate it on G14, then re-run the same model under as-found vs as-corrected control for a modeled saving.*
 
 ```mermaid
@@ -15,7 +22,7 @@ flowchart LR
     sched["schedule"] --> cal
     met["metered_energy"] --> cal
     cal -- "grid tau + OLS" --> model["RCModel(ua_eff, gain_eff, tau)"]
-    cal --> gate{"G14 gate: CV(RMSE) <= 30%"}
+    cal --> gate{"G14 gate: CV(RMSE) <= 30%, NMBE <= 0.5%, R2 >= 0.75"}
     gate -- "accept" --> run["predict: as-found vs as-corrected"]
     model --> run
     run --> sv["option_d_savings"]
@@ -57,7 +64,9 @@ cal.fit.cv_rmse  # hourly CV(RMSE)
 Calibration mirrors the change-point fitter (`camber.mandv.models`): the single nonlinear parameter
 `tau` is **grid-searched** (coarse then refined), and for each `tau` the linear `ua_eff`/`gain_eff` are
 solved by **OLS** — no scipy. Acceptance is the existing G14 gate (`stats.fit_stats` +
-`cv_rmse_max_for("hourly")` = CV(RMSE) ≤ 30%). Calibration is deterministic
+`cv_rmse_max_for("hourly")` = CV(RMSE) ≤ 30%). **NMBE is gated alongside CV(RMSE)**: `fit_stats`
+accepts a calibration only when all three hold, CV(RMSE) ≤ 30 %, |NMBE| ≤ 0.5 % and R² ≥ 0.75
+(its defaults). Calibration is deterministic
 (`validation.check_determinism`).
 
 ## Modeled savings — as-found vs as-corrected
@@ -69,7 +78,8 @@ sv = option_d_savings(cal, oat, as_found_schedule, as_corrected_schedule)
 sv.avoided_energy  # modeled avoided energy (None if the calibration failed the gate)
 sv.fractional_savings  # avoided / as-found
 sv.frac_savings_uncertainty  # ASHRAE G14 Annex-B fractional savings uncertainty
-sv.basis  # "IPMVP Option D (calibrated simulation)"  |  a not-claimed note
+sv.basis  # "Option D-style modeled savings (calibrated 1R1C grey box; pre-implementation estimate)"
+#           |  a not-claimed note
 sv.valid  # calibration met the G14 gate
 ```
 

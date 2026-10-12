@@ -1,4 +1,5 @@
-"""Linked references: the free PNNL Building Re-tuning resources behind CAMBER's rules.
+"""Linked references: the free PNNL Building Re-tuning resources behind CAMBER's rules, and the
+M&V standards and papers behind CAMBER's model and method names.
 
 Provisional (0.96, #78).
 
@@ -8,6 +9,11 @@ stable id, its title, publisher, document number, a public URL, a kind and the d
 last checked. :data:`RULE_REFERENCES` maps a rule name to the references a reader should open to
 learn more about that finding, and reports use it to add "Learn more" links and a "Further
 reading" list.
+
+**M&V references** (0.105, #163). :data:`MV_REFERENCES` lists the standards, protocols and papers
+that :mod:`camber.mandv.names` cites for each M&V model and method name. They carry their authors,
+year, venue and DOI so :meth:`Reference.citation` can give a full citation. Some sit behind a
+paywall; the link is then the publisher's or a library's record page, never a copy.
 
 **Link policy.** CAMBER links to these documents and never copies them: no text, figures or PDFs
 from them are reproduced in the repository or in a report. Where a guide is mapped to a rule, the
@@ -29,9 +35,12 @@ __all__ = [
     "REPORT",
     "PROJECT",
     "RELATED_TOOL",
+    "PAPER",
+    "STANDARD",
     "KINDS",
     "Reference",
     "REFERENCES",
+    "MV_REFERENCES",
     "RULE_REFERENCES",
     "WALKDOWN_REFERENCES",
     "reference",
@@ -49,11 +58,14 @@ TOOL_GUIDE = "tool_guide"  # a guide to an analysis tool
 REPORT = "report"  # a technical report
 PROJECT = "project_page"  # the project's own web pages
 RELATED_TOOL = "related_tool"  # a related tool CAMBER does not ship or wrap
-KINDS = (GUIDE, TRAINING, TOOL_GUIDE, REPORT, PROJECT, RELATED_TOOL)
+PAPER = "paper"  # a journal or conference paper (0.105)
+STANDARD = "standard"  # a standard, guideline, protocol or method specification (0.105)
+KINDS = (GUIDE, TRAINING, TOOL_GUIDE, REPORT, PROJECT, RELATED_TOOL, PAPER, STANDARD)
 
 _PNNL = "Pacific Northwest National Laboratory"
 _BASE = "https://www.pnnl.gov/sites/default/files/media/file/"
 _VERIFIED = "2026-09-29"
+_MV_VERIFIED = "2026-10-12"
 # the training course the ten chapters belong to (every chapter carries this number)
 _COURSE = "Large Commercial Buildings: Re-tuning for Efficiency"
 _COURSE_NO = "PNNL-SA-85063"
@@ -72,9 +84,24 @@ class Reference:
     kind: str  # one of KINDS
     verified_on: str  # ISO date the URL last answered 200
     section: str = ""
+    # bibliographic detail for papers, reports and standards (0.105; "" when not applicable)
+    authors: str = ""
+    year: str = ""
+    venue: str = ""  # journal / proceedings, volume(issue), pages
+    doi: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+    def citation(self) -> str:
+        """A plain-text citation: authors (year). Title. Venue. Number. DOI (0.105)."""
+        parts = [f"{self.authors} ({self.year})." if self.authors else ""]
+        parts.append(f"{self.title}.")
+        parts += [f"{self.venue}." if self.venue else "", f"{self.number}." if self.number else ""]
+        parts.append(f"doi:{self.doi}." if self.doi else "")
+        if not self.venue and not self.authors:
+            parts.append(f"{self.publisher}.")
+        return " ".join(p for p in parts if p)
 
     def label(self) -> str:
         """A human label: the title plus the document number when there is one."""
@@ -277,6 +304,126 @@ _ALL = (
         RELATED_TOOL,
         _VERIFIED,
     ),
+    # --- M&V standards, protocols and papers (0.105, #163; camber.mandv.names) ----------------
+    Reference(
+        "ashrae-g14-2014",
+        "ASHRAE Guideline 14-2014, Measurement of Energy, Demand, and Water Savings",
+        "ASHRAE",
+        "Guideline 14-2014",
+        "https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes",
+        STANDARD,
+        _MV_VERIFIED,
+        year="2014",
+    ),
+    Reference(
+        "ashrae-rp1050-imt",
+        "Inverse Modeling Toolkit: Numerical Algorithms (ASHRAE RP-1050)",
+        "ASHRAE",
+        "KC-03-02-1",
+        "https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451",
+        PAPER,
+        _MV_VERIFIED,
+        authors="Kissock, J.K., Haberl, J.S., Claridge, D.E.",
+        year="2003",
+        venue="ASHRAE Transactions 109(2)",
+    ),
+    Reference(
+        "fels-1986-prism",
+        "PRISM: An introduction",
+        "Elsevier",
+        "",
+        "https://doi.org/10.1016/0378-7788(86)90003-4",
+        PAPER,
+        _MV_VERIFIED,
+        authors="Fels, M.F.",
+        year="1986",
+        venue="Energy and Buildings 9(1-2):5-18",
+        doi="10.1016/0378-7788(86)90003-4",
+    ),
+    Reference(
+        "mathieu-2011-towt",
+        "Quantifying Changes in Building Electricity Use, With Application to Demand Response",
+        "IEEE",
+        "LBNL-4944E",
+        "https://www.osti.gov/biblio/1048308",
+        PAPER,
+        _MV_VERIFIED,
+        authors="Mathieu, J.L., Price, P.N., Kiliccote, S., Piette, M.A.",
+        year="2011",
+        venue="IEEE Transactions on Smart Grid 2(3):507-518",
+        doi="10.1109/TSG.2011.2145010",
+    ),
+    Reference(
+        "granderson-2015-baselines",
+        "Automated measurement and verification: Performance of public domain whole-building "
+        "electric baseline models",
+        "Elsevier",
+        "LBNL-187596",
+        "https://www.osti.gov/pages/biblio/1247594",
+        PAPER,
+        _MV_VERIFIED,
+        authors="Granderson, J., Price, P.N., Jump, D., Addy, N., Sohn, M.D.",
+        year="2015",
+        venue="Applied Energy 144:106-113",
+        doi="10.1016/j.apenergy.2015.01.026",
+    ),
+    Reference(
+        "lbnl-187225",
+        "Assessment of Automated Measurement and Verification (M&V) Methods",
+        "Lawrence Berkeley National Laboratory",
+        "LBNL-187225",
+        "https://www.osti.gov/biblio/1236174",
+        REPORT,
+        _MV_VERIFIED,
+        authors="Granderson, J., Touzani, S., Custodio, C., Sohn, M.D., Fernandes, S., Jump, D.",
+        year="2015",
+        doi="10.2172/1236174",
+    ),
+    Reference(
+        "lbnl-6963e",
+        "Performance Metrics and Objective Testing Methods for Energy Baseline Modeling Software",
+        "Lawrence Berkeley National Laboratory",
+        "LBNL-6963E",
+        "https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf",
+        PAPER,
+        _MV_VERIFIED,
+        authors="Granderson, J., Jump, D., Price, P.N., Sohn, M.D.",
+        year="2014",
+        venue="2014 ACEEE Summer Study on Energy Efficiency in Buildings, paper 11-734",
+    ),
+    Reference(
+        "caltrack-2",
+        "CalTRACK Technical Documentation: Methods (CalTRACK 2.0)",
+        "CalTRACK (LF Energy OpenEEmeter)",
+        "",
+        "https://docs.caltrack.org/en/latest/methods.html",
+        STANDARD,
+        _MV_VERIFIED,
+        year="2018",
+    ),
+    Reference(
+        "evo-ipmvp-core-2022",
+        "International Performance Measurement and Verification Protocol (IPMVP) Core Concepts "
+        "2022",
+        "Efficiency Valuation Organization (EVO)",
+        "EVO 10000-1:2022",
+        "https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp",
+        STANDARD,
+        _MV_VERIFIED,
+        year="2022",
+    ),
+    Reference(
+        "doe-sep-mv-2019",
+        "Superior Energy Performance 50001 Program Measurement & Verification Protocol: 2019 "
+        "(Edition 2)",
+        "U.S. Department of Energy",
+        "",
+        "https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/"
+        "sep-50001-measurement-and-verification-protocol",
+        STANDARD,
+        _MV_VERIFIED,
+        year="2023",
+    ),
 )
 
 #: every reference, by id (insertion order is page order on the references page)
@@ -359,6 +506,21 @@ RULE_REFERENCES: dict = {
     "hw_pump_summer_lockout": ("pnnl-guide-plant-heating", _CH8),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
+
+
+#: The M&V standards, protocols and papers :mod:`camber.mandv.names` cites (0.105, #163).
+MV_REFERENCES: tuple = (
+    "ashrae-g14-2014",
+    "ashrae-rp1050-imt",
+    "fels-1986-prism",
+    "mathieu-2011-towt",
+    "granderson-2015-baselines",
+    "lbnl-187225",
+    "lbnl-6963e",
+    "caltrack-2",
+    "evo-ipmvp-core-2022",
+    "doe-sep-mv-2019",
+)
 
 
 #: The walk-down chapter: every item of the RCx report's "Verify on site" checklist links to it

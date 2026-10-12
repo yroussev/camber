@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from camber.config import run_config
-from camber.mandv.degreeday import DegreeDayModel, fit_degree_day
+from camber.mandv.degreeday import MeanTempDegreeDayModel, fit_mean_temp_degree_day
 from camber.mandv.stats import logical_signs, model_regression_tests, sep_validity
 from camber.model.roles import Role
 from camber.mvrun import baseline_window_check
@@ -81,30 +81,32 @@ def _heating_only(seed=2):
 
 
 def test_both_fit_prefers_a_logical_balance_point():
-    m = fit_degree_day(T, _heating_only())
+    m = fit_mean_temp_degree_day(T, _heating_only())
     assert m.heating_slope >= 0 and m.cooling_slope >= 0
     assert m.caveats == [] and m.fit.accept
 
 
 def test_a_wrong_sign_is_declined_with_a_caveat():
-    m = fit_degree_day(T, _heating_only(), balance_point=53.0)  # the v0.90.0 pick
+    m = fit_mean_temp_degree_day(T, _heating_only(), balance_point=53.0)  # the v0.90.0 pick
     assert m.cooling_slope < 0
     assert m.fit.accept is False
     assert m.caveats and "cooling slope" in m.caveats[0] and "kind='heating'" in m.caveats[0]
-    rt = DegreeDayModel.from_dict(m.as_dict())
+    rt = MeanTempDegreeDayModel.from_dict(m.as_dict())
     assert rt.caveats == m.caveats
     # a heating-only model with a negative slope is declined too
-    h = fit_degree_day(T, 2000 - 10 * np.maximum(0, 60 - T), kind="heating", balance_point=60.0)
+    h = fit_mean_temp_degree_day(
+        T, 2000 - 10 * np.maximum(0, 60 - T), kind="heating", balance_point=60.0
+    )
     assert h.heating_slope < 0 and not h.fit.accept and "heating slope" in h.caveats[0]
 
 
 def test_logical_signs_cover_degree_day_models_and_the_sep_test_uses_them():
-    m = fit_degree_day(T, _heating_only(), balance_point=53.0)
+    m = fit_mean_temp_degree_day(T, _heating_only(), balance_point=53.0)
     assert logical_signs(m) == {"heating_slope": 1, "cooling_slope": 1}
     tests = model_regression_tests(m, T, _heating_only())
     v = sep_validity(tests, signs=logical_signs(m))
     assert not v.sep_valid and any("cooling_slope" in f for f in v.failures)
-    hm = fit_degree_day(T, _heating_only(), kind="heating")
+    hm = fit_mean_temp_degree_day(T, _heating_only(), kind="heating")
     assert logical_signs(hm) == {"heating_slope": 1}
-    cm = fit_degree_day(T, 500 + 20 * np.maximum(0, T - 60), kind="cooling")
+    cm = fit_mean_temp_degree_day(T, 500 + 20 * np.maximum(0, T - 60), kind="cooling")
     assert logical_signs(cm) == {"cooling_slope": 1}

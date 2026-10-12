@@ -8,7 +8,11 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.mandv.degreeday import DegreeDayModel, degree_days, fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import (  # noqa: E402
+    MeanTempDegreeDayModel,
+    degree_days,
+    fit_mean_temp_degree_day,
+)
 
 
 def _cooling_data(seed=0, slope=3.0, base=100.0, bp=60.0, n=48):
@@ -27,8 +31,8 @@ def test_degree_days_helper():
 
 def test_recovers_slope_balance_and_base():
     tavg, energy = _cooling_data(slope=3.0, base=100.0, bp=60.0)
-    m = fit_degree_day(tavg, energy)
-    assert isinstance(m, DegreeDayModel)
+    m = fit_mean_temp_degree_day(tavg, energy)
+    assert isinstance(m, MeanTempDegreeDayModel)
     assert abs(m.cooling_slope - 3.0) < 0.3
     assert abs(m.balance_point - 60.0) <= 3.0  # balance point searched by min CV(RMSE)
     assert abs(m.base - 100.0) < 8.0
@@ -38,27 +42,27 @@ def test_recovers_slope_balance_and_base():
 
 def test_predict_low_error():
     tavg, energy = _cooling_data()
-    m = fit_degree_day(tavg, energy)
+    m = fit_mean_temp_degree_day(tavg, energy)
     mae = float(np.mean(np.abs(m.predict(tavg) - energy)))
     assert mae < 5.0  # ~ the injected noise level
 
 
 def test_kind_cooling_only_zeroes_heating():
     tavg, energy = _cooling_data()
-    m = fit_degree_day(tavg, energy, kind="cooling")
+    m = fit_mean_temp_degree_day(tavg, energy, kind="cooling")
     assert m.heating_slope == 0.0 and m.cooling_slope > 2.5
     assert m.as_dict()["kind"] == "cooling" and "fit" in m.as_dict()
 
 
 def test_fixed_balance_point_used_verbatim():
     tavg, energy = _cooling_data(bp=60.0)
-    m = fit_degree_day(tavg, energy, balance_point=55.0)
+    m = fit_mean_temp_degree_day(tavg, energy, balance_point=55.0)
     assert m.balance_point == 55.0  # not searched
 
 
 def test_invalid_inputs():
     tavg, energy = _cooling_data()
     with pytest.raises(ValueError):
-        fit_degree_day(tavg, energy, kind="bogus")
+        fit_mean_temp_degree_day(tavg, energy, kind="bogus")
     with pytest.raises(ValueError):
-        fit_degree_day([50.0, 60.0], [100.0, 110.0])  # < 3 points
+        fit_mean_temp_degree_day([50.0, 60.0], [100.0, 110.0])  # < 3 points

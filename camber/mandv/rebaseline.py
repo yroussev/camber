@@ -154,7 +154,7 @@ def mv_kind(role) -> str:
 def mv_model_from_dict(d: dict):
     """Rebuild any M&V model from its ``as_dict`` payload, dispatching on its ``"type"``."""
     from .basetemp import BillingDegreeDayModel
-    from .degreeday import DegreeDayModel
+    from .degreeday import MeanTempDegreeDayModel
     from .models import ChangePointModel
     from .multivariable import ChangePointDriverModel
     from .towt import TOWTModel
@@ -163,7 +163,7 @@ def mv_model_from_dict(d: dict):
         "ChangePointModel": ChangePointModel,
         "ChangePointDriverModel": ChangePointDriverModel,
         "TOWTModel": TOWTModel,
-        "DegreeDayModel": DegreeDayModel,
+        "DegreeDayModel": MeanTempDegreeDayModel,  # the stored name, kept (0.105 rename)
         "BillingDegreeDayModel": BillingDegreeDayModel,  # 0.94 (#72)
     }
     typ = types.get(str((d or {}).get("type")))

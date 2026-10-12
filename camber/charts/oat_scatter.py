@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 from ..mandv.models import best_model
+from ..mandv.names import model_label
 from .energy_signature import _r2
 
 _KINDS = ("2P", "3PC", "3PH", "4P", "5P")
@@ -157,7 +158,12 @@ def oat_scatter(
         )
         grid = np.linspace(T.min(), T.max(), 200)
         ax.plot(
-            grid, model.predict(grid), color="#cc3333", lw=2.0, zorder=3, label=f"{model.kind} fit"
+            grid,
+            model.predict(grid),
+            color="#cc3333",
+            lw=2.0,
+            zorder=3,
+            label=f"{model_label(model)} fit",  # 0.105 (#163): the registry's label
         )
         for cp in model.change_points:
             ax.axvline(float(cp), color="grey", lw=0.8, ls="--", zorder=1)
@@ -168,7 +174,10 @@ def oat_scatter(
     ax.set_ylabel(ylabel)
     if title is None and shape is not None:
         title = f"OAT cloud — {shape.shape}" + (
-            f" ({shape.model_kind}, R² {shape.r2:.2f})" if shape.model_kind else ""
+            f" ({model_label(model) if model is not None else model_label(shape.model_kind)}, "
+            f"R² {shape.r2:.2f})"
+            if shape.model_kind
+            else ""
         )
     ax.set_title(title or "OAT scatter")
     if by is None or model is not None:

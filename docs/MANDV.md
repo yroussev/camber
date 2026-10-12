@@ -50,29 +50,152 @@ flowchart LR
 
 ## Method correspondence
 
-- **CalTRACK Daily** ↔ CAMBER daily change-point: aggregate to daily energy vs
-  daily-mean temperature, fit the inverse model, project onto reporting weather.
-  This is exactly what `mandv.caltrack.caltrack_savings()` does end-to-end.
-- **Hourly NMEC** ↔ `mandv.caltrack.caltrack_savings_hourly`, on a **TOWT** baseline
-  (`mandv.towt`, the LBNL Mathieu et al. time-of-week & temperature model).
-  **This is not the CalTRACK Hourly specification** — that method is a different estimator:
+Every M&V model kind, method and function, by the label CAMBER's reports show, the **standard
+name** to report it under, the citation and the **known differences** from that standard. The
+table is generated from the registry `camber.mandv.names` (by `scripts/mv_names_doc.py`), which
+the reports, the `mv_baseline` summary and the chart legends read too; the `kind` codes in data
+and JSON are unchanged. An empty standard name marks a CAMBER construct with no standard
+counterpart. See [Naming and citations](#naming-and-citations) for how to cite them.
 
-  | CalTRACK Hourly | CAMBER `mandv.towt` |
-  |---|---|
-  | per-calendar-month segmented models, weighted | one pooled model over the baseline |
-  | six **fixed** temperature bin edges | `n_temp_segments` **quantile-spaced** breakpoints |
-  | occupancy from a month × hour-of-week lookup, from a preliminary daily model's residuals | occupancy from bin-mean load vs the median of bin means |
-  | 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
+**Change-point models**
 
-  So these are defensible IPMVP Option-C savings on a published baseline model, not
-  eemeter-comparable numbers. Same posture as the daily method — see the CalTRACK note below.
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| 2P | `2P`, `mandv.models.fit_model` | Two-parameter (2P) linear regression model | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | — |
+| 3P cooling | `3PC`, `mandv.models.fit_model` | Three-parameter cooling change-point model (3PC) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Change points grid-searched over 40 points between the 5th and 95th temperature percentiles, slopes by least squares at each (the RP-1050 approach). `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
+| 3P heating | `3PH`, `mandv.models.fit_model` | Three-parameter heating change-point model (3PH) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Change points grid-searched over 40 points between the 5th and 95th temperature percentiles, slopes by least squares at each (the RP-1050 approach). `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
+| 3P cooling, zero base (CAMBER) | `3PCZ`, `mandv.models.fit_model` | — | — | CAMBER extension, not a G14 / IMT model: the intercept is fixed at zero (no base load), so p counts the slope(s) and change point(s) only. Opt-in (not in `best_model`'s default set). |
+| 3P heating, zero base (CAMBER) | `3PHZ`, `mandv.models.fit_model` | — | — | CAMBER extension, not a G14 / IMT model: the intercept is fixed at zero (no base load), so p counts the slope(s) and change point(s) only. Opt-in (not in `best_model`'s default set). |
+| 4P | `4P`, `mandv.models.fit_model` | Four-parameter change-point model (4P) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Change points grid-searched over 40 points between the 5th and 95th temperature percentiles, slopes by least squares at each (the RP-1050 approach). `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
+| 5P | `5P`, `mandv.models.fit_model` | Five-parameter change-point model (5P) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Both change points grid-searched on the same 40-point grid, the dead-band at least one grid step wide. When no dead-band fits, the fit falls back to a 2P line and keeps kind "5P" with no change points; it is then labelled "2P (5P fallback)". `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
+| 5P heating and cooling, zero base (CAMBER) | `5PZ`, `mandv.models.fit_model` | — | — | CAMBER extension, not a G14 / IMT model: the intercept is fixed at zero (no base load), so p counts the slope(s) and change point(s) only. Opt-in (not in `best_model`'s default set). Falls back to a 2P line (with an intercept) like 5P: "2P (5P zero-base fallback)". |
+| daily change-point (2P–5P, BIC) | `mandv.models.best_model` | Change-point regression model (ASHRAE Guideline 14 / RP-1050 IMT), selected by BIC | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Fits 2P, 3PC, 3PH, 4P and 5P and keeps the lowest BIC, n ln(SSE/n) + p ln(n), with every change point counted in p. Report the kind it chose by that kind's standard name. |
 
-  **Expect a band comparable to the daily method, not tighter.** Hourly residuals are strongly
-  serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction bites: measured
-  on a 20-week synthetic, n=3360 hours becomes n_eff=282 and the band widens from 1.6% at ρ=0 to
-  9.7% at ρ=0.85. Finer data does not buy proportionally more certainty.
-- **Billing/monthly** ↔ change-point on monthly data (looser CV(RMSE) tier); utility bills are
-  fitted per bill, weighted by days (see [Billing data](#billing-data)).
+**Degree-day models**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| Degree-day heating | `DD-H`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating model, PRISM heating-only form | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Daily degree-days summed over each bill, the base chosen from a grid by days-weighted least squares with a profile-likelihood range (`select_bases`); with a numeric `base_f` the base is fixed (a fixed-base degree-day model, base not counted in p). |
+| Degree-day cooling | `DD-C`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | The cooling analogue of DD-H (PRISM's original model is heating-only); same base search. |
+| Degree-day heating and cooling | `DD-HC`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating-and-cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Separate heating and cooling bases (heating base no higher than the cooling base), each searched on its own grid; p counts both fitted bases. |
+| Degree-day on period-mean temperature (CAMBER) | `degreeday`, `mandv.degreeday.fit_mean_temp_degree_day` | — | — | Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean temperature, about one balance point shared by both legs, so a shoulder month's swing days are undercounted. The searched balance point is not counted in p. Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC). |
+
+**Other baseline models**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| TOWT (CAMBER variant) | `towt`, `mandv.towt.fit_towt` | Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0) | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308); [Granderson et al. 2015](https://www.osti.gov/pages/biblio/1247594); [LBNL-187225](https://www.osti.gov/biblio/1236174); [LBNL-6963E](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | One pooled model over the baseline; hour-of-week bins (168); `n_temp_segments` quantile-spaced temperature knots rather than the reference's fixed knots; occupancy from each bin's mean load against the median of bin means; no time-weighting of observations. |
+| Change-point + drivers (multivariable) | `multivariable`, `mandv.multivariable.fit_cp_driver_model` | Multivariable change-point regression model (SEP 50001 M&V Protocol §6.3.2) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | Change points grid-searched with the drivers in the design; drivers enter linearly. |
+| Categorical change-point (one model per category) | `categorical`, `mandv.categorical.fit_categorical` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | A CAMBER construct: a separate change-point model per category combination (day type, occupancy mode), routed by category, with pooled fit statistics; not indicator terms in one regression. |
+
+**Savings methods (SEP 50001 M&V Protocol §6.2; the config's `mv.method`)**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| Forecast (avoided energy) | `forecast`, `mandv.methods.forecast_savings` | Forecast method (SEP 50001 M&V Protocol §6.2.1); IPMVP avoided energy use | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | — |
+| Backcast | `backcast`, `mandv.methods.backcast_savings` | Backcast method (SEP 50001 M&V Protocol §6.2.2) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | — |
+| Standard conditions (normalized savings) | `standard_conditions`, `mandv.methods.standard_conditions_savings` | Standard conditions method (SEP 50001 M&V Protocol §6.2.3); IPMVP normalized savings | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | — |
+| Chaining | `chaining`, `mandv.methods.chained_savings` | Chaining method (SEP 50001 M&V Protocol §6.2.4) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | — |
+| Sequential chain (CAMBER extension) | `mandv.methods.sequential_chain` | — | — | A multi-link chain; the SEP Protocol defines exactly one intermediate period. |
+| Method proposal (SEP order) | `auto`, `mandv.methods.select_method` | — | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | Proposes a method in the SEP order and ranks models by SEP validity then adjusted R² (the DOE EnPI tool's order); it only proposes, a reported saving needs a declared method. |
+
+**IPMVP options**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| IPMVP Option A (key-parameter measurement) | `option_a`, `mandv.option_a.option_a_savings` | IPMVP Option A: retrofit isolation, key parameter measurement | [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | The uncertainty of the stipulated portion is not quantified. |
+| IPMVP Option B (retrofit isolation) | `retrofit_isolation`, `mandv.retrofit_isolation.isolation_savings` | IPMVP Option B: retrofit isolation, all parameter measurement | [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp); [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | — |
+| Normalized savings | `normalized`, `mandv.normalized.normalized_savings` | IPMVP normalized savings (standard conditions) | [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp); [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | — |
+| Option D-style modeled savings (calibrated 1R1C grey box; pre-implementation estimate) | `option_d`, `mandv.rc_model.option_d_savings` | IPMVP Option D: calibrated simulation | [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp); [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | A calibrated grey-box RC model (1R1C, or 2R2C / multi-zone), not a whole-building simulation program, used before implementation to estimate a control change. The calibration gate is `fit_stats`: CV(RMSE) by interval (30 % hourly), \|NMBE\| <= 0.5 % and R² >= 0.75, all required. |
+
+**Whole-building savings functions**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| Daily change-point savings (not CalTRACK) | `mandv.caltrack.caltrack_savings` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | Not CalTRACK 2.0 Daily: a `best_model` daily change-point baseline (2P–5P, BIC) with IPMVP avoided energy and a G14 band, without CalTRACK's candidate models, balance-point grid, qualifying tests, adjusted-R² selection or data-sufficiency rules. To be renamed in 0.105 when the faithful CalTRACK methods land (#156). |
+| Pooled TOWT hourly savings (not CalTRACK Hourly) | `mandv.caltrack.caltrack_savings_hourly` | — | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Not CalTRACK 2.0 Hourly: one pooled TOWT (CAMBER variant) model, not per-month segmented models with fixed temperature bins and a residual-based occupancy lookup. To be renamed in 0.105 when the faithful CalTRACK methods land (#156). |
+
+**Tracking and forecasting**
+
+| Label | CAMBER | Standard name | Citation | Differences |
+|---|---|---|---|---|
+| CUSUM of savings | `cusum`, `mandv.cusum.cusum_savings` | Cumulative sum (CUSUM) of savings | — | Common M&V tracking practice; no single standard defines it, so none is cited. |
+| Mean-Week + drift (LBNL M4 analogue), not an M&V method | `forecast.seasonal_forecast` | — | [Granderson et al. 2015](https://www.osti.gov/pages/biblio/1247594); [LBNL-187225](https://www.osti.gov/biblio/1236174); [LBNL-6963E](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | A load forecast for anomaly detection, not an M&V baseline: the mean of history at each time-of-week slot (the LBNL test reports' Mean-Week model) plus an additive drift correction from the recent residuals. No weather term. |
+
+**References**
+
+- `ashrae-g14-2014`: ASHRAE Guideline 14-2014, Measurement of Energy, Demand, and Water Savings. Guideline 14-2014. ASHRAE. <https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes>
+- `ashrae-rp1050-imt`: Kissock, J.K., Haberl, J.S., Claridge, D.E. (2003). Inverse Modeling Toolkit: Numerical Algorithms (ASHRAE RP-1050). ASHRAE Transactions 109(2). KC-03-02-1. <https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451>
+- `fels-1986-prism`: Fels, M.F. (1986). PRISM: An introduction. Energy and Buildings 9(1-2):5-18. doi:10.1016/0378-7788(86)90003-4. <https://doi.org/10.1016/0378-7788(86)90003-4>
+- `mathieu-2011-towt`: Mathieu, J.L., Price, P.N., Kiliccote, S., Piette, M.A. (2011). Quantifying Changes in Building Electricity Use, With Application to Demand Response. IEEE Transactions on Smart Grid 2(3):507-518. LBNL-4944E. doi:10.1109/TSG.2011.2145010. <https://www.osti.gov/biblio/1048308>
+- `granderson-2015-baselines`: Granderson, J., Price, P.N., Jump, D., Addy, N., Sohn, M.D. (2015). Automated measurement and verification: Performance of public domain whole-building electric baseline models. Applied Energy 144:106-113. LBNL-187596. doi:10.1016/j.apenergy.2015.01.026. <https://www.osti.gov/pages/biblio/1247594>
+- `lbnl-187225`: Granderson, J., Touzani, S., Custodio, C., Sohn, M.D., Fernandes, S., Jump, D. (2015). Assessment of Automated Measurement and Verification (M&V) Methods. LBNL-187225. doi:10.2172/1236174. <https://www.osti.gov/biblio/1236174>
+- `lbnl-6963e`: Granderson, J., Jump, D., Price, P.N., Sohn, M.D. (2014). Performance Metrics and Objective Testing Methods for Energy Baseline Modeling Software. 2014 ACEEE Summer Study on Energy Efficiency in Buildings, paper 11-734. LBNL-6963E. <https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf>
+- `caltrack-2`: CalTRACK Technical Documentation: Methods (CalTRACK 2.0). CalTRACK (LF Energy OpenEEmeter). <https://docs.caltrack.org/en/latest/methods.html>
+- `evo-ipmvp-core-2022`: International Performance Measurement and Verification Protocol (IPMVP) Core Concepts 2022. EVO 10000-1:2022. Efficiency Valuation Organization (EVO). <https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp>
+- `doe-sep-mv-2019`: Superior Energy Performance 50001 Program Measurement & Verification Protocol: 2019 (Edition 2). U.S. Department of Energy. <https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol>
+
+**The `caltrack_*` functions are not CalTRACK.** `caltrack_savings` is a daily change-point
+baseline (`best_model`, 2P–5P by BIC) with IPMVP avoided energy and a G14 band; it does not apply
+CalTRACK 2.0 Daily's candidate models, balance-point grid, qualifying tests, adjusted-R² selection
+or data-sufficiency rules, so its numbers are not eemeter-comparable. `caltrack_savings_hourly`
+is a pooled TOWT, not CalTRACK Hourly:
+
+| CalTRACK Hourly | CAMBER `mandv.towt` |
+|---|---|
+| per-calendar-month segmented models, weighted | one pooled model over the baseline |
+| six **fixed** temperature bin edges | `n_temp_segments` **quantile-spaced** breakpoints |
+| occupancy from a month × hour-of-week lookup, from a preliminary daily model's residuals | occupancy from bin-mean load vs the median of bin means |
+| 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
+
+Both are being renamed in 0.105, when faithful CalTRACK 2.0 Daily, Billing and Hourly methods
+take the `caltrack_*` names (#156). Until then they are defensible IPMVP Option-C savings on a
+published baseline model, reported under the names in the table above.
+
+**Expect an hourly band comparable to the daily method, not tighter.** Hourly residuals are
+strongly serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction
+bites: measured on a 20-week synthetic, n=3360 hours becomes n_eff=282 and the band widens from
+1.6% at ρ=0 to 9.7% at ρ=0.85. Finer data does not buy proportionally more certainty.
+
+**Billing/monthly** data use the same change-point models on monthly data (the looser CV(RMSE)
+tier), fitted per bill and weighted by days, or the variable-base degree-day models of
+`mandv.basetemp` (see [Billing data](#billing-data)).
+
+## Naming and citations
+
+When a report, a testing portal or an evaluator asks for the model type, give the **standard
+name** from the table above, with its citation, and the CAMBER label beside it. The registry has
+the same text for code to read:
+
+```python
+from camber.mandv.names import citations, model_label, mv_name
+
+row = mv_name("3PC")
+row.standard_name  # 'Three-parameter cooling change-point model (3PC)'
+row.differences  # where CAMBER's fit departs from the cited standard
+[r.citation() for r in citations("3PC")]  # ASHRAE G14-2014; Kissock et al. 2003 (RP-1050 IMT)
+model_label(model)  # a fitted model's label, e.g. '2P (5P fallback)'
+```
+
+- **Name the fitted kind, not the search.** `best_model` reports the kind it chose; cite that
+  kind ("three-parameter cooling change-point model (3PC), ASHRAE Guideline 14 / RP-1050 IMT,
+  selected among 2P–5P by BIC"), not "CAMBER best model".
+- **State the differences.** A row with differences is reported under the standard name *with*
+  them ("TOWT (Mathieu et al. 2011), CAMBER variant: quantile-spaced temperature knots,
+  hour-of-week bins, load-median occupancy"), or under the CAMBER label alone.
+- **No standard name, no borrowed one.** A CAMBER construct (the zero-base kinds, the period-mean
+  degree-day model, the sequential chain) is named by its label and described; it is not called
+  the nearest standard model. The `caltrack_*` functions are not CalTRACK: name what they fit.
+- **An ensemble is its components.** A prediction that combines several models is described as
+  "Ensemble approach combining" each component's standard name, then the combination rule, for
+  example: *"Ensemble approach combining a three-parameter cooling change-point model (3PC;
+  ASHRAE Guideline 14) and a Time-of-Week-and-Temperature model (TOWT, CAMBER variant; Mathieu et
+  al. 2011); the prediction is the unweighted mean of the two."* Give the weights or the selection
+  rule exactly; a name such as "CAMBER ensemble" alone is not a model type.
+- **Cite the method too.** The savings method has its own name (forecast / avoided energy,
+  backcast, standard conditions / normalized savings, chaining; SEP 50001 M&V Protocol §6.2,
+  IPMVP), and so does the uncertainty band (ASHRAE Guideline 14 Annex B for the measured kernel,
+  and the daily 30 % CV(RMSE) tier is CAMBER's interpolation, not a G14 value).
 
 ## Quick use
 
@@ -117,7 +240,8 @@ itself, so the baseline fit's ρ is the standard substitution.
 ## Acceptance thresholds — and where we differ from CalTRACK
 
 - CAMBER uses ASHRAE **Guideline 14** acceptance tiers for CV(RMSE)
-  (`stats.cv_rmse_max_for`: ~15% monthly, ~30% daily/hourly) and reports NMBE.
+  (`stats.cv_rmse_max_for`: ~15% monthly, ~30% hourly) and reports NMBE. The **daily 30 % tier is
+  CAMBER's interpolation**, not a G14 value; a daily verdict means it meets CAMBER's daily tier.
 - **CalTRACK is stricter and more prescriptive**: it specifies data-sufficiency
   rules (coverage, minimum days), explicit model-selection criteria, and hard
   limits that eemeter enforces. CAMBER leaves those policy choices to the caller —
@@ -931,7 +1055,7 @@ A weather or BAS export sometimes writes a placeholder, such as -237, for a miss
 temperature. Left in a fit, it is the coldest point: TOWT took it as its first temperature
 breakpoint, and a heating change-point model bent its arm toward it. Every baseline fit now
 screens its temperatures first. `fit_towt`, `models.fit_model` / `best_model`,
-`degreeday.fit_degree_day` and the `intervalfit` frame builders treat a value outside the
+`degreeday.fit_mean_temp_degree_day` and the `intervalfit` frame builders treat a value outside the
 sensor-health outdoor-air range (`sensorhealth.PHYSICAL_BOUNDS`, -40 to 140 °F) as missing. The
 count is on the model (`n_temp_screened`, serialised only when non-zero), on the frame
 (`attrs["n_temp_screened"]`) and in the savings caveats. `temp_bounds=(lo, hi)` sets another
@@ -1484,23 +1608,32 @@ Then run the *same* baseline and reporting data through both and compare:
 This gives a credible, standards-aligned check without making eemeter a CAMBER
 dependency. See [docs/ECOSYSTEM.md](ECOSYSTEM.md) for the broader leverage strategy.
 
-## Degree-day baseline (`mandv.degreeday`)
+## Degree-day baseline on period-mean temperature (`mandv.degreeday`)
 
-The simplest defensible weather model — a variable-base degree-day regression
-`E = base + a·HDD + b·CDD` — for monthly-bill M&V where you have average temperature and energy per
-period (a lighter cousin of the change-point models above).
+A degree-day regression `E = base + a·HDD + b·CDD` for monthly M&V when only an average
+temperature and the energy per period are at hand (a lighter cousin of the change-point models
+above). Each period's degree-days come from its **mean** temperature, about **one** balance point
+shared by both legs. That is **not** the variable-base degree-day (VBDD, PRISM) model, which sums
+daily degree-days over each period: a shoulder month whose mean sits above the base still has cold
+days below it, and the mean-temperature form misses them. For VBDD on bills, with separate heating
+and cooling bases, use `mandv.basetemp` (`DD-H` / `DD-C` / `DD-HC`, [Billing data](#billing-data)).
 
 ```python
-from camber.mandv.degreeday import fit_degree_day
+from camber.mandv.degreeday import fit_mean_temp_degree_day
 
-m = fit_degree_day(tavg_per_month, energy_per_month)  # balance point auto-fit by min CV(RMSE)
+m = fit_mean_temp_degree_day(tavg_per_month, energy_per_month)  # balance point by min CV(RMSE)
 m.balance_point, m.cooling_slope, m.heating_slope, m.fit.cv_rmse
 m.predict(normal_year_tavg)  # normalize / project the baseline
 ```
 
 `degree_days(tavg, balance_point)` returns the `(HDD, CDD)` arrays. Flags: `balance_point` (fix it
 or leave None to search), `balance_range`/`step` (search grid), `kind` (`heating`/`cooling`/`both`).
-Fit statistics (R², CV(RMSE), NMBE, G14 acceptance) come from `mandv.stats.fit_stats`.
+Fit statistics (R², CV(RMSE), NMBE, G14 acceptance) come from `mandv.stats.fit_stats`; their `p`
+counts the intercept and the slopes but not a searched balance point (unlike `basetemp`, which
+counts its fitted bases), so they are slightly optimistic when the balance point is searched.
+
+Until 0.105 these were `fit_degree_day` and `DegreeDayModel`; both names still work and raise a
+`DeprecationWarning`. Stored models keep `"type": "DegreeDayModel"` and read back unchanged.
 
 ## IPMVP Option A — key-parameter measurement (`mandv.option_a`)
 
@@ -1520,7 +1653,7 @@ Inputs may be scalars or sampled arrays/Series (the mean is taken). The result's
 measured-vs-stipulated split for audit; the stipulated portion carries uncertainty this method does
 not quantify. Complements Option B (`mandv.retrofit_isolation`) and Option C (`mandv.stats`).
 
-## IPMVP Option D — calibrated simulation (`mandv.rc_model`)
+## Option D-style modeled savings (`mandv.rc_model`)
 
 The one remaining IPMVP boundary, now shipped: a dependency-light 1R1C grey-box building model
 (`RCModel.predict(oat, schedule)`) calibrated to metered energy (grid `tau` + OLS, gated by the same
@@ -1530,3 +1663,9 @@ in for. Refuses to claim a saving when the calibration fails the gate. So CAMBER
 Options A, B, C, and D**. A **2R2C** thermal-mass variant (`RC2Model`/`calibrate2`), **multi-zone**
 stacked-OLS calibration (`calibrate_zones`), and an optional **EnergyPlus** cross-validator
 (`interop.energyplus`) add depth on the same grid-τ/OLS/G14 footing. See **[OPTION-D.md](OPTION-D.md)**.
+
+A claimed saving's `basis` reads "Option D-style modeled savings (calibrated 1R1C grey box;
+pre-implementation estimate)" (0.105): IPMVP Option D is calibrated simulation, and a calibrated
+grey box run before the change is made is reported in that style, not as Option D itself. The
+calibration gate is `fit_stats`'s, so **NMBE is gated alongside CV(RMSE)**: CV(RMSE) ≤ 30 %
+(hourly), |NMBE| ≤ 0.5 % and R² ≥ 0.75 must all hold.
