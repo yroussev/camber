@@ -1585,6 +1585,7 @@
     "diagnose_pump_plant"
   ],
   "camber.pumpsim": [
+    "DESIGN_FLOW_GPM",
     "FAULTS",
     "LocusConfusion",
     "PumpFault",
@@ -2089,6 +2090,7 @@
     "LeakingValve"
   ],
   "camber.rules.loop_deltat_rule": [
+    "CONSTANT_CV",
     "DELTAT_FAULT_F",
     "DELTAT_FAULT_SIGMA",
     "DELTAT_PLAUSIBLE",
@@ -2098,6 +2100,7 @@
     "MIN_LOAD"
   ],
   "camber.rules.loop_dp_rule": [
+    "CONSTANT_CV",
     "DP_FAULT",
     "DP_FAULT_SIGMA",
     "DP_PLAUSIBLE",
@@ -2144,17 +2147,23 @@
     "snippet_yaml"
   ],
   "camber.rules.pump_flow_rule": [
+    "CONSTANT_SPEED_CV",
     "DP_CONFOUND",
+    "FLOW_FAULT_FRAC",
     "FLOW_FAULT_GPM",
     "FLOW_FAULT_SIGMA",
     "FLOW_PLAUSIBLE",
+    "FLOW_WARN_FRAC",
     "FLOW_WARN_GPM",
     "FLOW_WARN_SIGMA",
     "MIN_SPEED",
-    "PumpFlowDrift"
+    "PumpFlowDrift",
+    "SPEED_FLOOR_TOL_PCT"
   ],
   "camber.rules.pump_head_rule": [
+    "CONSTANT_SPEED_CV",
     "FLOW_CONFOUND",
+    "FLOW_CONFOUND_FRAC",
     "HEAD_FAULT_PSI",
     "HEAD_FAULT_SIGMA",
     "HEAD_PLAUSIBLE",
@@ -2164,10 +2173,13 @@
     "PumpHeadDrift"
   ],
   "camber.rules.pump_power_rule": [
+    "CONSTANT_CV",
     "MIN_LOAD",
+    "POWER_FAULT_FRAC",
     "POWER_FAULT_KW",
     "POWER_FAULT_SIGMA",
     "POWER_PLAUSIBLE",
+    "POWER_WARN_FRAC",
     "POWER_WARN_KW",
     "POWER_WARN_SIGMA",
     "PumpPowerDrift"

@@ -17,6 +17,13 @@ identifies the pump, so no dedicated pump-power role is needed. Loop-parameteriz
 normalizer. Declines loudly when power or the flow normalizer is unmapped. **Not** auto-registered
 (needs an injected :class:`~camber.store.modelstore.BaselineStore`); run via
 :meth:`camber.rules.base.Registry.run_periods`.
+
+**Pump size (0.104, #150).** The flow gate is 10 % of the baseline's p95 flow (20 % for the
+identifiable span), capped at 50 / 10 gpm, and the kW floors are 5.5 % / 11 % of the baseline's p95
+power, capped at 1 / 2 kW, so a 40 gpm pump drawing under a kilowatt is judged on its own scale and
+every pump drawing 18.2 kW or more exactly as before. A flow that barely moves (coefficient of
+variation <= 2 %: a constant-speed pump) is compared as a flat level inside its observed band, with
+a caveat. Explicit constructor values always win. See :mod:`camber.rules._pumpgates`.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _pumpgates as G
 from .base import Finding
 
 _KIND = "pump_power"
@@ -45,13 +53,22 @@ POWER_PLAUSIBLE = (0.0, 1e7)
 # the fault); both a kW floor and a sigma floor must be cleared. The sigma floor carries the weight
 # (absolute power is pump-size-dependent); the kW floor is a coarse backstop. Constructor args.
 # ---------------------------------------------------------------------------------------------
+# 0.104 (#150): these are the caps; by default the floors are POWER_WARN_FRAC / POWER_FAULT_FRAC of
+# the baseline's p95 power (camber.rules._pumpgates), which reach these values at an 18.2 kW pump.
 POWER_WARN_KW = 1.0  # screening-grade -- coarse backstop
 POWER_FAULT_KW = 2.0  # screening-grade
+POWER_WARN_FRAC = G.POWER_WARN_FRAC  # of baseline p95 power, capped at POWER_WARN_KW
+POWER_FAULT_FRAC = G.POWER_FAULT_FRAC  # of baseline p95 power, capped at POWER_FAULT_KW
 POWER_WARN_SIGMA = 2.5  # screening-grade
 POWER_FAULT_SIGMA = 4.0  # screening-grade
 
 # Below this flow the pump carries no condition information.
-MIN_LOAD = 50.0
+# 0.104 (#150): the cap. By default the gate is 10 % of the baseline's p95 flow (20 % for the
+# identifiable span), capped at 50 / 10 gpm; a pump-speed normalizer is gated at the learned VFD
+# floor + 2 points (else 15 %) -- see camber.rules._pumpgates.
+MIN_LOAD = G.FLOW_GATE_CAP
+# A normalizer whose coefficient of variation over the baseline is at or under this is constant.
+CONSTANT_CV = G.CONSTANT_CV
 
 
 class PumpPowerDrift:
@@ -75,15 +92,17 @@ class PumpPowerDrift:
         flow_role: Role = Role.CHW_FLOW,
         status_role: Role = Role.PUMP_STATUS,
         freeze_if_missing: bool = True,
-        warn_kw: float = POWER_WARN_KW,  # screening-grade -- see the module note
-        fault_kw: float = POWER_FAULT_KW,  # screening-grade
+        warn_kw: float | None = None,  # None = size-relative (see the module note)
+        fault_kw: float | None = None,  # None = size-relative
         warn_sigma: float = POWER_WARN_SIGMA,  # screening-grade
         fault_sigma: float = POWER_FAULT_SIGMA,  # screening-grade
         slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_load: float = MIN_LOAD,
+        min_load: float | None = None,  # None = size-relative (see _pumpgates)
+        min_load_span: float | None = None,  # None = size-relative
+        constant_cv: float = CONSTANT_CV,
     ):
         self.store = store
         self.site = site
@@ -103,6 +122,8 @@ class PumpPowerDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_load = min_load
+        self.min_load_span = min_load_span
+        self.constant_cv = constant_cv
 
     # ------------------------------------------------------------------ frame prep
     def _running(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -111,7 +132,7 @@ class PumpPowerDrift:
             return frame[status >= 0.5]
         return frame
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None, mode="variable"):
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -120,22 +141,34 @@ class PumpPowerDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
+        if gate is None:
+            gate = G.normalizer_gates(
+                base_frame.get(self.flow_role), self.flow_role, self.min_load, self.min_load_span
+            )
+        level = mode == "constant"
+        span = (
+            G.level_span(base_frame, self.flow_role, self.power_role, gate.min_load)
+            if level
+            else gate.min_span
+        )
         fit = fit_load_baseline(
             base_frame,
             metric_col=self.power_role,
             load_col=self.flow_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=POWER_PLAUSIBLE,
+            min_load_span=span,
+            level_fallback=level,
         )
         if fit is None:
             why = unscoreable_reason(
                 base_frame,
                 metric_col=self.power_role,
                 load_col=self.flow_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=POWER_PLAUSIBLE,
                 min_samples=30,
-                min_load_span=10.0,
+                min_load_span=None if level else span,
             )
             caveats.append(
                 f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
@@ -154,16 +187,25 @@ class PumpPowerDrift:
         return fit
 
     # ------------------------------------------------------------------ severity
-    def _severity(self, drift, caveats) -> str:
+    def _floors(self, base: pd.DataFrame) -> tuple[float, float]:
+        """The (warn, fault) kW floors: explicit, else a fraction of the baseline's p95 power."""
+        power = base[self.power_role] if self.power_role in base.columns else None
+        return (
+            G.scaled_floor(power, self.warn_kw, POWER_WARN_FRAC, POWER_WARN_KW),
+            G.scaled_floor(power, self.fault_kw, POWER_FAULT_FRAC, POWER_FAULT_KW),
+        )
+
+    def _severity(self, drift, caveats, floors=None) -> str:
         """One-sided-UP severity: only *excess* power clears the floors (both kW and sigma)."""
+        warn_kw, fault_kw = floors if floors is not None else (POWER_WARN_KW, POWER_FAULT_KW)
         if drift.drift_sigma != drift.drift_sigma:  # NaN: baseline had no residual scatter
             caveats.append("baseline had no residual scatter, so drift is judged on kW alone")
-            if drift.drift_f >= self.fault_kw:
+            if drift.drift_f >= fault_kw:
                 return "fault"
-            return "warn" if drift.drift_f >= self.warn_kw else "ok"
-        if drift.drift_f >= self.fault_kw and drift.drift_sigma >= self.fault_sigma:
+            return "warn" if drift.drift_f >= warn_kw else "ok"
+        if drift.drift_f >= fault_kw and drift.drift_sigma >= self.fault_sigma:
             return "fault"
-        if drift.drift_f >= self.warn_kw and drift.drift_sigma >= self.warn_sigma:
+        if drift.drift_f >= warn_kw and drift.drift_sigma >= self.warn_sigma:
             return "warn"
         return "ok"
 
@@ -195,7 +237,13 @@ class PumpPowerDrift:
             )
 
         base_r, cur_r = self._running(baseline), self._running(current)
-        frozen = self._frozen_baseline(equip, base_r, caveats)
+        gate = G.normalizer_gates(
+            base_r[self.flow_role], self.flow_role, self.min_load, self.min_load_span
+        )
+        cv = G.normalizer_cv(base_r[self.flow_role])
+        mode = "constant" if cv <= self.constant_cv else "variable"
+        floors = self._floors(base_r)
+        frozen = self._frozen_baseline(equip, base_r, caveats, gate, mode)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -211,7 +259,7 @@ class PumpPowerDrift:
             cur_r,
             metric_col=self.power_role,
             load_col=self.flow_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=POWER_PLAUSIBLE,
         )
         if drift is None:
@@ -219,7 +267,7 @@ class PumpPowerDrift:
                 cur_r,
                 metric_col=self.power_role,
                 load_col=self.flow_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=POWER_PLAUSIBLE,
                 min_samples=10,
                 baseline=frozen,
@@ -236,7 +284,7 @@ class PumpPowerDrift:
                 caveats=caveats,
             )
 
-        severity = self._severity(drift, caveats)
+        severity = self._severity(drift, caveats, floors)
         direction = "up" if drift.drift_f >= 0 else "down"
         rec = self.store.get(self.site, equip, _KIND)
         metrics = {
@@ -248,7 +296,27 @@ class PumpPowerDrift:
             "pump_power_n_current": drift.n_current,
             "pump_power_baseline_sigma_kw": frozen.sigma_f,
             "pump_power_baseline_frozen_at": rec.frozen_at if rec else "",
+            # 0.104 (#150): the normalizer gates used, where they came from, and the model
+            "pump_power_load_gate": gate.min_load,
+            "pump_power_load_span_gate": gate.min_span,
+            "pump_power_gate_source": gate.source,
+            "pump_power_vfd_floor_pct": gate.vfd_floor,
+            "pump_power_normalizer_mode": mode,
+            "pump_power_warn_floor_kw": floors[0],
+            "pump_power_fault_floor_kw": floors[1],
+            "pump_power_baseline_model": getattr(frozen, "load_model", "linear"),
         }
+        if getattr(frozen, "load_model", "linear") == "level":
+            unit = "% speed" if G.is_speed(self.flow_role) else "gpm"
+            caveats.append(
+                G.constant_flow_caveat(
+                    "pump power",
+                    cv,
+                    frozen.tons_min - frozen.load_band,
+                    frozen.tons_max + frozen.load_band,
+                    unit,
+                )
+            )
         if drift.extrapolated:
             caveats.append(
                 "over 10% of the current period ran outside the baseline's fitted flow envelope, "
@@ -268,7 +336,7 @@ class PumpPowerDrift:
                 cur_r,
                 approach_col=self.power_role,
                 tons_col=self.flow_role,
-                min_tons=self.min_load,
+                min_tons=gate.min_load,
                 approach_range=POWER_PLAUSIBLE,
             )
         except ValueError as exc:

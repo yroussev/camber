@@ -291,7 +291,14 @@ def test_config_validation(tmp_path, extra, msg):
 
 
 def test_every_tunable_parameter_is_documented():
-    assert pd_docs.documented_drift_rules() == ["coil_leak_drift"]
+    assert pd_docs.documented_drift_rules() == [
+        "coil_leak_drift",
+        "loop_deltat_drift",  # 0.104 (#150): the pump family, as constructor arguments
+        "loop_dp_drift",
+        "pump_flow_drift",
+        "pump_head_drift",
+        "pump_power_drift",
+    ]
     for rule in pd_docs.documented_drift_rules():
         params = pd_docs.drift_rule_params(rule)
         names = {p.name for p in params}

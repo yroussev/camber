@@ -24,6 +24,13 @@ Loop-parameterized (chilled-water by default; pass the hot-water DP / flow / set
 loop). Declines loudly when DP or the flow normalizer is unmapped. **Not** auto-registered (needs an
 injected :class:`~camber.store.modelstore.BaselineStore`); run via
 :meth:`camber.rules.base.Registry.run_periods`.
+
+**Gates scale with the loop (0.104, #150).** The flow gate is 10 % of the baseline's p95 flow (20 %
+for the identifiable span), capped at 50 / 10 gpm, so every loop of 500 gpm or more is gated exactly
+as before; a pump-speed normalizer is gated just above the learned VFD floor (else 15 %). A flow
+that barely moves (coefficient of variation <= 2 %: a constant-speed pump, a constant-flow loop) is
+compared as a flat level inside its observed band, with a caveat. DP is a pressure, so its floors
+do not scale with loop size. Explicit constructor values always win.
 """
 
 from __future__ import annotations
@@ -40,6 +47,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _pumpgates as G
 from .base import Finding
 
 _KIND = "loop_dp"
@@ -87,7 +95,12 @@ DP_WARN_SIGMA = 2.5  # screening-grade, applied to |drift|
 DP_FAULT_SIGMA = 4.0  # screening-grade, applied to |drift|
 
 # Below this flow the loop carries no condition information.
-MIN_LOAD = 50.0
+# 0.104 (#150): the cap. By default the gate is 10 % of the baseline's p95 flow (20 % for the
+# identifiable span), capped at 50 / 10 gpm; a pump-speed normalizer is gated at the learned VFD
+# floor + 2 points (else 15 %) -- see camber.rules._pumpgates.
+MIN_LOAD = G.FLOW_GATE_CAP
+# A normalizer whose coefficient of variation over the baseline is at or under this is constant.
+CONSTANT_CV = G.CONSTANT_CV
 
 # A setpoint shift of at least this much (DP units) triggers the reset-confound adjustment.
 DP_SP_CONFOUND = 1.0
@@ -123,7 +136,9 @@ class LoopDPDrift:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_load: float = MIN_LOAD,
+        min_load: float | None = None,  # None = size-relative (see _pumpgates)
+        min_load_span: float | None = None,  # None = size-relative
+        constant_cv: float = CONSTANT_CV,
         dp_range: tuple[float, float] | None = None,  # None = scale-free (dp_plausible_range)
     ):
         self.store = store
@@ -146,6 +161,8 @@ class LoopDPDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_load = min_load
+        self.min_load_span = min_load_span
+        self.constant_cv = constant_cv
         self.dp_range = dp_range
 
     # ------------------------------------------------------------------ frame prep
@@ -163,7 +180,9 @@ class LoopDPDrift:
             return (float("-inf"), float("inf"))
         return dp_plausible_range(base_frame[self.dp_role])
 
-    def _frozen_baseline(self, equip, base_frame, caveats, rng=DP_PLAUSIBLE):
+    def _frozen_baseline(
+        self, equip, base_frame, caveats, rng=DP_PLAUSIBLE, gate=None, mode="variable"
+    ):
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -172,22 +191,34 @@ class LoopDPDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
+        if gate is None:
+            gate = G.normalizer_gates(
+                base_frame.get(self.flow_role), self.flow_role, self.min_load, self.min_load_span
+            )
+        level = mode == "constant"
+        span = (
+            G.level_span(base_frame, self.flow_role, self.dp_role, gate.min_load)
+            if level
+            else gate.min_span
+        )
         fit = fit_load_baseline(
             base_frame,
             metric_col=self.dp_role,
             load_col=self.flow_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=rng,
+            min_load_span=span,
+            level_fallback=level,
         )
         if fit is None:
             why = unscoreable_reason(
                 base_frame,
                 metric_col=self.dp_role,
                 load_col=self.flow_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=rng,
                 min_samples=30,
-                min_load_span=10.0,
+                min_load_span=None if level else span,
             )
             caveats.append(
                 f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
@@ -249,7 +280,12 @@ class LoopDPDrift:
 
         base_r, cur_r = self._running(baseline), self._running(current)
         rng = self._range(base_r)
-        frozen = self._frozen_baseline(equip, base_r, caveats, rng)
+        gate = G.normalizer_gates(
+            base_r[self.flow_role], self.flow_role, self.min_load, self.min_load_span
+        )
+        cv = G.normalizer_cv(base_r[self.flow_role])
+        mode = "constant" if cv <= self.constant_cv else "variable"
+        frozen = self._frozen_baseline(equip, base_r, caveats, rng, gate, mode)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -265,7 +301,7 @@ class LoopDPDrift:
             cur_r,
             metric_col=self.dp_role,
             load_col=self.flow_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=rng,
         )
         if drift is None:
@@ -273,7 +309,7 @@ class LoopDPDrift:
                 cur_r,
                 metric_col=self.dp_role,
                 load_col=self.flow_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=rng,
                 min_samples=10,
                 baseline=frozen,
@@ -302,7 +338,25 @@ class LoopDPDrift:
             "loop_dp_n_current": drift.n_current,
             "loop_dp_baseline_sigma": frozen.sigma_f,
             "loop_dp_baseline_frozen_at": rec.frozen_at if rec else "",
+            # 0.104 (#150): the normalizer gates used, where they came from, and the model
+            "loop_dp_load_gate": gate.min_load,
+            "loop_dp_load_span_gate": gate.min_span,
+            "loop_dp_gate_source": gate.source,
+            "loop_dp_vfd_floor_pct": gate.vfd_floor,
+            "loop_dp_normalizer_mode": mode,
+            "loop_dp_baseline_model": getattr(frozen, "load_model", "linear"),
         }
+        if getattr(frozen, "load_model", "linear") == "level":
+            unit = "% speed" if G.is_speed(self.flow_role) else "gpm"
+            caveats.append(
+                G.constant_flow_caveat(
+                    "loop DP",
+                    cv,
+                    frozen.tons_min - frozen.load_band,
+                    frozen.tons_max + frozen.load_band,
+                    unit,
+                )
+            )
 
         # DP-reset confound: judge on the drift NOT explained by a concurrent setpoint move
         setpoint_driven = False
@@ -357,7 +411,7 @@ class LoopDPDrift:
                 cur_r,
                 approach_col=self.dp_role,
                 tons_col=self.flow_role,
-                min_tons=self.min_load,
+                min_tons=gate.min_load,
                 approach_range=rng,
             )
         except ValueError as exc:

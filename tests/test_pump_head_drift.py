@@ -82,9 +82,10 @@ def test_it_is_a_period_rule_and_is_not_auto_registered():
     assert "pump_head_drift" not in builtin_registry().names()
 
 
-def test_speed_required_head_optional():
+def test_speed_or_status_required_head_optional():
     rule = _rule(BaselineStore())
-    assert Role.CHW_PUMP_SPEED in rule.roles_required
+    # 0.104 (#150): a speed point or a run status lets it run (status only = constant speed)
+    assert rule.roles_any_of == ((Role.CHW_PUMP_SPEED, Role.PUMP_STATUS),)
     assert Role.PUMP_HEAD in rule.roles_optional and Role.PUMP_HEAD not in rule.roles_required
 
 

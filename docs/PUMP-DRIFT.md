@@ -117,6 +117,97 @@ camber drift run    config.json      # score current vs baseline, worst-first
 camber drift accept config.json --equip <EQ> --by <NAME> --reason "<what changed>"
 ```
 
+## Pump size and constant-speed pumps
+
+Until 0.104 the detectors gated on fixed numbers: 50 gpm of flow, a 15 % speed, a 15 / 30 gpm flow
+deficit and a 1 / 2 kW power excess. A 40 gpm pump never reaches 50 gpm, so the loop ΔT, loop DP and
+pump-power detectors declined on it, and a worn impeller's whole deficit sat under the 15 gpm floor.
+Since 0.104 (#150) each gate is derived from the baseline period, capped at the old value, and an
+explicit constructor value always wins (`camber.rules._pumpgates`):
+
+| Gate | Default | Cap (pumps at or above it gated as before) |
+|---|---|---|
+| minimum flow / identifiable flow span | 10 % / 20 % of the baseline's p95 flow (`size_relative_load_gates`, as the chiller rules since 0.84) | 50 / 10 gpm (500 gpm) |
+| minimum speed | the learned VFD floor (`camber.chwpump.learn_vfd_floor`) + 2 points, else 15 % | none: speed is already relative |
+| flow-deficit floor (`pump_flow_drift`) | 2 % / 4 % of the baseline's p95 flow | 15 / 30 gpm (750 gpm) |
+| power-excess floor (`pump_power_drift`) | 5.5 % / 11 % of the baseline's p95 power | 1 / 2 kW (18.2 kW) |
+| flow-rise confound (`pump_head_drift`) | 2.5 % of the baseline's p95 flow | 20 gpm (800 gpm) |
+
+The speed gate leaves out the samples a pump spends parked at its drive minimum: there the drive,
+not the load, sets the speed, so they say nothing about flow or head *at* a speed.
+`loop_deltat_drift` uses the speed gate too when a pump speed stands in for flow (it used 50).
+
+The sigma floors still carry the weight. The gpm and kW floors are backstops against a very tight
+baseline. On the original 1000 gpm pump (p95 983–993 gpm, 19.7–19.9 kW) the old floors were 1.5 %
+of flow and 5.1 % of power, so any larger fraction leaves every full-size result unchanged.
+Within that bound:
+- **Flow:** the sigma floor binds first for every fraction from 1.6 % to 3 % at every size, so
+  2 % / 4 % keeps the backstop at or above typical flow-meter accuracy.
+- **Power:** the kW floor does bind on small pumps. At 6 % a small pump catches bearing drag
+  0.125–0.25 severity later than the full-size pump; 5.5 % keeps it within 0.125.
+
+Head, loop DP and ΔT are pressures and a temperature difference, so their floors do not scale.
+
+**Constant-speed pumps** have no speed curve to normalize on. `pump_flow_drift` and
+`pump_head_drift` treat a pump as constant-speed in two cases:
+- its speed varies by at most 2 % (coefficient of variation over the baseline, `constant_speed_cv`);
+- it has no speed point but has a running status. The two detectors now run on a speed point *or*
+  a status.
+
+Instead of declining, such a pump's flow and head are compared as a **flat level** at its fixed
+speed, inside the band they were observed at. The Finding carries a caveat that a level change is
+pump wear *or* a change in the system curve: a throttled or re-set balancing valve moves a
+constant-speed pump back along its curve just as wear does. The flow detector's rising-DP
+resistance caveat still applies.
+
+In the same way, a loop whose flow barely moves (`constant_cv`, 2 %) gets a flat-level baseline in
+`loop_deltat_drift`, `loop_dp_drift` and `pump_power_drift`, valid within 5 % of its median flow
+beyond the observed band. A current period outside that band is not scored. Each Finding reports
+the gates and floors it used:
+- `*_speed_gate_pct` / `*_load_gate`;
+- `*_gate_source`: `explicit`, `size_relative`, `learned_vfd_floor` or `default`;
+- `*_vfd_floor_pct` and `*_warn_floor_*`;
+- `*_speed_mode` / `*_normalizer_mode`;
+- `*_baseline_model`.
+
+**The size sweep.** `camber.pumpsim` takes `design_flow_gpm`, which scales flow, power and their
+noise, plus `fixed_speed` and `speed_point=False`. The sweep runs every fault at severities 2–4
+(2 seeds each) and 10 healthy plus 6 DP-reset runs per size. Each cell is the number of cases the
+detector flagged (warn or fault), 0.103 → 0.104.
+
+Variable-speed pump:
+
+| Pump (gpm) | Flow faults (`pump_flow_drift`) | Head (`pump_head_drift`) | Bearing drag (`pump_power_drift`) | ΔT faults (`loop_deltat_drift`) | DP faults (`loop_dp_drift`) | Locus right | False alarms |
+|---|---|---|---|---|---|---|---|
+| 20 | 0 → 24 of 24 | 18 → 18 of 18 | 0 → 6 of 6 | 0 → 10 of 12 | 0 → 11 of 12 | 24 → 47 of 48 | 0 → 0 of 18 |
+| 40 | 0 → 24 of 24 | 18 → 18 of 18 | 0 → 6 of 6 | 0 → 10 of 12 | 0 → 11 of 12 | 24 → 47 of 48 | 0 → 0 of 18 |
+| 100 | 0 → 24 of 24 | 18 → 18 of 18 | 0 → 6 of 6 | 10 → 10 of 12 | 11 → 11 of 12 | 41 → 47 of 48 | 0 → 0 of 18 |
+| 200 | 8 → 24 of 24 | 18 → 18 of 18 | 0 → 6 of 6 | 10 → 10 of 12 | 11 → 11 of 12 | 41 → 47 of 48 | 0 → 0 of 18 |
+| 500 | 24 → 24 of 24 | 18 → 18 of 18 | 4 → 6 of 6 | 10 → 10 of 12 | 11 → 11 of 12 | 45 → 47 of 48 | 0 → 0 of 18 |
+| 1000 | 24 → 24 of 24 | 18 → 18 of 18 | 6 → 6 of 6 | 10 → 10 of 12 | 11 → 11 of 12 | 47 → 47 of 48 | 0 → 0 of 18 |
+
+Every size now detects and localizes what the 1000 gpm pump does. The 1000 gpm results are
+unchanged: `tests/golden/pumpsim_fullsize.json`, captured at 0.103, pins them. The cases still
+missed are the same at every size: valve-authority loss at severity 2 for loop ΔT, and one
+severity-2 case for loop DP.
+
+Constant-speed pump (the same at every size from 20 to 1000 gpm; a status-only pump with no speed
+point reads the same):
+
+| Detector | 0.103 | 0.104 |
+|---|---|---|
+| Flow faults (`pump_flow_drift`) | declined | 24 of 24 |
+| Head (`pump_head_drift`) | declined | 18 of 18 |
+| Bearing drag, ΔT, DP | declined below 500 / 200 / 200 gpm | 6 of 6, 10 of 12, 10 of 12 |
+| Locus right | 6 to 29 of 48 | 45 of 48 |
+| False alarms | 0 of 18 | 0 of 18 |
+
+A constant-speed pump cannot change its flow by more than the system curve allows, so the sim's
+severity-4 faults that move flow by 8 to 14 % leave the flat level's band. The loop detectors then
+decline those samples rather than score them. The one place the flat level misleads is
+severity-4 overpumping (+8 % flow at fixed speed). There, the extra power the extra flow draws
+reads as an efficiency loss, and the loop reads loop-wide instead of distribution in 2 of 6 cases.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

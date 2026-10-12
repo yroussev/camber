@@ -2953,14 +2953,266 @@ DRIFT_EXEMPT["coil_leak_drift"] = {
 }
 
 
+# ---- begin 0104-pumpgates (#150): the pump / loop drift detectors ----
+#
+# The pump family's five detectors are built by the drift run with their defaults (they take no
+# config params), so they are documented as Python constructor arguments and rendered under their
+# own heading. 0.104 made their gates size-relative; an explicit value always wins.
+
+#: Drift detectors documented here whose parameters are Python constructor arguments only.
+_PYTHON_ONLY_DRIFT = frozenset(
+    {"pump_flow_drift", "pump_head_drift", "loop_deltat_drift", "loop_dp_drift", "pump_power_drift"}
+)
+
+_SCREENING = "CAMBER judgment: screening-grade (camber.driftthresholds)"
+_SIGMA_CAL = (
+    "Freeze a baseline on one known-good period and score another known-good period; set the "
+    "floor above the largest |drift_sigma| it reads."
+)
+_NONE_SCALED = (
+    "None (the default) scales it to this pump from the baseline period; a number is used as "
+    "given. The Finding's metrics report the value used."
+)
+_PUMP_CUSUM = {
+    "slack_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (0.25, 2.0)),
+    "limit_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (4.0, 20.0)),
+    "clip_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (2.0, 8.0)),
+    "min_consecutive": _P("count (samples)", _CUSUM_BASIS, _CUSUM_CAL, (1, 48)),
+}
+_MIN_SPEED = _P(
+    "% speed",
+    "public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a "
+    "variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that "
+    "ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say "
+    "nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the "
+    "learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback",
+    "Read the drive's minimum speed from the VFD parameters or the sequence of operations and set "
+    "this a point or two above it; or leave None to learn it from the baseline's running speeds "
+    "(camber.chwpump.learn_vfd_floor).",
+    (5.0, 60.0),
+    "None (the default) = the learned VFD floor + 2 points, else 15 %; the metrics "
+    "*_speed_gate_pct, *_speed_gate_source and *_vfd_floor_pct say which.",
+)
+_CONSTANT_SPEED_CV = _P(
+    "fraction (std / mean)",
+    "CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's speed "
+    "varies well under 2 %, a VFD pump's by tens of % (the lbnl-chiller secondary pump: 38 %)",
+    "Compute the coefficient of variation of the pump speed over the running hours of a known "
+    "period; a constant-speed pump sits near zero.",
+    (0.0, 0.1),
+    "At or under it -- or with no speed point but a running status -- the pump is constant-speed: "
+    "its signal is compared as a flat level at its fixed speed, with a caveat.",
+)
+_CONSTANT_CV = _P(
+    "fraction (std / mean)",
+    "CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's flow "
+    "varies well under 2 % (lbnl-chiller chiller 1: 0.07 %), a variable-flow loop's by tens of %",
+    "Compute the coefficient of variation of the normalizer (flow or speed) over the running "
+    "hours of a known period; a constant-flow loop sits near zero.",
+    (0.0, 0.1),
+    "At or under it the baseline is a flat level valid within 5 % of the median normalizer "
+    "beyond its observed band; samples outside it are not scored.",
+)
+_MIN_LOAD = _P(
+    "gpm (% speed when the normalizer is a pump speed)",
+    "CAMBER judgment: 10 % of the baseline's p95 flow, capped at the former 50 gpm -- the "
+    "fractions of the 0.84 chiller gates (size_relative_load_gates), so every pump of 500 gpm or "
+    "more is gated as before; a speed normalizer is gated like min_speed (PNNL Re-tuning Ch.8)",
+    "Set it to about a tenth of the pump's design flow, or leave None.",
+    (0.0, 200.0),
+    _NONE_SCALED,
+)
+_MIN_LOAD_SPAN = _P(
+    "gpm (% speed when the normalizer is a pump speed)",
+    "CAMBER judgment: 20 % of the baseline's p95 flow, capped at the former 10 gpm "
+    "(size_relative_load_gates); 10 points for a speed normalizer",
+    "Leave it; a narrower baseline range does not identify a slope (a constant normalizer is "
+    "then a flat level).",
+    (0.0, 50.0),
+    _NONE_SCALED,
+)
+
+DRIFT_PARAM_DOCS["pump_flow_drift"] = {
+    "warn_gpm": _P(
+        "gpm",
+        "CAMBER judgment: screening-grade backstop, 2 % of the baseline's p95 flow capped at the "
+        "former 15 gpm (reached at a 750 gpm pump): at or above typical flow-meter accuracy "
+        "(about 1-2 % of reading); the affinity laws (Q ∝ N) make a deficit scale with the pump, "
+        "and in the 20-1000 gpm pumpsim sweep the sigma floor binds first at every size",
+        "Leave None, or set it just above the flow meter's stated accuracy at design flow.",
+        (0.5, 100.0),
+        _NONE_SCALED + " A warn needs both warn_gpm and warn_sigma.",
+    ),
+    "fault_gpm": _P(
+        "gpm",
+        "CAMBER judgment: screening-grade, 4 % of the baseline's p95 flow capped at 30 gpm",
+        "Keep it at about twice warn_gpm.",
+        (1.0, 200.0),
+        _NONE_SCALED,
+    ),
+    "warn_sigma": _P("σ", _SCREENING, _SIGMA_CAL, (1.5, 6.0)),
+    "fault_sigma": _P("σ", _SCREENING, "Keep it above warn_sigma.", (2.5, 10.0)),
+    "dp_confound": _P(
+        "loop DP units",
+        "CAMBER judgment: a DP rise this large alongside a flow deficit is added resistance",
+        "Set it a little above the loop DP's own scatter at its setpoint.",
+        (0.1, 20.0),
+        "Caveat only; it does not change the severity.",
+    ),
+    **_PUMP_CUSUM,
+    "min_speed": _MIN_SPEED,
+    "constant_speed_cv": _CONSTANT_SPEED_CV,
+}
+
+DRIFT_PARAM_DOCS["pump_head_drift"] = {
+    "warn_psi": _P(
+        "psi",
+        "CAMBER judgment: screening-grade backstop; head is a pressure, so it does not scale with "
+        "the pump's flow",
+        _SIGMA_CAL,
+        (0.5, 20.0),
+        "A warn needs both warn_psi and warn_sigma.",
+    ),
+    "fault_psi": _P("psi", _SCREENING, "Keep it at about twice warn_psi.", (1.0, 40.0)),
+    "warn_sigma": _P("σ", _SCREENING, _SIGMA_CAL, (1.5, 6.0)),
+    "fault_sigma": _P("σ", _SCREENING, "Keep it above warn_sigma.", (2.5, 10.0)),
+    "flow_confound": _P(
+        "gpm",
+        "CAMBER judgment: 2.5 % of the baseline's p95 flow, capped at the former 20 gpm (reached "
+        "at an 800 gpm pump): a flow rise this large moves the operating point down the curve",
+        "Leave None, or set it to a few percent of design flow.",
+        (0.5, 100.0),
+        _NONE_SCALED + " Caveat only; it does not change the severity.",
+    ),
+    **_PUMP_CUSUM,
+    "min_speed": _MIN_SPEED,
+    "constant_speed_cv": _CONSTANT_SPEED_CV,
+}
+
+DRIFT_PARAM_DOCS["loop_deltat_drift"] = {
+    "warn_f": _P(
+        "°F",
+        "CAMBER judgment: screening-grade; a two-sensor temperature difference",
+        "Score known-good periods against each other and set it above the |drift| they read.",
+        (0.25, 5.0),
+        "Two-sided; a warn needs both warn_f and warn_sigma.",
+    ),
+    "fault_f": _P("°F", _SCREENING, "Keep it at about twice warn_f.", (0.5, 10.0)),
+    "warn_sigma": _P("σ", _SCREENING, _SIGMA_CAL, (1.5, 6.0)),
+    "fault_sigma": _P("σ", _SCREENING, "Keep it above warn_sigma.", (2.5, 10.0)),
+    **_PUMP_CUSUM,
+    "min_load": _MIN_LOAD,
+    "min_load_span": _MIN_LOAD_SPAN,
+    "constant_cv": _CONSTANT_CV,
+}
+
+DRIFT_PARAM_DOCS["loop_dp_drift"] = {
+    "warn": _P(
+        "loop DP units",
+        "CAMBER judgment: screening-grade backstop; DP is a pressure, so it does not scale with "
+        "the loop's flow, and the sigma floor carries the weight across units",
+        _SIGMA_CAL,
+        (0.1, 50.0),
+        "Two-sided; a warn needs both warn and warn_sigma.",
+    ),
+    "fault": _P("loop DP units", _SCREENING, "Keep it at about twice warn.", (0.2, 100.0)),
+    "warn_sigma": _P("σ", _SCREENING, _SIGMA_CAL, (1.5, 6.0)),
+    "fault_sigma": _P("σ", _SCREENING, "Keep it above warn_sigma.", (2.5, 10.0)),
+    "dp_sp_confound": _P(
+        "loop DP units",
+        "CAMBER judgment: a setpoint move this large is a reset, not a fault",
+        "Set it a little above the setpoint's own jitter.",
+        (0.1, 20.0),
+    ),
+    **_PUMP_CUSUM,
+    "min_load": _MIN_LOAD,
+    "min_load_span": _MIN_LOAD_SPAN,
+    "constant_cv": _CONSTANT_CV,
+}
+
+DRIFT_PARAM_DOCS["pump_power_drift"] = {
+    "warn_kw": _P(
+        "kW",
+        "CAMBER judgment: screening-grade backstop, 5.5 % of the baseline's p95 power capped at "
+        "the former 1 kW (reached at an 18.2 kW pump); by the affinity laws pump power scales "
+        "with flow x head, so a fixed kW floor cannot fit a fractional-horsepower pump. 6 % "
+        "delayed small-pump detection of bearing drag in the pumpsim sweep; 5.5 % keeps it within "
+        "0.125 severity of full size",
+        "Leave None, or set it just above the power meter's resolution at design flow.",
+        (0.01, 20.0),
+        _NONE_SCALED + " A warn needs both warn_kw and warn_sigma.",
+    ),
+    "fault_kw": _P(
+        "kW",
+        "CAMBER judgment: screening-grade, 11 % of the baseline's p95 power capped at 2 kW",
+        "Keep it at about twice warn_kw.",
+        (0.02, 40.0),
+        _NONE_SCALED,
+    ),
+    "warn_sigma": _P("σ", _SCREENING, _SIGMA_CAL, (1.5, 6.0)),
+    "fault_sigma": _P("σ", _SCREENING, "Keep it above warn_sigma.", (2.5, 10.0)),
+    **_PUMP_CUSUM,
+    "min_load": _MIN_LOAD,
+    "min_load_span": _MIN_LOAD_SPAN,
+    "constant_cv": _CONSTANT_CV,
+}
+
+_PUMP_IDENTITY = {
+    "store": "the injected baseline store",
+    "site": "identity",
+    "run_id": "identity",
+    "freeze_if_missing": "set by the drift run (never from a config)",
+}
+_ROLE = "a role: which point the detector reads"
+DRIFT_EXEMPT["pump_flow_drift"] = {
+    **_PUMP_IDENTITY,
+    **{r: _ROLE for r in ("flow_role", "speed_role", "dp_role", "dp_sp_role", "status_role")},
+}
+DRIFT_EXEMPT["pump_head_drift"] = {
+    **_PUMP_IDENTITY,
+    **{r: _ROLE for r in ("speed_role", "head_role", "flow_role", "status_role")},
+}
+DRIFT_EXEMPT["loop_deltat_drift"] = {
+    **_PUMP_IDENTITY,
+    **{r: _ROLE for r in ("warm_role", "cool_role", "load_role", "status_role")},
+}
+DRIFT_EXEMPT["loop_dp_drift"] = {
+    **_PUMP_IDENTITY,
+    **{r: _ROLE for r in ("dp_role", "flow_role", "sp_role", "status_role")},
+    "dp_range": "a plausibility band that drops dropouts, not a threshold; None scales it to the "
+    "loop's own median DP (dp_plausible_range)",
+}
+DRIFT_EXEMPT["pump_power_drift"] = {
+    **_PUMP_IDENTITY,
+    **{r: _ROLE for r in ("power_role", "flow_role", "status_role")},
+}
+# ---- end 0104-pumpgates ----
+
+
 def _drift_factories() -> dict:
     from .coil_leak_rule import CoilLeakDrift
+    from .loop_deltat_rule import LoopDeltaTDrift
+    from .loop_dp_rule import LoopDPDrift
+    from .pump_flow_rule import PumpFlowDrift
+    from .pump_head_rule import PumpHeadDrift
+    from .pump_power_rule import PumpPowerDrift
 
-    return {"coil_leak_drift": CoilLeakDrift}
+    return {
+        "coil_leak_drift": CoilLeakDrift,
+        "loop_deltat_drift": LoopDeltaTDrift,  # 0.104 (#150)
+        "loop_dp_drift": LoopDPDrift,
+        "pump_flow_drift": PumpFlowDrift,
+        "pump_head_drift": PumpHeadDrift,
+        "pump_power_drift": PumpPowerDrift,
+    }
 
 
 def documented_drift_rules() -> list[str]:
-    """The sorted names of the opt-in drift detectors documented in :data:`DRIFT_PARAM_DOCS`."""
+    """The sorted names of the drift detectors documented in :data:`DRIFT_PARAM_DOCS`.
+
+    The opt-in ones (a config sets their parameters) and, since 0.104 (#150), the pump family's
+    five detectors, whose parameters are Python constructor arguments only.
+    """
     return sorted(_drift_factories())
 
 

@@ -68,6 +68,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   (variants `--hourly` and `--10starts`). The chiller exercise separates the two ways `chiller_staging` fails, and shows a
   condenser-water reset that passes the check but saves little (variant `--slope05`). The
   workbook now has 22 exercises.
+- **`pumpsim` sizes the pump and runs constant-speed pumps (#150).** `simulate_case` and
+  `make_cases` take `design_flow_gpm` (flow at 100 % speed, default 1000 gpm), which scales flow,
+  power and their noise and leaves head, loop DP and ΔT alone, plus `fixed_speed` (a constant-speed
+  pump with a `PUMP_STATUS` of 1) and `speed_point=False` (no speed column). The default pump's
+  frames are byte-identical to 0.103's.
+- **The pump drift family's parameters are documented (#150)** in `camber.rules.param_docs` and
+  `docs/THRESHOLDS.md`, under "Pump and loop drift detectors": every constructor parameter of
+  `pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift` and
+  `pump_power_drift`, with its unit, range, basis and how to calibrate it.
 
 ### Changed
 - **`camber serve` refuses cross-site browser requests (#134), as `camber lab` does.** A request
@@ -109,6 +118,40 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   interval is unchanged. Both cycle rules report two new metrics, `interval_min` and `n_partial`
   (samples on for part of their interval). The resampling rules for run status are written up in
   `docs/TIME-HANDLING.md`.
+- **The pump and loop drift detectors scale their gates to the pump (#150).** Until now they gated
+  on fixed numbers that a small pump never meets. A 40 gpm pump never reached 50 gpm, so
+  `loop_deltat_drift`, `loop_dp_drift` and `pump_power_drift` declined, and a worn impeller's whole
+  deficit sat under the 15 gpm floor of `pump_flow_drift`. With the defaults now `None`:
+  - **Flow gates.** The minimum flow and identifiable flow span are 10 % and 20 % of the
+    baseline's p95 flow (`size_relative_load_gates`, as the chiller rules since 0.84), capped at the
+    former 50 and 10 gpm. A pump whose baseline p95 is 500 gpm or more is gated exactly as before.
+  - **Speed gates.** The minimum speed of `pump_flow_drift` and `pump_head_drift` is the pump's
+    learned VFD floor plus 2 points, else 15 %, so samples parked at the drive minimum (where the
+    drive, not the load, sets the speed) are left out. `loop_deltat_drift` uses the same speed gate,
+    not 50, when a pump speed stands in for flow.
+  - **Backstop floors.** The flow-deficit floor is 2 % / 4 % of the baseline's p95 flow (capped at
+    15 / 30 gpm, reached at a 750 gpm pump). The power-excess floor is 5.5 % / 11 % of its p95
+    power (capped at 1 / 2 kW, reached at 18.2 kW). The head detector's flow-rise confound is 2.5 %
+    of p95 flow (capped at 20 gpm). The sigma floors still carry the weight.
+  - **Constant-speed pumps** are compared as a flat level, with a caveat, instead of declining.
+    This applies to a speed whose coefficient of variation over the baseline is at most 2 %
+    (`constant_speed_cv`), or a pump with no speed point but a running status: `pump_flow_drift`
+    and `pump_head_drift` now run on a speed point *or* a status (`roles_any_of`). The caveat says
+    that a throttled balancing valve moves a constant-speed pump along its curve just as wear
+    does. A loop whose flow barely moves (`constant_cv`, 2 %) gets a flat-level baseline in the
+    three flow-normalized detectors.
+
+  An explicit constructor value restores the old gate. Every Finding reports the gates and floors
+  it used (`*_speed_gate_pct`, `*_load_gate`, `*_gate_source`, `*_vfd_floor_pct`, `*_warn_floor_*`,
+  `*_speed_mode` / `*_normalizer_mode`, `*_baseline_model`).
+
+  On the pumpsim sweep from 20 to 1000 gpm, every fault family is now detected and localized at
+  every size as it is at full size, with no false alarm on healthy or DP-reset runs; at 0.103,
+  `pump_flow_drift` caught no flow fault below 200 gpm. Full-size results are unchanged (a golden
+  from 0.103 pins them). On `lbnl-chiller`, the three flow-normalized detectors now score chiller
+  1's constant 279 gpm flow as a level instead of declining, all `ok`. On `lbnl-boiler`, scored
+  with the detectors built on hot-water roles (the family is chilled-water only until #152), no
+  severity changes; its lead pump turns out to be variable-speed (a 28.9 % VFD floor, not constant).
 
 ### Deprecated
 - **No authentication by default for `camber serve` on loopback (#134).** A future release, 0.105.0

@@ -25,6 +25,15 @@ The rule is **loop-parameterized**: it defaults to the chilled-water roles but t
 ``speed_role`` (and the optional confound / status roles) so one class serves a hot-water loop too
 -- the equip identifies which pump. It is **not** auto-registered (it needs an injected
 ``BaselineStore``); run it via :meth:`camber.rules.base.Registry.run_periods`.
+
+**Pump size and constant-speed pumps (0.104, #150).** The speed gate sits just above the pump's
+learned VFD floor (samples parked at the drive minimum say nothing about flow *at* a speed), else
+15 %; the gpm floors are 2 % / 4 % of the baseline's p95 flow, capped at 15 / 30 gpm, so a 40 gpm
+pump is judged on its own scale and every pump of 750 gpm or more exactly as before. A pump whose
+speed barely moves (coefficient of variation <= 2 %), or that has no speed point but a running
+status, is a constant-speed pump: its flow is compared as a flat level at its fixed speed, with a
+caveat that a throttled balancing valve moves it along its curve just as wear does. Explicit
+constructor values always win. See :mod:`camber.rules._pumpgates`.
 """
 
 from __future__ import annotations
@@ -41,6 +50,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _pumpgates as G
 from .base import Finding
 
 _KIND = "pump_flow"
@@ -58,13 +68,21 @@ FLOW_PLAUSIBLE = (0.0, 1e6)
 # backstop that stops a very tight baseline from firing on a trivially small deficit. All are
 # constructor arguments, characterized from the signal class, not established on the pumps here.
 # ---------------------------------------------------------------------------------------------
+# 0.104 (#150): these are the caps; by default the floors are FLOW_WARN_FRAC / FLOW_FAULT_FRAC of
+# the baseline's p95 flow (camber.rules._pumpgates), which reach these values at a 750 gpm pump.
 FLOW_WARN_GPM = 15.0  # screening-grade -- coarse backstop; the sigma floor does the work
 FLOW_FAULT_GPM = 30.0  # screening-grade
+FLOW_WARN_FRAC = G.FLOW_WARN_FRAC  # of baseline p95 flow, capped at FLOW_WARN_GPM
+FLOW_FAULT_FRAC = G.FLOW_FAULT_FRAC  # of baseline p95 flow, capped at FLOW_FAULT_GPM
 FLOW_WARN_SIGMA = 2.5  # screening-grade
 FLOW_FAULT_SIGMA = 4.0  # screening-grade
 
 # Below this drive speed (%) the pump carries no condition information -- the analog of min_tons.
-MIN_SPEED = 15.0
+# 0.104 (#150): the fallback; by default the gate is the learned VFD floor + SPEED_FLOOR_TOL_PCT.
+MIN_SPEED = G.SPEED_FALLBACK
+SPEED_FLOOR_TOL_PCT = G.SPEED_FLOOR_TOL_PCT
+# A speed whose coefficient of variation over the baseline is at or under this is constant.
+CONSTANT_SPEED_CV = G.CONSTANT_CV
 
 # A co-moving loop-DP rise of at least this much (in the DP's own units) alongside the flow deficit
 # flags the system-resistance confound (the deficit may be a throttled valve, not pump wear).
@@ -95,8 +113,8 @@ class PumpFlowDrift:
         dp_sp_role: Role = Role.CHW_DIFF_PRESS_SP,
         status_role: Role = Role.PUMP_STATUS,
         freeze_if_missing: bool = True,
-        warn_gpm: float = FLOW_WARN_GPM,  # screening-grade -- see the module note
-        fault_gpm: float = FLOW_FAULT_GPM,  # screening-grade
+        warn_gpm: float | None = None,  # None = size-relative (see the module note)
+        fault_gpm: float | None = None,  # None = size-relative
         warn_sigma: float = FLOW_WARN_SIGMA,  # screening-grade
         fault_sigma: float = FLOW_FAULT_SIGMA,  # screening-grade
         dp_confound: float = DP_CONFOUND,
@@ -104,7 +122,8 @@ class PumpFlowDrift:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_speed: float = MIN_SPEED,
+        min_speed: float | None = None,  # None = learned VFD floor + tolerance, else MIN_SPEED
+        constant_speed_cv: float = CONSTANT_SPEED_CV,
     ):
         self.store = store
         self.site = site
@@ -114,8 +133,10 @@ class PumpFlowDrift:
         self.dp_role = dp_role
         self.dp_sp_role = dp_sp_role
         self.status_role = status_role
-        # Instance-level so the loop parameterization is reflected to Registry.run_periods.
-        self.roles_required = (flow_role, speed_role)
+        # Instance-level so the loop parameterization is reflected to Registry.run_periods. A speed
+        # point or a run status lets it run (0.104, #150: a status-only pump is constant-speed).
+        self.roles_required = (flow_role,)
+        self.roles_any_of = ((speed_role, status_role),)
         self.roles_optional = (dp_role, dp_sp_role, status_role)
         self.freeze_if_missing = freeze_if_missing
         self.warn_gpm = warn_gpm
@@ -128,6 +149,7 @@ class PumpFlowDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_speed = min_speed
+        self.constant_speed_cv = constant_speed_cv
 
     # ------------------------------------------------------------------ frame prep
     def _running(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -137,8 +159,19 @@ class PumpFlowDrift:
             return frame[status >= 0.5]
         return frame
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _speed_mode(self, base: pd.DataFrame, current: pd.DataFrame) -> tuple[str, float]:
+        """``(mode, cv)``: ``variable`` / ``constant`` / ``status_only`` / ``missing``."""
+        if self.speed_role in base.columns and self.speed_role in current.columns:
+            cv = G.normalizer_cv(base[self.speed_role])
+            return ("constant" if cv <= self.constant_speed_cv else "variable"), cv
+        if self.status_role in base.columns and self.status_role in current.columns:
+            return "status_only", 0.0
+        return "missing", float("nan")
+
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None, mode="variable"):
         """The frozen flow~speed baseline, freezing an initial one from ``base_frame`` if none."""
+        if gate is None:
+            gate = G.speed_gate(base_frame.get(self.speed_role), self.min_speed)
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -147,22 +180,30 @@ class PumpFlowDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
+        level = mode in ("constant", "status_only")
+        span = (
+            G.level_span(base_frame, self.speed_role, self.flow_role, gate.min_load)
+            if level
+            else gate.min_span
+        )
         fit = fit_load_baseline(
             base_frame,
             metric_col=self.flow_role,
             load_col=self.speed_role,
-            min_load=self.min_speed,
+            min_load=gate.min_load,
             metric_range=FLOW_PLAUSIBLE,
+            min_load_span=span,
+            level_fallback=level,
         )
         if fit is None:
             why = unscoreable_reason(
                 base_frame,
                 metric_col=self.flow_role,
                 load_col=self.speed_role,
-                min_load=self.min_speed,
+                min_load=gate.min_load,
                 metric_range=FLOW_PLAUSIBLE,
                 min_samples=30,
-                min_load_span=10.0,
+                min_load_span=None if level else span,
             )
             caveats.append(
                 f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
@@ -181,16 +222,25 @@ class PumpFlowDrift:
         return fit
 
     # ------------------------------------------------------------------ severity
-    def _severity(self, drift, caveats) -> str:
+    def _floors(self, base: pd.DataFrame) -> tuple[float, float]:
+        """The (warn, fault) gpm floors: explicit, else a fraction of the baseline's p95 flow."""
+        flow = base[self.flow_role] if self.flow_role in base.columns else None
+        return (
+            G.scaled_floor(flow, self.warn_gpm, FLOW_WARN_FRAC, FLOW_WARN_GPM),
+            G.scaled_floor(flow, self.fault_gpm, FLOW_FAULT_FRAC, FLOW_FAULT_GPM),
+        )
+
+    def _severity(self, drift, caveats, floors=None) -> str:
         """One-sided-DOWN severity: only a flow *deficit* clears the floors (both gpm and sigma)."""
+        warn_gpm, fault_gpm = floors if floors is not None else (FLOW_WARN_GPM, FLOW_FAULT_GPM)
         if drift.drift_sigma != drift.drift_sigma:  # NaN: baseline had no residual scatter
             caveats.append("baseline had no residual scatter, so drift is judged on gpm alone")
-            if drift.drift_f <= -self.fault_gpm:
+            if drift.drift_f <= -fault_gpm:
                 return "fault"
-            return "warn" if drift.drift_f <= -self.warn_gpm else "ok"
-        if drift.drift_f <= -self.fault_gpm and drift.drift_sigma <= -self.fault_sigma:
+            return "warn" if drift.drift_f <= -warn_gpm else "ok"
+        if drift.drift_f <= -fault_gpm and drift.drift_sigma <= -self.fault_sigma:
             return "fault"
-        if drift.drift_f <= -self.warn_gpm and drift.drift_sigma <= -self.warn_sigma:
+        if drift.drift_f <= -warn_gpm and drift.drift_sigma <= -self.warn_sigma:
             return "warn"
         return "ok"
 
@@ -226,7 +276,8 @@ class PumpFlowDrift:
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's flow-at-speed vs the frozen baseline; return a Finding."""
         caveats: list = []
-        if self.flow_role not in current.columns or self.speed_role not in current.columns:
+        mode, cv = self._speed_mode(baseline, current)
+        if self.flow_role not in current.columns or mode == "missing":
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -240,7 +291,12 @@ class PumpFlowDrift:
             )
 
         base_r, cur_r = self._running(baseline), self._running(current)
-        frozen = self._frozen_baseline(equip, base_r, caveats)
+        if mode == "status_only":  # a constant-speed pump with no speed point: score it at "100 %"
+            base_r = base_r.assign(**{self.speed_role: G.STATUS_ONLY_SPEED})
+            cur_r = cur_r.assign(**{self.speed_role: G.STATUS_ONLY_SPEED})
+        gate = G.speed_gate(base_r[self.speed_role], self.min_speed)
+        floors = self._floors(base_r)
+        frozen = self._frozen_baseline(equip, base_r, caveats, gate, mode)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -256,7 +312,7 @@ class PumpFlowDrift:
             cur_r,
             metric_col=self.flow_role,
             load_col=self.speed_role,
-            min_load=self.min_speed,
+            min_load=gate.min_load,
             metric_range=FLOW_PLAUSIBLE,
         )
         if drift is None:
@@ -264,7 +320,7 @@ class PumpFlowDrift:
                 cur_r,
                 metric_col=self.flow_role,
                 load_col=self.speed_role,
-                min_load=self.min_speed,
+                min_load=gate.min_load,
                 metric_range=FLOW_PLAUSIBLE,
                 min_samples=10,
                 baseline=frozen,
@@ -281,7 +337,7 @@ class PumpFlowDrift:
                 caveats=caveats,
             )
 
-        severity = self._severity(drift, caveats)
+        severity = self._severity(drift, caveats, floors)
         direction = "down" if drift.drift_f < 0 else "up"
         rec = self.store.get(self.site, equip, _KIND)
         metrics = {
@@ -293,7 +349,17 @@ class PumpFlowDrift:
             "pump_flow_n_current": drift.n_current,
             "pump_flow_baseline_sigma_gpm": frozen.sigma_f,
             "pump_flow_baseline_frozen_at": rec.frozen_at if rec else "",
+            # 0.104 (#150): the gates and floors this pump was judged with, and where they came from
+            "pump_flow_speed_gate_pct": gate.min_load,
+            "pump_flow_speed_gate_source": gate.source,
+            "pump_flow_vfd_floor_pct": gate.vfd_floor,
+            "pump_flow_warn_floor_gpm": floors[0],
+            "pump_flow_fault_floor_gpm": floors[1],
+            "pump_flow_speed_mode": mode,
+            "pump_flow_baseline_model": getattr(frozen, "load_model", "linear"),
         }
+        if mode in ("constant", "status_only"):
+            caveats.append(G.constant_speed_caveat("flow", mode, cv))
         self._resistance_confound(base_r, cur_r, direction == "down", metrics, caveats)
         if drift.extrapolated:
             caveats.append(
@@ -315,7 +381,7 @@ class PumpFlowDrift:
                 cur_r,
                 approach_col=self.flow_role,
                 tons_col=self.speed_role,
-                min_tons=self.min_speed,
+                min_tons=gate.min_load,
                 approach_range=FLOW_PLAUSIBLE,
             )
         except ValueError as exc:

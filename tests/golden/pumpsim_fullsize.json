@@ -1,0 +1,2947 @@
+{
+ "_comment": "Full-size (1000 gpm) pumpsim results captured at 0.103 (865ebe7) before #150's size-relative gates; tests/test_pump_size_gates.py checks every existing metric, severity, summary and caveat is unchanged.",
+ "cases": [
+  {
+   "case": "healthy@0",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.026,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.8467,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -0.2079,
+      "pump_flow_drift_sigma": -0.0176,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 5.28,
+      "pump_flow_slope_gpm_per_month": 1.2942,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -9.985,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2381,
+      "pump_head_drift_direction": "up",
+      "pump_head_drift_psi": 0.1517,
+      "pump_head_drift_sigma": 0.0678,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.89,
+      "pump_head_slope_psi_per_month": 0.1837,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head +0.2 psi vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4938,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0384,
+      "loop_deltat_drift_sigma": 0.0777,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 3.06,
+      "loop_deltat_slope_f_per_month": -0.0009,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5061,
+      "loop_dp_drift": -0.013,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.0257,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 5.56,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.1427,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4009,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0408,
+      "pump_power_drift_sigma": -0.1017,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.17,
+      "pump_power_slope_kw_per_month": 0.0143,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8646.54853,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488656.527108,
+     "chw_pump_speed": 48870.162439,
+     "chw_return_temp": 40312.522368,
+     "chw_supply_temp": 31689.179249,
+     "power": 9786.504588,
+     "pump_head": 18171.48216
+    },
+    "current": {
+     "chw_diff_press": 8643.02869,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488010.080462,
+     "chw_pump_speed": 48816.13019,
+     "chw_return_temp": 40303.667529,
+     "chw_supply_temp": 31667.273061,
+     "power": 9756.0763,
+     "pump_head": 18241.748897
+    }
+   }
+  },
+  {
+   "case": "healthy@0",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.038,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.4014,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 1.4293,
+      "pump_flow_drift_sigma": 0.1153,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 3.06,
+      "pump_flow_slope_gpm_per_month": 1.9455,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +1 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 11.064,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.266,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.0819,
+      "pump_head_drift_sigma": -0.0361,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 5.14,
+      "pump_head_slope_psi_per_month": 0.0107,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.1 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4923,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0498,
+      "loop_deltat_drift_sigma": -0.1012,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 5.56,
+      "loop_deltat_slope_f_per_month": -0.0317,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5117,
+      "loop_dp_drift": -0.0217,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.0424,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.17,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0514,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3895,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0269,
+      "pump_power_drift_sigma": -0.069,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.31,
+      "pump_power_slope_kw_per_month": 0.0022,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8665.123198,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 487416.461638,
+     "chw_pump_speed": 48801.456991,
+     "chw_return_temp": 40329.475026,
+     "chw_supply_temp": 31685.640276,
+     "power": 9755.307586,
+     "pump_head": 18153.853331
+    },
+    "current": {
+     "chw_diff_press": 8640.763999,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 491306.922214,
+     "chw_pump_speed": 49120.595664,
+     "chw_return_temp": 40305.805341,
+     "chw_supply_temp": 31681.956304,
+     "power": 9817.469752,
+     "pump_head": 18420.436369
+    }
+   }
+  },
+  {
+   "case": "healthy@0",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.037,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.2046,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 1.3452,
+      "pump_flow_drift_sigma": 0.1102,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 2.64,
+      "pump_flow_slope_gpm_per_month": -0.364,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +1 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 11.942,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2445,
+      "pump_head_drift_direction": "up",
+      "pump_head_drift_psi": 0.043,
+      "pump_head_drift_sigma": 0.0192,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 5.14,
+      "pump_head_slope_psi_per_month": -0.2475,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head +0.0 psi vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5048,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0211,
+      "loop_deltat_drift_sigma": -0.0418,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.86,
+      "loop_deltat_slope_f_per_month": 0.0217,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4841,
+      "loop_dp_drift": 0.0424,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.0875,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.44,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0248,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4027,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0095,
+      "pump_power_drift_sigma": 0.0236,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.17,
+      "pump_power_slope_kw_per_month": -0.0474,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8636.601009,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489578.273446,
+     "chw_pump_speed": 48962.111819,
+     "chw_return_temp": 40337.628954,
+     "chw_supply_temp": 31686.958942,
+     "power": 9806.391536,
+     "pump_head": 18277.228658
+    },
+    "current": {
+     "chw_diff_press": 8655.638172,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489220.400332,
+     "chw_pump_speed": 48863.260753,
+     "chw_return_temp": 40334.560372,
+     "chw_supply_temp": 31688.008808,
+     "power": 9802.323667,
+     "pump_head": 18239.533817
+    }
+   }
+  },
+  {
+   "case": "healthy@0",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.012,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.9935,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -0.756,
+      "pump_flow_drift_sigma": -0.063,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 5.28,
+      "pump_flow_slope_gpm_per_month": 0.7871,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow deficit -1 gpm (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -5.449,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3203,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.2152,
+      "pump_head_drift_sigma": -0.0928,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 2.78,
+      "pump_head_slope_psi_per_month": 0.0597,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5204,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.014,
+      "loop_deltat_drift_sigma": -0.0269,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 3.47,
+      "loop_deltat_slope_f_per_month": 0.0338,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4857,
+      "loop_dp_drift": -0.0046,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.0095,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 5.69,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0224,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4064,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0143,
+      "pump_power_drift_sigma": -0.0351,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.44,
+      "pump_power_slope_kw_per_month": -0.0301,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8645.411646,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489432.57733,
+     "chw_pump_speed": 48920.461881,
+     "chw_return_temp": 40316.378174,
+     "chw_supply_temp": 31677.631289,
+     "power": 9805.085842,
+     "pump_head": 18318.461442
+    },
+    "current": {
+     "chw_diff_press": 8645.352171,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 486599.851204,
+     "chw_pump_speed": 48670.625374,
+     "chw_return_temp": 40309.484864,
+     "chw_supply_temp": 31675.44903,
+     "power": 9729.270318,
+     "pump_head": 18121.923536
+    }
+   }
+  },
+  {
+   "case": "impeller_wear@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.086,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.8239,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -46.6239,
+      "pump_flow_drift_sigma": -3.9432,
+      "pump_flow_first_alarm_at": "2025-06-01 09:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 88.06,
+      "pump_flow_slope_gpm_per_month": 1.3992,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump flow deficit -47 gpm (-3.9\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -49.318,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3492,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -6.0314,
+      "pump_head_drift_sigma": -2.5674,
+      "pump_head_first_alarm_at": "2025-06-01 16:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 62.92,
+      "pump_head_slope_psi_per_month": -0.1275,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump head deficit -6.0 psi (-2.6\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5177,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0378,
+      "loop_deltat_drift_sigma": 0.073,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.31,
+      "loop_deltat_slope_f_per_month": -0.0028,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.493,
+      "loop_dp_drift": -0.0851,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.1725,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.58,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0569,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.1 (0.2\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4029,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0084,
+      "pump_power_drift_sigma": 0.0208,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.03,
+      "pump_power_slope_kw_per_month": -0.0416,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8658.037537,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488765.059123,
+     "chw_pump_speed": 48943.135401,
+     "chw_return_temp": 40311.061828,
+     "chw_supply_temp": 31673.956574,
+     "power": 9783.413032,
+     "pump_head": 18284.594918
+    },
+    "current": {
+     "chw_diff_press": 8612.929194,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 455798.910232,
+     "chw_pump_speed": 48989.90743,
+     "chw_return_temp": 40318.098,
+     "chw_supply_temp": 31673.528489,
+     "power": 9132.574098,
+     "pump_head": 14648.668408
+    }
+   }
+  },
+  {
+   "case": "impeller_wear@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.004,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.5063,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -95.8047,
+      "pump_flow_drift_sigma": -7.6605,
+      "pump_flow_first_alarm_at": "2025-06-01 07:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 99.86,
+      "pump_flow_slope_gpm_per_month": -2.2016,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump flow deficit -96 gpm (-7.7\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -83.396,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.1899,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -11.4509,
+      "pump_head_drift_sigma": -5.229,
+      "pump_head_first_alarm_at": "2025-06-01 14:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 77.22,
+      "pump_head_slope_psi_per_month": -0.3414,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump head deficit -11.5 psi (-5.2\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.514,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0596,
+      "loop_deltat_drift_sigma": 0.1159,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 5.42,
+      "loop_deltat_slope_f_per_month": 0.0032,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.1\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4976,
+      "loop_dp_drift": 0.0039,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.0079,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.44,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0885,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3933,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0176,
+      "pump_power_drift_sigma": 0.0448,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.17,
+      "pump_power_slope_kw_per_month": -0.0229,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8633.786375,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 486591.542343,
+     "chw_pump_speed": 48678.617697,
+     "chw_return_temp": 40297.710994,
+     "chw_supply_temp": 31680.843216,
+     "power": 9720.733775,
+     "pump_head": 18081.394939
+    },
+    "current": {
+     "chw_diff_press": 8632.062463,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 421094.542917,
+     "chw_pump_speed": 48986.33671,
+     "chw_return_temp": 40333.956832,
+     "chw_supply_temp": 31678.427505,
+     "power": 8429.333046,
+     "pump_head": 11005.071571
+    }
+   }
+  },
+  {
+   "case": "cavitation@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.027,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.1726,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -47.9195,
+      "pump_flow_drift_sigma": -3.9367,
+      "pump_flow_first_alarm_at": "2025-06-01 09:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 81.25,
+      "pump_flow_slope_gpm_per_month": 0.478,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump flow deficit -48 gpm (-3.9\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -51.102,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3774,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -5.9979,
+      "pump_head_drift_sigma": -2.5229,
+      "pump_head_first_alarm_at": "2025-06-01 17:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 61.39,
+      "pump_head_slope_psi_per_month": 0.2062,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump head deficit -6.0 psi (-2.5\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4849,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0027,
+      "loop_deltat_drift_sigma": -0.0056,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.86,
+      "loop_deltat_slope_f_per_month": 0.0674,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.502,
+      "loop_dp_drift": 0.0075,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.015,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.31,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0631,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4028,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0207,
+      "pump_power_drift_sigma": 0.0513,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 5.97,
+      "pump_power_slope_kw_per_month": -0.0551,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8648.315799,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 490469.224358,
+     "chw_pump_speed": 49027.630215,
+     "chw_return_temp": 40331.774561,
+     "chw_supply_temp": 31691.729315,
+     "power": 9791.975012,
+     "pump_head": 18339.638586
+    },
+    "current": {
+     "chw_diff_press": 8665.367411,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 455538.947433,
+     "chw_pump_speed": 49011.039557,
+     "chw_return_temp": 40335.864552,
+     "chw_supply_temp": 31688.741882,
+     "power": 9108.303368,
+     "pump_head": 14660.069632
+    }
+   }
+  },
+  {
+   "case": "cavitation@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.026,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.3702,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -92.2766,
+      "pump_flow_drift_sigma": -8.1157,
+      "pump_flow_first_alarm_at": "2025-06-01 07:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 93.89,
+      "pump_flow_slope_gpm_per_month": 6.2303,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump flow deficit -92 gpm (-8.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -82.494,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2731,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -11.1264,
+      "pump_head_drift_sigma": -4.8948,
+      "pump_head_first_alarm_at": "2025-06-01 14:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 77.22,
+      "pump_head_slope_psi_per_month": -0.5874,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump head deficit -11.1 psi (-4.9\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5046,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0137,
+      "loop_deltat_drift_sigma": -0.0272,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.44,
+      "loop_deltat_slope_f_per_month": -0.0068,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4934,
+      "loop_dp_drift": -0.0234,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.0475,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.03,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.047,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3988,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0283,
+      "pump_power_drift_sigma": -0.0709,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.86,
+      "pump_power_slope_kw_per_month": -0.0239,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8657.328918,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489190.737049,
+     "chw_pump_speed": 48962.096546,
+     "chw_return_temp": 40337.018934,
+     "chw_supply_temp": 31693.456,
+     "power": 9796.716046,
+     "pump_head": 18293.110903
+    },
+    "current": {
+     "chw_diff_press": 8645.611895,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 422706.432442,
+     "chw_pump_speed": 49043.838371,
+     "chw_return_temp": 40305.154724,
+     "chw_supply_temp": 31691.903235,
+     "power": 8438.604089,
+     "pump_head": 11029.178844
+    }
+   }
+  },
+  {
+   "case": "bearing_drag@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.004,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.225,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 1.0355,
+      "pump_flow_drift_sigma": 0.0847,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 5.28,
+      "pump_flow_slope_gpm_per_month": -1.391,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +1 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 17.677,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3292,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.0943,
+      "pump_head_drift_sigma": -0.0405,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.61,
+      "pump_head_slope_psi_per_month": 0.018,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.1 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5197,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.024,
+      "loop_deltat_drift_sigma": 0.0463,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 3.61,
+      "loop_deltat_slope_f_per_month": 0.0972,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4873,
+      "loop_dp_drift": 0.0268,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.055,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 5.28,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.033,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": "up",
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4038,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 1.6612,
+      "pump_power_drift_sigma": 4.1138,
+      "pump_power_first_alarm_at": "2025-06-01 10:00:00",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 90.14,
+      "pump_power_slope_kw_per_month": 0.1079,
+      "pump_power_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump power excess +1.7 kW (4.1\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8636.799896,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488508.148862,
+     "chw_pump_speed": 48849.337061,
+     "chw_return_temp": 40293.827105,
+     "chw_supply_temp": 31668.154295,
+     "power": 9762.508372,
+     "pump_head": 18170.433259
+    },
+    "current": {
+     "chw_diff_press": 8655.60767,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489115.03583,
+     "chw_pump_speed": 48835.735709,
+     "chw_return_temp": 40323.466251,
+     "chw_supply_temp": 31689.596291,
+     "power": 10980.885115,
+     "pump_head": 18207.730993
+    }
+   }
+  },
+  {
+   "case": "bearing_drag@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.02,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.0146,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -0.3727,
+      "pump_flow_drift_sigma": -0.031,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 4.31,
+      "pump_flow_slope_gpm_per_month": 1.7336,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 2.783,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2515,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.1572,
+      "pump_head_drift_sigma": -0.0698,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.19,
+      "pump_head_slope_psi_per_month": 0.0372,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5144,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0071,
+      "loop_deltat_drift_sigma": 0.0139,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.44,
+      "loop_deltat_slope_f_per_month": -0.0867,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4959,
+      "loop_dp_drift": 0.0114,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.023,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 5.14,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0562,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": "up",
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4211,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 3.2825,
+      "pump_power_drift_sigma": 7.7951,
+      "pump_power_first_alarm_at": "2025-06-01 07:00:00",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 100.0,
+      "pump_power_slope_kw_per_month": 0.0082,
+      "pump_power_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump power excess +3.3 kW (7.8\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8621.4688,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488079.89946,
+     "chw_pump_speed": 48804.65657,
+     "chw_return_temp": 40316.755769,
+     "chw_supply_temp": 31682.384473,
+     "power": 9755.571145,
+     "pump_head": 18188.178422
+    },
+    "current": {
+     "chw_diff_press": 8632.530158,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488544.579532,
+     "chw_pump_speed": 48859.838349,
+     "chw_return_temp": 40316.083058,
+     "chw_supply_temp": 31675.086249,
+     "power": 12109.997209,
+     "pump_head": 18249.842288
+    }
+   }
+  },
+  {
+   "case": "entrained_air@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.02,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.2235,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -39.5768,
+      "pump_flow_drift_sigma": -3.2378,
+      "pump_flow_first_alarm_at": "2025-06-01 12:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 73.06,
+      "pump_flow_slope_gpm_per_month": -6.1935,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump flow deficit -40 gpm (-3.2\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -26.509,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2954,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -5.7949,
+      "pump_head_drift_sigma": -2.5246,
+      "pump_head_first_alarm_at": "2025-06-01 16:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 59.86,
+      "pump_head_slope_psi_per_month": 0.0216,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump head deficit -5.8 psi (-2.5\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4885,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0221,
+      "loop_deltat_drift_sigma": 0.0453,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 5.28,
+      "loop_deltat_slope_f_per_month": -0.0719,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.489,
+      "loop_dp_drift": -0.0226,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.0461,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.72,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0604,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4058,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0061,
+      "pump_power_drift_sigma": -0.0151,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.86,
+      "pump_power_slope_kw_per_month": 0.0623,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8648.734326,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 486698.857559,
+     "chw_pump_speed": 48737.14837,
+     "chw_return_temp": 40295.938975,
+     "chw_supply_temp": 31674.99897,
+     "power": 9728.434426,
+     "pump_head": 18094.075778
+    },
+    "current": {
+     "chw_diff_press": 8631.179848,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 460684.333189,
+     "chw_pump_speed": 49001.921122,
+     "chw_return_temp": 40302.858808,
+     "chw_supply_temp": 31668.454508,
+     "power": 9208.240091,
+     "pump_head": 14784.3045
+    }
+   }
+  },
+  {
+   "case": "entrained_air@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.031,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.3816,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -81.5778,
+      "pump_flow_drift_sigma": -7.1675,
+      "pump_flow_first_alarm_at": "2025-06-01 07:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 93.89,
+      "pump_flow_slope_gpm_per_month": 5.3495,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump flow deficit -82 gpm (-7.2\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -84.287,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": "down",
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.1996,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -11.7165,
+      "pump_head_drift_sigma": -5.3267,
+      "pump_head_first_alarm_at": "2025-06-01 13:00:00",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 75.28,
+      "pump_head_slope_psi_per_month": -0.6929,
+      "pump_head_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump head deficit -11.7 psi (-5.3\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4957,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0114,
+      "loop_deltat_drift_sigma": -0.023,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.58,
+      "loop_deltat_slope_f_per_month": -0.0067,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5055,
+      "loop_dp_drift": 0.0599,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.1186,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 3.89,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0313,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.1 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4126,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0422,
+      "pump_power_drift_sigma": 0.1022,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.03,
+      "pump_power_slope_kw_per_month": -0.0188,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8636.78074,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488960.068693,
+     "chw_pump_speed": 48904.678037,
+     "chw_return_temp": 40323.830115,
+     "chw_supply_temp": 31679.880573,
+     "power": 9775.535851,
+     "pump_head": 18294.180066
+    },
+    "current": {
+     "chw_diff_press": 8657.487679,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 429949.321132,
+     "chw_pump_speed": 49004.782123,
+     "chw_return_temp": 40323.791803,
+     "chw_supply_temp": 31685.65867,
+     "power": 8607.169571,
+     "pump_head": 11080.275728
+    }
+   }
+  },
+  {
+   "case": "clogged_strainer@2",
+   "findings": [
+    {
+     "caveats": [
+      "loop differential pressure also rose +2.4 over the same window; a flow deficit with rising DP points at increased system resistance (a throttled or stuck-closed valve downstream) rather than pump wear -- check the distribution, and the head signal, before condemning the impeller"
+     ],
+     "metrics": {
+      "dp_shift": 2.389,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.1757,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -42.1088,
+      "pump_flow_drift_sigma": -3.4584,
+      "pump_flow_first_alarm_at": "2025-06-01 10:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 80.56,
+      "pump_flow_slope_gpm_per_month": 0.3464,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "warn",
+     "summary": "P_SIM: pump flow deficit -42 gpm (-3.5\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -28.884,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2094,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.3217,
+      "pump_head_drift_sigma": -0.1456,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 5.42,
+      "pump_head_slope_psi_per_month": -0.0103,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.3 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4983,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0574,
+      "loop_deltat_drift_sigma": 0.1152,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 5.14,
+      "loop_deltat_slope_f_per_month": -0.1584,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.1\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5019,
+      "loop_dp_drift": 2.4072,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 4.7961,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 99.86,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0375,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "warn",
+     "summary": "P_SIM: loop DP rose 2.4 (4.8\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3907,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0004,
+      "pump_power_drift_sigma": 0.001,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 5.69,
+      "pump_power_slope_kw_per_month": 0.0123,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8634.889992,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489935.33029,
+     "chw_pump_speed": 48949.627912,
+     "chw_return_temp": 40317.481045,
+     "chw_supply_temp": 31690.194612,
+     "power": 9796.086621,
+     "pump_head": 18336.299484
+    },
+    "current": {
+     "chw_diff_press": 10368.063538,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 461725.622922,
+     "chw_pump_speed": 49087.469006,
+     "chw_return_temp": 40334.578844,
+     "chw_supply_temp": 31677.293145,
+     "power": 9234.983313,
+     "pump_head": 18363.299469
+    }
+   }
+  },
+  {
+   "case": "clogged_strainer@4",
+   "findings": [
+    {
+     "caveats": [
+      "loop differential pressure also rose +4.8 over the same window; a flow deficit with rising DP points at increased system resistance (a throttled or stuck-closed valve downstream) rather than pump wear -- check the distribution, and the head signal, before condemning the impeller"
+     ],
+     "metrics": {
+      "dp_shift": 4.793,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": "down",
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.4256,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -80.7794,
+      "pump_flow_drift_sigma": -6.501,
+      "pump_flow_first_alarm_at": "2025-06-01 07:00:00",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 99.17,
+      "pump_flow_slope_gpm_per_month": -2.6713,
+      "pump_flow_sustained_alarm": true,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "fault",
+     "summary": "P_SIM: pump flow deficit -81 gpm (-6.5\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -85.085,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3382,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.0423,
+      "pump_head_drift_sigma": -0.0181,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.33,
+      "pump_head_slope_psi_per_month": 0.1544,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.0 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4806,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0164,
+      "loop_deltat_drift_sigma": -0.034,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 6.53,
+      "loop_deltat_slope_f_per_month": 0.0627,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4879,
+      "loop_dp_drift": 4.775,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 9.7868,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 100.0,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0258,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "fault",
+     "summary": "P_SIM: loop DP rose 4.8 (9.8\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3886,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0187,
+      "pump_power_drift_sigma": -0.0481,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 5.56,
+      "pump_power_slope_kw_per_month": 0.0052,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8649.731157,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 490359.735456,
+     "chw_pump_speed": 49041.598261,
+     "chw_return_temp": 40325.547274,
+     "chw_supply_temp": 31679.517686,
+     "power": 9825.205043,
+     "pump_head": 18373.154282
+    },
+    "current": {
+     "chw_diff_press": 12110.44264,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 431619.58714,
+     "chw_pump_speed": 48973.789814,
+     "chw_return_temp": 40302.176732,
+     "chw_supply_temp": 31676.710874,
+     "power": 8642.232226,
+     "pump_head": 18331.095219
+    }
+   }
+  },
+  {
+   "case": "overpumping@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": -0.086,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.7865,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 27.2272,
+      "pump_flow_drift_sigma": 2.31,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 58.61,
+      "pump_flow_slope_gpm_per_month": 2.0408,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +27 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [
+      "loop flow also rose +29 gpm over the same window; head falls as the operating point rides down the pump curve at higher flow, so part of this head deficit may be that, not wear -- read it together with the flow-at-speed signal"
+     ],
+     "metrics": {
+      "flow_shift": 29.239,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.257,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.1717,
+      "pump_head_drift_sigma": -0.0761,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 5.28,
+      "pump_head_slope_psi_per_month": 0.2664,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": "down",
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4957,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -1.4161,
+      "loop_deltat_drift_sigma": -2.8568,
+      "loop_deltat_first_alarm_at": "2025-06-01 09:00:00",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 80.14,
+      "loop_deltat_slope_f_per_month": -0.0819,
+      "loop_deltat_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "warn",
+     "summary": "P_SIM: loop \u0394T collapsed 1.4\u00b0F (2.9\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5352,
+      "loop_dp_drift": -0.0723,
+      "loop_dp_drift_direction": "down",
+      "loop_dp_drift_sigma": -0.135,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 2.36,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0673,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP fell 0.1 (0.1\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3895,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0253,
+      "pump_power_drift_sigma": -0.065,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 5.42,
+      "pump_power_slope_kw_per_month": -0.0102,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8670.059579,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488681.463493,
+     "chw_pump_speed": 48840.677324,
+     "chw_return_temp": 40331.642405,
+     "chw_supply_temp": 31708.031925,
+     "power": 9772.107557,
+     "pump_head": 18247.537071
+    },
+    "current": {
+     "chw_diff_press": 8626.051926,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 508887.137736,
+     "chw_pump_speed": 48900.642084,
+     "chw_return_temp": 39295.412751,
+     "chw_supply_temp": 31679.388805,
+     "power": 10151.20321,
+     "pump_head": 18214.958084
+    }
+   }
+  },
+  {
+   "case": "overpumping@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 0.01,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.7422,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 53.6584,
+      "pump_flow_drift_sigma": 4.5697,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 91.81,
+      "pump_flow_slope_gpm_per_month": 3.7216,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +54 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [
+      "loop flow also rose +57 gpm over the same window; head falls as the operating point rides down the pump curve at higher flow, so part of this head deficit may be that, not wear -- read it together with the flow-at-speed signal"
+     ],
+     "metrics": {
+      "flow_shift": 56.675,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3082,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.284,
+      "pump_head_drift_sigma": -0.123,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 2.5,
+      "pump_head_slope_psi_per_month": 0.06,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.3 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [
+      "over 10% of the current period ran outside the baseline's fitted flow envelope, so part of this drift is extrapolated"
+     ],
+     "metrics": {
+      "loop_deltat_alarm_direction": "down",
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5053,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -2.8992,
+      "loop_deltat_drift_sigma": -5.7376,
+      "loop_deltat_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 100.0,
+      "loop_deltat_slope_f_per_month": 0.0218,
+      "loop_deltat_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "fault",
+     "summary": "P_SIM: loop \u0394T collapsed 2.9\u00b0F (5.7\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [
+      "over 10% of the current period ran outside the baseline's fitted flow envelope, so part of this drift is extrapolated"
+     ],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": null,
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5005,
+      "loop_dp_drift": 0.0112,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 0.0224,
+      "loop_dp_first_alarm_at": "",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 4.86,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0256,
+      "loop_dp_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [
+      "over 10% of the current period ran outside the baseline's fitted flow envelope, so part of this drift is extrapolated"
+     ],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3985,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0345,
+      "pump_power_drift_sigma": 0.0866,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 5.0,
+      "pump_power_slope_kw_per_month": -0.0711,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8646.801377,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489870.703959,
+     "chw_pump_speed": 48963.490356,
+     "chw_return_temp": 40315.679282,
+     "chw_supply_temp": 31674.689042,
+     "power": 9783.535091,
+     "pump_head": 18331.366485
+    },
+    "current": {
+     "chw_diff_press": 8647.519258,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 530536.512766,
+     "chw_pump_speed": 49146.269816,
+     "chw_return_temp": 38251.112557,
+     "chw_supply_temp": 31686.697556,
+     "power": 10619.526412,
+     "pump_head": 18339.876926
+    }
+   }
+  },
+  {
+   "case": "valve_authority_loss@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 1.965,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.2511,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 1.133,
+      "pump_flow_drift_sigma": 0.0925,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 3.47,
+      "pump_flow_slope_gpm_per_month": -1.2526,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +1 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -19.617,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3128,
+      "pump_head_drift_direction": "up",
+      "pump_head_drift_psi": 0.0051,
+      "pump_head_drift_sigma": 0.0022,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.19,
+      "pump_head_slope_psi_per_month": 0.2046,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head +0.0 psi vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": "down",
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5008,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -1.2094,
+      "loop_deltat_drift_sigma": -2.415,
+      "loop_deltat_first_alarm_at": "2025-06-01 10:00:00",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 68.47,
+      "loop_deltat_slope_f_per_month": -0.1842,
+      "loop_deltat_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 1.2\u00b0F (2.4\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.5025,
+      "loop_dp_drift": 1.9579,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 3.8963,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 96.94,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": 0.0028,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 2.0 (3.9\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.403,
+      "pump_power_drift_direction": "up",
+      "pump_power_drift_kw": 0.0221,
+      "pump_power_drift_sigma": 0.0548,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.17,
+      "pump_power_slope_kw_per_month": 0.0596,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8654.79685,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489836.418458,
+     "chw_pump_speed": 49044.524163,
+     "chw_return_temp": 40341.328305,
+     "chw_supply_temp": 31681.985146,
+     "power": 9791.156154,
+     "pump_head": 18319.026428
+    },
+    "current": {
+     "chw_diff_press": 10069.646322,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 489633.918682,
+     "chw_pump_speed": 48936.985741,
+     "chw_return_temp": 39468.644103,
+     "chw_supply_temp": 31692.612397,
+     "power": 9805.334849,
+     "pump_head": 18299.008297
+    }
+   }
+  },
+  {
+   "case": "valve_authority_loss@4",
+   "findings": [
+    {
+     "caveats": [
+      "loop differential pressure also rose +4.0 over the same window; a flow deficit with rising DP points at increased system resistance (a throttled or stuck-closed valve downstream) rather than pump wear -- check the distribution, and the head signal, before condemning the impeller"
+     ],
+     "metrics": {
+      "dp_shift": 4.046,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.9674,
+      "pump_flow_drift_direction": "down",
+      "pump_flow_drift_gpm": -0.196,
+      "pump_flow_drift_sigma": -0.0164,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 4.03,
+      "pump_flow_slope_gpm_per_month": -1.6212,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 12.814,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2254,
+      "pump_head_drift_direction": "up",
+      "pump_head_drift_psi": 0.0357,
+      "pump_head_drift_sigma": 0.016,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 4.86,
+      "pump_head_slope_psi_per_month": 0.1324,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head +0.0 psi vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": "down",
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5031,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -2.397,
+      "loop_deltat_drift_sigma": -4.7645,
+      "loop_deltat_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 99.86,
+      "loop_deltat_slope_f_per_month": 0.0951,
+      "loop_deltat_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "warn",
+     "summary": "P_SIM: loop \u0394T collapsed 2.4\u00b0F (4.8\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_sp_shift": 0.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4893,
+      "loop_dp_drift": 4.0419,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 8.2606,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 100.0,
+      "loop_dp_setpoint_driven": false,
+      "loop_dp_slope_per_month": -0.0328,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "fault",
+     "summary": "P_SIM: loop DP rose 4.0 (8.3\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4087,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0288,
+      "pump_power_drift_sigma": -0.0704,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 3.75,
+      "pump_power_slope_kw_per_month": 0.0483,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8614.789227,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488006.297124,
+     "chw_pump_speed": 48764.060473,
+     "chw_return_temp": 40311.113026,
+     "chw_supply_temp": 31672.719305,
+     "power": 9757.350996,
+     "pump_head": 18092.305778
+    },
+    "current": {
+     "chw_diff_press": 11521.26872,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 490722.145716,
+     "chw_pump_speed": 49048.848313,
+     "chw_return_temp": 38579.166429,
+     "chw_supply_temp": 31686.828024,
+     "power": 9797.944879,
+     "pump_head": 18407.443203
+    }
+   }
+  },
+  {
+   "case": "dp_reset@2",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 2.968,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 11.7945,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 0.0747,
+      "pump_flow_drift_sigma": 0.0063,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 5.42,
+      "pump_flow_slope_gpm_per_month": -0.2223,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +0 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": -0.8,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.3204,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.1192,
+      "pump_head_drift_sigma": -0.0514,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.89,
+      "pump_head_slope_psi_per_month": -0.1386,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.1 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.4815,
+      "loop_deltat_drift_direction": "up",
+      "loop_deltat_drift_f": 0.0075,
+      "loop_deltat_drift_sigma": 0.0156,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.44,
+      "loop_deltat_slope_f_per_month": 0.0735,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+    },
+    {
+     "caveats": [
+      "DP setpoint shifted +3.0 over the window; judged on the residual drift -0.0 not explained by the reset -- no independent control fault remains"
+     ],
+     "metrics": {
+      "dp_sp_shift": 3.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4756,
+      "loop_dp_drift": 2.9901,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 6.2869,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 100.0,
+      "loop_dp_residual_drift": -0.0099,
+      "loop_dp_setpoint_driven": true,
+      "loop_dp_slope_per_month": 0.0267,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 3.0 (6.3\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.4016,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0222,
+      "pump_power_drift_sigma": -0.0552,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.03,
+      "pump_power_slope_kw_per_month": -0.0257,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8606.400514,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488918.046415,
+     "chw_pump_speed": 48906.611263,
+     "chw_return_temp": 40317.85731,
+     "chw_supply_temp": 31686.466138,
+     "power": 9765.39451,
+     "pump_head": 18258.485091
+    },
+    "current": {
+     "chw_diff_press": 10768.918331,
+     "chw_diff_press_sp": 10800.0,
+     "chw_flow": 487904.887973,
+     "chw_pump_speed": 48850.951548,
+     "chw_return_temp": 40351.455515,
+     "chw_supply_temp": 31698.342016,
+     "power": 9747.041497,
+     "pump_head": 18152.748307
+    }
+   }
+  },
+  {
+   "case": "dp_reset@4",
+   "findings": [
+    {
+     "caveats": [],
+     "metrics": {
+      "dp_shift": 5.959,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_flow_alarm_direction": null,
+      "pump_flow_baseline_frozen_at": "SIM",
+      "pump_flow_baseline_sigma_gpm": 12.4086,
+      "pump_flow_drift_direction": "up",
+      "pump_flow_drift_gpm": 0.5037,
+      "pump_flow_drift_sigma": 0.0406,
+      "pump_flow_first_alarm_at": "",
+      "pump_flow_n_current": 720.0,
+      "pump_flow_pct_outside_2sigma": 3.47,
+      "pump_flow_slope_gpm_per_month": -1.4608,
+      "pump_flow_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_flow_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump flow +1 gpm vs frozen baseline at matched speed (a surplus is not a fault)"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "flow_shift": 1.966,
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_head_alarm_direction": null,
+      "pump_head_baseline_frozen_at": "SIM",
+      "pump_head_baseline_sigma_psi": 2.2123,
+      "pump_head_drift_direction": "down",
+      "pump_head_drift_psi": -0.0414,
+      "pump_head_drift_sigma": -0.0187,
+      "pump_head_first_alarm_at": "",
+      "pump_head_n_current": 720.0,
+      "pump_head_pct_outside_2sigma": 3.61,
+      "pump_head_slope_psi_per_month": -0.6086,
+      "pump_head_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_head_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump head deficit -0.0 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "loop_deltat_alarm_direction": null,
+      "loop_deltat_baseline_frozen_at": "SIM",
+      "loop_deltat_baseline_sigma_f": 0.5204,
+      "loop_deltat_drift_direction": "down",
+      "loop_deltat_drift_f": -0.0195,
+      "loop_deltat_drift_sigma": -0.0374,
+      "loop_deltat_first_alarm_at": "",
+      "loop_deltat_n_current": 720.0,
+      "loop_deltat_pct_outside_2sigma": 4.03,
+      "loop_deltat_slope_f_per_month": 0.0446,
+      "loop_deltat_sustained_alarm": false,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_deltat_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+    },
+    {
+     "caveats": [
+      "DP setpoint shifted +6.0 over the window; judged on the residual drift -0.0 not explained by the reset -- no independent control fault remains"
+     ],
+     "metrics": {
+      "dp_sp_shift": 6.0,
+      "loop_dp_alarm_direction": "up",
+      "loop_dp_baseline_frozen_at": "SIM",
+      "loop_dp_baseline_sigma": 0.4927,
+      "loop_dp_drift": 5.9684,
+      "loop_dp_drift_direction": "up",
+      "loop_dp_drift_sigma": 12.1137,
+      "loop_dp_first_alarm_at": "2025-06-01 07:00:00",
+      "loop_dp_n_current": 720.0,
+      "loop_dp_pct_outside_2sigma": 100.0,
+      "loop_dp_residual_drift": -0.0316,
+      "loop_dp_setpoint_driven": true,
+      "loop_dp_slope_per_month": 0.0359,
+      "loop_dp_sustained_alarm": true,
+      "magnitude_threshold_confidence": "screening-grade",
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "loop_dp_drift",
+     "severity": "ok",
+     "summary": "P_SIM: loop DP rose 6.0 (12.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+    },
+    {
+     "caveats": [],
+     "metrics": {
+      "magnitude_threshold_confidence": "screening-grade",
+      "pump_power_alarm_direction": null,
+      "pump_power_baseline_frozen_at": "SIM",
+      "pump_power_baseline_sigma_kw": 0.3908,
+      "pump_power_drift_direction": "down",
+      "pump_power_drift_kw": -0.0203,
+      "pump_power_drift_sigma": -0.0519,
+      "pump_power_first_alarm_at": "",
+      "pump_power_n_current": 720.0,
+      "pump_power_pct_outside_2sigma": 4.03,
+      "pump_power_slope_kw_per_month": -0.0252,
+      "pump_power_sustained_alarm": false,
+      "temporal_threshold_confidence": "provisional-untuned",
+      "threshold_confidence_note": "magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment; temporal/CUSUM parameters are provisional and untuned for this signal: the false-alarm rate and detection delay they produce have not been measured, so a sustained alarm is a prompt to look, not a verdict; full temporal validation awaits real trended fault data",
+      "thresholds_provisional": true
+     },
+     "rule": "pump_power_drift",
+     "severity": "ok",
+     "summary": "P_SIM: pump power -0.0 kW vs frozen baseline at matched flow (less power is not a fault)"
+    }
+   ],
+   "frames": {
+    "baseline": {
+     "chw_diff_press": 8639.703653,
+     "chw_diff_press_sp": 8640.0,
+     "chw_flow": 488771.814218,
+     "chw_pump_speed": 48831.807999,
+     "chw_return_temp": 40334.252494,
+     "chw_supply_temp": 31681.120874,
+     "power": 9775.661477,
+     "pump_head": 18166.798317
+    },
+    "current": {
+     "chw_diff_press": 12938.289741,
+     "chw_diff_press_sp": 12960.0,
+     "chw_flow": 489839.390213,
+     "chw_pump_speed": 48912.347605,
+     "chw_return_temp": 40298.62358,
+     "chw_supply_temp": 31664.91078,
+     "power": 9796.696942,
+     "pump_head": 18252.459587
+    }
+   }
+  }
+ ]
+}

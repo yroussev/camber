@@ -158,12 +158,34 @@ These entries are a provisional API (0.100).
 """
 
 
+_PUMP_DRIFT_INTRO = """\
+## Pump and loop drift detectors
+
+The pump drift family's detectors (`"family": "pump"`), which a drift run builds with these
+defaults; a config does not set their parameters, so they are Python constructor arguments
+(`camber.rules.pump_flow_rule.PumpFlowDrift(store, min_speed=30.0)`). Since 0.104 their gates and
+backstop floors scale with the pump: a default of `null` means "derived from the baseline period",
+and the Finding's metrics report the value used. See [PUMP-DRIFT.md](PUMP-DRIFT.md).
+"""
+
+
 def _drift_sections() -> list:
-    """The "Opt-in drift detectors" part of the page (0.100, #100)."""
+    """The "Opt-in drift detectors" and "Pump and loop drift detectors" parts of the page."""
     rules = pd.documented_drift_rules()
     if not rules:
         return []
-    out = [_DRIFT_INTRO]
+    python_only = getattr(pd, "_PYTHON_ONLY_DRIFT", frozenset())
+    opt_in = [r for r in rules if r not in python_only]
+    pump = [r for r in rules if r in python_only]
+    out = [_DRIFT_INTRO] + _drift_tables(opt_in) if opt_in else []
+    if pump:  # 0.104 (#150)
+        out += [_PUMP_DRIFT_INTRO] + _drift_tables(pump)
+    return out
+
+
+def _drift_tables(rules) -> list:
+    """One parameter table plus calibration notes per drift detector in ``rules``."""
+    out = []
     for rule in rules:
         out.append(f"### {rule}\n")
         params = pd.drift_rule_params(rule)

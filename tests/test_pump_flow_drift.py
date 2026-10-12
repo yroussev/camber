@@ -149,9 +149,12 @@ def test_it_is_a_period_rule_and_is_not_auto_registered():
 
 def test_defaults_to_chilled_water_and_reparameterizes_to_hot_water():
     chw = _rule(BaselineStore())
-    assert chw.roles_required == (Role.CHW_FLOW, Role.CHW_PUMP_SPEED)
+    # 0.104 (#150): a speed point or a run status lets it run (status only = constant speed)
+    assert chw.roles_required == (Role.CHW_FLOW,)
+    assert chw.roles_any_of == ((Role.CHW_PUMP_SPEED, Role.PUMP_STATUS),)
     hw = _rule(BaselineStore(), flow_role=Role.HW_FLOW, speed_role=Role.HW_PUMP_SPEED)
-    assert hw.roles_required == (Role.HW_FLOW, Role.HW_PUMP_SPEED)
+    assert hw.roles_required == (Role.HW_FLOW,)
+    assert hw.roles_any_of == ((Role.HW_PUMP_SPEED, Role.PUMP_STATUS),)
 
 
 # --------------------------------------------------------------------------- the detector

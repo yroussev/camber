@@ -1306,3 +1306,173 @@ How to calibrate:
 - `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
 
 Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `coil` (identity: set by the family entry's coil_leak list); `freeze_if_missing` (set by the drift run (never from a config)).
+
+## Pump and loop drift detectors
+
+The pump drift family's detectors (`"family": "pump"`), which a drift run builds with these
+defaults; a config does not set their parameters, so they are Python constructor arguments
+(`camber.rules.pump_flow_rule.PumpFlowDrift(store, min_speed=30.0)`). Since 0.104 their gates and
+backstop floors scale with the pump: a default of `null` means "derived from the baseline period",
+and the Finding's metrics report the value used. See [PUMP-DRIFT.md](PUMP-DRIFT.md).
+
+### loop_deltat_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn_f` | `1.0` | °F | 0.25 to 5.0 | CAMBER judgment: screening-grade; a two-sensor temperature difference |
+| `fault_f` | `2.0` | °F | 0.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `warn_sigma` | `2.5` | σ | 1.5 to 6.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `fault_sigma` | `5.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_load` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 200.0 | CAMBER judgment: 10 % of the baseline's p95 flow, capped at the former 50 gpm -- the fractions of the 0.84 chiller gates (size_relative_load_gates), so every pump of 500 gpm or more is gated as before; a speed normalizer is gated like min_speed (PNNL Re-tuning Ch.8) |
+| `min_load_span` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 50.0 | CAMBER judgment: 20 % of the baseline's p95 flow, capped at the former 10 gpm (size_relative_load_gates); 10 points for a speed normalizer |
+| `constant_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's flow varies well under 2 % (lbnl-chiller chiller 1: 0.07 %), a variable-flow loop's by tens of % |
+
+How to calibrate:
+
+- `warn_f`: Score known-good periods against each other and set it above the |drift| they read. *Note:* Two-sided; a warn needs both warn_f and warn_sigma.
+- `fault_f`: Keep it at about twice warn_f.
+- `warn_sigma`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads.
+- `fault_sigma`: Keep it above warn_sigma.
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_load`: Set it to about a tenth of the pump's design flow, or leave None. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `min_load_span`: Leave it; a narrower baseline range does not identify a slope (a constant normalizer is then a flat level). *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `constant_cv`: Compute the coefficient of variation of the normalizer (flow or speed) over the running hours of a known period; a constant-flow loop sits near zero. *Note:* At or under it the baseline is a flat level valid within 5 % of the median normalizer beyond its observed band; samples outside it are not scored.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `warm_role` (a role: which point the detector reads); `cool_role` (a role: which point the detector reads); `load_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).
+
+### loop_dp_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn` | `2.0` | loop DP units | 0.1 to 50.0 | CAMBER judgment: screening-grade backstop; DP is a pressure, so it does not scale with the loop's flow, and the sigma floor carries the weight across units |
+| `fault` | `4.0` | loop DP units | 0.2 to 100.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `warn_sigma` | `2.5` | σ | 1.5 to 6.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `fault_sigma` | `4.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `dp_sp_confound` | `1.0` | loop DP units | 0.1 to 20.0 | CAMBER judgment: a setpoint move this large is a reset, not a fault |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_load` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 200.0 | CAMBER judgment: 10 % of the baseline's p95 flow, capped at the former 50 gpm -- the fractions of the 0.84 chiller gates (size_relative_load_gates), so every pump of 500 gpm or more is gated as before; a speed normalizer is gated like min_speed (PNNL Re-tuning Ch.8) |
+| `min_load_span` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 50.0 | CAMBER judgment: 20 % of the baseline's p95 flow, capped at the former 10 gpm (size_relative_load_gates); 10 points for a speed normalizer |
+| `constant_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's flow varies well under 2 % (lbnl-chiller chiller 1: 0.07 %), a variable-flow loop's by tens of % |
+
+How to calibrate:
+
+- `warn`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads. *Note:* Two-sided; a warn needs both warn and warn_sigma.
+- `fault`: Keep it at about twice warn.
+- `warn_sigma`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads.
+- `fault_sigma`: Keep it above warn_sigma.
+- `dp_sp_confound`: Set it a little above the setpoint's own jitter.
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_load`: Set it to about a tenth of the pump's design flow, or leave None. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `min_load_span`: Leave it; a narrower baseline range does not identify a slope (a constant normalizer is then a flat level). *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `constant_cv`: Compute the coefficient of variation of the normalizer (flow or speed) over the running hours of a known period; a constant-flow loop sits near zero. *Note:* At or under it the baseline is a flat level valid within 5 % of the median normalizer beyond its observed band; samples outside it are not scored.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `dp_role` (a role: which point the detector reads); `flow_role` (a role: which point the detector reads); `sp_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads); `dp_range` (a plausibility band that drops dropouts, not a threshold; None scales it to the loop's own median DP (dp_plausible_range)).
+
+### pump_flow_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn_gpm` | `null` | gpm | 0.5 to 100.0 | CAMBER judgment: screening-grade backstop, 2 % of the baseline's p95 flow capped at the former 15 gpm (reached at a 750 gpm pump): at or above typical flow-meter accuracy (about 1-2 % of reading); the affinity laws (Q ∝ N) make a deficit scale with the pump, and in the 20-1000 gpm pumpsim sweep the sigma floor binds first at every size |
+| `fault_gpm` | `null` | gpm | 1.0 to 200.0 | CAMBER judgment: screening-grade, 4 % of the baseline's p95 flow capped at 30 gpm |
+| `warn_sigma` | `2.5` | σ | 1.5 to 6.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `fault_sigma` | `4.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `dp_confound` | `1.0` | loop DP units | 0.1 to 20.0 | CAMBER judgment: a DP rise this large alongside a flow deficit is added resistance |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
+| `constant_speed_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's speed varies well under 2 %, a VFD pump's by tens of % (the lbnl-chiller secondary pump: 38 %) |
+
+How to calibrate:
+
+- `warn_gpm`: Leave None, or set it just above the flow meter's stated accuracy at design flow. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used. A warn needs both warn_gpm and warn_sigma.
+- `fault_gpm`: Keep it at about twice warn_gpm. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `warn_sigma`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads.
+- `fault_sigma`: Keep it above warn_sigma.
+- `dp_confound`: Set it a little above the loop DP's own scatter at its setpoint. *Note:* Caveat only; it does not change the severity.
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_speed`: Read the drive's minimum speed from the VFD parameters or the sequence of operations and set this a point or two above it; or leave None to learn it from the baseline's running speeds (camber.chwpump.learn_vfd_floor). *Note:* None (the default) = the learned VFD floor + 2 points, else 15 %; the metrics *_speed_gate_pct, *_speed_gate_source and *_vfd_floor_pct say which.
+- `constant_speed_cv`: Compute the coefficient of variation of the pump speed over the running hours of a known period; a constant-speed pump sits near zero. *Note:* At or under it -- or with no speed point but a running status -- the pump is constant-speed: its signal is compared as a flat level at its fixed speed, with a caveat.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `flow_role` (a role: which point the detector reads); `speed_role` (a role: which point the detector reads); `dp_role` (a role: which point the detector reads); `dp_sp_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).
+
+### pump_head_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn_psi` | `2.0` | psi | 0.5 to 20.0 | CAMBER judgment: screening-grade backstop; head is a pressure, so it does not scale with the pump's flow |
+| `fault_psi` | `4.0` | psi | 1.0 to 40.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `warn_sigma` | `2.5` | σ | 1.5 to 6.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `fault_sigma` | `4.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `flow_confound` | `null` | gpm | 0.5 to 100.0 | CAMBER judgment: 2.5 % of the baseline's p95 flow, capped at the former 20 gpm (reached at an 800 gpm pump): a flow rise this large moves the operating point down the curve |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
+| `constant_speed_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's speed varies well under 2 %, a VFD pump's by tens of % (the lbnl-chiller secondary pump: 38 %) |
+
+How to calibrate:
+
+- `warn_psi`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads. *Note:* A warn needs both warn_psi and warn_sigma.
+- `fault_psi`: Keep it at about twice warn_psi.
+- `warn_sigma`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads.
+- `fault_sigma`: Keep it above warn_sigma.
+- `flow_confound`: Leave None, or set it to a few percent of design flow. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used. Caveat only; it does not change the severity.
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_speed`: Read the drive's minimum speed from the VFD parameters or the sequence of operations and set this a point or two above it; or leave None to learn it from the baseline's running speeds (camber.chwpump.learn_vfd_floor). *Note:* None (the default) = the learned VFD floor + 2 points, else 15 %; the metrics *_speed_gate_pct, *_speed_gate_source and *_vfd_floor_pct say which.
+- `constant_speed_cv`: Compute the coefficient of variation of the pump speed over the running hours of a known period; a constant-speed pump sits near zero. *Note:* At or under it -- or with no speed point but a running status -- the pump is constant-speed: its signal is compared as a flat level at its fixed speed, with a caveat.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `speed_role` (a role: which point the detector reads); `head_role` (a role: which point the detector reads); `flow_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).
+
+### pump_power_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn_kw` | `null` | kW | 0.01 to 20.0 | CAMBER judgment: screening-grade backstop, 5.5 % of the baseline's p95 power capped at the former 1 kW (reached at an 18.2 kW pump); by the affinity laws pump power scales with flow x head, so a fixed kW floor cannot fit a fractional-horsepower pump. 6 % delayed small-pump detection of bearing drag in the pumpsim sweep; 5.5 % keeps it within 0.125 severity of full size |
+| `fault_kw` | `null` | kW | 0.02 to 40.0 | CAMBER judgment: screening-grade, 11 % of the baseline's p95 power capped at 2 kW |
+| `warn_sigma` | `2.5` | σ | 1.5 to 6.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `fault_sigma` | `4.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade (camber.driftthresholds) |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_load` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 200.0 | CAMBER judgment: 10 % of the baseline's p95 flow, capped at the former 50 gpm -- the fractions of the 0.84 chiller gates (size_relative_load_gates), so every pump of 500 gpm or more is gated as before; a speed normalizer is gated like min_speed (PNNL Re-tuning Ch.8) |
+| `min_load_span` | `null` | gpm (% speed when the normalizer is a pump speed) | 0.0 to 50.0 | CAMBER judgment: 20 % of the baseline's p95 flow, capped at the former 10 gpm (size_relative_load_gates); 10 points for a speed normalizer |
+| `constant_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's flow varies well under 2 % (lbnl-chiller chiller 1: 0.07 %), a variable-flow loop's by tens of % |
+
+How to calibrate:
+
+- `warn_kw`: Leave None, or set it just above the power meter's resolution at design flow. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used. A warn needs both warn_kw and warn_sigma.
+- `fault_kw`: Keep it at about twice warn_kw. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `warn_sigma`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the largest |drift_sigma| it reads.
+- `fault_sigma`: Keep it above warn_sigma.
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_load`: Set it to about a tenth of the pump's design flow, or leave None. *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `min_load_span`: Leave it; a narrower baseline range does not identify a slope (a constant normalizer is then a flat level). *Note:* None (the default) scales it to this pump from the baseline period; a number is used as given. The Finding's metrics report the value used.
+- `constant_cv`: Compute the coefficient of variation of the normalizer (flow or speed) over the running hours of a known period; a constant-flow loop sits near zero. *Note:* At or under it the baseline is a flat level valid within 5 % of the median normalizer beyond its observed band; samples outside it are not scored.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `power_role` (a role: which point the detector reads); `flow_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).

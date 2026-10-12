@@ -15,6 +15,13 @@ normalizing ΔT on load would be circular; flow is the non-circular proxy (load/
 extra residual scatter, which the sigma floor absorbs). Where no flow point exists, pass pump
 speed as the normalizer -- an affinity proxy for flow.
 
+**Gates scale with the loop (0.104, #150).** A flow normalizer is gated at 10 % of the baseline's
+p95 flow (20 % for the identifiable span), capped at 50 / 10 gpm, so a small loop is not declined
+for never reaching 50 gpm and every loop of 500 gpm or more is gated exactly as before; a pump-speed
+normalizer is gated just above the pump's learned VFD floor (else 15 %), not at 50. A normalizer
+that barely moves (coefficient of variation <= 2 %: a constant-speed pump, a constant-flow loop) is
+compared as a flat level inside its observed band, with a caveat. Explicit values always win.
+
 **Loop-parameterized** by the warm/cool temperature pair and the normalizer, so one class serves a
 chilled-water loop (warm=return, cool=supply) or a hot-water loop (warm=supply, cool=return); the
 equip identifies the loop. Declines loudly when the temperature pair or the normalizer is unmapped.
@@ -36,6 +43,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _pumpgates as G
 from .base import Finding
 
 _KIND = "loop_deltat"
@@ -55,7 +63,12 @@ DELTAT_WARN_SIGMA = 2.5  # screening-grade, applied to |drift|
 DELTAT_FAULT_SIGMA = 5.0  # screening-grade, applied to |drift|
 
 # Below this normalizer value (gpm of flow, or % speed) the loop carries no condition information.
-MIN_LOAD = 50.0
+# 0.104 (#150): the cap. By default a flow normalizer is gated at 10 % of the baseline's p95 flow
+# (20 % for the identifiable span), capped at 50 / 10 gpm, and a pump-speed normalizer at the
+# learned VFD floor + 2 points (else 15 %) -- see camber.rules._pumpgates.
+MIN_LOAD = G.FLOW_GATE_CAP
+# A normalizer whose coefficient of variation over the baseline is at or under this is constant.
+CONSTANT_CV = G.CONSTANT_CV
 
 
 class LoopDeltaTDrift:
@@ -89,7 +102,9 @@ class LoopDeltaTDrift:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_load: float = MIN_LOAD,
+        min_load: float | None = None,  # None = size-relative (see _pumpgates)
+        min_load_span: float | None = None,  # None = size-relative
+        constant_cv: float = CONSTANT_CV,
     ):
         self.store = store
         self.site = site
@@ -110,6 +125,8 @@ class LoopDeltaTDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_load = min_load
+        self.min_load_span = min_load_span
+        self.constant_cv = constant_cv
 
     # ------------------------------------------------------------------ frame prep
     def _prepared(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -124,7 +141,7 @@ class LoopDeltaTDrift:
             out = out[status >= 0.5]
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None, mode="variable"):
         """The frozen ΔT~flow baseline, freezing an initial one from ``base_frame`` if none."""
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
@@ -134,22 +151,34 @@ class LoopDeltaTDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
+        if gate is None:
+            gate = G.normalizer_gates(
+                base_frame.get(self.load_role), self.load_role, self.min_load, self.min_load_span
+            )
+        level = mode == "constant"
+        span = (
+            G.level_span(base_frame, self.load_role, _METRIC, gate.min_load)
+            if level
+            else gate.min_span
+        )
         fit = fit_load_baseline(
             base_frame,
             metric_col=_METRIC,
             load_col=self.load_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=DELTAT_PLAUSIBLE,
+            min_load_span=span,
+            level_fallback=level,
         )
         if fit is None:
             why = unscoreable_reason(
                 base_frame,
                 metric_col=_METRIC,
                 load_col=self.load_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=DELTAT_PLAUSIBLE,
                 min_samples=30,
-                min_load_span=10.0,
+                min_load_span=None if level else span,
             )
             caveats.append(
                 f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
@@ -215,7 +244,12 @@ class LoopDeltaTDrift:
             )
 
         base_t, cur_t = self._prepared(baseline), self._prepared(current)
-        frozen = self._frozen_baseline(equip, base_t, caveats)
+        gate = G.normalizer_gates(
+            base_t[self.load_role], self.load_role, self.min_load, self.min_load_span
+        )
+        cv = G.normalizer_cv(base_t[self.load_role])
+        mode = "constant" if cv <= self.constant_cv else "variable"
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate, mode)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -231,7 +265,7 @@ class LoopDeltaTDrift:
             cur_t,
             metric_col=_METRIC,
             load_col=self.load_role,
-            min_load=self.min_load,
+            min_load=gate.min_load,
             metric_range=DELTAT_PLAUSIBLE,
         )
         if drift is None:
@@ -239,7 +273,7 @@ class LoopDeltaTDrift:
                 cur_t,
                 metric_col=_METRIC,
                 load_col=self.load_role,
-                min_load=self.min_load,
+                min_load=gate.min_load,
                 metric_range=DELTAT_PLAUSIBLE,
                 min_samples=10,
                 baseline=frozen,
@@ -269,7 +303,25 @@ class LoopDeltaTDrift:
             "loop_deltat_n_current": drift.n_current,
             "loop_deltat_baseline_sigma_f": frozen.sigma_f,
             "loop_deltat_baseline_frozen_at": rec.frozen_at if rec else "",
+            # 0.104 (#150): the normalizer gates used, where they came from, and the model
+            "loop_deltat_load_gate": gate.min_load,
+            "loop_deltat_load_span_gate": gate.min_span,
+            "loop_deltat_gate_source": gate.source,
+            "loop_deltat_vfd_floor_pct": gate.vfd_floor,
+            "loop_deltat_normalizer_mode": mode,
+            "loop_deltat_baseline_model": getattr(frozen, "load_model", "linear"),
         }
+        if getattr(frozen, "load_model", "linear") == "level":
+            unit = "% speed" if G.is_speed(self.load_role) else "gpm"
+            caveats.append(
+                G.constant_flow_caveat(
+                    "loop ΔT",
+                    cv,
+                    frozen.tons_min - frozen.load_band,
+                    frozen.tons_max + frozen.load_band,
+                    unit,
+                )
+            )
         if drift.extrapolated:
             caveats.append(
                 "over 10% of the current period ran outside the baseline's fitted flow envelope, "
@@ -289,7 +341,7 @@ class LoopDeltaTDrift:
                 cur_t,
                 approach_col=_METRIC,
                 tons_col=self.load_role,
-                min_tons=self.min_load,
+                min_tons=gate.min_load,
                 approach_range=DELTAT_PLAUSIBLE,
             )
         except ValueError as exc:

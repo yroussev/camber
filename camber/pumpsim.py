@@ -16,6 +16,13 @@ flow while the pump's head stays healthy and loop DP rises; overpumping collapse
 that moves the setpoint must *not* alarm). That is enough to exercise every detector, the
 flow-vs-head disambiguation, and -- the headline -- the roll-up's ``locus`` assignment.
 
+**Pump size and constant speed (0.104, #150).** ``design_flow_gpm`` scales the pump: flow (and the
+power that follows it) and their meter noise scale with it, while head, loop DP and ΔT -- pressures
+and a temperature difference -- do not. The default, 1000 gpm near full speed, is the pump every
+earlier release simulated, and its frames are byte-identical to theirs. ``fixed_speed`` runs a
+constant-speed pump at that speed (with a ``PUMP_STATUS`` of 1), and ``speed_point=False`` drops
+the speed column, as on a pump that publishes only its run status.
+
 Deterministic given a seed; numpy / pandas only (core deps).
 """
 
@@ -23,6 +30,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,6 +39,7 @@ from .model.roles import Role
 from .pumpdrift import PumpDriftDiagnosis, diagnose_pump_drift
 
 __all__ = [
+    "DESIGN_FLOW_GPM",
     "PumpFault",
     "FAULTS",
     "SimulatedCase",
@@ -44,6 +53,7 @@ __all__ = [
 
 # Healthy design coefficients (chilled-water loop).
 _Q_COEF = 10.0  # gpm per % speed  -> ~1000 gpm near full
+DESIGN_FLOW_GPM = 100.0 * _Q_COEF  # the default pump: flow at 100 % speed
 _H_COEF = 0.005  # psi per %^2      -> ~50 psi near full
 _DT0 = 12.0  # design loop ΔT, degF
 _DP0 = 12.0  # design loop DP (held at setpoint)
@@ -108,16 +118,34 @@ def _speed(n: int, rng) -> np.ndarray:
     return np.clip(s, 35.0, 100.0)
 
 
-def _frame(n: int, *, start: str, seed: int, fault: PumpFault | None, severity: int):
-    """One role-frame: healthy channels from speed, with ``fault`` deltas (x severity) imposed."""
+def _frame(
+    n: int,
+    *,
+    start: str,
+    seed: int,
+    fault: PumpFault | None,
+    severity: int,
+    design_flow_gpm: float = DESIGN_FLOW_GPM,
+    fixed_speed: float | None = None,
+    speed_point: bool = True,
+):
+    """One role-frame: healthy channels from speed, with ``fault`` deltas (x severity) imposed.
+
+    ``design_flow_gpm`` scales flow, power and their noise (the default reproduces the original
+    1000 gpm pump exactly); ``fixed_speed`` runs a constant-speed pump; ``speed_point=False`` drops
+    the speed column (a pump that publishes only its status).
+    """
     rng = np.random.default_rng(seed)
     idx = pd.date_range(start, periods=n, freq="1h")
     spd = _speed(n, rng)
+    if fixed_speed is not None:
+        spd = np.full(n, float(fixed_speed))
     s = float(severity)
     f = fault
+    k = float(design_flow_gpm) / DESIGN_FLOW_GPM  # exactly 1.0 for the default pump
 
-    flow = _Q_COEF * spd * (1 + (f.d_flow_frac * s if f else 0.0)) + rng.normal(
-        0, _FLOW_NOISE + (f.extra_flow_noise * s if f else 0.0), n
+    flow = _Q_COEF * k * spd * (1 + (f.d_flow_frac * s if f else 0.0)) + rng.normal(
+        0, (_FLOW_NOISE + (f.extra_flow_noise * s if f else 0.0)) * k, n
     )
     head = _H_COEF * spd * spd * (1 + (f.d_head_frac * s if f else 0.0)) + rng.normal(
         0, _HEAD_NOISE, n
@@ -126,11 +154,11 @@ def _frame(n: int, *, start: str, seed: int, fault: PumpFault | None, severity: 
     dp_sp = _DP0 + (f.d_dp_sp * s if f else 0.0)
     dp = dp_sp + (f.d_dp * s if f else 0.0) + rng.normal(0, _DP_NOISE, n)
     power = _P_COEF * flow * (1 + (f.d_power_frac * s if f else 0.0)) + rng.normal(
-        0, _POWER_NOISE, n
+        0, _POWER_NOISE * k, n
     )
     supply = np.full(n, _CHWS) + rng.normal(0, _TEMP_NOISE, n)
 
-    return pd.DataFrame(
+    out = pd.DataFrame(
         {
             Role.CHW_PUMP_SPEED: spd,
             Role.CHW_FLOW: flow,
@@ -143,6 +171,11 @@ def _frame(n: int, *, start: str, seed: int, fault: PumpFault | None, severity: 
         },
         index=idx,
     )
+    if fixed_speed is not None:
+        out[Role.PUMP_STATUS] = 1.0
+    if not speed_point:
+        out = out.drop(columns=[Role.CHW_PUMP_SPEED])
+    return out
 
 
 @dataclass(frozen=True)
@@ -187,11 +220,24 @@ def simulate_case(
     seed: int = 0,
     baseline_start: str = "2025-05-01",
     current_start: str = "2025-06-01",
+    design_flow_gpm: float = DESIGN_FLOW_GPM,
+    fixed_speed: float | None = None,
+    speed_point: bool = True,
 ) -> SimulatedCase:
-    """One case: healthy baseline, current period (healthy or ``fault_name`` at that sev)."""
+    """One case: healthy baseline, current period (healthy or ``fault_name`` at that sev).
+
+    ``design_flow_gpm`` sizes the pump (flow at 100 % speed; the default is the original 1000 gpm
+    pump, byte-identical to earlier releases); ``fixed_speed`` makes it a constant-speed pump at
+    that speed, and ``speed_point=False`` drops its speed column (status only).
+    """
     fault = None if (fault_name is None or severity <= 0) else FAULTS[fault_name]
-    baseline = _frame(n, start=baseline_start, seed=seed, fault=None, severity=0)
-    current = _frame(n, start=current_start, seed=seed + 1, fault=fault, severity=severity)
+    size: dict[str, Any] = {
+        "design_flow_gpm": design_flow_gpm,
+        "fixed_speed": fixed_speed,
+        "speed_point": speed_point,
+    }
+    baseline = _frame(n, start=baseline_start, seed=seed, fault=None, severity=0, **size)
+    current = _frame(n, start=current_start, seed=seed + 1, fault=fault, severity=severity, **size)
     return SimulatedCase(
         equip=equip,
         baseline=baseline,
@@ -210,18 +256,30 @@ def make_cases(
     n_healthy: int = 8,
     n_per_fault: int = 2,
     seed0: int = 0,
+    design_flow_gpm: float = DESIGN_FLOW_GPM,
+    fixed_speed: float | None = None,
+    speed_point: bool = True,
 ) -> list:
-    """A labelled set: ``n_healthy`` negatives plus ``n_per_fault`` cases per fault x severity."""
+    """A labelled set: ``n_healthy`` negatives plus ``n_per_fault`` cases per fault x severity.
+
+    ``design_flow_gpm`` / ``fixed_speed`` / ``speed_point`` are passed to every
+    :func:`simulate_case` (0.104, #150).
+    """
+    size: dict[str, Any] = {
+        "design_flow_gpm": design_flow_gpm,
+        "fixed_speed": fixed_speed,
+        "speed_point": speed_point,
+    }
     names = list(FAULTS) if faults is None else list(faults)
     cases: list = []
     seed = seed0
     for _ in range(n_healthy):
-        cases.append(simulate_case(None, 0, seed=seed))
+        cases.append(simulate_case(None, 0, seed=seed, **size))
         seed += 2
     for name in names:
         for sev in severities:
             for _ in range(n_per_fault):
-                cases.append(simulate_case(name, sev, seed=seed))
+                cases.append(simulate_case(name, sev, seed=seed, **size))
                 seed += 2
     return cases
 

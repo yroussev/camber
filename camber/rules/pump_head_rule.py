@@ -23,6 +23,13 @@ psi floor is only a coarse backstop.
 
 Loop-parameterized like the flow detector; **not** auto-registered (needs an injected
 ``BaselineStore``); run via :meth:`camber.rules.base.Registry.run_periods`.
+
+**Pump size and constant-speed pumps (0.104, #150).** As in the flow detector, the speed gate sits
+just above the learned VFD floor (else 15 %), and a constant-speed pump (speed coefficient of
+variation <= 2 %, or no speed point but a running status) has its head compared as a flat level at
+its fixed speed, with a caveat. Head is a pressure, so the psi floors do not scale with pump size;
+the flow-rise confound does (2.5 % of the baseline's p95 flow, capped at 20 gpm). Explicit
+constructor values always win. See :mod:`camber.rules._pumpgates`.
 """
 
 from __future__ import annotations
@@ -39,6 +46,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _pumpgates as G
 from .base import Finding
 
 _KIND = "pump_head"
@@ -57,11 +65,16 @@ HEAD_WARN_SIGMA = 2.5  # screening-grade
 HEAD_FAULT_SIGMA = 4.0  # screening-grade
 
 # Below this drive speed (%) the pump carries no condition information -- the analog of min_tons.
-MIN_SPEED = 15.0
+# 0.104 (#150): the fallback; by default the gate is the learned VFD floor + SPEED_FLOOR_TOL_PCT.
+MIN_SPEED = G.SPEED_FALLBACK
+# A speed whose coefficient of variation over the baseline is at or under this is constant.
+CONSTANT_SPEED_CV = G.CONSTANT_CV
 
 # A co-moving flow rise of at least this much (gpm) alongside the head deficit flags the
-# operating-point confound (head fell riding down the curve, not from wear).
+# operating-point confound (head fell riding down the curve, not from wear). 0.104 (#150): the cap;
+# by default it is FLOW_CONFOUND_FRAC of the baseline's p95 flow (20 gpm at an 800 gpm pump).
 FLOW_CONFOUND = 20.0
+FLOW_CONFOUND_FRAC = 0.025
 
 
 class PumpHeadDrift:
@@ -90,12 +103,13 @@ class PumpHeadDrift:
         fault_psi: float = HEAD_FAULT_PSI,  # screening-grade
         warn_sigma: float = HEAD_WARN_SIGMA,  # screening-grade
         fault_sigma: float = HEAD_FAULT_SIGMA,  # screening-grade
-        flow_confound: float = FLOW_CONFOUND,
+        flow_confound: float | None = None,  # None = size-relative (see the module note)
         slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_speed: float = MIN_SPEED,
+        min_speed: float | None = None,  # None = learned VFD floor + tolerance, else MIN_SPEED
+        constant_speed_cv: float = CONSTANT_SPEED_CV,
     ):
         self.store = store
         self.site = site
@@ -104,7 +118,9 @@ class PumpHeadDrift:
         self.head_role = head_role
         self.flow_role = flow_role
         self.status_role = status_role
-        self.roles_required = (speed_role,)
+        # 0.104 (#150): a speed point or a run status lets it run (status only = constant speed)
+        self.roles_required = ()
+        self.roles_any_of = ((speed_role, status_role),)
         self.roles_optional = (head_role, flow_role, status_role)
         self.freeze_if_missing = freeze_if_missing
         self.warn_psi = warn_psi
@@ -117,6 +133,7 @@ class PumpHeadDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_speed = min_speed
+        self.constant_speed_cv = constant_speed_cv
 
     # ------------------------------------------------------------------ frame prep
     def _running(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -126,8 +143,19 @@ class PumpHeadDrift:
             return frame[status >= 0.5]
         return frame
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _speed_mode(self, base: pd.DataFrame, current: pd.DataFrame) -> tuple[str, float]:
+        """``(mode, cv)``: ``variable`` / ``constant`` / ``status_only`` / ``missing``."""
+        if self.speed_role in base.columns and self.speed_role in current.columns:
+            cv = G.normalizer_cv(base[self.speed_role])
+            return ("constant" if cv <= self.constant_speed_cv else "variable"), cv
+        if self.status_role in base.columns and self.status_role in current.columns:
+            return "status_only", 0.0
+        return "missing", float("nan")
+
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None, mode="variable"):
         """The frozen head~speed baseline, freezing an initial one from ``base_frame`` if none."""
+        if gate is None:
+            gate = G.speed_gate(base_frame.get(self.speed_role), self.min_speed)
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -136,22 +164,30 @@ class PumpHeadDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
+        level = mode in ("constant", "status_only")
+        span = (
+            G.level_span(base_frame, self.speed_role, self.head_role, gate.min_load)
+            if level
+            else gate.min_span
+        )
         fit = fit_load_baseline(
             base_frame,
             metric_col=self.head_role,
             load_col=self.speed_role,
-            min_load=self.min_speed,
+            min_load=gate.min_load,
             metric_range=HEAD_PLAUSIBLE,
+            min_load_span=span,
+            level_fallback=level,
         )
         if fit is None:
             why = unscoreable_reason(
                 base_frame,
                 metric_col=self.head_role,
                 load_col=self.speed_role,
-                min_load=self.min_speed,
+                min_load=gate.min_load,
                 metric_range=HEAD_PLAUSIBLE,
                 min_samples=30,
-                min_load_span=10.0,
+                min_load_span=None if level else span,
             )
             caveats.append(
                 f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
@@ -188,13 +224,16 @@ class PumpHeadDrift:
         """Report the flow shift; caveat a head deficit that co-moves with a flow rise (curve)."""
         if self.flow_role not in cur.columns or self.flow_role not in base.columns:
             return
+        confound = G.scaled_floor(
+            base[self.flow_role], self.flow_confound, FLOW_CONFOUND_FRAC, FLOW_CONFOUND
+        )
         base_q = pd.to_numeric(base[self.flow_role], errors="coerce").median()
         cur_q = pd.to_numeric(cur[self.flow_role], errors="coerce").median()
         if base_q != base_q or cur_q != cur_q:  # a NaN
             return
         shift = round(float(cur_q - base_q), 3)
         metrics["flow_shift"] = shift
-        if deficit and shift >= self.flow_confound:
+        if deficit and shift >= confound:
             caveats.append(
                 f"loop flow also rose {shift:+.0f} gpm over the same window; head falls as the "
                 "operating point rides down the pump curve at higher flow, so part of this head "
@@ -226,7 +265,8 @@ class PumpHeadDrift:
                     "and this pump does not publish one; it cannot be inferred from flow or speed"
                 ],
             )
-        if self.speed_role not in current.columns:
+        mode, cv = self._speed_mode(baseline, current)
+        if mode == "missing":
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -237,7 +277,11 @@ class PumpHeadDrift:
             )
 
         base_r, cur_r = self._running(baseline), self._running(current)
-        frozen = self._frozen_baseline(equip, base_r, caveats)
+        if mode == "status_only":  # a constant-speed pump with no speed point: score it at "100 %"
+            base_r = base_r.assign(**{self.speed_role: G.STATUS_ONLY_SPEED})
+            cur_r = cur_r.assign(**{self.speed_role: G.STATUS_ONLY_SPEED})
+        gate = G.speed_gate(base_r[self.speed_role], self.min_speed)
+        frozen = self._frozen_baseline(equip, base_r, caveats, gate, mode)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -253,7 +297,7 @@ class PumpHeadDrift:
             cur_r,
             metric_col=self.head_role,
             load_col=self.speed_role,
-            min_load=self.min_speed,
+            min_load=gate.min_load,
             metric_range=HEAD_PLAUSIBLE,
         )
         if drift is None:
@@ -261,7 +305,7 @@ class PumpHeadDrift:
                 cur_r,
                 metric_col=self.head_role,
                 load_col=self.speed_role,
-                min_load=self.min_speed,
+                min_load=gate.min_load,
                 metric_range=HEAD_PLAUSIBLE,
                 min_samples=10,
                 baseline=frozen,
@@ -290,7 +334,15 @@ class PumpHeadDrift:
             "pump_head_n_current": drift.n_current,
             "pump_head_baseline_sigma_psi": frozen.sigma_f,
             "pump_head_baseline_frozen_at": rec.frozen_at if rec else "",
+            # 0.104 (#150): the speed gate this pump was judged with, and where it came from
+            "pump_head_speed_gate_pct": gate.min_load,
+            "pump_head_speed_gate_source": gate.source,
+            "pump_head_vfd_floor_pct": gate.vfd_floor,
+            "pump_head_speed_mode": mode,
+            "pump_head_baseline_model": getattr(frozen, "load_model", "linear"),
         }
+        if mode in ("constant", "status_only"):
+            caveats.append(G.constant_speed_caveat("head", mode, cv))
         self._flow_confound(base_r, cur_r, direction == "down", metrics, caveats)
         if drift.extrapolated:
             caveats.append(
@@ -311,7 +363,7 @@ class PumpHeadDrift:
                 cur_r,
                 approach_col=self.head_role,
                 tons_col=self.speed_role,
-                min_tons=self.min_speed,
+                min_tons=gate.min_load,
                 approach_range=HEAD_PLAUSIBLE,
             )
         except ValueError as exc:
