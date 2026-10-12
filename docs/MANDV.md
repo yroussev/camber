@@ -50,10 +50,18 @@ flowchart LR
 
 ## Method correspondence
 
-- **CalTRACK Daily** ↔ CAMBER daily change-point: aggregate to daily energy vs
-  daily-mean temperature, fit the inverse model, project onto reporting weather.
-  This is exactly what `mandv.caltrack.caltrack_savings()` does end-to-end.
-- **Hourly NMEC** ↔ `mandv.caltrack.caltrack_savings_hourly`, on a **TOWT** baseline
+- **CalTRACK 2.0 Daily and Billing** ↔ `mandv.caltrack_daily.caltrack_daily_savings` and
+  `caltrack_billing_savings` (0.105): the CalTRACK methods as published, with
+  `eemeter_compat=True` to reproduce eemeter 2.10. See [CalTRACK 2.0 methods](#caltrack-20-methods).
+- **CalTRACK 2.0 Hourly** ↔ `mandv.caltrack_hourly.caltrack_hourly_savings` (0.105): the
+  month-segmented CalTRACK TOWT. See [CalTRACK 2.0 methods](#caltrack-20-methods).
+- **Daily NMEC on a change-point baseline** ↔ `mandv.caltrack.daily_changepoint_savings`
+  (called `caltrack_savings` before 0.105; the old name is a deprecated alias): aggregate to daily
+  energy vs daily-mean temperature, fit the best 2P–5P change-point model by BIC, project onto
+  reporting weather. **This is not CalTRACK Daily** — no balance-point grid, adjusted-R² selection
+  or CalTRACK sufficiency rules.
+- **Hourly NMEC on a pooled TOWT** ↔ `mandv.caltrack.towt_savings_hourly` (called
+  `caltrack_savings_hourly` before 0.105; deprecated alias), on a **TOWT** baseline
   (`mandv.towt`, the LBNL Mathieu et al. time-of-week & temperature model).
   **This is not the CalTRACK Hourly specification** — that method is a different estimator:
 
@@ -65,7 +73,8 @@ flowchart LR
   | 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
 
   So these are defensible IPMVP Option-C savings on a published baseline model, not
-  eemeter-comparable numbers. Same posture as the daily method — see the CalTRACK note below.
+  eemeter-comparable numbers. Same posture as the daily change-point method — see the CalTRACK
+  note below.
 
   **Expect a band comparable to the daily method, not tighter.** Hourly residuals are strongly
   serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction bites: measured
@@ -77,9 +86,9 @@ flowchart LR
 ## Quick use
 
 ```python
-from camber.mandv.caltrack import caltrack_savings
+from camber.mandv.caltrack import daily_changepoint_savings
 
-res = caltrack_savings(
+res = daily_changepoint_savings(
     baseline_energy, baseline_temp, reporting_energy, reporting_temp
 )  # hourly Series in
 print(res.model_kind, round(res.baseline_r2, 3))
@@ -110,7 +119,7 @@ constant and all; the projected one is textbook regression theory, cited as such
 borrowing G14's empirical `1.26` for a case it was never derived for.
 
 Serial correlation widens both, via `n′`. Daily whole-building residuals are routinely correlated,
-so an unadjusted band is optimistic — `caltrack_savings` estimates ρ from the baseline residuals
+so an unadjusted band is optimistic — `daily_changepoint_savings` estimates ρ from the baseline residuals
 automatically. Strictly the *reporting*-period ρ is wanted, but those residuals contain the saving
 itself, so the baseline fit's ρ is the standard substitution.
 
@@ -120,10 +129,10 @@ itself, so the baseline fit's ρ is the standard substitution.
   (`stats.cv_rmse_max_for`: ~15% monthly, ~30% daily/hourly) and reports NMBE.
 - **CalTRACK is stricter and more prescriptive**: it specifies data-sufficiency
   rules (coverage, minimum days), explicit model-selection criteria, and hard
-  limits that eemeter enforces. CAMBER leaves those policy choices to the caller —
-  so a CAMBER fit is *not* automatically CalTRACK-compliant. Use the thresholds and
-  the FSU to judge whether a result is reportable, and apply CalTRACK's data rules
-  if compliance is required.
+  limits that eemeter enforces. CAMBER's own baselines leave those policy choices to the
+  caller, so a change-point or pooled-TOWT fit is *not* CalTRACK-compliant. Use the thresholds
+  and the FSU to judge whether such a result is reportable. When compliance is required, use the
+  CalTRACK 2.0 methods (0.105), which apply CalTRACK's data rules themselves.
 
 ## Extrapolation: coverage, caveats and declining
 
@@ -134,7 +143,7 @@ the baseline to cover the reporting conditions, or the extrapolation to be discl
 neither is quoted for the numbers below, and CalTRACK prescribes no extrapolation test. **Every
 threshold here is a CAMBER policy choice**, set on `mandv.coverage.ExtrapolationPolicy`.
 
-Every savings path — `avoided_energy_savings`, `caltrack_savings`, `caltrack_savings_hourly`,
+Every savings path — `avoided_energy_savings`, `daily_changepoint_savings`, `towt_savings_hourly`,
 `isolation_savings`, `normalized_savings`, `isolation_normalized_savings` and the savings chart —
 grades the baseline's coverage of the reporting drivers and acts on the tier:
 
@@ -182,7 +191,8 @@ and never changes the tier. TOWT clips its temperature basis at the breakpoints,
 response **flat** beyond the fitted range: the error there is bias, not parameter variance, so TOWT
 is flagged but its FSU is never widened. The unseen hour-of-week check still raises.
 
-**CalTRACK daily** also caveats a baseline shorter than 365 days, which cannot span a weather year.
+**The daily change-point path** (`daily_changepoint_savings`) also caveats a baseline shorter than
+365 days, which cannot span a weather year.
 **Normalized savings** grade both models against the normal year (`coverage_baseline`,
 `coverage_reporting`); a TMY colder than the reporting model's fit declines. **Categorical models**
 treat a reporting category the baseline never fitted as unsupported (bind a period with
@@ -194,10 +204,10 @@ To keep computing it (with a widened band and a caveat starting "SEVERE extrapol
 defensible saving"), opt out:
 
 ```python
-from camber.mandv.caltrack import caltrack_savings
+from camber.mandv.caltrack import daily_changepoint_savings
 from camber.mandv.coverage import ExtrapolationPolicy
 
-res = caltrack_savings(
+res = daily_changepoint_savings(
     baseline_energy,
     baseline_temp,
     reporting_energy,
@@ -521,7 +531,7 @@ explain, and they skew a baseline. CAMBER has three detectors, all on the residu
 change-point weather model:
 
 - **`detect_non_routine`** — point-wise: days whose residual is a robust (MAD) outlier.
-  `caltrack_savings(..., exclude_non_routine=True)` drops those baseline days and refits, so a
+  `daily_changepoint_savings(..., exclude_non_routine=True)` drops those baseline days and refits, so a
   one-off shutdown doesn't distort the savings.
 - **`detect_step_change`** — one sustained level shift, by the largest two-sample statistic over
   all splits. Pass `autocorrelation=True` (**recommended**): it divides the statistic by
@@ -880,7 +890,7 @@ keeps the historical days.
 timestamps, so an export that kept both readings of the repeated hour counted that hour's energy
 twice. It has no zone to tell which reading is which, so now:
 
-- With `timezone=` (also on `caltrack_savings_hourly`), the samples are placed on their real
+- With `timezone=` (also on `towt_savings_hourly`), the samples are placed on their real
   instants (`timegrid.localize`'s convention), and both real hours of the fall-back are kept,
   each with its own energy and temperature. A lone sample in the repeated hour (the store's
   hourly mean of the two passes) stands for both, as `repeated_hour_weights` counts it twice on
@@ -889,7 +899,7 @@ twice. It has no zone to tell which reading is which, so now:
 - Without a zone, duplicate timestamps are one hour. Energy and temperature are averaged per
   stamp (`timegrid.regularize(dedupe="mean")`), never summed, and
   `attrs["n_duplicate_stamps"]` counts them. A `camber.tsparse.TimezoneWarning` says to pass the
-  zone; `caltrack_savings_hourly` adds the count to its caveats.
+  zone; `towt_savings_hourly` adds the count to its caveats.
 
 A rate meter's step is now taken from the positive gaps only, so heavily duplicated stamps no
 longer give a zero step and zero energy. Hourly data without duplicates is unchanged.
@@ -911,7 +921,7 @@ spring-forward day still passes 0.9. `mandv.intervalfit.day_coverage` gives each
 
 Dropped days are counted in the frame's `attrs["dropped_days"]`, and the results report them:
 
-- `caltrack_savings`: a savings caveat;
+- `daily_changepoint_savings`: a savings caveat;
 - the non-routine detectors: `n_days_dropped`;
 - a config's `mv_baseline` finding: the metric `n_days_dropped` and a caveat;
 - the `mv_savings` findings: a caveat for dropped baseline or reporting days.
@@ -921,7 +931,7 @@ already had one. `min_coverage=0` keeps every day, the frame before 0.105. Frame
 (the BDG2 benchmark keeps complete days first) are unchanged.
 
 `daily_energy_vs_temp` and `hourly_energy_vs_temp` default to `rate_is_energy_rate=True` (the
-meter is a rate), while `caltrack_savings`, `caltrack_savings_hourly` and the non-routine
+meter is a rate), while `daily_changepoint_savings`, `towt_savings_hourly` and the non-routine
 detectors default to `False` (energy per interval). The defaults are historical and are kept;
 pass the flag explicitly.
 
@@ -1462,27 +1472,175 @@ the reporting period and each intermediate window of a chain.
 
 With a numeric `base_f`, or bases that were not selected, the proposal is unchanged.
 
-## Cross-checking against eemeter
+## CalTRACK 2.0 methods
 
-eemeter pulls heavier dependencies, so install it in a **separate environment**
-rather than alongside CAMBER:
+Provisional (0.105, #156). `mandv.caltrack_daily` and `mandv.caltrack_hourly` implement the
+CalTRACK 2.0 Daily, Billing and Hourly methods as published: CalTRACK Methods 2.0 and its
+Technical Appendix (`openeemeter/caltrack` at commit `6b630ee`), with eemeter 2.10.0, the reference
+implementation, for every point the documents leave open. Each rule in the code carries its id in
+CAMBER's implementation spec (`CT-D-*` daily and billing, `CT-H-*` hourly, `CT-C-*` metrics), and
+each constant (`mandv._caltrack`) cites its source.
 
-```sh
-python -m venv .eemeter && . .eemeter/bin/activate
-pip install eemeter eeweather
+| Method | Savings | Fit only | Model |
+|---|---|---|---|
+| Daily | `caltrack_daily_savings` | `fit_caltrack_daily` | `CalTRACKDailyModel` |
+| Billing | `caltrack_billing_savings` | `fit_caltrack_billing` | `CalTRACKBillingModel` |
+| Hourly | `caltrack_hourly_savings` | `fit_caltrack_hourly` | `CalTRACKHourlyModel` |
+
+```python
+from camber.mandv.caltrack_daily import caltrack_daily_savings
+from camber.mandv.caltrack_hourly import caltrack_hourly_savings
+
+res = caltrack_daily_savings(
+    baseline_energy, baseline_temp, reporting_energy, reporting_temp, fuel="gas"
+)
+print(res.model.model_type, res.model.heating_balance_point, res.model.r_squared_adj)
+print(res.savings.avoided_energy, res.fsu["fsu"])  # CalTRACK's FSU, a fraction
+
+hourly = caltrack_hourly_savings(baseline_energy, baseline_temp, reporting_energy, reporting_temp)
+predicted = hourly.model.predict(reporting_index, reporting_temp)  # NaN where unseen
 ```
 
-Then run the *same* baseline and reporting data through both and compare:
+Every savings function returns a `CalTRACKResult`:
 
-1. CAMBER: `caltrack_savings(...).savings.avoided_energy`.
-2. eemeter: fit a CalTRACK daily model on the baseline and compute metered savings
-   over the reporting period (see eemeter's docs/notebooks).
-3. Expect the avoided-energy figures to agree within CAMBER's reported FSU band.
-   Differences usually trace to CalTRACK's data-sufficiency/limit rules (which
-   eemeter applies and CAMBER leaves configurable) or to model-selection choices.
+- `model`: the fitted model. It has `predict(...)` (days, bills or hours, with their
+  temperatures), `as_dict()` and `from_dict()`, so a stored baseline can be projected later.
+- `sufficiency`: the baseline data-sufficiency verdict and counts.
+- `savings`: CAMBER's `SavingsResult`, with the avoided energy summed over the reporting
+  periods, the coverage grade, the caveats and the ASHRAE Guideline 14 band, as on every
+  CAMBER savings path.
+- `fsu`: CalTRACK's own fractional savings uncertainty, for Daily and Billing.
+- `fit`: the baseline `FitStats`.
+- `reporting`: the per-period table (observed, predicted, avoided).
+- `candidates`: every candidate model with its status (Daily and Billing).
 
-This gives a credible, standards-aligned check without making eemeter a CAMBER
-dependency. See [docs/ECOSYSTEM.md](ECOSYSTEM.md) for the broader leverage strategy.
+Inputs follow CAMBER's conventions. Naive timestamps are the site's wall clock, and `timezone=`
+names it. Temperatures are °F and screened to the plausible outdoor range. A duplicate timestamp
+that is not a fall-back hour raises, since it may be two meters in one series.
+
+**Daily and Billing.**
+
+- **Baseline window.** The baseline is the 365 days before `intervention_start` (default: the
+  day after the last reading). At most 37 days may be missing. Electricity zeros count as
+  missing. Negative values and values above median + 3 IQR are flagged.
+- **Daily data.** A day's usage is kept when at least half its intervals are present. The
+  missing intervals are filled with the day's mean. A day's mean temperature needs at least half
+  its hours. Temperature gaps of up to six hours are interpolated.
+- **Bills.** Estimated reads are combined with the next bill, up to 70 days. Baseline bills
+  under 25 days, or over 35 days (70 for bi-monthly), are dropped. A bill needs hourly
+  temperature for 90 % of its hours.
+- **Candidates.** The search fits intercept-only, HDD-only, CDD-only (electricity only) and
+  HDD+CDD on balance points from 30 to 90 °F. Each degree-day term needs 10 non-zero days (daily
+  only) and 20 degree days in total. A negative coefficient disqualifies a candidate. The
+  p-value screen is off at its default `max_p_value=1.0`, as CalTRACK 2.0 removed it.
+- **Selection.** The qualified candidate with the highest adjusted R² wins. Ties go to the
+  earlier candidate in eemeter's scan order.
+- **Billing fit.** Billing fits usage per day by least squares weighted by each bill's days with
+  a valid temperature.
+- **Prediction.** A period's prediction is `n_days × (μ + β_H·HDD + β_C·CDD)`, with the degree
+  days averaged over its valid days.
+
+**Hourly.**
+
+- **Segments.** There is one model per calendar month. It is fitted on its month at weight 1.0
+  and the months either side at 0.5. A segment needs consumption for over 90 % of the hours of
+  its month and both neighbours, or it predicts NaN.
+- **Occupancy.** An hour of the week is occupied when over 65 % of its rows are under-predicted
+  by a preliminary model with heating below 50 °F and cooling above 65 °F.
+- **Temperature bins.** The endpoints are 30/45/55/65/75/90 °F. A bin with fewer than 20 hours is
+  merged by eemeter's rule.
+- **Design and fit.** The design has 168 hour-of-week levels and the bins times occupancy, with
+  no intercept. Each segment is fitted by weighted least squares, and prediction uses each hour's
+  month model.
+- **Unseen hours.** An hour of the week that a segment never saw predicts **NaN**, as in eemeter
+  3.1. eemeter 2.10 predicts its temperature terms alone there, which is a bug and is not
+  reproduced. `predict(...).attrs` and the savings caveats count those hours.
+- **Single model.** `segment_type="single"` fits one model on the year.
+  `result.sufficiency["single_model"]` reports the two conditions under which CalTRACK allows
+  it: at most two months with |NMBE| > 1 %, or reporting temperatures beyond 10 % of the
+  baseline range.
+
+**Defaults follow the CalTRACK documents; `eemeter_compat=True` reproduces eemeter 2.10** where
+the two disagree:
+
+| Rule | Default (CalTRACK documents) | `eemeter_compat=True` (eemeter 2.10) |
+|---|---|---|
+| Missing baseline days | at most 37 of 365 | valid ≥ 90 % of 365 (at most 36) |
+| Negative meter values | flagged; sufficiency passes | sufficiency fails |
+| Day usage coverage | kept at ≥ 50 % of intervals | kept at > 50 % |
+| Day mean temperature | ≥ 50 % of the day's hours | any hour (fit); > 90 % (sufficiency); bills > 12 hours |
+| Temperature gaps ≤ 6 h | interpolated | not interpolated |
+| Balance-point grid | 3 °F (21 points) | 1 °F (61 points) |
+| Estimated bills | combined first, 70-day cap | length filter first, no cap |
+| Bill temperature | all of the bill's hours | hours within 35 days of its start |
+| Hourly month coverage | > 90 % per segment | not checked (a stub in 2.10) |
+
+`bp_step=` overrides the grid either way. Where the documents and eemeter agree, or the spec
+chose eemeter's reading, both modes behave the same:
+
+- the billing degree days are the mean over the days with a valid temperature;
+- the billing weight is those days;
+- a coefficient of exactly 0 passes the sign test;
+- an unseen hour of the week predicts NaN.
+
+**Uncertainty.** `result.fsu` is CalTRACK's fractional savings uncertainty:
+
+`FSU = t·(aM² + bM + d)·CV(RMSE)·√((P/P′)(1 + 2/P′)/Q) / F`
+
+- `a`, `b` and `d` are the daily or billing coefficients.
+- `M` is the reporting months (reporting days / 30 for daily), `Q` the reporting periods and `F`
+  the savings fraction.
+- The methods document never defines `P′`. CAMBER follows eemeter: `P′ = P(1 − ρ)/(1 + ρ)`, with
+  ρ the lag-1 autocorrelation of the baseline residuals, and `t` on `P − c` degrees of freedom.
+- Note `(1 + 2/P′)`, where Guideline 14's form, the one `result.savings` uses, has `(1 + 2/n)`
+  and the constant 1.26.
+- CalTRACK 2.0 publishes no hourly coefficients, so Hourly reports only the Guideline 14 band.
+  Its `p` is the parameter count of all fitted segments.
+
+**Metrics** (`model.metrics`) follow eemeter's conventions. `cvrmse_adj` is
+`√(Σe²/(n − c))/ȳ`, and **`nmbe` is `Σ(ŷ − y)/Σy`, positive when the model over-predicts**: the
+opposite sign to Guideline 14's NMBE in `result.fit`.
+
+**Points the spec left to interpretation:**
+
+- The baseline window for bills starts at the bill boundary nearest 365 days before the
+  intervention (eemeter's overshoot).
+- An estimated bill followed by another estimate is missing. Only the last estimate of a run is
+  folded into the next actual read, which reproduces eemeter's documented example.
+- `|NMBE|` is the reading of the hourly 1 % rule.
+- A segment's month coverage counts the month's hours that fall inside the baseline window.
+
+## Cross-checking against eemeter
+
+The CalTRACK 2.0 methods above are checked against eemeter 2.10.11 by
+`tests/test_caltrack_eemeter_xcheck.py`, a dev-only test. With `eemeter_compat=True`, CAMBER
+must match eemeter exactly on synthetic daily, billing and hourly cases:
+
+- the selected model, its balance points, parameters and adjusted R²;
+- the occupancy lookup, kept bins and parameter count of every hourly segment;
+- every prediction both make.
+
+The one expected difference is the unseen hour of the week, which is NaN in CAMBER. On the
+0.105 cases the largest prediction difference was 2e-12 (daily and billing) and 3e-12 (hourly).
+
+eemeter 2.x needs pandas 1.x and numpy 1.x, so it runs in its **own environment** and never
+becomes a CAMBER dependency. The test runs eemeter there through `tests/eemeter_oracle.py` and is
+skipped unless `CAMBER_EEMETER_PYTHON` points to that environment's interpreter:
+
+```sh
+python3.10 -m venv /tmp/eemeter-210 && /tmp/eemeter-210/bin/pip install \
+  "setuptools<70" numpy==1.21.6 pandas==1.3.5 statsmodels==0.13.5 scipy==1.7.3 patsy==0.5.3
+/tmp/eemeter-210/bin/pip install --no-deps eemeter==2.10.11
+/tmp/eemeter-210/bin/pip install pytz click "pyarrow<15"
+CAMBER_EEMETER_PYTHON=/tmp/eemeter-210/bin/python python -m pytest tests/test_caltrack_eemeter_xcheck.py -s
+```
+
+To compare savings on your own data, run the same baseline and reporting data through
+`caltrack_daily_savings(..., eemeter_compat=True)` and through eemeter's
+`create_caltrack_daily_design_matrix` and `fit_caltrack_usage_per_day_model`. eemeter reads the
+last meter row as the end of the final period, so append a NaN row there. The models should be
+identical. CAMBER's own `daily_changepoint_savings` and `towt_savings_hourly` are different
+estimators, so expect only agreement within their bands.
 
 ## Degree-day baseline (`mandv.degreeday`)
 

@@ -78,7 +78,7 @@ The drift section freezes a baseline on January to June and scores July to Decem
 M&V attempt on the RTU tests, in Python:
 
 ```python
-from camber.mandv.caltrack import caltrack_savings_hourly
+from camber.mandv.caltrack import towt_savings_hourly
 from camber.model.roles import Role
 from camber.store import ParquetStore
 
@@ -90,7 +90,7 @@ def hourly(equip, role):
     return frame[role]
 
 
-caltrack_savings_hourly(
+towt_savings_hourly(
     hourly("RTU__base_heating", Role.POWER),
     hourly("WEATHER__base_heating", Role.OAT),
     hourly("RTU__sb_heating", Role.POWER),
@@ -159,7 +159,7 @@ caltrack_savings_hourly(
   ...), severity and each detector's signal; the threshold notes printed with it.
 - **ORNL findings**: `night_weekend_setback` (fan runtime and, when the fan cycles, the held
   setback temperature) and `compressor_short_cycle` (`starts_per_day`, `runtime_pct`).
-- **M&V**: `caltrack_savings_hourly` either returns a saving with its band or refuses, saying
+- **M&V**: `towt_savings_hourly` either returns a saving with its band or refuses, saying
   why. A refusal for too little baseline data also says what data is needed: the exception's
   `need` attribute (`e.need["text"]`) gives the hours required, available and still missing.
 

@@ -20,7 +20,7 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   meter's baseline low. A day is now kept only when its samples cover at least `min_coverage`
   of it (default 0.9): the samples present times the meter's modal interval, over the day's
   hours. With the site's zone a daylight-saving day is judged against its own 23 or 25 hours.
-  The frame's `attrs["dropped_days"]` counts the days dropped. `caltrack_savings`, the
+  The frame's `attrs["dropped_days"]` counts the days dropped. `daily_changepoint_savings`, the
   non-routine detectors and a config's `mv` findings take `min_coverage` (config:
   `mv[].min_coverage`) and report what was dropped. `min_coverage=0` keeps every day, as before.
   The docstring no longer implies a rule that did not exist. The workbook answers move with it,
@@ -33,7 +33,7 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - **The hourly fall-back hour is no longer counted twice (#158).** `hourly_energy_vs_temp`
   summed duplicate timestamps, so an export that kept both readings of the repeated
   daylight-saving hour gave that hour double energy. With the new `timezone=` (also on
-  `caltrack_savings_hourly` and `caltrack_savings`), both real hours are kept on a tz-aware local
+  `towt_savings_hourly` and `daily_changepoint_savings`), both real hours are kept on a tz-aware local
   index. A lone stored sample in the repeated hour stands for both, as on the daily path. Without
   a zone, duplicate stamps are averaged into one hour, counted in `attrs["n_duplicate_stamps"]`,
   with a `TimezoneWarning`. A rate meter's step now comes from the positive gaps only, so
@@ -56,13 +56,49 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
   length on the site's clock).
+- **The CalTRACK 2.0 Daily, Billing and Hourly methods (#156).** `mandv.caltrack_daily` and
+  `mandv.caltrack_hourly` implement the published methods, rule by rule and with every constant
+  cited:
+  - `caltrack_daily_savings`, `caltrack_billing_savings` and `caltrack_hourly_savings`, each
+    returning the fitted model with a `SavingsResult` in a `CalTRACKResult`;
+  - the `fit_caltrack_*` functions;
+  - `CalTRACKDailyModel`, `CalTRACKBillingModel` and `CalTRACKHourlyModel`, each with
+    `predict`, `as_dict` and `from_dict`, so a baseline can be stored and projected later.
+
+  Daily and Billing apply CalTRACK's data sufficiency, usage-per-day and temperature rules, its
+  billing-period rules and its balance-point grid. They fit intercept-only, HDD, CDD and HDD+CDD
+  candidates, qualify them on degree days and signs, select by adjusted R² with eemeter's tie
+  order, and report CalTRACK's fractional savings uncertainty. Hourly fits one model per
+  calendar month, weighting the months either side at 0.5. Its occupancy comes from a
+  preliminary model's residuals, and its six fixed temperature bins are merged where sparse. An
+  hour of the week a month never saw predicts NaN and is counted.
+
+  Defaults follow the CalTRACK documents. `eemeter_compat=True` reproduces eemeter 2.10 where
+  they differ, except eemeter 2.10's bug on unseen hours. A dev-only cross-check
+  (`tests/test_caltrack_eemeter_xcheck.py`, skipped without a separate eemeter 2.10.11
+  environment) matches eemeter to 3e-12 on synthetic cases. See docs/MANDV.md, "CalTRACK 2.0
+  methods".
 
 ### Changed
+- **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily
+  change-point baseline chosen by BIC, is now `daily_changepoint_savings`, returning
+  `DailyNMECResult`. `caltrack_savings_hourly`, a pooled TOWT, is now `towt_savings_hourly`,
+  returning `TOWTHourlyResult`, which also carries the fitted model (`model`, not in
+  `as_dict`). Neither was CalTRACK-comparable. The numbers are unchanged, and so are the
+  workbook answers. The `caltrack_*` names now belong to the CalTRACK 2.0 methods above, under
+  new names, so no old name changes meaning.
 - Clean data (whole days, plausible temperatures, no duplicate stamps) gives the same numbers as
   before. Where a day is partial, a temperature is implausible or an hourly stamp repeats, the
   M&V frames, fits and savings change as described under Fixed. The default `rate_is_energy_rate`
   differs between the frame builders (`True`) and the savings functions (`False`). It is now
   documented and is unchanged.
+
+### Deprecated
+- `mandv.caltrack.caltrack_savings`, `caltrack_savings_hourly`, `NMECResult` and
+  `HourlyNMECResult` (#156), to be removed in 1.0. Each warns and returns the same numbers as
+  `daily_changepoint_savings`, `towt_savings_hourly`, `DailyNMECResult` and `TOWTHourlyResult`.
+  An old result class is a subclass of its new one, so `isinstance` checks against either name
+  hold.
 
 ## [0.104.0] — Unreleased
 

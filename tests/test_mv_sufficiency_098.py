@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.config import run_config  # noqa: E402
-from camber.mandv.caltrack import caltrack_savings, caltrack_savings_hourly  # noqa: E402
+from camber.mandv.caltrack import daily_changepoint_savings, towt_savings_hourly  # noqa: E402
 from camber.mandv.sufficiency import InsufficientBaseline, baseline_need  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.store import ParquetStore  # noqa: E402
@@ -66,12 +66,12 @@ def test_caltrack_entry_points_carry_the_need():
     eb, tb = _hourly("2024-01-01", 168)
     er, tr = _hourly("2024-03-01", 168, seed=1)
     with pytest.raises(InsufficientBaseline) as hi:
-        caltrack_savings_hourly(eb, tb, er, tr)
+        towt_savings_hourly(eb, tb, er, tr)
     assert str(hi.value) == "need >= 1440 baseline hours, got 168"  # byte-identical
     assert (hi.value.need["shortfall"], hi.value.need["days_short"]) == (1272, 53)
 
     with pytest.raises(InsufficientBaseline) as di:
-        caltrack_savings(eb, tb, er, tr)
+        daily_changepoint_savings(eb, tb, er, tr)
     assert str(di.value) == "need >= 60 baseline days, got 7"
     assert di.value.need["shortfall"] == 53 and di.value.need["unit"] == "days"
 
@@ -79,13 +79,13 @@ def test_caltrack_entry_points_carry_the_need():
     eb, tb = _hourly("2024-01-01", 24 * 140)
     wk = eb.index.dayofweek < 5
     with pytest.raises(InsufficientBaseline, match="168 hour-of-week bins") as bi:
-        caltrack_savings_hourly(eb[wk], tb[wk], er, tr)
+        towt_savings_hourly(eb[wk], tb[wk], er, tr)
     assert bi.value.need["unit"] == "hour-of-week bins" and bi.value.need["have"] == 120
 
     # three weeks: every bin seen, but 3 < 4 observations each -- one more week needed
     eb, tb = _hourly("2024-01-01", 24 * 21)
     with pytest.raises(InsufficientBaseline, match="fewer than") as ti:
-        caltrack_savings_hourly(eb, tb, er, tr, min_hours=24, min_obs_per_bin=4)
+        towt_savings_hourly(eb, tb, er, tr, min_hours=24, min_obs_per_bin=4)
     assert (ti.value.need["shortfall"], ti.value.need["days_short"]) == (1, 7)
 
 

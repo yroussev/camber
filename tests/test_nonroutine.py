@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.mandv.caltrack import caltrack_savings  # noqa: E402
+from camber.mandv.caltrack import daily_changepoint_savings  # noqa: E402
 from camber.mandv.nonroutine import (  # noqa: E402
     detect_non_routine,
     detect_step_change,
@@ -50,8 +50,8 @@ def test_caltrack_excludes_non_routine_and_fits_cleaner():
     sd = ["2023-02-10", "2023-02-11", "2023-02-12", "2023-03-05", "2023-03-06"]
     be, bt = _hourly(days=150, seed=1, shutdown=sd)
     re_, rt = _hourly(days=120, seed=2)  # clean reporting, no retrofit
-    without = caltrack_savings(be, bt, re_, rt, exclude_non_routine=False)
-    cleaned = caltrack_savings(be, bt, re_, rt, exclude_non_routine=True)
+    without = daily_changepoint_savings(be, bt, re_, rt, exclude_non_routine=False)
+    cleaned = daily_changepoint_savings(be, bt, re_, rt, exclude_non_routine=True)
     assert cleaned.n_non_routine_excluded >= 5  # the shutdown days dropped
     assert without.n_non_routine_excluded == 0
     # dropping the shutdowns gives a tighter baseline fit

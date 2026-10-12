@@ -663,14 +663,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V day coverage, the hourly repeated hour and the temperature screen** (0.105; #157, #158,
   #159), additive and provisional:
   - `mandv.intervalfit.day_coverage` and `day_hours`; the keyword-only `min_coverage=` of
-    `daily_energy_vs_temp`, `caltrack_savings`, `detect_non_routine`, `detect_step_change` and
+    `daily_energy_vs_temp`, `daily_changepoint_savings`, `detect_non_routine`, `detect_step_change` and
     `detect_step_changes`; the config key `mv[].min_coverage`; the frame `attrs`
     `dropped_days`, `min_coverage`, `n_temp_screened`, `n_duplicate_stamps` and
     `n_repeated_hour_copied`; the trailing result fields `n_days_dropped` / `n_temp_screened` of
     the three non-routine results (in `as_dict` only when non-zero), and the `mv_baseline`
     metrics of the same names (present only when non-zero);
-  - the keyword-only `timezone=` of `hourly_energy_vs_temp`, `caltrack_savings` and
-    `caltrack_savings_hourly`;
+  - the keyword-only `timezone=` of `hourly_energy_vs_temp`, `daily_changepoint_savings` and
+    `towt_savings_hourly` (and of their deprecated old names);
   - the private module `mandv._temperature` (`screen_temperature`); the keyword-only
     `temp_bounds=` of `fit_model`, `best_model`, `fit_towt`, `fit_degree_day` and the
     `intervalfit` frame builders; the trailing `n_temp_screened` field of `ChangePointModel`,
@@ -683,6 +683,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   without a zone averages duplicate timestamps into one hour (it summed energy) and warns with
   `TimezoneWarning`, and with `timezone=` returns a tz-aware local index. Clean data, with whole
   days and plausible temperatures, gives the same numbers as before.
+- **CalTRACK 2.0 methods** (0.105; #156), additive and provisional: the modules
+  `mandv.caltrack_daily` and `mandv.caltrack_hourly` and every public name in them, including
+  `caltrack_daily_savings`, `caltrack_billing_savings`, `caltrack_hourly_savings`, the `fit_*`
+  functions, `CalTRACKDailyModel`, `CalTRACKBillingModel`, `CalTRACKHourlyModel` and their
+  `as_dict` formats. Also `mandv.CalTRACKResult` (defined in the private `mandv._caltrack`), the
+  `eemeter_compat=` switch and the pytest marker `eemeter_oracle`. The defaults follow the
+  published CalTRACK 2.0 documents, and `eemeter_compat=True` follows eemeter 2.10. A default may
+  change in a minor release if a CalTRACK document is found to say otherwise, with a CHANGELOG
+  entry. The renamed `daily_changepoint_savings` / `DailyNMECResult` and `towt_savings_hourly` /
+  `TOWTHourlyResult` keep the stability of the names they replace. The new trailing field
+  `TOWTHourlyResult.model` is provisional and is not in `as_dict`.
 
 ### The read API server: `camber.api.server`
 
@@ -721,6 +732,10 @@ Currently deprecated names and code paths, each with its replacement. Each emits
 |---|---|---|---|
 | Site-keyed fault and baseline records (fingerprint `sha1(site, equip, rule/kind)`), read through the compatibility path of a `FaultLifecycle` / `BaselineStore` opened with `facility_id=` | 0.86 | 2.0 | `camber portfolio migrate` (re-keys them to `facility_id` once, on disk) |
 | The ticket field `legacy_fingerprint` (present only when `facility_id=` is passed) | 0.86 | 2.0 | the facility-keyed `fingerprint` |
+| `mandv.caltrack.caltrack_savings` (a daily change-point baseline, not CalTRACK Daily) | 0.105 | 1.0 | `mandv.caltrack.daily_changepoint_savings` (same numbers); for CalTRACK Daily, `mandv.caltrack_daily.caltrack_daily_savings` |
+| `mandv.caltrack.NMECResult` | 0.105 | 1.0 | `mandv.caltrack.DailyNMECResult` |
+| `mandv.caltrack.caltrack_savings_hourly` (a pooled TOWT, not CalTRACK Hourly) | 0.105 | 1.0 | `mandv.caltrack.towt_savings_hourly` (same numbers); for CalTRACK Hourly, `mandv.caltrack_hourly.caltrack_hourly_savings` |
+| `mandv.caltrack.HourlyNMECResult` | 0.105 | 1.0 | `mandv.caltrack.TOWTHourlyResult` |
 
 Stores opened **without** a facility (plain stores outside a portfolio workspace) are not
 deprecated in this release and do not warn: nothing there can be migrated to a facility id yet.

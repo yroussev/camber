@@ -143,8 +143,8 @@ def daily_energy_vs_temp(
     ``rate``: interval meter series. If ``rate_is_energy_rate`` it is a rate
     (BTU/hr etc.) integrated to daily energy; otherwise it is already energy per
     interval and is simply summed. (The default here is ``True``, a rate, while the savings
-    functions built on this frame -- :func:`~camber.mandv.caltrack.caltrack_savings`, the
-    non-routine detectors -- default to ``False``, energy per interval. The two defaults are
+    functions built on this frame -- :func:`~camber.mandv.caltrack.daily_changepoint_savings`,
+    the non-routine detectors -- default to ``False``, energy per interval. The two defaults are
     historical and are kept; pass the flag explicitly.)
 
     **Day coverage** (0.105, #157). A day is kept only when its meter samples cover at least

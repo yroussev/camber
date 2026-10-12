@@ -496,7 +496,7 @@ Sharpen the "diagnosis, not just detection" edge and scale to many buildings —
       benchmarking (percentile vs peers). (`report.fleet`)
 - [x] **M&V non-routine adjustment** — flag baseline anomalies (shutdowns, etc.) as
       residual outliers and optionally exclude them before refitting, so savings
-      aren't corrupted. (`mandv.nonroutine`, `caltrack_savings(exclude_non_routine=)`)
+      aren't corrupted. (`mandv.nonroutine`, `daily_changepoint_savings(exclude_non_routine=)`)
 - [x] **Rule-library benchmark** — generalized multi-detector harness
       (`eval.benchmark`: per-detector confusion + correct-diagnosis) scores the
       detector suite across **three LBNL equipment families** — single-duct AHU,

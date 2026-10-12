@@ -141,7 +141,7 @@ def test_billing_input_passes_min_coverage_to_the_bills():
 
 
 def test_caltrack_savings_reports_the_dropped_days():
-    from camber.mandv.caltrack import caltrack_savings
+    from camber.mandv.caltrack import daily_changepoint_savings
 
     idx = pd.date_range("2020-01-01", "2021-12-31 23:00", freq="1h")
     t = pd.Series(50 + 25 * np.sin(2 * np.pi * np.arange(len(idx)) / 8760), index=idx)
@@ -151,10 +151,12 @@ def test_caltrack_savings_reports_the_dropped_days():
     )
     base_e, rep_e = e[:"2020-12-31"], e["2021-01-01":] * 0.9
     base_e = _drop_hours(_drop_hours(base_e, "2020-02-03", 12), "2020-06-08", 20)
-    res = caltrack_savings(base_e, t[:"2020-12-31"], rep_e, t["2021-01-01":])
+    res = daily_changepoint_savings(base_e, t[:"2020-12-31"], rep_e, t["2021-01-01":])
     assert res.baseline_n == 364  # 366 days less the two partial ones
     assert any("2 baseline day(s)" in c and "90%" in c for c in res.savings.caveats)
-    keep = caltrack_savings(base_e, t[:"2020-12-31"], rep_e, t["2021-01-01":], min_coverage=0.0)
+    keep = daily_changepoint_savings(
+        base_e, t[:"2020-12-31"], rep_e, t["2021-01-01":], min_coverage=0.0
+    )
     assert keep.baseline_n == 366
     assert not any("day(s) with meter data" in c for c in keep.savings.caveats)
 

@@ -1,6 +1,23 @@
 """Measurement & verification: change-point models, TOWT, statistics, weather, resampling."""
 
-from .caltrack import NMECResult, caltrack_savings
+from ._caltrack import CalTRACKResult
+from .caltrack import (
+    DailyNMECResult,
+    NMECResult,
+    TOWTHourlyResult,
+    caltrack_savings,
+    daily_changepoint_savings,
+    towt_savings_hourly,
+)
+from .caltrack_daily import (
+    CalTRACKBillingModel,
+    CalTRACKDailyModel,
+    caltrack_billing_savings,
+    caltrack_daily_savings,
+    fit_caltrack_billing,
+    fit_caltrack_daily,
+)
+from .caltrack_hourly import CalTRACKHourlyModel, caltrack_hourly_savings, fit_caltrack_hourly
 from .nonroutine import (
     NonRoutineResult,
     StepChangeResult,
@@ -27,8 +44,22 @@ from .retrofit_isolation import (
 )
 
 __all__ = [
-    "caltrack_savings",
-    "NMECResult",
+    "caltrack_daily_savings",
+    "caltrack_billing_savings",
+    "caltrack_hourly_savings",
+    "fit_caltrack_daily",
+    "fit_caltrack_billing",
+    "fit_caltrack_hourly",
+    "CalTRACKDailyModel",
+    "CalTRACKBillingModel",
+    "CalTRACKHourlyModel",
+    "CalTRACKResult",
+    "daily_changepoint_savings",
+    "DailyNMECResult",
+    "towt_savings_hourly",
+    "TOWTHourlyResult",
+    "caltrack_savings",  # deprecated (0.105): daily_changepoint_savings
+    "NMECResult",  # deprecated (0.105): DailyNMECResult
     "detect_non_routine",
     "NonRoutineResult",
     "detect_step_change",

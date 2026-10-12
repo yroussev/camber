@@ -137,7 +137,7 @@ def test_caltrack_hourly_takes_the_zone(monkeypatch):
     t = pd.Series(50 + 10 * np.sin(np.arange(len(idx)) / 24), index=idx)
     e = pd.Series(20 + (idx.hour.isin(range(8, 18))) * 10 + 0.2 * t.to_numpy(), index=idx)
     half = len(idx) // 2
-    caltrack.caltrack_savings_hourly(
+    caltrack.towt_savings_hourly(
         e[:half], t[:half], e[half:], t[half:], min_hours=24 * 30, timezone=LA
     )
     assert seen == [LA, LA]

@@ -13,7 +13,7 @@ Real-data figures were recorded from::
     camber datasets config ornl-frp-ops --store lab_store --out ornl.json
     camber run ornl.json --out ornl_out
 
-and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on the RTU's
+and the M&V attempt in Python shown on the page (``towt_savings_hourly`` on the RTU's
 power, baseline test against setback test).
 
 (CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
@@ -36,7 +36,7 @@ from _workbook import REAL, Check, Exercise, Finding, Metric, Run, write_standin
 
 from camber import datasets
 from camber.config import run_config, run_drift_config
-from camber.mandv.caltrack import caltrack_savings_hourly
+from camber.mandv.caltrack import towt_savings_hourly
 from camber.mandv.sufficiency import InsufficientBaseline
 from camber.model.roles import Role
 from camber.report import build_rcx_report
@@ -199,11 +199,11 @@ def _mv_refused(ctx) -> None:
     b_oat = _ornl_frame(ctx, "WEATHER__base_heating")[Role.OAT]
     r_oat = _ornl_frame(ctx, "WEATHER__sb_heating")[Role.OAT]
     try:
-        caltrack_savings_hourly(base, b_oat, rep, r_oat)
+        towt_savings_hourly(base, b_oat, rep, r_oat)
     except ValueError as e:
         msg, err = str(e), e
     else:
-        raise AssertionError("caltrack_savings_hourly accepted a one-week baseline")
+        raise AssertionError("towt_savings_hourly accepted a one-week baseline")
     assert "need >= 1440 baseline hours" in msg, msg
     if ctx.mode == REAL:
         assert msg.endswith("got 168"), msg

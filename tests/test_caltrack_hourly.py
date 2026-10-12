@@ -1,4 +1,4 @@
-"""Hourly NMEC on a TOWT baseline (camber.mandv.caltrack.caltrack_savings_hourly).
+"""Hourly NMEC on a TOWT baseline (camber.mandv.caltrack.towt_savings_hourly).
 
 The load-bearing tests here are the two that guard *silent* wrongness: a TOWT model projected onto
 hours it never saw, and the autocorrelation correction that stops an hourly band looking falsely
@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.mandv.caltrack import caltrack_savings_hourly  # noqa: E402
+from camber.mandv.caltrack import towt_savings_hourly  # noqa: E402
 from camber.mandv.stats import avoided_energy_savings, cv_rmse_max_for, fit_stats  # noqa: E402
 from camber.mandv.towt import TOWTAtIndex, fit_towt  # noqa: E402
 
@@ -40,7 +40,7 @@ def _site(start, weeks, *, scale=1.0, rho=0.0, seed=0):
 def test_recovers_a_known_saving():
     eb, tb = _site("2024-01-01", 20)
     er, tr = _site("2024-06-01", 8, scale=0.85, seed=1)
-    res = caltrack_savings_hourly(eb, tb, er, tr)
+    res = towt_savings_hourly(eb, tb, er, tr)
 
     assert res.savings.savings_pct == pytest.approx(0.15, abs=0.05)
     assert res.n_tow_bins == 168  # full weekly coverage
@@ -73,7 +73,7 @@ def test_the_hourly_entry_point_refuses_a_baseline_that_cannot_cover():
     weekday = eb.index.dayofweek < 5
     er, tr = _site("2024-06-01", 8, seed=1)
     with pytest.raises(ValueError, match="168 hour-of-week bins"):
-        caltrack_savings_hourly(eb[weekday], tb[weekday], er, tr)
+        towt_savings_hourly(eb[weekday], tb[weekday], er, tr)
 
 
 def test_sufficiency_is_coverage_not_row_count():
@@ -81,11 +81,11 @@ def test_sufficiency_is_coverage_not_row_count():
     eb, tb = _site("2024-01-01", 20)
     er, tr = _site("2024-06-01", 8, seed=1)
     with pytest.raises(ValueError, match="baseline hours"):
-        caltrack_savings_hourly(eb, tb, er, tr, min_hours=24 * 400)
+        towt_savings_hourly(eb, tb, er, tr, min_hours=24 * 400)
     # three weeks covers all 168 bins but only 3 observations each
     short_e, short_t = _site("2024-01-01", 3)
     with pytest.raises(ValueError, match="fewer than"):
-        caltrack_savings_hourly(short_e, short_t, er, tr, min_hours=24, min_obs_per_bin=4)
+        towt_savings_hourly(short_e, short_t, er, tr, min_hours=24, min_obs_per_bin=4)
 
 
 def test_autocorrelation_widens_the_hourly_band_substantially():
@@ -97,7 +97,7 @@ def test_autocorrelation_widens_the_hourly_band_substantially():
     bands = {}
     for rho in (0.0, 0.85):
         eb, tb = _site("2024-01-01", 20, rho=rho, seed=3)
-        res = caltrack_savings_hourly(eb, tb, er, tr)
+        res = towt_savings_hourly(eb, tb, er, tr)
         bands[rho] = res.savings.fractional_uncertainty
         if rho:
             assert res.baseline_rho == pytest.approx(0.85, abs=0.1)
@@ -146,6 +146,6 @@ def test_non_routine_screening_excludes_whole_days():
     eb[shutdown] = eb[shutdown] * 0.1  # a two-day shutdown
     er, tr = _site("2024-06-01", 8, scale=0.85, seed=1)
 
-    res = caltrack_savings_hourly(eb, tb, er, tr, exclude_non_routine=True)
+    res = towt_savings_hourly(eb, tb, er, tr, exclude_non_routine=True)
     assert res.n_non_routine_days_excluded >= 1
     assert res.baseline_n % 1 == 0 and res.baseline_n < 20 * 168  # whole days removed

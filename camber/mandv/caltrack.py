@@ -1,31 +1,37 @@
-"""CalTRACK / IPMVP-aligned whole-building savings (NMEC).
+"""Whole-building NMEC savings on CAMBER's own baselines, and the deprecated CalTRACK-named entry
+points (0.105, #156).
 
-CAMBER's M&V pieces already implement the IPMVP Option-C / CalTRACK *normalized
-metered energy consumption* workflow; this module assembles them into one call
-using CalTRACK vocabulary and documents the correspondence so results can be
-cross-checked against OpenEEmeter (eemeter). See ``docs/MANDV.md`` for the full
-terminology bridge and the eemeter cross-check recipe.
+CAMBER's M&V pieces implement the IPMVP Option-C *normalized metered energy consumption*
+workflow; this module assembles them into one call per interval:
 
-Correspondence:
+| function                      | baseline model                                              |
+|-------------------------------|-------------------------------------------------------------|
+| `daily_changepoint_savings`   | `models.best_model` change-point on daily energy (BIC pick) |
+| `towt_savings_hourly`         | `towt.fit_towt`, the LBNL time-of-week & temperature model  |
 
-| CalTRACK / IPMVP term        | CAMBER                                          |
-|------------------------------|-------------------------------------------------|
-| baseline-period model        | `models.best_model` change-point (daily)        |
-| fit metrics CV(RMSE) / NMBE  | `stats.fit_stats`                               |
-| avoided energy use           | `stats.avoided_energy_savings` (G14 Annex-B FSU)|
+Both report avoided energy with the ASHRAE Guideline 14 Annex-B band
+(`stats.avoided_energy_savings`). **Neither is a CalTRACK method.** The faithful CalTRACK 2.0
+Daily, Billing and Hourly methods are :func:`camber.mandv.caltrack_daily.caltrack_daily_savings`,
+:func:`~camber.mandv.caltrack_daily.caltrack_billing_savings` and
+:func:`camber.mandv.caltrack_hourly.caltrack_hourly_savings`.
 
-This is the daily method (CalTRACK Daily). The hourly method maps onto
-:mod:`camber.mandv.towt`; assembling that here is future work.
+Until 0.105 the two functions here were called ``caltrack_savings`` and
+``caltrack_savings_hourly`` (results ``NMECResult`` and ``HourlyNMECResult``). Those names stay as
+deprecated aliases that return the same numbers and warn (removal in 1.0); they were never
+CalTRACK-comparable, which is why they were renamed rather than repointed.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import inspect
+import warnings
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from .._deprecation import deprecated
 from ..ingest.quality import outlier_mask
 from .coverage import ExtrapolationPolicy
 from .intervalfit import _frame_caveats, daily_energy_vs_temp, hourly_energy_vs_temp
@@ -37,8 +43,9 @@ from .towt import TOWTAtIndex, fit_towt, hour_of_week
 
 
 @dataclass
-class NMECResult:
-    """Whole-building NMEC savings: the baseline fit plus avoided energy use."""
+class DailyNMECResult:
+    """Whole-building NMEC savings on a daily change-point baseline: the fit plus avoided energy
+    (the result of :func:`daily_changepoint_savings`; called ``NMECResult`` before 0.105)."""
 
     model_kind: str  # change-point family chosen for the baseline
     baseline_cv_rmse: float  # baseline fit CV(RMSE), fraction
@@ -58,7 +65,7 @@ class NMECResult:
         return d
 
 
-def caltrack_savings(
+def daily_changepoint_savings(
     baseline_energy: pd.Series,
     baseline_temp: pd.Series,
     reporting_energy: pd.Series,
@@ -72,12 +79,16 @@ def caltrack_savings(
     extrapolation: ExtrapolationPolicy | None = None,
     min_coverage: float = 0.9,
     timezone: str | None = None,
-) -> NMECResult:
-    """CalTRACK Daily / IPMVP Option-C avoided energy use from baseline + reporting.
+) -> DailyNMECResult:
+    """IPMVP Option-C avoided energy use on a daily change-point baseline.
 
-    Fits a change-point baseline on daily energy vs daily-mean temperature, projects
-    it onto the reporting period's weather, and reports avoided energy use with
-    ASHRAE G14 Annex-B fractional savings uncertainty. ``*_energy`` are interval
+    Fits a change-point baseline on daily energy vs daily-mean temperature (the best of the
+    2P..5P families by BIC, :func:`camber.mandv.models.best_model`), projects it onto the
+    reporting period's weather, and reports avoided energy use with ASHRAE G14 Annex-B
+    fractional savings uncertainty. **This is not CalTRACK Daily** (no balance-point grid search,
+    adjusted-R^2 selection or CalTRACK sufficiency rules): for that, use
+    :func:`camber.mandv.caltrack_daily.caltrack_daily_savings`. Called ``caltrack_savings``
+    before 0.105; the old name is a deprecated alias. ``*_energy`` are interval
     meter series and ``*_temp`` the matching outdoor temperatures;
     ``rate_is_energy_rate`` marks energy that is a rate (BTU/hr) rather than per-
     interval energy.
@@ -156,7 +167,7 @@ def caltrack_savings(
         )
     savings.caveats.extend(notes)
 
-    return NMECResult(
+    return DailyNMECResult(
         model_kind=model.kind,
         baseline_cv_rmse=st.cv_rmse,
         baseline_nmbe=st.nmbe,
@@ -171,8 +182,12 @@ def caltrack_savings(
 
 
 @dataclass
-class HourlyNMECResult:
-    """Hourly NMEC savings on a TOWT baseline, plus the fit and the shape of the model."""
+class TOWTHourlyResult:
+    """Hourly NMEC savings on a TOWT baseline, plus the fit and the shape of the model (the result
+    of :func:`towt_savings_hourly`; called ``HourlyNMECResult`` before 0.105).
+
+    ``model`` (0.105) is the fitted :class:`~camber.mandv.towt.TOWTModel`, so the baseline can be
+    projected again (``model.predict(index, temp)``); it is not part of :meth:`as_dict`."""
 
     baseline_cv_rmse: float
     baseline_nmbe: float
@@ -187,15 +202,20 @@ class HourlyNMECResult:
     cv_rmse_max: float  # the gate it was judged against
     baseline_rho: float | None = None
     n_non_routine_days_excluded: int = 0
+    model: Any = field(default=None, repr=False, compare=False)
 
     def as_dict(self) -> dict:
-        """Return the result (with the nested savings) as a plain dict."""
-        d = asdict(self)
-        d["savings"] = self.savings.as_dict()
+        """Return the result (with the nested savings, without the model) as a plain dict."""
+        d = {}
+        for f in fields(self):
+            if f.name == "model":
+                continue
+            v = getattr(self, f.name)
+            d[f.name] = v.as_dict() if f.name == "savings" else v
         return d
 
 
-def caltrack_savings_hourly(
+def towt_savings_hourly(
     baseline_energy: pd.Series,
     baseline_temp: pd.Series,
     reporting_energy: pd.Series,
@@ -211,20 +231,23 @@ def caltrack_savings_hourly(
     occ_split: bool = True,
     extrapolation: ExtrapolationPolicy | None = None,
     timezone: str | None = None,
-) -> HourlyNMECResult:
+) -> TOWTHourlyResult:
     """Hourly NMEC / IPMVP Option-C avoided energy on a **TOWT** baseline.
 
-    The hourly counterpart to :func:`caltrack_savings`. Fits a Time-of-Week & Temperature model
+    The hourly counterpart to :func:`daily_changepoint_savings`. Called
+    ``caltrack_savings_hourly`` before 0.105; the old name is a deprecated alias. The result
+    carries the fitted model (``result.model``). Fits a Time-of-Week & Temperature model
     (:func:`camber.mandv.towt.fit_towt`, the LBNL Mathieu et al. formulation) on hourly baseline
     energy vs temperature, projects it onto the reporting period, and reports avoided energy with
     the G14 Annex-B band.
 
     **This is not the CalTRACK Hourly specification.** That method prescribes per-calendar-month
     segmented models, six *fixed* temperature bin edges, and occupancy from a month x hour-of-week
-    lookup derived from a preliminary daily model. CAMBER's TOWT is a single pooled model with
-    quantile-spaced breakpoints and load-median occupancy. The numbers here are defensible IPMVP
-    Option-C savings on a published baseline model; they are not eemeter-comparable, and this
-    function does not claim to be.
+    lookup derived from a preliminary model's residuals; CAMBER implements it as
+    :func:`camber.mandv.caltrack_hourly.caltrack_hourly_savings`. The TOWT here is a single pooled
+    model with quantile-spaced breakpoints and load-median occupancy. The numbers are defensible
+    IPMVP Option-C savings on a published baseline model; they are not eemeter-comparable, and
+    this function does not claim to be.
 
     **Sufficiency is about coverage, not row count.** A TOWT design has a column per hour-of-week
     bin, so a bin observed once is a fitted level carrying no information. ``min_hours`` sets a
@@ -316,7 +339,7 @@ def caltrack_savings_hourly(
     )
     savings.caveats.extend(notes)
 
-    return HourlyNMECResult(
+    return TOWTHourlyResult(
         baseline_cv_rmse=st.cv_rmse,
         baseline_nmbe=st.nmbe,
         baseline_r2=st.r2,
@@ -330,6 +353,7 @@ def caltrack_savings_hourly(
         cv_rmse_max=cv_rmse_max_for("hourly"),
         baseline_rho=st.rho_lag1,
         n_non_routine_days_excluded=excluded,
+        model=model,
     )
 
 
@@ -357,3 +381,42 @@ def _require_bin_coverage(index, min_obs_per_bin: int) -> None:
                 days_per_unit=7.0,
             ),
         )
+
+
+# --------------------------------------------------------------------------- deprecated names
+# The pre-0.105 names. Each returns exactly what its renamed function returns, as an instance of
+# the old class (a subclass of the new one, so isinstance() checks against either name hold).
+
+
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.caltrack.DailyNMECResult")
+class NMECResult(DailyNMECResult):
+    """Deprecated name of :class:`DailyNMECResult`."""
+
+
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.caltrack.TOWTHourlyResult")
+class HourlyNMECResult(TOWTHourlyResult):
+    """Deprecated name of :class:`TOWTHourlyResult`."""
+
+
+def _as_legacy(cls, res):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return cls(**{f.name: getattr(res, f.name) for f in fields(res)})
+
+
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.caltrack.daily_changepoint_savings")
+def caltrack_savings(*args, **kwargs) -> DailyNMECResult:
+    """Deprecated name of :func:`daily_changepoint_savings` (a daily change-point baseline, not
+    CalTRACK Daily: see :func:`camber.mandv.caltrack_daily.caltrack_daily_savings`)."""
+    return _as_legacy(NMECResult, daily_changepoint_savings(*args, **kwargs))
+
+
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.caltrack.towt_savings_hourly")
+def caltrack_savings_hourly(*args, **kwargs) -> TOWTHourlyResult:
+    """Deprecated name of :func:`towt_savings_hourly` (a pooled TOWT baseline, not CalTRACK
+    Hourly: see :func:`camber.mandv.caltrack_hourly.caltrack_hourly_savings`)."""
+    return _as_legacy(HourlyNMECResult, towt_savings_hourly(*args, **kwargs))
+
+
+caltrack_savings.__signature__ = inspect.signature(daily_changepoint_savings)  # type: ignore[attr-defined]
+caltrack_savings_hourly.__signature__ = inspect.signature(towt_savings_hourly)  # type: ignore[attr-defined]

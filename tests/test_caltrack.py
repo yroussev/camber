@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.mandv.caltrack import NMECResult, caltrack_savings  # noqa: E402
+from camber.mandv.caltrack import DailyNMECResult, daily_changepoint_savings  # noqa: E402
 
 
 def _series(start, days, *, reduction=0.0, seed=0):
@@ -29,8 +29,8 @@ def _series(start, days, *, reduction=0.0, seed=0):
 def test_nmec_recovers_known_savings():
     be, bt = _series("2023-01-01", 120, reduction=0.0, seed=1)
     re_, rt = _series("2024-01-01", 120, reduction=0.20, seed=2)  # 20% retrofit
-    res = caltrack_savings(be, bt, re_, rt)
-    assert isinstance(res, NMECResult)
+    res = daily_changepoint_savings(be, bt, re_, rt)
+    assert isinstance(res, DailyNMECResult)
     assert res.model_kind in ("3PC", "4P", "2P")  # cooling-driven baseline
     assert res.baseline_r2 > 0.9
     assert 0.14 < res.savings.savings_pct < 0.26  # ~20% avoided (fraction)
@@ -41,7 +41,7 @@ def test_nmec_recovers_known_savings():
 def test_no_savings_is_near_zero():
     be, bt = _series("2023-01-01", 120, reduction=0.0, seed=3)
     re_, rt = _series("2024-01-01", 120, reduction=0.0, seed=4)  # no change
-    res = caltrack_savings(be, bt, re_, rt)
+    res = daily_changepoint_savings(be, bt, re_, rt)
     assert abs(res.savings.savings_pct) < 0.10  # ~0% within noise (fraction)
 
 
@@ -49,12 +49,12 @@ def test_requires_enough_baseline_days():
     be, bt = _series("2023-01-01", 10)
     re_, rt = _series("2024-01-01", 120)
     with pytest.raises(ValueError):
-        caltrack_savings(be, bt, re_, rt)
+        daily_changepoint_savings(be, bt, re_, rt)
 
 
 def test_result_as_dict_includes_nested_savings():
     be, bt = _series("2023-01-01", 90)
     re_, rt = _series("2024-01-01", 90, reduction=0.1)
-    d = caltrack_savings(be, bt, re_, rt).as_dict()
+    d = daily_changepoint_savings(be, bt, re_, rt).as_dict()
     assert "model_kind" in d and isinstance(d["savings"], dict)
     assert "avoided_energy" in d["savings"]

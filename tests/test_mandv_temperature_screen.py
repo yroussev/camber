@@ -162,13 +162,13 @@ def test_interval_frames_screen_and_count():
 
 
 def test_caltrack_reports_screened_temperatures():
-    from camber.mandv.caltrack import caltrack_savings_hourly
+    from camber.mandv.caltrack import towt_savings_hourly
 
     e, t = _hourly(weeks=16, seed=5)
     ts = t.copy()
     ts.iloc[[100, 2000]] = SENTINEL
     half = 24 * 7 * 8
-    res = caltrack_savings_hourly(
+    res = towt_savings_hourly(
         e.iloc[:half], ts.iloc[:half], e.iloc[half:] * 0.9, ts.iloc[half:], min_hours=24 * 30
     )
     assert any("1 baseline temperature value(s) outside" in c for c in res.savings.caveats)

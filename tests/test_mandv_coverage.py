@@ -602,7 +602,7 @@ GOLDEN = {
 
 def _golden_cases():
     """The exact in-range cases GOLDEN was frozen from (pre-coverage code, main 951e6e6)."""
-    from camber.mandv.caltrack import caltrack_savings, caltrack_savings_hourly
+    from camber.mandv.caltrack import daily_changepoint_savings, towt_savings_hourly
     from camber.mandv.normalized import normalized_savings
     from camber.mandv.retrofit_isolation import isolation_normalized_savings, isolation_savings
     from camber.mandv.stats import avoided_energy_savings, fit_stats
@@ -634,7 +634,7 @@ def _golden_cases():
 
     be, bt = series("2023-01-01", 120, seed=1)
     re_, rt = series("2024-01-01", 120, 0.2, seed=2)
-    out["caltrack_daily"] = caltrack_savings(be, bt, re_, rt).savings
+    out["caltrack_daily"] = daily_changepoint_savings(be, bt, re_, rt).savings
 
     def site(start, weeks, scale=1.0, seed=0):
         rng = np.random.default_rng(seed)
@@ -646,7 +646,7 @@ def _golden_cases():
 
     eb, tb = site("2024-01-01", 20)
     er, tr = site("2024-06-01", 8, 0.85, seed=1)
-    out["caltrack_hourly"] = caltrack_savings_hourly(eb, tb, er, tr).savings
+    out["caltrack_hourly"] = towt_savings_hourly(eb, tb, er, tr).savings
     rng = np.random.default_rng(7)
     tons_b = rng.uniform(50, 400, 60)
     tons_r = rng.uniform(60, 390, 60)
@@ -820,7 +820,7 @@ def test_towt_is_flagged_never_widened():
 
 
 def test_caltrack_365_day_caveat_and_policy_passthrough():
-    from camber.mandv.caltrack import caltrack_savings
+    from camber.mandv.caltrack import daily_changepoint_savings
 
     idx = pd.date_range("2023-01-01", periods=120 * 24, freq="1h")
     temp = 60 + 18 * np.sin((idx.hour - 9) / 24 * 2 * np.pi)
@@ -829,10 +829,10 @@ def test_caltrack_365_day_caveat_and_policy_passthrough():
     ridx = pd.date_range("2024-06-01", periods=60 * 24, freq="1h")
     rt = pd.Series(np.asarray(temp[: len(ridx)]) + 25, index=ridx)  # a much hotter season
     re_ = pd.Series(20.0 + np.clip(rt.to_numpy() - 65, 0, None), index=ridx)
-    r = caltrack_savings(e, t, re_, rt)
+    r = daily_changepoint_savings(e, t, re_, rt)
     assert r.savings.declined and r.as_dict()["savings"]["declined"] is True
     assert any("< 365" in c for c in r.savings.caveats)
-    r2 = caltrack_savings(e, t, re_, rt, extrapolation=ExtrapolationPolicy(decline=False))
+    r2 = daily_changepoint_savings(e, t, re_, rt, extrapolation=ExtrapolationPolicy(decline=False))
     assert r2.savings.avoided_energy is not None
 
 

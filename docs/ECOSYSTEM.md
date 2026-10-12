@@ -81,11 +81,12 @@ profiles, carpet plots and change-point M&V cover the same ground in Python. See
    dependency-free `http_json_transport` for token/JSON-capable servers; the
    decoders handle both the v3 and Hayson JSON encodings. The `[haystack]` extra
    pulls phable (Python >= 3.11) or pyhaystack (older).
-3. **M&V: align with CalTRACK / eemeter — DONE.** `mandv.caltrack.caltrack_savings`
-   assembles the Option-C / CalTRACK-Daily NMEC workflow (baseline model → avoided
-   energy + FSU); [docs/MANDV.md](MANDV.md) maps the terminology, notes where we
-   differ from strict CalTRACK, and gives an eemeter cross-check recipe (no
-   dependency added).
+3. **M&V: align with CalTRACK / eemeter — DONE.** `mandv.caltrack_daily` and
+   `mandv.caltrack_hourly` implement the CalTRACK 2.0 Daily, Billing and Hourly methods
+   (0.105), matching eemeter 2.10 under `eemeter_compat=True`; `mandv.caltrack` keeps
+   CAMBER's own Option-C NMEC workflows (change-point daily, TOWT hourly).
+   [docs/MANDV.md](MANDV.md) maps the terminology, notes where the methods differ, and
+   gives the eemeter cross-check recipe (no dependency added).
 
 4. **Tariffs / OpenEI URDB — DONE (hybrid).** A native, dependency-free engine
    (`camber.tariff`) bills an interval load against a URDB-shaped rate (fixed, TOU

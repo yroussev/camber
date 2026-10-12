@@ -330,7 +330,7 @@ See **[MANDV.md](MANDV.md)**. Change-point models (`mandv.models`, 2P–5P + zer
 TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv.stats`), CUSUM
 (`mandv.cusum`), weather normalization (`mandv.weather`), normalized annual savings
 (`mandv.normalized`), non-routine adjustment (`mandv.nonroutine`), Option-B retrofit isolation
-(`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **variable-base degree-day**
+(`mandv.retrofit_isolation`), the CalTRACK 2.0 Daily, Billing and Hourly methods (`mandv.caltrack_daily`, `mandv.caltrack_hourly`), a **variable-base degree-day**
 baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), **IPMVP Option A**
 (`mandv.option_a`, measured Δparameter × stipulated duty), and **IPMVP Option D** (`mandv.rc_model`, a
 1R1C **or 2R2C** grey-box calibrated to metered energy — grid-τ + OLS, G14-gated — run as-found vs
