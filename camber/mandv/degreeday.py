@@ -38,6 +38,8 @@ class DegreeDayModel:
     _fit_record: object = field(default=None, repr=False, compare=False)
     # 0.90.1 (#59): why the model should not be trusted as fitted (a slope of the wrong sign)
     caveats: list = field(default_factory=list)
+    # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
+    n_temp_screened: int = 0
 
     def predict(self, tavg):
         """Predicted energy for period average temperature(s) ``tavg``."""
@@ -61,6 +63,8 @@ class DegreeDayModel:
         }
         if self.caveats:
             d["caveats"] = list(self.caveats)
+        if self.n_temp_screened:  # 0.105 (#159): only when the screen removed something
+            d["n_temp_screened"] = int(self.n_temp_screened)
         d["fit"] = self.fit.as_dict() if hasattr(self.fit, "as_dict") else self.fit
         from .coverage import _FitRecord
 
@@ -88,6 +92,7 @@ class DegreeDayModel:
             fit=fit,
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
             caveats=list(d.get("caveats") or []),
+            n_temp_screened=int(d.get("n_temp_screened", 0)),
         )
 
 
@@ -129,6 +134,7 @@ def fit_degree_day(
     step: float = 1.0,
     kind: str = "both",
     time_index=None,
+    temp_bounds: tuple | None = None,
 ) -> DegreeDayModel:
     """Fit ``E = base + a·HDD + b·CDD``. Returns a :class:`DegreeDayModel`.
 
@@ -143,10 +149,17 @@ def fit_degree_day(
     logical; when none is, the best fit is returned **declined** -- ``fit.accept`` is ``False``
     and ``caveats`` names the offending slope (typically a ``"both"`` fit on a building with no
     cooling load: refit with ``kind="heating"``).
+
+    **Temperature screen** (0.105, #159). Temperatures outside ``temp_bounds`` (default the
+    sensor-health outdoor-air range, -40 to 140 degF; see
+    :func:`camber.mandv._temperature.screen_temperature`) are dropped like a missing month; the
+    model's ``n_temp_screened`` counts them. (They are not ``caveats``: those decline the model.)
     """
     if kind not in ("heating", "cooling", "both"):
         raise ValueError("kind must be 'heating', 'cooling', or 'both'")
-    tavg = np.asarray(tavg, dtype=float)
+    from ._temperature import screen_temperature
+
+    tavg, n_screened = screen_temperature(np.asarray(tavg, dtype=float), temp_bounds)
     energy = np.asarray(energy, dtype=float)
     if len(tavg) != len(energy):
         raise ValueError("tavg and energy must be the same length")
@@ -196,6 +209,7 @@ def fit_degree_day(
         cooling_slope=round(cs, 4),
         fit=fs,
         caveats=caveats,
+        n_temp_screened=n_screened,
     )
     # the record's s2 is the reported (rounded) model's, so an exact band matches its predictions
     resid = energy - model.predict(tavg)

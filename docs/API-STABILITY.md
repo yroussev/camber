@@ -660,6 +660,29 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **Store verify and normalize** (0.104; #136), additive and provisional: `ParquetStore.verify()`
   and `ParquetStore.normalize()` (both in `camber.store._normalize`, with `check_part`), their
   report shapes, the audit action `store.normalize`, and the CLI `camber store verify|normalize`.
+- **M&V day coverage, the hourly repeated hour and the temperature screen** (0.105; #157, #158,
+  #159), additive and provisional:
+  - `mandv.intervalfit.day_coverage` and `day_hours`; the keyword-only `min_coverage=` of
+    `daily_energy_vs_temp`, `caltrack_savings`, `detect_non_routine`, `detect_step_change` and
+    `detect_step_changes`; the config key `mv[].min_coverage`; the frame `attrs`
+    `dropped_days`, `min_coverage`, `n_temp_screened`, `n_duplicate_stamps` and
+    `n_repeated_hour_copied`; the trailing result fields `n_days_dropped` / `n_temp_screened` of
+    the three non-routine results (in `as_dict` only when non-zero), and the `mv_baseline`
+    metrics of the same names (present only when non-zero);
+  - the keyword-only `timezone=` of `hourly_energy_vs_temp`, `caltrack_savings` and
+    `caltrack_savings_hourly`;
+  - the private module `mandv._temperature` (`screen_temperature`); the keyword-only
+    `temp_bounds=` of `fit_model`, `best_model`, `fit_towt`, `fit_degree_day` and the
+    `intervalfit` frame builders; the trailing `n_temp_screened` field of `ChangePointModel`,
+    `TOWTModel` and `DegreeDayModel` (serialised only when non-zero).
+
+  **Behaviour changes**, on by default: a daily frame drops days whose meter data cover less
+  than 90 % of the day (`min_coverage=0` keeps them); temperatures outside -40 to 140 °F are
+  treated as missing by every baseline fit (`temp_bounds=(-inf, inf)` keeps them); a TOWT row
+  without a temperature predicts NaN instead of its time-of-week level; `hourly_energy_vs_temp`
+  without a zone averages duplicate timestamps into one hour (it summed energy) and warns with
+  `TimezoneWarning`, and with `timezone=` returns a tz-aware local index. Clean data, with whole
+  days and plausible temperatures, gives the same numbers as before.
 
 ### The read API server: `camber.api.server`
 

@@ -51,8 +51,10 @@ def test_weights_mark_only_the_repeated_hour():
 def test_dst_days_are_23_and_25_hours(tz, spring, autumn):
     _raw, hourly = _wall_clock("2018-01-01", "2019-01-01", tz)
     oat = pd.Series(50.0, index=hourly.index)
-    old = daily_energy_vs_temp(hourly, oat)
-    new = daily_energy_vs_temp(hourly, oat, timezone=tz)
+    # the UTC year starts and ends part-way through a local day; min_coverage=0 keeps those two
+    # partial edge days (0.105, #157 drops them by default) so the year's energy is whole
+    old = daily_energy_vs_temp(hourly, oat, min_coverage=0.0)
+    new = daily_energy_vs_temp(hourly, oat, timezone=tz, min_coverage=0.0)
     assert old.loc[spring, "energy"] == new.loc[spring, "energy"] == 23.0
     assert old.loc[autumn, "energy"] == 24.0  # the historical result: an hour short
     assert new.loc[autumn, "energy"] == 25.0

@@ -409,6 +409,12 @@ energy in kBtu or kWh. The fits stay in the meter's unit, and the findings carry
 entry's gas volumes need `bills.heat_content`. Without the block nothing changes. See
 [UNITS.md](UNITS.md).
 
+**Day coverage (0.105).** A trended `mv` entry keeps a day only when its meter data cover at least
+`"min_coverage"` of it (default `0.9`; `0` keeps every day, as before 0.105). The `mv_baseline`
+finding reports the days dropped as `n_days_dropped`, with a caveat. Temperatures outside -40 to
+140 °F are treated as missing and counted as `n_temp_screened`. See
+[MANDV.md](MANDV.md#day-coverage-0105-157).
+
 Outside a workspace, name the store with the config's top-level `"mv_store"` (or `--store`).
 `camber portfolio migrate` moves it, every version included, to `state/<fid>/mv_baselines.json`.
 

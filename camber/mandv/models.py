@@ -53,6 +53,8 @@ class ChangePointModel:
     fit_range: tuple | None = None
     # the one private fit-time record (support, pinv(X'X), ...; camber.mandv.coverage)
     _fit_record: object = field(default=None, repr=False, compare=False)
+    # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
+    n_temp_screened: int = 0
 
     def predict(self, T):
         """Predicted energy for temperature(s) T (scalar or array)."""
@@ -69,7 +71,7 @@ class ChangePointModel:
         from .coverage import _FitRecord
 
         rec = self._fit_record
-        return {
+        d = {
             "type": "ChangePointModel",
             "kind": self.kind,
             "coeffs": {k: float(v) for k, v in self.coeffs.items()},
@@ -79,6 +81,9 @@ class ChangePointModel:
             "fit_range": None if self.fit_range is None else [float(x) for x in self.fit_range],
             "fit_record": rec.as_dict() if isinstance(rec, _FitRecord) else None,
         }
+        if self.n_temp_screened:  # 0.105 (#159): only when the screen removed something
+            d["n_temp_screened"] = int(self.n_temp_screened)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> ChangePointModel:
@@ -104,6 +109,7 @@ class ChangePointModel:
             _predict=_predict_from_design(kind, cps, beta),
             fit_range=None if fr is None else (float(fr[0]), float(fr[1])),
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+            n_temp_screened=int(d.get("n_temp_screened", 0)),
         )
 
     def coverage(self, T, *, projected=None, policy=None):
@@ -468,7 +474,14 @@ _OBJECTIVE_AWARE = {"3PC", "3PH", "4P"}
 
 
 def fit_model(
-    T, y, kind: str, *, objective: str = "sse", time_index=None, weights=None
+    T,
+    y,
+    kind: str,
+    *,
+    objective: str = "sse",
+    time_index=None,
+    weights=None,
+    temp_bounds: tuple | None = None,
 ) -> ChangePointModel:
     """Fit one model ``kind`` to (temperature, energy) data.
 
@@ -482,8 +495,15 @@ def fit_model(
 
     ``weights`` (aligned to ``T``; provisional, 0.92) makes it a weighted least-squares fit --
     for bills, their day counts (see the module docstring). Equal weights are neutral.
+
+    **Temperature screen** (0.105, #159). Temperatures outside ``temp_bounds`` (default the
+    sensor-health outdoor-air range, -40 to 140 degF; see
+    :func:`camber.mandv._temperature.screen_temperature`) are treated as missing, so a sentinel
+    placeholder cannot become a change point; the model's ``n_temp_screened`` counts them.
     """
-    T = np.asarray(T, dtype=float)
+    from ._temperature import screen_temperature
+
+    T, n_screened = screen_temperature(np.asarray(T, dtype=float), temp_bounds)
     y = np.asarray(y, dtype=float)
     mask = np.isfinite(T) & np.isfinite(y)
     idx = None if time_index is None else np.asarray(time_index)[mask]
@@ -524,6 +544,7 @@ def fit_model(
             weights=w,
             weight_scale=scale,
         ),
+        n_temp_screened=n_screened,
     )
 
 
@@ -537,7 +558,13 @@ def _rho_of(resid, index):
 
 
 def best_model(
-    T, y, kinds=("2P", "3PC", "3PH", "4P", "5P"), *, time_index=None, weights=None
+    T,
+    y,
+    kinds=("2P", "3PC", "3PH", "4P", "5P"),
+    *,
+    time_index=None,
+    weights=None,
+    temp_bounds: tuple | None = None,
 ) -> ChangePointModel:
     """Fit several model kinds and return the best by adjusted goodness of fit.
 
@@ -546,13 +573,14 @@ def best_model(
     "heating/cooling goes to zero" kinds (3PHZ/3PCZ) are not in the default set
     (they encode a modeling assumption -- no base load -- the caller opts into);
     pass them explicitly via ``kinds`` when appropriate. ``time_index`` and ``weights`` are
-    passed to :func:`fit_model` (with weights the BIC uses the weighted SSE).
+    passed to :func:`fit_model` (with weights the BIC uses the weighted SSE), and so is
+    ``temp_bounds`` (the temperature screen, 0.105).
     """
     n_params = N_PARAMS
     best, best_score = None, np.inf
     for k in kinds:
         try:
-            m = fit_model(T, y, k, time_index=time_index, weights=weights)
+            m = fit_model(T, y, k, time_index=time_index, weights=weights, temp_bounds=temp_bounds)
         except Exception:
             continue
         p = n_params[k]

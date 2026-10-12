@@ -88,6 +88,25 @@ df = load_csv("export.csv", timezone="America/Chicago")  # Z / offset / epoch ->
   `source_timezone` / `local_timezone`). There `source.timezone` defaults to that zone and applies
   only to a `shared_oat` CSV file, and a different zone warns.
 
+## M&V frames across daylight saving
+
+The M&V frame builders in `camber.mandv.intervalfit` take the site's zone as `timezone=` (a
+config's `source.timezone`). See [MANDV.md](MANDV.md#daylight-saving-days-provisional-093) for the
+energy side.
+
+- **Daily** (`daily_energy_vs_temp`, 0.93): a day is as long as its clock. The fall-back day sums
+  25 hours (a sample in the repeated hour counts for both passes, `repeated_hour_weights`) and the
+  spring-forward day 23. The day-coverage rule (0.105, `min_coverage`) judges each day against
+  that length; without a zone every day is 24 hours.
+- **Hourly** (`hourly_energy_vs_temp`, 0.105): with a zone the samples are placed on their real
+  instants, `localize`'s convention. The repeated hour becomes two hours, both kept, and the frame
+  has a tz-aware local index. A lone sample in the repeated hour (the store's hourly mean of the
+  two passes) stands for both. Without a zone, duplicate timestamps are one hour: energy and
+  temperature are averaged per stamp (`regularize(dedupe="mean")`), so the repeated hour is no
+  longer counted double. A `TimezoneWarning` gives the count, as for offset stamps without a zone.
+- A rate meter's step comes from the positive gaps only (as `interval_hours` does), so duplicate
+  stamps can no longer pull it to zero.
+
 ## Resampling a run status
 
 A run config's `resample` (default `1h`) puts every point on one grid. Analog points take the

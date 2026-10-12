@@ -12,6 +12,58 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.105.0] — Unreleased
+
+### Fixed
+- **Daily M&V frames drop partial days (#157).** `mandv.intervalfit.daily_energy_vs_temp` summed
+  whatever samples a day held, so a day missing hours counted as a whole day and biased a gappy
+  meter's baseline low. A day is now kept only when its samples cover at least `min_coverage`
+  of it (default 0.9): the samples present times the meter's modal interval, over the day's
+  hours. With the site's zone a daylight-saving day is judged against its own 23 or 25 hours.
+  The frame's `attrs["dropped_days"]` counts the days dropped. `caltrack_savings`, the
+  non-routine detectors and a config's `mv` findings take `min_coverage` (config:
+  `mv[].min_coverage`) and report what was dropped. `min_coverage=0` keeps every day, as before.
+  The docstring no longer implies a rule that did not exist. The workbook answers move with it,
+  because the real datasets hold partial days. In `mv-baselines`, `b6400_ElImp` loses two
+  near-empty baseline days (R² 0.868 to 0.887). Its forecast saving goes from 5.8 % to 6.2 %, with
+  a band of 24,051 to 24,347, and its backcast from 5.1 % to 5.7 %. The closure chain goes from
+  -0.9 % to -0.4 %, and from -8.1 % to -7.5 % adjusted. `UVA_A` goes from R² 0.66 to 0.67 and a
+  saving of -0.1 % to -0.2 %, and `UVA_B`'s saving from 12.6 % to 12.7 %. In
+  `data-energy-charting`, `UVA_A`'s CV(RMSE) goes from 26.1 % to 26.0 %.
+- **The hourly fall-back hour is no longer counted twice (#158).** `hourly_energy_vs_temp`
+  summed duplicate timestamps, so an export that kept both readings of the repeated
+  daylight-saving hour gave that hour double energy. With the new `timezone=` (also on
+  `caltrack_savings_hourly` and `caltrack_savings`), both real hours are kept on a tz-aware local
+  index. A lone stored sample in the repeated hour stands for both, as on the daily path. Without
+  a zone, duplicate stamps are averaged into one hour, counted in `attrs["n_duplicate_stamps"]`,
+  with a `TimezoneWarning`. A rate meter's step now comes from the positive gaps only, so
+  duplicate stamps can no longer give a zero step and zero energy.
+- **Baseline fits screen implausible temperatures (#159).** A placeholder such as -237 for a
+  missing outdoor temperature became TOWT's first temperature breakpoint, or a change-point
+  model's coldest point. `fit_towt`, `models.fit_model` / `best_model`,
+  `degreeday.fit_degree_day` and the `intervalfit` frames now treat values outside the
+  sensor-health outdoor-air range (-40 to 140 °F) as missing. The count is reported as
+  `n_temp_screened` on the model and the frame, and in the savings caveats. `temp_bounds=` sets
+  another range.
+- **A TOWT row without a temperature predicts NaN (#159).** `TOWTModel.predict` used to give it
+  its time-of-week level alone, a projection with no weather in it. `avoided_energy_savings`
+  excludes such rows, as it did any non-finite projection, and its caveat now says how many rows
+  had no finite projection.
+- With the site's zone, an energy-per-interval export that kept both readings of the repeated
+  hour under one stamp counted each reading twice on the daily path. Both readings now count
+  once each.
+
+### Added
+- `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
+  length on the site's clock).
+
+### Changed
+- Clean data (whole days, plausible temperatures, no duplicate stamps) gives the same numbers as
+  before. Where a day is partial, a temperature is implausible or an hourly stamp repeats, the
+  M&V frames, fits and savings change as described under Fixed. The default `rate_is_energy_rate`
+  differs between the frame builders (`True`) and the savings functions (`False`). It is now
+  documented and is unchanged.
+
 ## [0.104.0] — Unreleased
 
 ### Added

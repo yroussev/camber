@@ -56,6 +56,10 @@ the coverage metrics (``coverage_tier``, ``share_points_outside``, ``share_energ
 ``severe``) the saving is **declined**: ``severity="info"``, ``metrics["declined"]`` true with
 ``declined_reason``, and a caveat, never a number. The optional ``"extrapolation": {...}`` keys
 tune the grading (:class:`~camber.mandv.coverage.ExtrapolationPolicy`; an unknown key is an error).
+``"min_coverage"`` (0.105, #157; default 0.9) is the share of a day the meter data must cover for
+the day to be kept; the ``mv_baseline`` Finding reports the days it dropped as ``n_days_dropped``
+(and implausible temperatures treated as missing as ``n_temp_screened``), each only when
+non-zero, with a caveat.
 
 ``"method"`` declares the SEP adjustment-model method (:mod:`camber.mandv.methods`): ``forecast``
 (the default when absent -- the Finding then says no method was declared), ``backcast`` (a model
@@ -894,16 +898,49 @@ def _mv_frame(ctx: dict, win, entry: dict | None = None):
     return _mv_daily(ctx["full"], ctx["role"], win, entry, timezone=ctx.get("timezone"))
 
 
+def _mv_min_coverage(entry: dict | None) -> float:
+    """``mv[].min_coverage`` (0.105, #157): the share of a day its meter data must cover for the
+    day to be kept (default 0.9; 0 keeps every day, the frames before 0.105)."""
+    v = (entry or {}).get("min_coverage", 0.9)
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"mv.min_coverage must be a number in [0, 1], got {v!r}") from None
+    if not 0.0 <= f <= 1.0:
+        raise ValueError(f"mv.min_coverage must be a number in [0, 1], got {v!r}")
+    return f
+
+
+def _mv_daily_frame(e, t, entry: dict | None, timezone: str | None):
+    """:func:`~camber.mandv.intervalfit.daily_energy_vs_temp` at the entry's ``min_coverage``."""
+    from .mandv.intervalfit import daily_energy_vs_temp
+
+    return daily_energy_vs_temp(e, t, timezone=timezone, min_coverage=_mv_min_coverage(entry))
+
+
+def _mv_frame_notes(daily, period: str) -> tuple:
+    """``(metrics, caveats)`` for what a daily frame dropped (0.105): the metrics
+    ``n_days_dropped`` / ``n_temp_screened`` only when non-zero, so clean data reports as before."""
+    from .mandv.intervalfit import _frame_caveats
+
+    a = getattr(daily, "attrs", {}) or {}
+    metrics = {
+        k: int(a.get(src, 0))
+        for k, src in (("n_days_dropped", "dropped_days"), ("n_temp_screened", "n_temp_screened"))
+        if int(a.get(src, 0))
+    }
+    return metrics, _frame_caveats(daily, period)
+
+
 def _mv_daily(full, role, win, entry: dict | None = None, *, timezone: str | None = None):
     """Daily energy vs temperature over ``win``, with the entry's driver columns (if any)."""
     frame = full.loc[win[0] : win[1]]
     e, t = frame[role].dropna(), frame[Role.OAT].dropna()
     from .mandv import _mvform
-    from .mandv.intervalfit import daily_energy_vs_temp
 
     if not (len(e) and len(t)):
         return None
-    daily = daily_energy_vs_temp(e, t, timezone=timezone)
+    daily = _mv_daily_frame(e, t, entry, timezone)
     return _mvform.add_drivers(daily, entry, frame) if entry is not None else daily
 
 
@@ -1277,7 +1314,6 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     it, and the Finding reports both (``auto`` only proposes)."""
     from .mandv import _mvform
     from .mandv.coverage import ExtrapolationPolicy, support_of
-    from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.stats import cv_rmse_max_for, fit_stats
     from .mvrun import baseline_window_check
     from .rules.base import Finding
@@ -1299,6 +1335,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         RebaselinePolicy.from_entry(entry)
         events_from_entry(entry)
     min_days = int(entry.get("min_days", 60))
+    _mv_min_coverage(entry)  # a bad mv.min_coverage is a config error, up front
     adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
     conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
@@ -1340,9 +1377,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             )
             continue
         frame = full.loc[period[0] : period[1]] if period else full
-        daily = daily_energy_vs_temp(
-            frame[role].dropna(), frame[Role.OAT].dropna(), timezone=prep.timezone
+        daily = _mv_daily_frame(
+            frame[role].dropna(), frame[Role.OAT].dropna(), entry, prep.timezone
         )
+        drop_metrics, drop_caveats = _mv_frame_notes(daily, "baseline")
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
             from .mandv.sufficiency import baseline_need
@@ -1371,6 +1409,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         win = period or [daily.index.min(), daily.index.max()]
         _, short_why = baseline_window_check(len(daily), win, entry)
         base_caveats = [f"short or gappy baseline: {short_why}"] if short_why else []
+        base_caveats += drop_caveats  # 0.105: what the day-coverage rule / temperature screen did
         n_before = len(out)
         out.append(
             Finding(
@@ -1403,6 +1442,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             )
         )
         out[-1].metrics["short_baseline"] = bool(short_why)
+        out[-1].metrics.update(drop_metrics)
         if reporting is None:
             continue
         ctx = {
@@ -1427,11 +1467,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             continue
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
-        daily_r = (
-            daily_energy_vs_temp(r_e, r_t, timezone=prep.timezone)
-            if len(r_e) and len(r_t)
-            else None
-        )
+        daily_r = _mv_daily_frame(r_e, r_t, entry, prep.timezone) if len(r_e) and len(r_t) else None
+        rep_caveats = [] if daily_r is None else _mv_frame_notes(daily_r, "reporting")[1]
         if daily_r is not None:
             daily_r = _mvform.add_drivers(daily_r, entry, rframe)
         if daily_r is None or daily_r.empty:
@@ -1456,7 +1493,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         else:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
-        _add_caveats(out[n_before + 1 :], base_caveats)  # they rest on the same baseline
+        _add_caveats(out[n_before + 1 :], base_caveats + rep_caveats)  # the same baseline
     if conv_extra["caveats"] or conv_extra["metrics"]:  # 0.93 (#70): a gas volume's heat content
         for f in out:
             f.metrics.update(conv_extra["metrics"])
@@ -1731,7 +1768,6 @@ def _mv_versioned_findings(
     import pandas as pd
 
     from .mandv import _mvform
-    from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.models import N_PARAMS
     from .mandv.rebaseline import (
         RebaselinePolicy,
@@ -1749,8 +1785,8 @@ def _mv_versioned_findings(
     store = prep.mv_store
     out: list = []
     if bills is None:
-        daily_all = daily_energy_vs_temp(
-            full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+        daily_all = _mv_daily_frame(
+            full[role].dropna(), full[Role.OAT].dropna(), entry, prep.timezone
         )
         daily_all = _mvform.add_drivers(daily_all, entry, full)
     else:  # 0.94 (#72): bills
