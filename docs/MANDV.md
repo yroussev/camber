@@ -941,6 +941,19 @@ A row with no temperature has no weather to project. `TOWTModel.predict` used to
 its time-of-week level alone; it now returns NaN for it. `stats.avoided_energy_savings` leaves the
 row out of its sums, as before, and its caveat now says how many rows had no finite projection.
 
+## Why no model could be fit (0.105, #160)
+
+`best_model` tries each kind in `kinds` and keeps the lowest BIC. When none can be fit it used
+to raise a bare `ValueError("no model could be fit")`. It now raises `models.ModelFitError`, still
+a `ValueError`, whose message names every kind with its parameter count and the reason it was
+refused: the fit's own error (for example `need >=3 finite points to fit`), `n - p < 1` with the
+counts, or a non-finite BIC. The same list is on the exception's `candidates`.
+
+`best_model(..., return_candidates=True)` returns `(model, candidates)`: one dict per kind tried,
+in order, with `kind`, `p` and either `n`, `sse`, `bic` and `selected` or `refused`. The selection
+itself is unchanged, with the same BIC and the same tie rule (within `1e-9`, the first kind
+tried wins).
+
 ## Change-point + driver models
 
 When energy also follows a continuously varying driver — occupancy, production, operating hours,

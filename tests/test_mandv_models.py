@@ -185,3 +185,68 @@ def test_grid_ties_keep_the_first_grid_point_whatever_the_rounding():
     m5 = M.fit_model(T, y, "5P")
     lo, hi = m5.change_points
     assert lo == grid[0] and hi == grid[1]
+
+
+# --- #160: best_model says why no model could be fit, and can return its candidates ----------
+
+
+def _fixtures():
+    """The best_model fixtures above: cooling, linear, heating-to-zero (with its kinds)."""
+    r3, r4, r12 = (np.random.default_rng(s) for s in (3, 4, 12))
+    T1 = np.linspace(45, 105, 400)
+    T2 = np.linspace(40, 100, 300)
+    T3 = np.linspace(35, 90, 300)
+    return [
+        (T1, 20 + 0.8 * np.maximum(0.0, T1 - 65) + r3.normal(0, 0.3, len(T1)), None),
+        (T2, 5 + 0.6 * T2 + r4.normal(0, 0.2, len(T2)), None),
+        (T3, np.maximum(0.0, 60 - T3) * 2.0 + r12.normal(0, 0.3, len(T3)), ("2P", "3PH", "3PHZ")),
+    ]
+
+
+def test_best_model_error_lists_each_candidates_reason():
+    import pytest
+
+    from camber.mandv.models import ModelFitError
+
+    with pytest.raises(ModelFitError) as ei:
+        best_model([50.0, 60.0], [1.0, 2.0], kinds=("2P", "5P", "nope"))
+    err = ei.value
+    assert isinstance(err, ValueError)  # existing `except ValueError` handlers still catch it
+    msg = str(err)
+    assert msg.startswith("no model could be fit")
+    assert [c["kind"] for c in err.candidates] == ["2P", "5P", "nope"]
+    assert all(c["refused"] for c in err.candidates)
+    for c in err.candidates:
+        assert f"{c['kind']} (p={c['p']}): {c['refused']}" in msg
+    assert err.candidates[0]["p"] == 2 and err.candidates[2]["p"] is None
+    assert "need >=3 finite points" in err.candidates[0]["refused"]
+
+
+def test_best_model_n_minus_p_refusal_is_reported():
+    from camber.mandv.models import ModelFitError
+
+    try:
+        best_model([40.0, 60.0, 80.0], [3.0, 1.0, 4.0], kinds=("3PC", "3PH"))
+    except ModelFitError as e:
+        assert all("n - p < 1" in c["refused"] or "Error" in c["refused"] for c in e.candidates)
+        assert any("n - p < 1 (n=3 points for p=3)" in c["refused"] for c in e.candidates)
+    else:  # pragma: no cover
+        raise AssertionError("three points cannot carry a 3-parameter model with n - p >= 1")
+
+
+def test_return_candidates_matches_default_choice():
+    for T, y, kinds in _fixtures():
+        kw = {} if kinds is None else {"kinds": kinds}
+        plain = best_model(T, y, **kw)
+        m, cands = best_model(T, y, return_candidates=True, **kw)
+        assert m.kind == plain.kind and m.change_points == plain.change_points
+        assert m.sse == plain.sse
+        fitted = [c for c in cands if "bic" in c]
+        assert [c["kind"] for c in cands] == list(kinds or ("2P", "3PC", "3PH", "4P", "5P"))
+        assert sum(c["selected"] for c in fitted) == 1
+        chosen = next(c for c in fitted if c["selected"])
+        assert chosen["kind"] == m.kind
+        # the chosen kind has the lowest BIC (within the tie tolerance, the first one wins)
+        assert chosen["bic"] <= min(c["bic"] for c in fitted) + 1e-9
+        n, p = m.n, chosen["p"]
+        assert np.isclose(chosen["bic"], n * np.log(m.sse / n + 1e-12) + p * np.log(n))
