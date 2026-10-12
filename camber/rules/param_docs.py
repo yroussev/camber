@@ -1865,6 +1865,34 @@ _PLANT_MAX_STARTS = (
     "minimum cycle time (the code says to confirm it against the equipment's controls)"
 )
 
+
+# 0.104 (#143): the trend-resolution guard every start-counting rule shares.
+def _max_interval(what: str, *, declines: bool = True) -> ParamDoc:
+    note = (
+        "Coarser than this, a count at or above max_starts_per_day stands with a caveat that it "
+        "is a floor. "
+        + (
+            f"Below the limit, when samples show the {what} on for only part of an interval (a "
+            "resampled run status holds the interval's duty), the interval hid starts, so the "
+            "verdict declines to info instead of ok; with no part-on samples ok stands with the "
+            "caveat."
+            if declines
+            else "Below the limit the verdict stands with the caveat (an averaged power trend "
+            "cannot show the cycles it hid)."
+        )
+    )
+    return _P(
+        "minutes",
+        "CAMBER judgment: the 15-minute grid CAMBER ingests to; a start-to-start cycle shorter "
+        "than the trend interval is invisible to an off-to-on count",
+        f"Keep it at or below the {what}'s minimum cycle time (minimum on plus minimum off). "
+        "Better than raising it: run the rule at the stored interval (resample at or below this) "
+        "so the count can see the cycles.",
+        (5.0, 60.0),
+        note,
+    )
+
+
 PARAM_DOCS["boiler_summer_lockout"] = {
     "summer_lockout_oat_f": _P(
         "°F",
@@ -1912,6 +1940,7 @@ PARAM_DOCS["boiler_short_cycle"] = {
         "Warn at this many firing starts per day, fault at twice it."
         + _GAS_FIRING,  # 0.98 (#86 item 4a, 098-plant-boiler)
     ),
+    "max_interval_min": _max_interval("boiler"),  # 0.104 (#143)
 }
 
 PARAM_DOCS["hw_plant_deltat"] = {
@@ -2115,6 +2144,7 @@ PARAM_DOCS["chiller_staging"] = {
         "Needs CHW flow and temperatures. Severity is fixed in code: warn when >= 25 % of running "
         "hours sit below this load, fault at >= 50 %. Peak is the observed peak, not nameplate.",
     ),
+    "max_interval_min": _max_interval("chiller", declines=False),  # 0.104 (#143)
 }
 
 PARAM_DOCS["chiller_staging_fleet"] = {
@@ -2278,6 +2308,7 @@ PARAM_DOCS["compressor_short_cycle"] = {
         "Warn at the ceiling, fault at twice it. The span includes days the unit is off, so a "
         "trend with long idle stretches lowers the rate.",
     ),
+    "max_interval_min": _max_interval("compressor"),  # 0.104 (#143)
 }
 
 PARAM_DOCS["compressor_staging"] = {

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..boilercycle import analyze_boiler_cycling
+from ..boilercycle import _resolution_check, analyze_boiler_cycling
 from ..model.roles import Role
 from .base import Finding
 
@@ -25,11 +25,13 @@ class CompressorShortCycle:
     roles_required = (Role.COMPRESSOR_STATUS,)
     roles_optional = ()
 
-    def __init__(self, max_starts_per_day: float = 12.0):
+    def __init__(self, max_starts_per_day: float = 12.0, max_interval_min: float = 15.0):
         # Not derived from the DX minimum off-time: a ~5 min timer alone would permit ~12 starts
         # an HOUR. 12 starts a day (about one every 2 h, averaged over the trend span including
         # idle days) is a CAMBER screening ceiling.
         self.max_starts_per_day = max_starts_per_day
+        # 0.104 (#143): the coarsest trend interval whose count can vouch for "ok"
+        self.max_interval_min = max_interval_min
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -56,6 +58,21 @@ class CompressorShortCycle:
             severity = "warn"
         else:
             severity = "ok"
+        # 0.104 (#143): a coarse trend's count is a floor (camber.boilercycle._resolution_check)
+        severity, caveats, declined = _resolution_check(
+            res,
+            severity,
+            max_starts_per_day=self.max_starts_per_day,
+            max_interval_min=self.max_interval_min,
+            what="compressor",
+        )
+        summary = (
+            f"{equip}: {res.starts_per_day:.1f} compressor starts/day "
+            f"(threshold {self.max_starts_per_day:.0f}), running "
+            f"{res.runtime_pct:.0f}% of the time"
+        )
+        if declined:
+            summary += f"; cannot confirm on a {res.interval_min:g}-minute trend"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -66,10 +83,9 @@ class CompressorShortCycle:
                 "runtime_pct": res.runtime_pct,
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
+                "interval_min": res.interval_min,  # 0.104 (#143)
+                "n_partial": res.n_partial,  # 0.104 (#143)
             },
-            summary=(
-                f"{equip}: {res.starts_per_day:.1f} compressor starts/day "
-                f"(threshold {self.max_starts_per_day:.0f}), running "
-                f"{res.runtime_pct:.0f}% of the time"
-            ),
+            summary=summary,
+            caveats=caveats,
         )

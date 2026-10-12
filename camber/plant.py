@@ -132,22 +132,29 @@ def analyze_hw_plant(
     if n == 0:
         return None
 
-    running = work["BoilerStatus"] > 0.5
+    # 0.104 (#143): a resampled status is the bin's duty (0..1). Firing shares weight each
+    # sample by its duty, so a boiler firing a quarter of every hour is not read as never
+    # firing; on a 0/1 trend this is the plain share of firing samples. ``running`` (firing
+    # for most of the sample) still selects the samples the temperature checks read.
+    duty = pd.to_numeric(work["BoilerStatus"], errors="coerce").clip(0.0, 1.0)
+    running = duty > 0.5
     n_run = int(running.sum())
-    boiler_running_pct = round(100.0 * n_run / n, 2)
+    boiler_running_pct = round(100.0 * float(duty.mean()), 2)
 
     # summer-lockout violation (needs OAT). Without OAT we CANNOT evaluate it --
     # report None, never a confident 0% ("clean, locked out in summer"). When the
-    # boiler never runs (n_run == 0) there are trivially no hot-weather running hours,
-    # so 0% is an honest evaluated answer.
+    # boiler never fires there are trivially no hot-weather firing hours, so 0% is an
+    # honest evaluated answer.
     if "OAT" not in work.columns:
         summer_run_pct = None
-    elif n_run:
-        oat_run = work.loc[running, "OAT"].dropna()
+    elif bool((duty > 0).any()):
+        fired = work[duty > 0]
+        oat_fired = fired["OAT"].dropna()
+        w = duty.reindex(oat_fired.index)
         summer_run_pct = (
-            round(100.0 * float((oat_run > summer_lockout_oat_f).mean()), 2)
-            if len(oat_run)
-            else None  # OAT present but all-NaN over running hours -> not evaluated
+            round(100.0 * float((w * (oat_fired > summer_lockout_oat_f)).sum() / w.sum()), 2)
+            if len(oat_fired)
+            else None  # OAT present but all-NaN over firing hours -> not evaluated
         )
     else:
         summer_run_pct = 0.0

@@ -164,7 +164,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     these signals is judged as before, with a caveat.
   - *Status duty.* Event-logged status points are resampled to their time-weighted duty
     (`camber.realio.load_status(how="duty")`), so a runtime verdict such as setback does not change
-    with the resample interval; `how="any"` keeps the old "on at any moment" bins.
+    with the resample interval; `how="any"` keeps the old "on at any moment" bins. Ingest and a
+    run's read from a store resample status the same way, and the start-counting rules count the
+    fewest starts the duties allow, declining a below-limit verdict on a coarse trend that hid
+    starts (0.104, #143; [TIME-HANDLING.md](TIME-HANDLING.md#resampling-a-run-status)).
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle, hot-water pump warm-weather lockout

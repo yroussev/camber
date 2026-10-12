@@ -62,7 +62,7 @@ import pandas as pd
 
 from .. import __version__
 from ..model.mapping import MappingProvider
-from ..model.roles import Role
+from ..model.roles import _ANY_ON_ROLES, Role
 from ..store import FacilityRegistry, ParquetStore
 from ..store._lock import store_lock
 from ..store.parquet_store import _scratch_store
@@ -90,7 +90,6 @@ _STAGING = "_staging"
 # 0.103 (#124): where this ingest extracts archive members the cache cannot take (a read-only
 # cache): a scratch directory beside its staging area in the store, removed when it ends.
 _EXTRACT_SCRATCH: contextvars.ContextVar = contextvars.ContextVar("extract_scratch", default=None)
-_ANY_ON = frozenset({Role.WARMUP, Role.COOLDOWN})
 
 
 @dataclass
@@ -345,7 +344,7 @@ def _resample(frame: pd.DataFrame, rule: str | None) -> pd.DataFrame:
     cols = {}
     for col in frame.columns:
         r = frame[col].resample(rule)
-        cols[col] = r.max() if col in _ANY_ON else r.mean()
+        cols[col] = r.max() if col in _ANY_ON_ROLES else r.mean()
     return pd.concat(cols, axis=1)
 
 

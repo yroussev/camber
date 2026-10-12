@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..boilercycle import analyze_boiler_cycling
+from ..boilercycle import _resolution_check, analyze_boiler_cycling
 from ..model.roles import Role
 from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
@@ -29,9 +29,12 @@ class BoilerShortCycle:
     roles_any_of = BOILER_RUN_ANY_OF
     roles_optional = ()
 
-    def __init__(self, max_starts_per_day: float = 6.0):
+    def __init__(self, max_starts_per_day: float = 6.0, max_interval_min: float = 15.0):
         # Manufacturer/min-cycle-time dependent; confirm against the boiler's controls.
         self.max_starts_per_day = max_starts_per_day
+        # 0.104 (#143): the coarsest trend interval whose count can vouch for "ok"; coarser, a
+        # count below the limit with part-on samples declines (camber.boilercycle)
+        self.max_interval_min = max_interval_min
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -53,6 +56,23 @@ class BoilerShortCycle:
             severity = "warn"
         else:
             severity = "ok"
+        # 0.104 (#143): a coarse trend's count is a floor; below the limit with part-on samples
+        # the interval hid starts, so the verdict declines rather than reading "ok"
+        severity, res_caveats, declined = _resolution_check(
+            res,
+            severity,
+            max_starts_per_day=self.max_starts_per_day,
+            max_interval_min=self.max_interval_min,
+        )
+        if run_source:  # the gas caveat already says sub-interval firing is invisible
+            res_caveats = res_caveats if declined else []
+        summary = (
+            f"{equip}: {res.starts_per_day:.1f} boiler starts/day "
+            f"(threshold {self.max_starts_per_day:.0f}), firing "
+            f"{res.runtime_pct:.0f}% of the time"
+        )
+        if declined:
+            summary += f"; cannot confirm on a {res.interval_min:g}-minute trend"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -63,14 +83,12 @@ class BoilerShortCycle:
                 "runtime_pct": res.runtime_pct,
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
+                "interval_min": res.interval_min,  # 0.104 (#143)
+                "n_partial": res.n_partial,  # 0.104 (#143)
                 **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
-            summary=(
-                f"{equip}: {res.starts_per_day:.1f} boiler starts/day "
-                f"(threshold {self.max_starts_per_day:.0f}), firing "
-                f"{res.runtime_pct:.0f}% of the time"
-            ),
-            caveats=[GAS_RUN_CAVEAT] if run_source else [],  # 0.98 (#86 item 4a)
+            summary=summary,
+            caveats=([GAS_RUN_CAVEAT] if run_source else []) + res_caveats,
         )
 
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:

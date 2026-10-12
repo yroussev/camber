@@ -97,6 +97,18 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   lock is taken once; otherwise each write takes it on its own, which costs under a millisecond.
   An ingest's staging area and a workspace's rollup stores take no lock of their own, because the
   lock on the store they belong to already covers them.
+- **Start-counting rules say when a trend is too coarse to count starts (#143).**
+  `boiler_short_cycle`, `compressor_short_cycle` and `chiller_staging` take a new parameter,
+  `max_interval_min` (default 15 minutes). On a trend coarser than that, a start count is a floor,
+  since a cycle shorter than the interval is invisible. A count at or above `max_starts_per_day`
+  keeps its verdict and gains a caveat saying so. Below the limit, `boiler_short_cycle` and
+  `compressor_short_cycle` decline (`info`, "cannot confirm on a 60-minute trend") when samples
+  show the equipment on for only part of an interval, because the interval hid starts; with no
+  part-on samples, `ok` stands with the caveat. `chiller_staging` reads an averaged power trend,
+  which cannot show hidden cycles, so it adds the caveat only. A run at the stored 15-minute
+  interval is unchanged. Both cycle rules report two new metrics, `interval_min` and `n_partial`
+  (samples on for part of their interval). The resampling rules for run status are written up in
+  `docs/TIME-HANDLING.md`.
 
 ### Deprecated
 - **No authentication by default for `camber serve` on loopback (#134).** A future release, 0.105.0
@@ -132,6 +144,21 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   take no lock, a warm `points()` costs the same, and a store that can't be written to still
   answers (it just isn't cached). Two readers rebuilding at once also no longer fail on a shared
   temp file.
+- **A resampled run status hid a short-cycling boiler (#143).** A run config that resamples above
+  the stored interval gives a 0/1 run status the bin's duty, the share of the bin it was on, as
+  ingest and the folder path already do. `boiler_short_cycle` and `compressor_short_cycle` then
+  read "firing" as a duty above 0.5, so a boiler firing a quarter of every hour read as never
+  firing: 0 starts and 0 % runtime on `synthetic-hw-plant-cycling`'s short-cycling plant at 1 h.
+  They now count the fewest starts the duties allow (a sample on for part of its interval holds a
+  start or a stop), and `runtime_pct` is the mean duty, the share of time firing. On a 0/1 trend
+  both are unchanged. The same plant at 1 h now reads 11.2 starts a day and 23.6 % firing, a warn
+  with the coarse-trend caveat; at 15 minutes it is still 20.2 starts a day. `boiler_summer_lockout`
+  weights its firing shares (`boiler_running_pct`, `summer_run_pct`) by duty in the same way, so a
+  boiler firing part of every hot hour is no longer read as locked out. The duty is kept, not
+  replaced by the bin's max: "on at any moment" is a duty above 0, while a max would read a
+  quarter-hour of firing as a full hour and still show a cycling boiler as one long run.
+  `ParquetStore.read_role_frame(resample=...)` now takes the max for the warm-up and cool-down
+  flags, as ingest and `camber.resolve` already did.
 
 ## [0.103.0] — 2026-10-11
 

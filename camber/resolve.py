@@ -34,7 +34,7 @@ import pandas as pd
 
 from . import realio
 from .model.mapping import MappingProvider
-from .model.roles import STATUS_ROLES, Role
+from .model.roles import _ANY_ON_ROLES, STATUS_ROLES, Role
 from .schedules import occupied_mask
 from .units import normalize_percent_frame
 
@@ -118,7 +118,7 @@ TERMINAL_CLASSES: tuple = ("VAV", "CAV", "FCAV")
 
 # Status roles resampled "on if on at any moment of the bin" rather than by duty: prep-mode flags
 # that *exclude* samples, where a bin partly in warm-up/cool-down should be excluded whole.
-_ANY_ON_ROLES = frozenset({Role.WARMUP, Role.COOLDOWN})
+# One set for ingest, the folder path and the store read (camber.model.roles).
 
 
 def _as_folders(folder) -> list:

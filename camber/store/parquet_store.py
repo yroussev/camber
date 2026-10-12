@@ -685,8 +685,9 @@ class ParquetStore:
         """Read one equipment back as a wide, role-named frame (rule-ready).
 
         Columns are :class:`Role` members (mirroring ``resolve``); index is a
-        sorted DatetimeIndex. ``resample`` is a pandas offset alias
-        (mean-aggregated) or None for the stored grid.
+        sorted DatetimeIndex. ``resample`` is a pandas offset alias or None for the stored
+        grid: each role takes the bin mean (a run status its duty, the share of the bin it was
+        on), the warm-up/cool-down exclusion flags the max, as at ingest.
         """
         long = self.read_long(
             facility_id=facility_id,
@@ -708,7 +709,17 @@ class ParquetStore:
         wide.index = pd.DatetimeIndex(pd.to_datetime(wide.index)).as_unit("ns")
         wide = wide.sort_index()
         if resample:
-            wide = wide.resample(resample).mean()
+            # the same per-role rule as ingest and resolve (0.104, #143): every role takes the
+            # bin mean -- a run status its duty -- except the warm-up/cool-down exclusion flags,
+            # which take the max
+            from ..model.roles import _ANY_ON_ROLES
+
+            flags = [c for c in wide.columns if c in {r.value for r in _ANY_ON_ROLES}]
+            bins = wide.resample(resample)
+            out = bins.mean()
+            if flags:
+                out[flags] = bins.max()[flags]
+            wide = out
         # restore Role-typed columns where the slug is a known role
         slug_to_role = {r.value: r for r in Role}
         wide.columns = [slug_to_role.get(c, c) for c in wide.columns]

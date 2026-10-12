@@ -87,3 +87,50 @@ df = load_csv("export.csv", timezone="America/Chicago")  # Z / offset / epoch ->
 - A store facility ingested from the dataset catalog is already on the site's clock (the entry's
   `source_timezone` / `local_timezone`). There `source.timezone` defaults to that zone and applies
   only to a `shared_oat` CSV file, and a different zone warns.
+
+## Resampling a run status
+
+A run config's `resample` (default `1h`) puts every point on one grid. Analog points take the
+bin's mean. A run status or command (`boiler_status`, `supply_fan_status`, `pump_status`,
+`compressor_status` and the other status roles) takes the bin's mean as well, which for a 0/1
+signal is its **duty**: the share of the bin it was on (0 to 1). The rule is the same at every
+step: ingest's 15-minute resample, the folder path (`camber.realio.load_status(how="duty")`, time
+weighted over an event-logged point) and a run's read from a Parquet store, through
+`camber.resolve` or `ParquetStore.read_role_frame(resample=...)`. The only exceptions are the
+warm-up and cool-down flags (`warmup`, `cooldown`), which take the bin's max: they *exclude*
+samples, and a bin touched by warm-up at all is excluded whole.
+
+Why a duty and not the max ("on at any moment of the bin")? The duty keeps strictly more: "on at
+any moment" is `duty > 0`, but a max cannot give back how long the equipment ran. A max would
+read a boiler firing 15 minutes an hour as firing the whole hour, inflating every run-time figure,
+and it would not help a start count either: an hour with any firing in it reads on, so a boiler
+that cycles all day reads as one long run.
+
+What the rules read from a duty:
+
+| Question | Read | Used by |
+|---|---|---|
+| How long did it run? | the duty itself (its mean, or duty-weighted shares) | `runtime_pct` of the start-counting rules; `boiler_running_pct` and `summer_run_pct` of `boiler_summer_lockout`; `night_weekend_setback` |
+| Was it running in this sample, to judge the other points of the sample? | duty > 0.5 (on for most of the sample) | the fan, pump and plant gates (`camber.schedules.fan_on_mask`, `plant_run_mask`); the loop delta-T and reset checks |
+| How many times did it start? | the fewest starts consistent with the duties | `boiler_short_cycle`, `compressor_short_cycle` |
+
+A sample-level gate at 0.5 never turns a mostly-on sample off or a mostly-off sample on: the
+analog points of a sample on for a quarter of it are mostly the off readings, so the gate leaves
+them out.
+
+**Counting starts on a coarse trend.** A start count can only see a cycle as long as the trend's
+interval. The start-counting rules count the fewest starts the duties allow (a sample on for part
+of its interval holds a start or a stop inside it), which on a plain 0/1 trend is the off-to-on
+count. On a trend coarser than the rule's `max_interval_min` (default 15 minutes; see
+[THRESHOLDS.md](THRESHOLDS.md)) that count is a floor:
+
+- at or above `max_starts_per_day` the verdict stands (the floor already reaches the limit), with
+  a caveat;
+- below it, when samples show the equipment on for only part of an interval, the interval hid
+  starts, so the rule declines (`info`, "cannot confirm") instead of reporting `ok`;
+- below it with no part-on samples, `ok` stands with the caveat.
+
+`chiller_staging` counts starts from an averaged power trend, which has no part-on reading to show
+hidden cycles; coarser than its `max_interval_min` it adds the caveat only. Run start-counting
+rules at the interval the data was stored at (`resample: 15min` for a catalog dataset) to count
+the cycles themselves.

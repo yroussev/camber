@@ -56,11 +56,11 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 |---|---|---|
 | [`actuator_stuck`](#actuator_stuck) | 14 |  |
 | [`airflow_tracking`](#airflow_tracking) | 4 |  |
-| [`boiler_short_cycle`](#boiler_short_cycle) | 1 |  |
+| [`boiler_short_cycle`](#boiler_short_cycle) | 2 |  |
 | [`boiler_summer_lockout`](#boiler_summer_lockout) | 1 |  |
 | [`chiller_approach_fouling`](#chiller_approach_fouling) | 2 |  |
 | [`chiller_efficiency`](#chiller_efficiency) | 1 |  |
-| [`chiller_staging`](#chiller_staging) | 2 |  |
+| [`chiller_staging`](#chiller_staging) | 3 |  |
 | [`chiller_staging_fleet`](#chiller_staging_fleet) | 1 |  |
 | [`chw_plant_reset`](#chw_plant_reset) | 4 | yes |
 | [`chw_pump_dp_reset`](#chw_pump_dp_reset) | 2 | yes |
@@ -69,7 +69,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`co2_ventilation_system`](#co2_ventilation_system) | 3 (passed to `co2_ventilation`) |  |
 | [`cohort_airflow`](#cohort_airflow) | 6 |  |
 | [`cohort_space_temp`](#cohort_space_temp) | 6 |  |
-| [`compressor_short_cycle`](#compressor_short_cycle) | 1 | yes |
+| [`compressor_short_cycle`](#compressor_short_cycle) | 2 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
 | [`condenser_water_reset`](#condenser_water_reset) | 3 |  |
@@ -171,10 +171,12 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `max_starts_per_day` | `6.0` | per day | 2.0 to 24.0 | CAMBER judgment: a generic cycling limit; the right value depends on the manufacturer's minimum cycle time (the code says to confirm it against the equipment's controls) |
+| `max_interval_min` | `15.0` | minutes | 5.0 to 60.0 | CAMBER judgment: the 15-minute grid CAMBER ingests to; a start-to-start cycle shorter than the trend interval is invisible to an off-to-on count |
 
 How to calibrate:
 
 - `max_starts_per_day`: Take the boiler's minimum on/off cycle time from its manual or burner control and divide the day by it with margin; or use the 95th-percentile daily starts of a known-good heating season. Coarse trends undercount starts, so the count is a floor. *Note:* Warn at this many firing starts per day, fault at twice it. Firing comes from the boiler run status (boiler_status); without one, from the gas input (gas_input_rate) above 5 % of its own 95th percentile (fixed in code), reported as run_source gas with a caveat.
+- `max_interval_min`: Keep it at or below the boiler's minimum cycle time (minimum on plus minimum off). Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the cycles. *Note:* Coarser than this, a count at or above max_starts_per_day stands with a caveat that it is a floor. Below the limit, when samples show the boiler on for only part of an interval (a resampled run status holds the interval's duty), the interval hid starts, so the verdict declines to info instead of ok; with no part-on samples ok stands with the caveat.
 
 ## boiler_summer_lockout
 
@@ -214,11 +216,13 @@ How to calibrate:
 |---|---|---|---|---|
 | `max_starts_per_day` | `6.0` | per day | 2.0 to 24.0 | CAMBER judgment: a generic cycling limit; the right value depends on the manufacturer's minimum cycle time (the code says to confirm it against the equipment's controls) |
 | `low_load_pct` | `40.0` | % of the chiller's observed peak tons | 10.0 to 70.0 | CAMBER judgment: the 'idling' cut-off for the optional load-factor metric |
+| `max_interval_min` | `15.0` | minutes | 5.0 to 60.0 | CAMBER judgment: the 15-minute grid CAMBER ingests to; a start-to-start cycle shorter than the trend interval is invisible to an off-to-on count |
 
 How to calibrate:
 
 - `max_starts_per_day`: Take the compressor's minimum start-to-start time (anti-recycle timer) from the chiller controls and allow margin; or use the 95th-percentile daily starts of a known-good cooling season. Coarse trends undercount starts, so the count is a floor. *Note:* Warn at this many starts per day, fault at twice it.
 - `low_load_pct`: Set it near the load below which the chiller's part-load curve (from the manufacturer) turns sharply less efficient, commonly 30-40 % of capacity. *Note:* Needs CHW flow and temperatures. Severity is fixed in code: warn when >= 25 % of running hours sit below this load, fault at >= 50 %. Peak is the observed peak, not nameplate.
+- `max_interval_min`: Keep it at or below the chiller's minimum cycle time (minimum on plus minimum off). Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the cycles. *Note:* Coarser than this, a count at or above max_starts_per_day stands with a caveat that it is a floor. Below the limit the verdict stands with the caveat (an averaged power trend cannot show the cycles it hid).
 
 ## chiller_staging_fleet
 
@@ -349,10 +353,12 @@ Not thresholds: `reference` (structured input: {equip: reference_equip} for norm
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `max_starts_per_day` | `12.0` | compressor starts per day (off-to-on transitions over the trend's span) | 6.0 to 72.0 | CAMBER judgment: a screening ceiling of about one start every 2 h; it is not derived from a DX minimum off-time (a ~5 min timer alone would permit ~12 starts an hour) |
+| `max_interval_min` | `15.0` | minutes | 5.0 to 60.0 | CAMBER judgment: the 15-minute grid CAMBER ingests to; a start-to-start cycle shorter than the trend interval is invisible to an off-to-on count |
 
 How to calibrate:
 
 - `max_starts_per_day`: Take the manufacturer's minimum on/off timers and the unit's staging hysteresis; better, count the starts per day in a known-good week of similar weather and set the ceiling somewhat above its highest day. Calibrating on the period you are scoring would hide a short-cycling fault. *Note:* Warn at the ceiling, fault at twice it. The span includes days the unit is off, so a trend with long idle stretches lowers the rate.
+- `max_interval_min`: Keep it at or below the compressor's minimum cycle time (minimum on plus minimum off). Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the cycles. *Note:* Coarser than this, a count at or above max_starts_per_day stands with a caveat that it is a floor. Below the limit, when samples show the compressor on for only part of an interval (a resampled run status holds the interval's duty), the interval hid starts, so the verdict declines to info instead of ok; with no part-on samples ok stands with the caveat.
 
 Fixed in code: warn at max_starts_per_day or more; fault at twice it (the factor 2 is fixed in code)
 

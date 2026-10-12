@@ -214,6 +214,14 @@ STATUS_ROLES: frozenset = frozenset(
 )
 
 
+# How a status role is resampled to a coarser grid (0.104, #143; docs/TIME-HANDLING.md). Every
+# status role takes the bin's mean -- its *duty*, the share of the bin it was on -- at ingest, on
+# the folder path (realio.load_status how="duty") and at a run's read-time resample alike, except
+# these prep-mode exclusion flags, which take the max: a bin touched by warm-up or cool-down at all
+# is excluded whole. A duty keeps strictly more than a max: "on at any moment" is duty > 0.
+_ANY_ON_ROLES: frozenset = frozenset({Role.WARMUP, Role.COOLDOWN})
+
+
 # Non-binding hint of the Haystack tag combination each role maps onto, for the
 # future ontology step. Not used at runtime; documentation only.
 HAYSTACK_HINT: dict[Role, str] = {

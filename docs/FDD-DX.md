@@ -52,6 +52,9 @@ requires a reversing-valve command; `DOAS` requires outdoor-air flow.
 
 - **`compressor_short_cycle`** — DX compressor firing in short bursts (starts/day past a
   min-off-time ceiling). Reuses the generic on/off start counter. Flag: `max_starts_per_day`.
+  On a trend coarser than `max_interval_min` (15 minutes) the count is a floor: a verdict below
+  the ceiling declines to `info` when the resampled status shows the compressor on for part of an
+  interval (see [TIME-HANDLING.md](TIME-HANDLING.md#resampling-a-run-status)).
 - **`compressor_staging`** — unstable multi-stage DX (excess stage changes/day). Flag:
   `max_changes_per_day`.
 - **`heatpump_defrost`** — excess heat-pump defrost / reversing-valve cycling (iced coil or faulty

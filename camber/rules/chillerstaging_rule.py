@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ..boilercycle import _interval_min
 from ..chillerstaging import analyze_chiller_staging
 from ..model.roles import Role
 from .base import Finding
@@ -31,11 +32,18 @@ class ChillerStaging:
     roles_required = (Role.POWER,)
     roles_optional = (Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP, Role.CHW_FLOW)
 
-    def __init__(self, max_starts_per_day: float = 6.0, low_load_pct: float = 40.0):
+    def __init__(
+        self,
+        max_starts_per_day: float = 6.0,
+        low_load_pct: float = 40.0,
+        max_interval_min: float = 15.0,
+    ):
         # Cycling threshold is manufacturer/min-cycle-time dependent; low_load_pct is
         # the "idling" judgment for the optional load-factor metric.
         self.max_starts_per_day = max_starts_per_day
         self.low_load_pct = low_load_pct
+        # 0.104 (#143): coarser than this, the start count is caveated as a floor
+        self.max_interval_min = max_interval_min
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -63,10 +71,22 @@ class ChillerStaging:
             if res.low_load_pct == res.low_load_pct
             else ""
         )
+        # 0.104 (#143): an averaged power trend hides an off-on cycle shorter than its interval;
+        # the chiller has no part-on status to show it, so the count is caveated as a floor
+        dt = _interval_min(legacy["Power"].dropna().index) if "Power" in legacy else None
+        caveats = []
+        if dt is not None and dt > self.max_interval_min:
+            caveats.append(
+                f"starts counted on a {dt:g}-minute trend, coarser than the "
+                f"{self.max_interval_min:g} minutes the count needs (max_interval_min): an "
+                "averaged power reading hides an off-and-on cycle shorter than the interval, so "
+                "starts_per_day is a floor; run at the stored interval for the true count"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
+            caveats=caveats,
             metrics={
                 "starts_per_day": res.starts_per_day,
                 "max_starts_per_day": self.max_starts_per_day,
