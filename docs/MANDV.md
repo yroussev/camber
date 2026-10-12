@@ -112,8 +112,13 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 
 | Label | CAMBER | Standard name | Citation | Differences |
 |---|---|---|---|---|
-| Daily change-point savings (not CalTRACK) | `mandv.caltrack.caltrack_savings` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | Not CalTRACK 2.0 Daily: a `best_model` daily change-point baseline (2P–5P, BIC) with IPMVP avoided energy and a G14 band, without CalTRACK's candidate models, balance-point grid, qualifying tests, adjusted-R² selection or data-sufficiency rules. To be renamed in 0.105 when the faithful CalTRACK methods land (#156). |
-| Pooled TOWT hourly savings (not CalTRACK Hourly) | `mandv.caltrack.caltrack_savings_hourly` | — | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Not CalTRACK 2.0 Hourly: one pooled TOWT (CAMBER variant) model, not per-month segmented models with fixed temperature bins and a residual-based occupancy lookup. To be renamed in 0.105 when the faithful CalTRACK methods land (#156). |
+| CalTRACK 2.0 Daily | `mandv.caltrack_daily.caltrack_daily_savings` | CalTRACK 2.0 Daily method | [CalTRACK 2.0](https://docs.caltrack.org/en/latest/methods.html) | Model `CalTRACKDailyModel` (`fit_caltrack_daily`). Defaults follow the CalTRACK 2.0 documents (3 °F balance-point grid, at most 37 missing days, day usage kept at >= 50 % coverage, <= 6 h temperature gaps interpolated); `eemeter_compat=True` reproduces eemeter 2.10 where the two differ (1 °F grid and the rest). The degree days of a period are the mean over its days with a valid temperature (eemeter's reading). The savings band is CAMBER's G14 band; CalTRACK's own FSU is reported beside it. |
+| CalTRACK 2.0 Billing | `mandv.caltrack_daily.caltrack_billing_savings` | CalTRACK 2.0 Billing method | [CalTRACK 2.0](https://docs.caltrack.org/en/latest/methods.html) | Model `CalTRACKBillingModel` (`fit_caltrack_billing`): the daily model fitted to bills' usage per day by WLS weighted by the bill's days with a valid temperature (eemeter's weight; the documents' n_p is equal when temperature is complete). Estimated reads are combined with the next bill up to 70 days (eemeter does not cap). `eemeter_compat=True` reproduces eemeter 2.10. |
+| CalTRACK 2.0 Hourly | `mandv.caltrack_hourly.caltrack_hourly_savings` | CalTRACK 2.0 Hourly method (CalTRACK TOWT) | [CalTRACK 2.0](https://docs.caltrack.org/en/latest/methods.html); [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Model `CalTRACKHourlyModel` (`fit_caltrack_hourly`). An hour of the week that a month's segment never saw predicts NaN in both modes (eemeter 3.1's fix; eemeter 2.10 predicts the temperature terms alone there). The > 90 % monthly coverage rule is applied (a stub in eemeter 2.10, skipped under `eemeter_compat=True`). CalTRACK publishes no hourly FSU, so only the G14 band is reported. |
+| Daily change-point savings (not CalTRACK) | `mandv.caltrack.daily_changepoint_savings` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | Not CalTRACK 2.0 Daily: a `best_model` daily change-point baseline (2P–5P, BIC) with IPMVP avoided energy and a G14 band, without CalTRACK's candidate models, balance-point grid, qualifying tests, adjusted-R² selection or data-sufficiency rules. Called `caltrack_savings` before 0.105 (#156). |
+| Pooled TOWT hourly savings (not CalTRACK Hourly) | `mandv.caltrack.towt_savings_hourly` | — | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Not CalTRACK 2.0 Hourly: one pooled TOWT (CAMBER variant) model, not per-month segmented models with fixed temperature bins and a residual-based occupancy lookup. Called `caltrack_savings_hourly` before 0.105 (#156). |
+| Daily change-point savings (not CalTRACK; deprecated name) | `mandv.caltrack.caltrack_savings` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | Deprecated alias (0.105, removed in 1.0) of `daily_changepoint_savings`, same numbers; not CalTRACK 2.0 Daily, which is `caltrack_daily_savings` (#156). |
+| Pooled TOWT hourly savings (not CalTRACK Hourly; deprecated name) | `mandv.caltrack.caltrack_savings_hourly` | — | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Deprecated alias (0.105, removed in 1.0) of `towt_savings_hourly`, same numbers; not CalTRACK 2.0 Hourly, which is `caltrack_hourly_savings` (#156). |
 
 **Tracking and forecasting**
 
@@ -135,22 +140,21 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 - `evo-ipmvp-core-2022`: International Performance Measurement and Verification Protocol (IPMVP) Core Concepts 2022. EVO 10000-1:2022. Efficiency Valuation Organization (EVO). <https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp>
 - `doe-sep-mv-2019`: Superior Energy Performance 50001 Program Measurement & Verification Protocol: 2019 (Edition 2). U.S. Department of Energy. <https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol>
 
-**The `caltrack_*` functions are not CalTRACK.** `caltrack_savings` is a daily change-point
-baseline (`best_model`, 2P–5P by BIC) with IPMVP avoided energy and a G14 band; it does not apply
-CalTRACK 2.0 Daily's candidate models, balance-point grid, qualifying tests, adjusted-R² selection
-or data-sufficiency rules, so its numbers are not eemeter-comparable. `caltrack_savings_hourly`
-is a pooled TOWT, not CalTRACK Hourly:
+**CalTRACK 2.0 and CAMBER's own whole-building baselines.** `caltrack_daily_savings`,
+`caltrack_billing_savings` and `caltrack_hourly_savings` implement the CalTRACK 2.0 methods as
+published, with `eemeter_compat=True` to reproduce eemeter 2.10 (see
+[CalTRACK 2.0 methods](#caltrack-20-methods)). `daily_changepoint_savings` and
+`towt_savings_hourly` are CAMBER's own baselines, not CalTRACK: a daily change-point model
+(`best_model`, 2P–5P by BIC) and a pooled TOWT, each with IPMVP avoided energy and a G14 band.
+They were called `caltrack_savings` and `caltrack_savings_hourly` before 0.105; those names are
+deprecated aliases with the same numbers (#156). The pooled TOWT differs from CalTRACK Hourly:
 
-| CalTRACK Hourly | CAMBER `mandv.towt` |
+| CalTRACK Hourly (`caltrack_hourly_savings`) | CAMBER `mandv.towt` (`towt_savings_hourly`) |
 |---|---|
 | per-calendar-month segmented models, weighted | one pooled model over the baseline |
 | six **fixed** temperature bin edges | `n_temp_segments` **quantile-spaced** breakpoints |
-| occupancy from a month × hour-of-week lookup, from a preliminary daily model's residuals | occupancy from bin-mean load vs the median of bin means |
-| 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
-
-Both are being renamed in 0.105, when faithful CalTRACK 2.0 Daily, Billing and Hourly methods
-take the `caltrack_*` names (#156). Until then they are defensible IPMVP Option-C savings on a
-published baseline model, reported under the names in the table above.
+| occupancy from an hour-of-week lookup per month, from a preliminary model's residuals | occupancy from bin-mean load vs the median of bin means |
+| > 90 % of each month's hours, per month segment | hour count **plus** per-hour-of-week-bin coverage |
 
 **Expect an hourly band comparable to the daily method, not tighter.** Hourly residuals are
 strongly serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction
@@ -185,7 +189,10 @@ model_label(model)  # a fitted model's label, e.g. '2P (5P fallback)'
   hour-of-week bins, load-median occupancy"), or under the CAMBER label alone.
 - **No standard name, no borrowed one.** A CAMBER construct (the zero-base kinds, the period-mean
   degree-day model, the sequential chain) is named by its label and described; it is not called
-  the nearest standard model. The `caltrack_*` functions are not CalTRACK: name what they fit.
+  the nearest standard model. `daily_changepoint_savings` and `towt_savings_hourly` (and their
+  deprecated old names `caltrack_savings` / `caltrack_savings_hourly`) are not CalTRACK: name
+  what they fit. `caltrack_daily_savings`, `caltrack_billing_savings` and
+  `caltrack_hourly_savings` are CalTRACK 2.0 Daily, Billing and Hourly.
 - **An ensemble is its components.** A prediction that combines several models is described as
   "Ensemble approach combining" each component's standard name, then the combination rule, for
   example: *"Ensemble approach combining a three-parameter cooling change-point model (3PC;

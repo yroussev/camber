@@ -37,22 +37,21 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 """
 
 _OUTRO = """\
-**The `caltrack_*` functions are not CalTRACK.** `caltrack_savings` is a daily change-point
-baseline (`best_model`, 2P–5P by BIC) with IPMVP avoided energy and a G14 band; it does not apply
-CalTRACK 2.0 Daily's candidate models, balance-point grid, qualifying tests, adjusted-R² selection
-or data-sufficiency rules, so its numbers are not eemeter-comparable. `caltrack_savings_hourly`
-is a pooled TOWT, not CalTRACK Hourly:
+**CalTRACK 2.0 and CAMBER's own whole-building baselines.** `caltrack_daily_savings`,
+`caltrack_billing_savings` and `caltrack_hourly_savings` implement the CalTRACK 2.0 methods as
+published, with `eemeter_compat=True` to reproduce eemeter 2.10 (see
+[CalTRACK 2.0 methods](#caltrack-20-methods)). `daily_changepoint_savings` and
+`towt_savings_hourly` are CAMBER's own baselines, not CalTRACK: a daily change-point model
+(`best_model`, 2P–5P by BIC) and a pooled TOWT, each with IPMVP avoided energy and a G14 band.
+They were called `caltrack_savings` and `caltrack_savings_hourly` before 0.105; those names are
+deprecated aliases with the same numbers (#156). The pooled TOWT differs from CalTRACK Hourly:
 
-| CalTRACK Hourly | CAMBER `mandv.towt` |
+| CalTRACK Hourly (`caltrack_hourly_savings`) | CAMBER `mandv.towt` (`towt_savings_hourly`) |
 |---|---|
 | per-calendar-month segmented models, weighted | one pooled model over the baseline |
 | six **fixed** temperature bin edges | `n_temp_segments` **quantile-spaced** breakpoints |
-| occupancy from a month × hour-of-week lookup, from a preliminary daily model's residuals | occupancy from bin-mean load vs the median of bin means |
-| 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
-
-Both are being renamed in 0.105, when faithful CalTRACK 2.0 Daily, Billing and Hourly methods
-take the `caltrack_*` names (#156). Until then they are defensible IPMVP Option-C savings on a
-published baseline model, reported under the names in the table above.
+| occupancy from an hour-of-week lookup per month, from a preliminary model's residuals | occupancy from bin-mean load vs the median of bin means |
+| > 90 % of each month's hours, per month segment | hour count **plus** per-hour-of-week-bin coverage |
 
 **Expect an hourly band comparable to the daily method, not tighter.** Hourly residuals are
 strongly serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction

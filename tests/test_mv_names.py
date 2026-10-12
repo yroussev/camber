@@ -25,6 +25,8 @@ def test_every_kind_method_and_dd_kind_has_a_row():
     want |= {"towt", "degreeday", "multivariable", "categorical", "option_a"}
     want |= {"retrofit_isolation", "option_d", "normalized", "cusum", "seasonal_forecast"}
     want |= {"caltrack_savings", "caltrack_savings_hourly", "best_model"}
+    want |= {"daily_changepoint_savings", "towt_savings_hourly"}
+    want |= {"caltrack_daily_savings", "caltrack_billing_savings", "caltrack_hourly_savings"}
     missing = want - set(N.MV_NAMES)
     assert not missing, missing
 
@@ -43,10 +45,33 @@ def test_rows_resolve_and_are_well_formed():
 
 
 def test_caltrack_rows_say_not_caltrack():
-    for code in ("caltrack_savings", "caltrack_savings_hourly"):
+    for code in (
+        "caltrack_savings",
+        "caltrack_savings_hourly",
+        "daily_changepoint_savings",
+        "towt_savings_hourly",
+    ):
         row = N.mv_name(code)
         assert "not CalTRACK" in row.label and row.standard_name == ""
         assert "#156" in row.differences
+    for code in ("caltrack_savings", "caltrack_savings_hourly"):
+        assert "Deprecated alias" in N.mv_name(code).differences
+
+
+def test_caltrack_2_rows_and_model_labels():
+    for code, lab in (
+        ("caltrack_daily_savings", "CalTRACK 2.0 Daily"),
+        ("caltrack_billing_savings", "CalTRACK 2.0 Billing"),
+        ("caltrack_hourly_savings", "CalTRACK 2.0 Hourly"),
+    ):
+        row = N.mv_name(code)
+        assert row.label == lab and row.citation_id[0] == "caltrack-2"
+        assert row.standard_name.startswith(lab)
+    from camber.mandv.caltrack_daily import CalTRACKBillingModel, CalTRACKDailyModel
+
+    assert N.model_label(CalTRACKDailyModel("hdd_only", 1.0)) == "CalTRACK 2.0 Daily"
+    assert N.model_label(CalTRACKBillingModel("hdd_only", 1.0)) == "CalTRACK 2.0 Billing"
+    assert N.model_label({"type": "CalTRACKHourlyModel"}) == "CalTRACK 2.0 Hourly"
 
 
 def test_labels():

@@ -355,26 +355,86 @@ _ROWS = (
     ),
     # --- whole-building savings functions -------------------------------------------------------
     MVName(
-        "caltrack_savings",
+        "caltrack_daily_savings",
+        "CalTRACK 2.0 Daily",
+        "CalTRACK 2.0 Daily method",
+        (_CALTRACK,),
+        "camber.mandv.caltrack_daily.caltrack_daily_savings",
+        "Model `CalTRACKDailyModel` (`fit_caltrack_daily`). Defaults follow the CalTRACK 2.0 "
+        "documents (3 °F balance-point grid, at most 37 missing days, day usage kept at >= 50 % "
+        "coverage, <= 6 h temperature gaps interpolated); `eemeter_compat=True` reproduces "
+        "eemeter 2.10 where the two differ (1 °F grid and the rest). The degree days of a period "
+        "are the mean over its days with a valid temperature (eemeter's reading). The savings "
+        "band is CAMBER's G14 band; CalTRACK's own FSU is reported beside it.",
+        "savings function",
+    ),
+    MVName(
+        "caltrack_billing_savings",
+        "CalTRACK 2.0 Billing",
+        "CalTRACK 2.0 Billing method",
+        (_CALTRACK,),
+        "camber.mandv.caltrack_daily.caltrack_billing_savings",
+        "Model `CalTRACKBillingModel` (`fit_caltrack_billing`): the daily model fitted to bills' "
+        "usage per day by WLS weighted by the bill's days with a valid temperature (eemeter's "
+        "weight; the documents' n_p is equal when temperature is complete). Estimated reads are "
+        "combined with the next bill up to 70 days (eemeter does not cap). `eemeter_compat=True` "
+        "reproduces eemeter 2.10.",
+        "savings function",
+    ),
+    MVName(
+        "caltrack_hourly_savings",
+        "CalTRACK 2.0 Hourly",
+        "CalTRACK 2.0 Hourly method (CalTRACK TOWT)",
+        (_CALTRACK, _TOWT),
+        "camber.mandv.caltrack_hourly.caltrack_hourly_savings",
+        "Model `CalTRACKHourlyModel` (`fit_caltrack_hourly`). An hour of the week that a month's "
+        "segment never saw predicts NaN in both modes (eemeter 3.1's fix; eemeter 2.10 predicts "
+        "the temperature terms alone there). The > 90 % monthly coverage rule is applied (a stub "
+        "in eemeter 2.10, skipped under `eemeter_compat=True`). CalTRACK publishes no hourly FSU, "
+        "so only the G14 band is reported.",
+        "savings function",
+    ),
+    MVName(
+        "daily_changepoint_savings",
         "Daily change-point savings (not CalTRACK)",
         "",
         (_G14, _IPMVP),
-        "camber.mandv.caltrack.caltrack_savings",
+        "camber.mandv.caltrack.daily_changepoint_savings",
         "Not CalTRACK 2.0 Daily: a `best_model` daily change-point baseline (2P–5P, BIC) with "
         "IPMVP avoided energy and a G14 band, without CalTRACK's candidate models, balance-point "
-        "grid, qualifying tests, adjusted-R² selection or data-sufficiency rules. To be renamed "
-        "in 0.105 when the faithful CalTRACK methods land (#156).",
+        "grid, qualifying tests, adjusted-R² selection or data-sufficiency rules. Called "
+        "`caltrack_savings` before 0.105 (#156).",
+        "savings function",
+    ),
+    MVName(
+        "towt_savings_hourly",
+        "Pooled TOWT hourly savings (not CalTRACK Hourly)",
+        "",
+        (_TOWT,),
+        "camber.mandv.caltrack.towt_savings_hourly",
+        "Not CalTRACK 2.0 Hourly: one pooled TOWT (CAMBER variant) model, not per-month "
+        "segmented models with fixed temperature bins and a residual-based occupancy lookup. "
+        "Called `caltrack_savings_hourly` before 0.105 (#156).",
+        "savings function",
+    ),
+    MVName(
+        "caltrack_savings",
+        "Daily change-point savings (not CalTRACK; deprecated name)",
+        "",
+        (_G14, _IPMVP),
+        "camber.mandv.caltrack.caltrack_savings",
+        "Deprecated alias (0.105, removed in 1.0) of `daily_changepoint_savings`, same numbers; "
+        "not CalTRACK 2.0 Daily, which is `caltrack_daily_savings` (#156).",
         "savings function",
     ),
     MVName(
         "caltrack_savings_hourly",
-        "Pooled TOWT hourly savings (not CalTRACK Hourly)",
+        "Pooled TOWT hourly savings (not CalTRACK Hourly; deprecated name)",
         "",
         (_TOWT,),
         "camber.mandv.caltrack.caltrack_savings_hourly",
-        "Not CalTRACK 2.0 Hourly: one pooled TOWT (CAMBER variant) model, not per-month "
-        "segmented models with fixed temperature bins and a residual-based occupancy lookup. To be "
-        "renamed in 0.105 when the faithful CalTRACK methods land (#156).",
+        "Deprecated alias (0.105, removed in 1.0) of `towt_savings_hourly`, same numbers; not "
+        "CalTRACK 2.0 Hourly, which is `caltrack_hourly_savings` (#156).",
         "savings function",
     ),
     # --- tracking and forecasting ---------------------------------------------------------------
@@ -411,6 +471,9 @@ _TYPE_CODES = {
     "DegreeDayModel": "degreeday",
     "MeanTempDegreeDayModel": "degreeday",
     "CategoricalModel": "categorical",
+    "CalTRACKDailyModel": "caltrack_daily_savings",
+    "CalTRACKBillingModel": "caltrack_billing_savings",
+    "CalTRACKHourlyModel": "caltrack_hourly_savings",
 }
 
 
