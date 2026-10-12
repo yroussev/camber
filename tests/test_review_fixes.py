@@ -53,23 +53,23 @@ def test_cohort_flags_outlier_when_majority_share_a_value():
 
 
 def test_degreeday_drops_nan_periods():
-    from camber.mandv.degreeday import fit_degree_day
+    from camber.mandv.degreeday import fit_mean_temp_degree_day
 
     rng = np.random.default_rng(0)
     tavg = rng.uniform(35, 90, 48)
     _, cdd = np.clip(60 - tavg, 0, None), np.clip(tavg - 60, 0, None)
     energy = 100 + 3.0 * cdd + rng.normal(0, 3, 48)
     energy[5] = np.nan  # a missing bill month
-    m = fit_degree_day(tavg, energy)
+    m = fit_mean_temp_degree_day(tavg, energy)
     assert np.isfinite(m.cooling_slope) and np.isfinite(m.base)  # was all-NaN, silently broken
     assert np.isfinite(m.predict(tavg)).all()
 
 
 def test_degreeday_rejects_degenerate_fit():
-    from camber.mandv.degreeday import fit_degree_day
+    from camber.mandv.degreeday import fit_mean_temp_degree_day
 
     with pytest.raises(ValueError):
-        fit_degree_day([40.0, 60.0, 80.0], [100.0, 130.0, 160.0], kind="both")  # n==p==3
+        fit_mean_temp_degree_day([40.0, 60.0, 80.0], [100.0, 130.0, 160.0], kind="both")  # n==p==3
 
 
 def test_changedetect_ignores_single_edge_outlier():

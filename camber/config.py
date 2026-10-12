@@ -1405,6 +1405,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         sup = support_of(daily["oat"].values, quantile=policy.support_quantile)
         verdict = "meets" if st.accept else "does not meet"
+        from .mandv.names import model_label  # 0.105 (#163): the registry's label, not the code
+
         # the baseline-length rule fit_version (camber mv freeze) enforces, as a caveat here (#59)
         win = period or [daily.index.min(), daily.index.max()]
         _, short_why = baseline_window_check(len(daily), win, entry)
@@ -1432,10 +1434,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     **_mvform.metrics(model),
                 },
                 summary=(
-                    f"{ref.equip}: {model.kind}"
+                    f"{ref.equip}: {model_label(model)}"
                     + (f" + {'/'.join(model.driver_names)}" if _mvform.metrics(model) else "")
                     + f" baseline, R2 {st.r2:.2f}, CV(RMSE) "
-                    f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily G14 acceptance"
+                    f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily acceptance (G14 "
+                    "criteria; the 30% daily CV(RMSE) tier is CAMBER's)"
                     + (" (short baseline)" if short_why else "")
                 ),
                 caveats=list(base_caveats),

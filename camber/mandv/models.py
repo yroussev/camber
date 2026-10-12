@@ -12,7 +12,18 @@ standard "p-parameter" family:
   side). (p=4)
 * **5P** -- flat dead-band in the middle with a heating slope below ``Tc_lo`` and
   a cooling slope above ``Tc_hi``. (p=5)  The model for a building that both
-  heats in winter and cools in summer -- the mixed-mode signature.
+  heats in winter and cools in summer -- the mixed-mode signature. **Fallback:** when no
+  dead-band at least one grid step wide fits, the 5P (and 5PZ) fitter returns a 2P line but keeps
+  ``kind="5P"`` with ``change_points=()``; reports label it "2P (5P fallback)"
+  (:func:`camber.mandv.names.label`) and its ``p`` stays 5.
+
+**Zero-intercept kinds** (``3PHZ``, ``3PCZ``, ``5PZ``) are a **CAMBER extension**, not ASHRAE
+Guideline 14 / RP-1050 models: the intercept is fixed at zero (no base load), so ``p`` counts only
+the slopes and change points. They are opt-in, never in :func:`best_model`'s default set.
+
+**Names.** Reports show each kind by its registry label ("3P cooling", "3P heating, zero base
+(CAMBER)"; :mod:`camber.mandv.names`), which also gives the standard name and citation; the
+``kind`` codes here are what data and serialisation carry.
 
 Fitting follows the ASHRAE RP-1050 inverse-model approach: for models with change
 point(s), grid-search the change-point temperature(s) over the observed range and,
@@ -34,7 +45,7 @@ unweighted path, byte for byte, and only ``weight_scale`` is recorded.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
 
@@ -557,6 +568,50 @@ def _rho_of(resid, index):
     return lag1_autocorrelation(resid, index=index)
 
 
+class ModelFitError(ValueError):
+    """No candidate kind could be fit by :func:`best_model` (0.105, #160).
+
+    A :class:`ValueError`, so existing ``except ValueError`` handlers still catch it. The message
+    lists every candidate and why it was refused; ``candidates`` holds the same as a list of dicts
+    (``kind``, ``p``, ``refused``), in the order the kinds were tried.
+    """
+
+    def __init__(self, candidates: list):
+        self.candidates = candidates
+        detail = "; ".join(
+            f"{c['kind']} (p={c['p']}): {c.get('refused', 'not selected')}" for c in candidates
+        )
+        super().__init__("no model could be fit" + (f" ({detail})" if detail else " (no kinds)"))
+
+
+@overload
+def best_model(
+    T,
+    y,
+    kinds=...,
+    *,
+    time_index=...,
+    weights=...,
+    temp_bounds: tuple | None = ...,
+    return_candidates: Literal[False] = ...,
+) -> ChangePointModel:
+    """Typing overload: the selected model alone (see the implementation below)."""
+
+
+@overload
+def best_model(
+    T,
+    y,
+    kinds=...,
+    *,
+    time_index=...,
+    weights=...,
+    temp_bounds: tuple | None = ...,
+    return_candidates: Literal[True],
+) -> tuple[ChangePointModel, list]:
+    """Typing overload: ``(model, candidates)`` (see the implementation below)."""
+
+
 def best_model(
     T,
     y,
@@ -565,31 +620,55 @@ def best_model(
     time_index=None,
     weights=None,
     temp_bounds: tuple | None = None,
-) -> ChangePointModel:
-    """Fit several model kinds and return the best by adjusted goodness of fit.
+    return_candidates: bool = False,
+) -> ChangePointModel | tuple[ChangePointModel, list]:
+    """Fit several model kinds and return the one with the lowest BIC.
 
-    Selection uses CV(RMSE) penalized for parameters (more parameters must earn
-    their keep) -- a simple BIC-like guard against overfitting with 5P. The
+    Selection is by the Bayesian information criterion, ``n ln(SSE/n) + p ln(n)`` with every
+    change point counted in ``p`` (more parameters must earn their keep), which guards against
+    overfitting with 5P; a kind whose BIC ties an earlier one within ``_BIC_TIE`` loses to it.
+    (Until 0.105 this docstring said CV(RMSE); the code has always used BIC.) BIC is CAMBER's
+    choice: ASHRAE Guideline 14 and the RP-1050 toolkit do not prescribe a selection criterion.
+    A 5P that fell back to a line competes with its fallback's SSE and 5P's ``p``. The
     "heating/cooling goes to zero" kinds (3PHZ/3PCZ) are not in the default set
     (they encode a modeling assumption -- no base load -- the caller opts into);
     pass them explicitly via ``kinds`` when appropriate. ``time_index`` and ``weights`` are
     passed to :func:`fit_model` (with weights the BIC uses the weighted SSE), and so is
     ``temp_bounds`` (the temperature screen, 0.105).
+
+    ``return_candidates=True`` (0.105, #160) returns ``(model, candidates)``: one dict per kind
+    tried, with ``kind``, ``p`` and either ``n``, ``sse``, ``bic`` and ``selected`` or the
+    ``refused`` reason. When no kind can be fit, a :class:`ModelFitError` lists each reason.
     """
     n_params = N_PARAMS
     best, best_score = None, np.inf
+    candidates: list = []
+    best_row: dict | None = None
     for k in kinds:
+        p = n_params.get(k)
         try:
             m = fit_model(T, y, k, time_index=time_index, weights=weights, temp_bounds=temp_bounds)
-        except Exception:
+        except Exception as e:  # every refusal is reported; none is fatal
+            candidates.append({"kind": k, "p": p, "refused": f"{type(e).__name__}: {e}"})
             continue
         p = n_params[k]
         if m.n - p < 1:
+            candidates.append(
+                {"kind": k, "p": p, "refused": f"n - p < 1 (n={m.n} points for p={p})"}
+            )
             continue
         # BIC: n*ln(SSE/n) + p*ln(n)
         bic = m.n * np.log(m.sse / m.n + 1e-12) + p * np.log(m.n)
+        if not np.isfinite(bic):
+            candidates.append({"kind": k, "p": p, "refused": f"non-finite BIC (sse={m.sse})"})
+            continue
+        row = {"kind": k, "p": p, "n": int(m.n), "sse": float(m.sse), "bic": float(bic)}
+        row["selected"] = False
+        candidates.append(row)
         if bic < best_score - _BIC_TIE:  # inf - tie is inf: the first finite kind is taken
-            best, best_score = m, bic
+            best, best_score, best_row = m, bic, row
     if best is None:
-        raise ValueError("no model could be fit")
-    return best
+        raise ModelFitError(candidates)
+    if best_row is not None:
+        best_row["selected"] = True
+    return (best, candidates) if return_candidates else best

@@ -22,6 +22,12 @@ enough; reach for TOWT when load is largely schedule-driven and hourly.
 Reference: Mathieu, Price, Kiliccote, Piette, "Quantifying Changes in Building
 Electricity Use, with Application to Demand Response," IEEE Trans. Smart Grid
 2(3), 2011 (LBNL). Method described and reimplemented independently here.
+
+**Name: "TOWT (CAMBER variant)"** (0.105, #163; :mod:`camber.mandv.names`). It differs from the
+reference in ways that change the numbers: hour-of-week bins (168), ``n_temp_segments``
+quantile-spaced temperature knots rather than fixed ones, occupancy from each bin's mean load
+against the median of bin means, one pooled model over the baseline and no time-weighting of
+observations. Report it as a TOWT variant with those differences, not as LBNL's TOWT.
 """
 
 from __future__ import annotations

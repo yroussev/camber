@@ -27,7 +27,7 @@ from camber.mandv.coverage import (  # noqa: E402
     support_of,
     towt_coverage,
 )
-from camber.mandv.degreeday import fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import fit_mean_temp_degree_day  # noqa: E402
 from camber.mandv.models import N_PARAMS, _design_for, best_model, fit_model  # noqa: E402
 from camber.mandv.retrofit_isolation import fit_driver_model  # noqa: E402
 from camber.mandv.towt import TOWTAtIndex, fit_towt  # noqa: E402
@@ -232,7 +232,7 @@ def test_fit_never_fails_because_of_coverage(monkeypatch):
     assert m._fit_record is None and m.fit_range is not None
     assert assess_coverage(m, Tb).tier == "not_evaluated"
     assert fit_driver_model(Tb, _truth(Tb))._fit_record is None
-    assert fit_degree_day(Tb[:24], _truth(Tb[:24]))._fit_record is None
+    assert fit_mean_temp_degree_day(Tb[:24], _truth(Tb[:24]))._fit_record is None
 
 
 def test_duck_typed_and_broken_models_are_not_evaluated():
@@ -297,7 +297,7 @@ def test_degree_day_coverage():
     rng = np.random.default_rng(11)
     tm = rng.uniform(25, 85, 36)
     em = 300 + 12 * np.maximum(0, 60 - tm) + 9 * np.maximum(0, tm - 65) + rng.normal(0, 10, 36)
-    dd = fit_degree_day(tm, em)
+    dd = fit_mean_temp_degree_day(tm, em)
     assert assess_coverage(dd, tm).tier == "in_range"
     assert assess_coverage(dd, tm + 40).tier == "severe"
     assert "fit" in dd.as_dict() and "_fit_record" not in dd.as_dict()
@@ -549,11 +549,11 @@ GOLDEN = {
         "savings_pct": -0.0923,
     },
     "degreeday": {
-        "abs_uncertainty": 65.9,
+        "abs_uncertainty": 66.93,
         "avoided_energy": 571.45,
         "baseline_projected": 5525.09,
         "confidence": 0.9,
-        "fractional_uncertainty": 0.1153,
+        "fractional_uncertainty": 0.1171,
         "fsu_autocorrelation_adjusted": False,
         "n_effective": 36.0,
         "reporting_actual": 4953.65,
@@ -678,7 +678,7 @@ def _golden_cases():
     rng = np.random.default_rng(11)
     tm = rng.uniform(25, 85, 36)
     em = 300 + 12 * np.maximum(0, 60 - tm) + 9 * np.maximum(0, tm - 65) + rng.normal(0, 10, 36)
-    dd = fit_degree_day(tm, em)
+    dd = fit_mean_temp_degree_day(tm, em)
     tr3 = rng.uniform(28, 82, 12)
     er3 = 0.9 * (300 + 12 * np.maximum(0, 60 - tr3) + 9 * np.maximum(0, tr3 - 65))
     out["degreeday"] = avoided_energy_savings(

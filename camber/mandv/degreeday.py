@@ -1,10 +1,25 @@
-"""Variable-base degree-day M&V baseline (HDD/CDD regression).
+"""Degree-day M&V baseline on period-mean temperature (HDD/CDD regression).
 
-The classic weather-normalization baseline: regress period energy on **heating and cooling
-degree-days** about a balance point — ``E = base + a·HDD + b·CDD``. It's the simplest defensible
-weather model (ASHRAE G14 / IPMVP), a lighter cousin of the change-point models in
-:mod:`camber.mandv.models`, and a good fit for monthly-bill M&V where you have average temperature
-and energy per period. The balance point is fit by minimizing CV(RMSE) unless supplied.
+Regress period energy on **heating and cooling degree-days** about one balance point --
+``E = base + a·HDD + b·CDD`` -- where each period's degree-days are computed from that period's
+**mean** temperature (``HDD = max(0, balance_point - tavg)``). It is a lighter cousin of the
+change-point models in :mod:`camber.mandv.models`, for monthly-bill M&V when only a period-average
+temperature and energy are at hand. The balance point is fit by minimizing CV(RMSE) unless
+supplied, and both legs share it.
+
+**Not the variable-base degree-day (VBDD / PRISM) model** (0.105, #163). PRISM sums *daily*
+degree-days over each meter-reading period at a fitted reference temperature; degree-days from a
+period's mean undercount the swing days of a shoulder month (a bill whose mean sits above the base
+still has cold days below it), and heating and cooling share one balance point here. For the
+variable-base form on bills -- daily degree-days summed over each bill, separate heating and
+cooling bases -- use :func:`camber.mandv.basetemp.fit_bill_degree_day` /
+:func:`camber.mandv.basetemp.select_bases`. Hence the 0.105 names :func:`fit_mean_temp_degree_day`
+and :class:`MeanTempDegreeDayModel`; the old names ``fit_degree_day`` / ``DegreeDayModel`` remain as
+deprecated aliases.
+
+**Parameter count.** ``p`` counts the intercept and the slopes (``kind="both"``: 3; one leg: 2),
+plus 1 for the balance point when the fit searches for it (a fixed ``balance_point`` is not
+counted), as :mod:`camber.mandv.basetemp` counts its fitted bases (0.105, #163).
 
 numpy only; fit statistics reuse :func:`camber.mandv.stats.fit_stats`.
 """
@@ -15,6 +30,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .._deprecation import deprecated
 from .stats import fit_stats
 
 
@@ -25,8 +41,13 @@ def degree_days(tavg, balance_point: float):
 
 
 @dataclass
-class DegreeDayModel:
-    """A fitted variable-base degree-day baseline: ``E = base + a·HDD + b·CDD``."""
+class MeanTempDegreeDayModel:
+    """A fitted degree-day baseline on period-mean temperature: ``E = base + a·HDD + b·CDD``.
+
+    One balance point for both legs, degree-days from each period's mean temperature (see the
+    module docstring: not the variable-base / PRISM form). Serialised with ``"type":
+    "DegreeDayModel"``, the pre-0.105 name, so stored baselines read back unchanged.
+    """
 
     kind: str  # "heating" | "cooling" | "both"
     balance_point: float
@@ -74,7 +95,7 @@ class DegreeDayModel:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict) -> DegreeDayModel:
+    def from_dict(cls, d: dict) -> MeanTempDegreeDayModel:
         """Rebuild a model written by :meth:`as_dict` (unknown ``fit`` keys are ignored)."""
         from .coverage import _FitRecord
         from .stats import FitStats
@@ -106,7 +127,7 @@ def _wrong_signs(heating_slope: float, cooling_slope: float) -> list:
     return out
 
 
-def _fit_at(tavg, energy, bp: float, kind: str):
+def _fit_at(tavg, energy, bp: float, kind: str, p_extra: int = 0):
     hdd, cdd = degree_days(tavg, bp)
     cols = [np.ones(len(tavg))]
     idx = {}
@@ -118,14 +139,14 @@ def _fit_at(tavg, energy, bp: float, kind: str):
         cols.append(cdd)
     X = np.column_stack(cols)
     coef, *_ = np.linalg.lstsq(X, energy, rcond=None)
-    fs = fit_stats(energy, X @ coef, p=X.shape[1])
+    fs = fit_stats(energy, X @ coef, p=X.shape[1] + p_extra)
     base = float(coef[0])
     hs = float(coef[idx["h"]]) if "h" in idx else 0.0
     cs = float(coef[idx["c"]]) if "c" in idx else 0.0
     return base, hs, cs, fs
 
 
-def fit_degree_day(
+def fit_mean_temp_degree_day(
     tavg,
     energy,
     *,
@@ -135,12 +156,16 @@ def fit_degree_day(
     kind: str = "both",
     time_index=None,
     temp_bounds: tuple | None = None,
-) -> DegreeDayModel:
-    """Fit ``E = base + a·HDD + b·CDD``. Returns a :class:`DegreeDayModel`.
+) -> MeanTempDegreeDayModel:
+    """Fit ``E = base + a·HDD + b·CDD`` on period-mean temperature. Returns a
+    :class:`MeanTempDegreeDayModel`.
 
-    ``tavg``/``energy`` are per-period average temperature and energy (e.g. monthly). If
-    ``balance_point`` is None, it's chosen from ``balance_range`` (stepped by ``step``) by minimum
-    CV(RMSE). ``kind`` restricts to ``"heating"``/``"cooling"`` or fits ``"both"`` legs.
+    ``tavg``/``energy`` are per-period average temperature and energy (e.g. monthly); each
+    period's degree-days come from its mean temperature, about one balance point shared by both
+    legs (not the variable-base / PRISM form; see the module docstring). If ``balance_point`` is
+    None, it's chosen from ``balance_range`` (stepped by ``step``) by minimum CV(RMSE) (and not
+    counted in ``p``; see the module docstring). ``kind`` restricts to ``"heating"`` /
+    ``"cooling"`` or fits ``"both"`` legs.
     ``time_index`` (aligned to ``tavg``) lets the fit record the residuals' lag-1 autocorrelation.
 
     **Signs** (0.90.1, issue #59). Energy cannot fall as degree-days rise, so the heating and
@@ -166,7 +191,9 @@ def fit_degree_day(
     finite = np.isfinite(tavg) & np.isfinite(energy)  # drop NaN/inf pairs (a missing bill month)
     idx = None if time_index is None else np.asarray(time_index)[finite]
     tavg, energy = tavg[finite], energy[finite]
-    p = 3 if kind == "both" else 2  # intercept + one or two slopes
+    # intercept + one or two slopes, plus the balance point when the fit chooses it
+    p_extra = 1 if balance_point is None else 0
+    p = (3 if kind == "both" else 2) + p_extra
     if len(tavg) <= p:  # need > p points, else the fit is degenerate
         raise ValueError(
             f"need more than {p} finite (tavg, energy) points for kind={kind!r}, have {len(tavg)}"
@@ -179,7 +206,7 @@ def fit_degree_day(
     )
     best = None
     for bp in candidates:
-        base, hs, cs, fs = _fit_at(tavg, energy, bp, kind)
+        base, hs, cs, fs = _fit_at(tavg, energy, bp, kind, p_extra)
         cv = fs.cv_rmse if fs.cv_rmse == fs.cv_rmse else float("inf")
         key = (bool(_wrong_signs(hs, cs)), cv)  # a logical fit beats any illogical one
         if best is None or key < best[0]:
@@ -201,7 +228,7 @@ def fit_degree_day(
     from .coverage import _linear_fit_record, _safe
     from .models import _rho_of
 
-    model = DegreeDayModel(
+    model = MeanTempDegreeDayModel(
         kind=kind,
         balance_point=round(float(bp), 2),
         base=round(base, 3),
@@ -225,3 +252,18 @@ def fit_degree_day(
         rho=_safe(_rho_of, resid, idx),
     )
     return model
+
+
+# --- deprecated names (0.105, #163) ---------------------------------------------------------------
+
+
+@deprecated(since="0.105", remove_in="2.0", use="camber.mandv.degreeday.MeanTempDegreeDayModel")
+class DegreeDayModel(MeanTempDegreeDayModel):
+    """Deprecated alias of :class:`MeanTempDegreeDayModel` (the old name said "variable-base",
+    which the model is not). ``from_dict`` on it still reads stored models."""
+
+
+@deprecated(since="0.105", remove_in="2.0", use="camber.mandv.degreeday.fit_mean_temp_degree_day")
+def fit_degree_day(tavg, energy, **kwargs) -> MeanTempDegreeDayModel:
+    """Deprecated alias of :func:`fit_mean_temp_degree_day`."""
+    return fit_mean_temp_degree_day(tavg, energy, **kwargs)

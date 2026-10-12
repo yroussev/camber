@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv._temperature import oat_bounds, screen_temperature  # noqa: E402
-from camber.mandv.degreeday import DegreeDayModel, fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import MeanTempDegreeDayModel, fit_mean_temp_degree_day  # noqa: E402
 from camber.mandv.models import ChangePointModel, best_model, fit_model  # noqa: E402
 from camber.mandv.towt import TOWTAtIndex, TOWTModel, fit_towt  # noqa: E402
 
@@ -77,13 +77,13 @@ def test_degree_day_fit_ignores_a_sentinel():
     rng = np.random.default_rng(1)
     tavg = rng.uniform(20, 80, 36)
     e = 100 + 3 * np.clip(60 - tavg, 0, None) + rng.normal(0, 1, 36)
-    clean = fit_degree_day(tavg, e, kind="heating")
+    clean = fit_mean_temp_degree_day(tavg, e, kind="heating")
     t2 = tavg.copy()
     t2[0] = SENTINEL
-    m = fit_degree_day(t2, e, kind="heating")
+    m = fit_mean_temp_degree_day(t2, e, kind="heating")
     assert m.n_temp_screened == 1 and m.fit.n == clean.fit.n - 1
     assert m.caveats == []  # a screen is not a decline
-    assert DegreeDayModel.from_dict(m.as_dict()).n_temp_screened == 1
+    assert MeanTempDegreeDayModel.from_dict(m.as_dict()).n_temp_screened == 1
     assert "n_temp_screened" not in clean.as_dict()
 
 

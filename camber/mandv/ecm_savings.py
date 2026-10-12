@@ -129,14 +129,14 @@ def unoccupied_cooling_energy(
 
 
 def modeled_savings(calibration, oat, as_found_schedule, as_corrected_schedule):
-    """Pre-implementation **modeled** ECM saving via a calibrated RC model (IPMVP Option D).
+    """Pre-implementation **modeled** ECM saving via a calibrated RC model (Option D-style).
 
     The counterfactual the :class:`WasteEstimate` upper bound stands in for: run the calibrated
     :class:`camber.mandv.rc_model.RCModel` under the as-found vs the as-corrected control and
     difference the annual profiles. Returns an :class:`camber.mandv.rc_model.OptionDSavings` — with
-    a real ``basis="IPMVP Option D (calibrated simulation)"`` when the calibration met the G14
-    acceptance gate,
-    and ``valid=False`` / no claimed saving when it did not. Delegates to
+    ``basis`` :data:`camber.mandv.rc_model.OPTION_D_BASIS` ("Option D-style modeled savings
+    (calibrated 1R1C grey box; pre-implementation estimate)") when the calibration met the G14
+    acceptance gate, and ``valid=False`` / no claimed saving when it did not. Delegates to
     :func:`camber.mandv.rc_model.option_d_savings`.
     """
     from .rc_model import option_d_savings

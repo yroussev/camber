@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv import stats  # noqa: E402
-from camber.mandv.degreeday import fit_degree_day  # noqa: E402
+from camber.mandv.degreeday import fit_mean_temp_degree_day  # noqa: E402
 from camber.mandv.models import N_PARAMS, fit_model  # noqa: E402
 from camber.mandv.retrofit_isolation import fit_driver_model  # noqa: E402
 from camber.mandv.stats import (  # noqa: E402
@@ -260,7 +260,7 @@ def test_logical_signs_and_model_tests_for_other_models():
     assert rt.names == ("intercept", "driver") and not rt.conditional_on_change_points
     tm = rng.uniform(25, 85, 36)
     em = 300 + 12 * np.maximum(0, 60 - tm) + rng.normal(0, 10, 36)
-    dd = fit_degree_day(tm, em, kind="heating")
+    dd = fit_mean_temp_degree_day(tm, em, kind="heating")
     rt = model_regression_tests(dd, tm, em)
     assert rt.names == ("base", "heating_slope") and rt.conditional_on_change_points
     with pytest.raises(TypeError):
