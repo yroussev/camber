@@ -35,12 +35,17 @@ def standin(store) -> None:
     datasets.ingest(_DS, store.root, data_dir=cache)
 
 
-def _hourly_hides_it(ctx) -> None:
-    """Resampled to an hour, the short-cycling boiler's firing status is the hour's average: a
-    quarter of an hour in each hour reads as 0.25, below the 0.5 line, so the boiler never fires."""
+def _hourly_count_is_a_floor(ctx) -> None:
+    """Resampled to an hour, the short-cycling boiler's firing status is the hour's duty: 0.25 in
+    most hours. The rule counts the fewest starts those duties allow, one per firing hour, so the
+    count is a floor; the runtime is the true share of time firing, and the finding says the
+    trend is coarser than the 15 minutes the count needs (0.104, #143)."""
     f = ctx.finding(_CYCLE, "PLANT__short_cycling", "hourly")
     assert f is not None, "no hourly finding on PLANT__short_cycling"
-    assert f.metrics["n_starts"] == 0 and f.metrics["runtime_pct"] == 0.0, f.metrics
+    m = f.metrics
+    assert m["n_starts"] == 234 and m["runtime_pct"] == 23.6, m
+    assert m["interval_min"] == 60.0, m
+    assert any("floor" in c for c in f.caveats), f.caveats
     cfg = ctx.config("hourly")
     assert cfg["resample"] == "1h", cfg["resample"]
 
@@ -111,14 +116,23 @@ EXERCISE = Exercise(
         Score(_CYCLE, tpr=1.0, fpr=1 / 3, tol=0.001, quote="33%"),
         Score(_DT, tpr=1.0, fpr=0.0),
         Score(_PUMP, tpr=1.0, fpr=0.0),
-        # 4. hourly: the short cycles vanish
-        Finding(_CYCLE, "PLANT__short_cycling", severity=("ok",), run="hourly"),
+        # 4. hourly: the count is a floor, the short-cycling boiler only just caught
+        Finding(_CYCLE, "PLANT__short_cycling", severity=("warn",), run="hourly"),
         Finding(_CYCLE, "PLANT__marginal", severity=("warn",), run="hourly"),
         Metric(
-            _CYCLE, "PLANT__marginal", "starts_per_day", 7.97, 0.005, run="hourly", quote="7.97"
+            _CYCLE,
+            "PLANT__short_cycling",
+            "starts_per_day",
+            11.17,
+            0.005,
+            run="hourly",
+            quote="11.2",
         ),
-        Check("an hourly average hides the short cycles", _hourly_hides_it, quote="0.25"),
-        Score(_CYCLE, tpr=0.0, fpr=1 / 3, tol=0.001, run="hourly"),
+        Metric(
+            _CYCLE, "PLANT__marginal", "starts_per_day", 8.16, 0.005, run="hourly", quote="8.16"
+        ),
+        Check("an hourly count is a floor", _hourly_count_is_a_floor, quote="0.25"),
+        Score(_CYCLE, tpr=1.0, fpr=1 / 3, tol=0.001, run="hourly"),
         # 5. a 10-starts limit: the marginal boiler passes, the short-cycling one still faults
         Finding(_CYCLE, "PLANT__marginal", severity=("ok",), run="limit10"),
         Finding(_CYCLE, "PLANT__short_cycling", severity=("fault",), run="limit10"),

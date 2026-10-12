@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise plant-boiler-cycling, the resolution lesson: boiler_short_cycle on the same 15-minute data resampled to 1h. A resampled firing status is the hour's maximum, so an hour with any firing in it reads as firing all hour and the short cycles inside it disappear.",
+  "_comment": "Workbook exercise plant-boiler-cycling, the resolution lesson: boiler_short_cycle on the same 15-minute data resampled to 1h. A resampled firing status is the hour's duty; the start count on it is the fewest starts the duties allow, a floor, and the finding says the trend is coarser than the 15 minutes the count needs.",
   "_dataset": "synthetic-hw-plant-cycling",
   "source": {
     "kind": "store",

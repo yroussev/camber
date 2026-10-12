@@ -80,8 +80,8 @@ camber run cyc10.json --out cyc10_out
    `hw_pump_dp_reset` (`median_speed_pct`, `pct_running_near_full`, `dp_sp_reset_present`) for
    each plant.
 4. **Score.** Run `camber datasets score` and read the rates for the three rules.
-5. **Sample it hourly.** Run the `hourly` variant and compare each plant's `starts_per_day` and
-   `runtime_pct` with step 2.
+5. **Sample it hourly.** Run the `hourly` variant and compare each plant's severity,
+   `starts_per_day` and `runtime_pct` with step 2, and read the findings' caveats.
 6. **Choose the limit.** Run the `10starts` variant. Note which verdicts change and which stay.
 
 ## Questions
@@ -92,7 +92,8 @@ camber run cyc10.json --out cyc10_out
    does the short-cycling plant pass them?
 3. What does the label score say for the three rules? Which plant is the false alarm, and is it
    one?
-4. Resampled to an hour, what happens to the short-cycling boiler? Why?
+4. Resampled to an hour, what happens to the short-cycling boiler's `starts_per_day`,
+   `runtime_pct` and severity? What does the caveat say, and why is the hourly count a floor?
 5. With a limit of 10 starts a day, which verdict changes? Where should the limit come from on a
    real site?
 
@@ -100,8 +101,11 @@ camber run cyc10.json --out cyc10_out
 
 - **Findings.** `camber run` prints one line per finding: one per rule and plant.
 - **Starts.** `boiler_short_cycle` reports `starts_per_day` (the firing starts, off to on, divided
-  by the days in the trend), `n_starts`, `runtime_pct` (the share of samples firing) and
-  `max_starts_per_day`. It warns at the limit and faults at twice it.
+  by the days in the trend), `n_starts`, `runtime_pct` (the share of time firing) and
+  `max_starts_per_day`. It warns at the limit and faults at twice it. On a trend coarser than
+  `max_interval_min` (15 minutes) it also reports `interval_min` and `n_partial` (samples firing
+  for part of their interval), caveats the count as a floor, and declines (`info`) rather than
+  pass a boiler whose samples show part-interval firing.
 - **Loop.** `hw_plant_deltat` reports `deltaT_median_f` and `low_deltaT_pct`, the share of occupied
   firing samples below the 20 °F design minimum. It warns at 20 % and faults at 50 %.
 - **Pump.** `hw_pump_dp_reset` reports `median_speed_pct`, `pct_running_near_full` (speeds of 90 %

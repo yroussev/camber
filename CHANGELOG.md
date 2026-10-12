@@ -63,9 +63,9 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   they flag a problem.
 - **Workbook exercises `plant-boiler-cycling` and `plant-chiller-staging` (#137)**, with
   instructor keys, a figure each and answers pinned by the test suite on the generated data. The
-  boiler exercise shows a short-cycling boiler vanish when the trend is resampled to an hour, and
-  a warn that depends on the boiler's own starts-per-day limit (variants `--hourly` and
-  `--10starts`). The chiller exercise separates the two ways `chiller_staging` fails, and shows a
+  boiler exercise shows a short-cycling boiler's start count fall to a floor when the trend is
+  resampled to an hour, and a warn that depends on the boiler's own starts-per-day limit
+  (variants `--hourly` and `--10starts`). The chiller exercise separates the two ways `chiller_staging` fails, and shows a
   condenser-water reset that passes the check but saves little (variant `--slope05`). The
   workbook now has 22 exercises.
 
@@ -159,6 +159,12 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   quarter-hour of firing as a full hour and still show a cycling boiler as one long run.
   `ParquetStore.read_role_frame(resample=...)` now takes the max for the warm-up and cool-down
   flags, as ingest and `camber.resolve` already did.
+  The `plant-boiler-cycling` exercise's hourly lesson changes with it: on the `--hourly` variant
+  `PLANT__short_cycling` was `ok` at 0 starts and 0 % firing and is now a `warn` at 11.17 starts
+  a day (234 starts, 23.6 % firing, with the coarse-trend caveat); `PLANT__marginal` reads 8.16
+  starts a day instead of 7.97, still a warn; the label score for `boiler_short_cycle` on that
+  variant goes from TPR 0 to TPR 100 % (FPR stays 33 %). The answer key, question 4, the
+  instructor's answer and the variant's description now teach that an hourly count is a floor.
 
 ## [0.103.0] — 2026-10-11
 

@@ -1117,12 +1117,16 @@ at low loads it cycles every three hours or so.
    short-cycling plant (TPR 100%) but its warn on `PLANT__marginal`, which is labelled healthy,
    is a false positive: FPR 33% (one of three). Whether that warn is a fault depends on the
    boiler: see answer 5. Four plants is a tiny sample: the 95 % intervals are wide.
-4. *Hourly.* The short-cycling boiler disappears: 0 starts and 0 % firing, `ok`. A run resampled
-   to an hour averages each point over the hour, so a firing status that is on for one sample in
-   four reads 0.25, under the 0.5 line the rule counts as firing; the hour reads as off. The
-   marginal boiler, whose firings last longer, still warns at 7.97 starts a day (firing 45.2% of
-   the hours). The label score for `boiler_short_cycle` falls to TPR 0 %. Keep the trend at the
-   resolution it was logged; an hourly trend can neither show nor count short cycles.
+4. *Hourly.* The short-cycling boiler is still caught, but only just: `warn` at 11.2 starts a
+   day instead of a `fault` at 20.2. A run resampled to an hour keeps each hour's firing as a
+   duty, so the boiler reads 0.25 in most hours. CAMBER counts the fewest starts those duties
+   allow: one per firing hour. Two short firings in one hour, or one firing that runs across the
+   hour boundary, count as one start, so the count is a floor. `runtime_pct` stays 23.6%, the
+   true share of time firing. Every hourly finding carries a caveat that a 60-minute trend is
+   coarser than the 15 minutes the count needs. A boiler below the limit whose hours show
+   part-hour firing would read `info` ("cannot confirm"), not `ok`. The marginal boiler warns at
+   8.16 starts a day. The label score stays TPR 100%. Keep the trend at the resolution it was
+   logged: an hourly trend can show that a boiler cycles, but not how often.
 5. *A limit of 10.* `PLANT__marginal` passes (`ok`, 8.15 under 10) and `PLANT__short_cycling`
    still faults (20.2 is over twice 10); the score is TPR 100%, FPR 0 %. The limit belongs to the
    boiler: take it from the maker's minimum run time or maximum cycles per hour, or from the
@@ -1142,7 +1146,8 @@ at low loads it cycles every three hours or so.
 **Common mistakes**
 
 - Reading the short-cycling plant's `ok` on `hw_plant_deltat` as "the plant is fine".
-- Resampling the trend to an hour "to make it manageable" and concluding there is no cycling.
+- Resampling the trend to an hour "to make it manageable" and reading the hourly starts per day
+  as the boiler's real count: it is a floor, roughly half the real one here.
 - Calling the marginal boiler's warn a fault before checking the boiler's own limit.
 - Citing these figures as evidence about real plants: the data are synthetic.
 
