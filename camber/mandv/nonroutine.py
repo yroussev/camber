@@ -48,12 +48,30 @@ from .models import best_model
 _MIN_BILLS_PER_SEGMENT = 3
 
 
-def _prepared(energy, temp, rate_is_energy_rate: bool):
-    """(energy-vs-temperature frame, cumulative days of service or ``None`` for daily data)."""
-    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
+def _prepared(energy, temp, rate_is_energy_rate: bool, min_coverage: float = 0.9):
+    """(energy-vs-temperature frame, cumulative days of service or ``None`` for daily data).
+
+    Days under ``min_coverage`` and implausible temperatures are dropped (0.105, #157 / #159);
+    :func:`_dropped` reads the counts back off the frame."""
+    df = daily_energy_vs_temp(
+        energy, temp, rate_is_energy_rate=rate_is_energy_rate, min_coverage=min_coverage
+    )
     if not df.attrs.get("billing"):
         return df, None
     return df, np.concatenate([[0], np.cumsum(df["days"].to_numpy(dtype=int))])
+
+
+def _dropped(df) -> dict:
+    """The result fields counting what :func:`_prepared` dropped (0.105)."""
+    return {
+        "n_days_dropped": int(df.attrs.get("dropped_days", 0)),
+        "n_temp_screened": int(df.attrs.get("n_temp_screened", 0)),
+    }
+
+
+def _dropped_dict(res) -> dict:
+    """The ``as_dict`` keys of :func:`_dropped`'s counts, only those that are non-zero."""
+    return {k: getattr(res, k) for k in ("n_days_dropped", "n_temp_screened") if getattr(res, k)}
 
 
 def _bill_days(df, span):
@@ -72,10 +90,13 @@ class NonRoutineResult:
     model_kind: str  # baseline model used to compute residuals
     billing: bool = False  # rows are billing periods (the mask is indexed by bill start)
     n_days: int | None = None  # days of service covered, for billing input
+    n_days_dropped: int = 0  # 0.105 (#157): days under min_coverage, dropped before the fit
+    n_temp_screened: int = 0  # 0.105 (#159): implausible temperatures treated as missing
 
     def as_dict(self) -> dict:
         """Return the summary (excluding the mask) as a plain dict; billing input adds
-        ``billing`` and ``n_days``."""
+        ``billing`` and ``n_days``, and ``n_days_dropped`` / ``n_temp_screened`` appear when
+        non-zero."""
         d = {
             "n_total": self.n_total,
             "n_flagged": self.n_flagged,
@@ -85,6 +106,7 @@ class NonRoutineResult:
         if self.billing:
             d["billing"] = True
             d["n_days"] = self.n_days
+        d.update(_dropped_dict(self))
         return d
 
 
@@ -105,14 +127,17 @@ def detect_non_routine(
     rate_is_energy_rate: bool = False,
     z: float = 3.5,
     min_days: int = 10,
+    min_coverage: float = 0.9,
 ) -> NonRoutineResult:
     """Flag non-routine days in an (energy, temp) period against its weather baseline.
 
     Aggregates to daily, fits a change-point baseline, and flags days whose residual
     is a robust (MAD) outlier at modified-z > ``z``. Billing input (see the module docstring)
-    flags bills instead, and ``min_days`` counts their days of service.
+    flags bills instead, and ``min_days`` counts their days of service. Days whose meter data
+    cover less than ``min_coverage`` of the day are dropped first (0.105; counted in
+    ``n_days_dropped``).
     """
-    df, span = _prepared(energy, temp, rate_is_energy_rate)
+    df, span = _prepared(energy, temp, rate_is_energy_rate, min_coverage)
     if span is None:
         if len(df) < min_days:
             raise ValueError(f"need >= {min_days} days, got {len(df)}")
@@ -131,6 +156,7 @@ def detect_non_routine(
         model_kind=model.kind,
         billing=span is not None,
         n_days=None if span is None else int(span[-1]),
+        **_dropped(df),
     )
 
 
@@ -152,10 +178,13 @@ class StepChangeResult:
     rho: float | None = None  # residual lag-1 autocorrelation, when autocorrelation=True
     billing: bool = False  # rows are bills: n_days is days of service, n_pre/n_post are bills
     n_periods: int | None = None  # number of bills, for billing input
+    n_days_dropped: int = 0  # 0.105 (#157): days under min_coverage, dropped before the fit
+    n_temp_screened: int = 0  # 0.105 (#159): implausible temperatures treated as missing
 
     def as_dict(self) -> dict:
-        """Return the summary (excluding the mask) as a plain dict; ``rho`` only when set, and
-        ``billing`` / ``n_periods`` only for billing input."""
+        """Return the summary (excluding the mask) as a plain dict; ``rho`` only when set,
+        ``billing`` / ``n_periods`` only for billing input, and ``n_days_dropped`` /
+        ``n_temp_screened`` only when non-zero."""
         d = {
             "detected": self.detected,
             "date": None if self.date is None else str(self.date.date()),
@@ -173,6 +202,7 @@ class StepChangeResult:
         if self.billing:
             d["billing"] = True
             d["n_periods"] = self.n_periods
+        d.update(_dropped_dict(self))
         return d
 
 
@@ -184,6 +214,7 @@ def detect_step_change(
     z: float = 3.5,
     min_segment_days: int = 14,
     autocorrelation: bool = False,
+    min_coverage: float = 0.9,
 ) -> StepChangeResult:
     """Detect a sustained level shift in the daily weather-baseline residuals.
 
@@ -213,9 +244,10 @@ def detect_step_change(
     carries ``rho``.
 
     Billing input (see the module docstring): ``min_segment_days`` counts days of service and each
-    side also needs :data:`_MIN_BILLS_PER_SEGMENT` bills.
+    side also needs :data:`_MIN_BILLS_PER_SEGMENT` bills. ``min_coverage`` is
+    :func:`detect_non_routine`'s.
     """
-    df, span = _prepared(energy, temp, rate_is_energy_rate)
+    df, span = _prepared(energy, temp, rate_is_energy_rate, min_coverage)
     n = len(df)
     if span is None:
         if n < 2 * min_segment_days:
@@ -284,6 +316,7 @@ def detect_step_change(
         rho=None if rho is None else round(rho, 4),
         billing=span is not None,
         n_periods=None if span is None else n,
+        **_dropped(df),
     )
 
 
@@ -330,6 +363,8 @@ class StepChangesResult:
     caveats: list = field(default_factory=list)
     billing: bool = False  # rows are bills: n_days is days of service
     n_periods: int | None = None  # number of bills, for billing input
+    n_days_dropped: int = 0  # 0.105 (#157): days under min_coverage, dropped before the fit
+    n_temp_screened: int = 0  # 0.105 (#159): implausible temperatures treated as missing
 
     @property
     def detected(self) -> bool:
@@ -352,6 +387,7 @@ class StepChangesResult:
             "converged": self.converged,
             "caveats": list(self.caveats),
             **({"billing": True, "n_periods": self.n_periods} if self.billing else {}),
+            **_dropped_dict(self),
         }
 
 
@@ -554,6 +590,7 @@ def detect_step_changes(
     max_steps: int = 5,
     penalty: float | None = None,
     max_iter: int = 3,
+    min_coverage: float = 0.9,
 ) -> StepChangesResult:
     """Detect several sustained level shifts in daily energy against its weather baseline.
 
@@ -579,11 +616,14 @@ def detect_step_changes(
     Billing input (see the module docstring): each bill is one row at its own period's mean
     temperature, ``min_segment_days`` counts days of service, every segment also holds at least
     :data:`_MIN_BILLS_PER_SEGMENT` bills, and a step's date is the start of the first bill at the
-    new level; ``delta`` is then in energy units per day.
+    new level; ``delta`` is then in energy units per day. ``min_coverage`` is
+    :func:`detect_non_routine`'s; what it and the temperature screen dropped is also in
+    ``caveats``.
     """
+    from .intervalfit import _frame_caveats
     from .stats import lag1_autocorrelation
 
-    df, span = _prepared(energy, temp, rate_is_energy_rate)
+    df, span = _prepared(energy, temp, rate_is_energy_rate, min_coverage)
     n = len(df)
     seg_kw: dict = {}
     if span is None:
@@ -689,7 +729,8 @@ def detect_step_changes(
         iterations=it,
         converged=converged,
         segment=pd.Series(_segment_ids(n, cps_found), index=df.index, name="segment"),
-        caveats=caveats,
+        caveats=caveats + _frame_caveats(df, "input"),
         billing=span is not None,
         n_periods=None if span is None else n,
+        **_dropped(df),
     )

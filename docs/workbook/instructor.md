@@ -1380,7 +1380,7 @@ CAMBER 0.97.0-dev, with the commands on the [exercise page](data-energy-charting
 4. *Weather.* The lodging's chilled water picks a cooling-only change point (`3PC`) and the
    weather explains most of its daily variation (R² 0.86); it meets the G14 tier. The same
    building's electricity barely follows the weather (R² 0.32) and fails it.
-5. *`UVA_A`'s all-days model.* R² 0.12, CV(RMSE) 26.1%. Its profile shows why: weekdays and
+5. *`UVA_A`'s all-days model.* R² 0.12, CV(RMSE) 26.0%. Its profile shows why: weekdays and
    weekends (and holidays and academic breaks) are different loads at the same temperature, so a
    temperature-only model scatters. A day-type driver is missing, which `mv-baselines` adds.
 
@@ -1407,7 +1407,8 @@ CAMBER 0.97.0-dev, with the commands on the [exercise page](data-energy-charting
 ### `mv-baselines`: change-point baselines and M&V
 
 Figures from the real `cofactor-drammen`, `valladolid-uva` and `bdg2` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](mv-baselines.md#setup). The bills are
+0.97.0-dev, with the commands on the [exercise page](mv-baselines.md#setup); the trended
+figures were refreshed in 0.105, when daily baselines began dropping partial days. The bills are
 synthetic, cut from the open BDG2 meters.
 
 **Answer key**
@@ -1417,20 +1418,20 @@ synthetic, cut from the open BDG2 meters.
    of 0.72 is under the 0.75 CAMBER requires. SEP §6.4.1 rejects the same model for another
    reason: its cooling slope has the wrong sign (the logical-sign test), so its SEnPI is not
    reportable under `validity: both`.
-2. *The unexplained saving.* The school `b6400_ElImp` uses 5.8% less in 2019 than its 2018
-   model predicts, with a 90 % band of 24,051 on the saving: outside the band. The backcast
-   agrees (5.1%). No measure is documented, so before reporting it, find the cause: an
+2. *The unexplained saving.* The school `b6400_ElImp` uses 6.2% less in 2019 than its 2018
+   model predicts, with a 90 % band of 24,347 on the saving: outside the band. The backcast
+   agrees (5.7%). No measure is documented, so before reporting it, find the cause: an
    operating change, a sub-meter moved, an occupancy change. A saving nobody can explain is a
    non-routine question, not a result.
 3. *The nursing home.* 0.8%, well inside its band: no change.
 4. *The chain.* `UVA_B` (the faculty whose publisher describes an equipment replacement) shows a
-   chained saving of 12.6% over 2016-2018; `UVA_A`, -0.1%, none. Neither 2016 baseline meets the
-   G14 gate (R² 0.66 and 0.55, under 0.75), though both pass SEP's R² test (0.50 or more), so the
+   chained saving of 12.7% over 2016-2018; `UVA_A`, -0.2%, none. Neither 2016 baseline meets the
+   G14 gate (R² 0.67 and 0.55, under 0.75), though both pass SEP's R² test (0.50 or more), so the
    savings are "for information only". The chain leaves the academic breaks (July and August,
    Christmas, Easter) unmodelled: the occupied-day driver knows public holidays only.
-5. *The closure.* Unadjusted, `b6400_ElImp`'s 2020 chained saving is -0.9%, which looks like
+5. *The closure.* Unadjusted, `b6400_ElImp`'s 2020 chained saving is -0.4%, which looks like
    "no change". The closure indicator is material and negative: the school used much less while
-   it was shut, which hid the rest of the year. Adjusted, the saving is -8.1%: outside the
+   it was shut, which hid the rest of the year. Adjusted, the saving is -7.5%: outside the
    closure the school used more than the model expects (plausibly, more ventilation after
    reopening). The unadjusted figure misleads because two opposite effects cancel.
 6. *Chilled-water bills.* 10 bills make the 2016 baseline (a bill straddling New Year belongs to
@@ -1455,8 +1456,8 @@ synthetic, cut from the open BDG2 meters.
 
 **Common mistakes**
 
-- Reporting the 5.8% as a re-tuning saving.
-- Reading the unadjusted -0.9% as "the school did not change".
+- Reporting the 6.2% as a re-tuning saving.
+- Reading the unadjusted -0.4% as "the school did not change".
 - Treating R² as the only acceptance criterion, or ignoring CV(RMSE) because R² is high.
 - Forgetting that the bills are synthetic, or presenting them as real utility bills.
 - Comparing forecast and backcast percentages without their bands.

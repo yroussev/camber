@@ -1241,6 +1241,8 @@
   ],
   "camber.mandv.intervalfit": [
     "daily_energy_vs_temp",
+    "day_coverage",
+    "day_hours",
     "degree_days",
     "energy_vs_degree_days",
     "hourly_energy_vs_temp",

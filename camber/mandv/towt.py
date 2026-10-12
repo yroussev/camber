@@ -52,7 +52,8 @@ def _temp_components(temp: np.ndarray, breakpoints: np.ndarray) -> np.ndarray:
     """Continuous piecewise-linear basis: column j has slope 1 within segment j.
 
     Sum_j beta_j * comp_j(T) is a continuous piecewise-linear function of T whose
-    slope in segment j is beta_j.
+    slope in segment j is beta_j. A missing temperature gives a row of NaN (0.105, #159; it was
+    zeros, which made the prediction the time-of-week level alone).
     """
     n_seg = len(breakpoints) - 1
     out = np.zeros((len(temp), n_seg), dtype="float64")
@@ -60,7 +61,7 @@ def _temp_components(temp: np.ndarray, breakpoints: np.ndarray) -> np.ndarray:
     for j in range(n_seg):
         lo, hi = breakpoints[j], breakpoints[j + 1]
         out[:, j] = np.clip(t - lo, 0.0, hi - lo)
-    return np.nan_to_num(out)
+    return out
 
 
 def _build_design(
@@ -95,13 +96,15 @@ class TOWTModel:
     split: bool
     # the one private fit-time record (mode x temperature cell counts; camber.mandv.coverage)
     _fit_record: object = field(default=None, repr=False, compare=False)
+    # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
+    n_temp_screened: int = 0
 
     def as_dict(self) -> dict:
         """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model."""
         from .coverage import _FitRecord
 
         rec = self._fit_record
-        return {
+        d = {
             "type": "TOWTModel",
             "bins": [int(b) for b in self.bins],
             "breakpoints": [float(b) for b in self.breakpoints],
@@ -111,6 +114,9 @@ class TOWTModel:
             "split": bool(self.split),
             "fit_record": rec.as_dict() if isinstance(rec, _FitRecord) else None,
         }
+        if self.n_temp_screened:  # 0.105 (#159): only when the screen removed something
+            d["n_temp_screened"] = int(self.n_temp_screened)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> TOWTModel:
@@ -126,6 +132,7 @@ class TOWTModel:
             n_params=int(d["n_params"]),
             split=bool(d["split"]),
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+            n_temp_screened=int(d.get("n_temp_screened", 0)),
         )
 
     def coverage(self, index, temp, *, projected=None, policy=None):
@@ -145,6 +152,11 @@ class TOWTModel:
         **40**. A negative baseline reads downstream as a large negative saving, with no error and
         no NaN to notice. Failing loudly is the only honest option: returning NaN would instead make
         those hours vanish from a savings sum without saying so.
+
+        A row whose temperature is missing (NaN, or screened out as implausible) predicts NaN
+        (0.105, #159). It used to predict the time-of-week level alone, a number with no weather
+        in it; :func:`camber.mandv.stats.avoided_energy_savings` now excludes such rows from its
+        sums and counts them in its caveats.
         """
         idx = pd.DatetimeIndex(index)
         tow = hour_of_week(idx)
@@ -168,7 +180,12 @@ class TOWTModel:
 
 
 def fit_towt(
-    energy: pd.Series, temp: pd.Series, *, n_temp_segments: int = 6, occ_split: bool = True
+    energy: pd.Series,
+    temp: pd.Series,
+    *,
+    n_temp_segments: int = 6,
+    occ_split: bool = True,
+    temp_bounds: tuple | None = None,
 ) -> TOWTModel:
     """Fit a TOWT model to an hourly ``energy`` series against ``temp``.
 
@@ -176,7 +193,16 @@ def fit_towt(
     the piecewise-linear temperature resolution; ``occ_split`` fits the
     temperature response separately for occupied vs unoccupied hour-of-week bins
     (occupancy inferred from each bin's mean load).
+
+    **Temperature screen** (0.105, #159). Temperatures outside ``temp_bounds`` (default the
+    sensor-health outdoor-air range, -40 to 140 degF; see
+    :func:`camber.mandv._temperature.screen_temperature`) are treated as missing, so a sentinel
+    placeholder cannot become the first temperature breakpoint; the model's ``n_temp_screened``
+    counts them.
     """
+    from ._temperature import screen_temperature
+
+    temp, n_screened = screen_temperature(temp, temp_bounds)
     df = pd.DataFrame({"e": energy, "t": temp}).dropna()
     if len(df) < 50:
         raise ValueError("need >= 50 aligned observations to fit TOWT")
@@ -222,6 +248,7 @@ def fit_towt(
             p=p,
             rho=_safe(_rho_of, resid, idx),
         ),
+        n_temp_screened=n_screened,
     )
 
 

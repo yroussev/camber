@@ -124,7 +124,7 @@ EXERCISE = Exercise(
         Metric("mv_baseline", STEPHEN_CHW, "r2", 0.86, 0.005, run="fox", on=REAL, quote="0.86"),
         Metric("mv_baseline", STEPHEN_EL, "r2", 0.32, 0.005, run="fox", on=REAL, quote="0.32"),
         Metric("mv_baseline", "UVA_A", "r2", 0.12, 0.005, run="uva", on=REAL, quote="0.12"),
-        Metric("mv_baseline", "UVA_A", "cv_rmse", 0.261, 0.001, run="uva", on=REAL, quote="26.1%"),
+        Metric("mv_baseline", "UVA_A", "cv_rmse", 0.2595, 0.001, run="uva", on=REAL, quote="26.0%"),
     ),
     standin=standin,
 )

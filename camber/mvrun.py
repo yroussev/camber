@@ -162,7 +162,7 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     Equipment discovery is the ordinary run's (:func:`camber.config._prepare`), so a suspended
     facility finds no meters -- see docs/PORTFOLIO.md.
     """
-    from .config import _prepare
+    from .config import _mv_min_coverage, _prepare
     from .mandv import _mvform
     from .mandv.intervalfit import daily_energy_vs_temp
     from .model.roles import Role
@@ -200,7 +200,10 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
             if any(r not in full.columns for r in extra):
                 continue
             daily = daily_energy_vs_temp(
-                full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+                full[role].dropna(),
+                full[Role.OAT].dropna(),
+                timezone=prep.timezone,
+                min_coverage=_mv_min_coverage(entry),  # 0.105 (#157)
             )
             daily = _mvform.add_drivers(daily, entry, full)
             out.append(MeterSeries(k, entry, ref.equip, role.value, mv_kind(role), daily))

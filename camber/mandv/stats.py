@@ -86,6 +86,14 @@ def cv_rmse_max_for(interval: str) -> float:
     return _CV_RMSE_MAX.get(interval, 0.20)
 
 
+def _time_array(index) -> np.ndarray:
+    """``index`` as an array; a tz-aware ``DatetimeIndex`` (an hourly frame on the site's clock,
+    0.105) as its UTC instants, which numpy holds without a zone. Anything else is unchanged."""
+    if getattr(index, "tz", None) is not None and hasattr(index, "asi8"):
+        return np.asarray(index.asi8).view("datetime64[ns]")
+    return np.asarray(index)
+
+
 def fit_stats(
     y,
     yhat,
@@ -121,7 +129,7 @@ def fit_stats(
     y = np.asarray(y, dtype=float)
     yhat = np.asarray(yhat, dtype=float)
     m = np.isfinite(y) & np.isfinite(yhat)
-    idx = None if time_index is None else np.asarray(time_index)[m]
+    idx = None if time_index is None else _time_array(time_index)[m]
     w, _scale = fit_weights(weights, m)
     y, yhat = y[m], yhat[m]
     n = len(y)
@@ -386,7 +394,8 @@ def lag1_autocorrelation(
     ok = np.isfinite(r)
     pair = ok[:-1] & ok[1:]  # a NaN kills the pairs on both sides of it
     if index is not None:
-        idx = np.asarray(index)
+        # a tz-aware index (an hourly frame on the site's clock, 0.105) as its UTC instants
+        idx = _time_array(index)
         if len(idx) != len(r):
             raise ValueError("index must be the same length as residuals")
         try:
@@ -476,7 +485,8 @@ def avoided_energy_savings(
     parameter-variance factor ``k``; ``severe`` **declines** the saving (numbers ``None``) unless
     the policy says ``decline=False``. Reporting rows without a finite projection or actual energy
     are excluded from the sums and counted (``coverage["n_used"]`` vs ``["n_report"]``), not
-    dropped silently.
+    dropped silently; the caveat also says how many had no finite projection (0.105, #159: a
+    missing or screened temperature).
 
     **Kernel.** ``kernel="g14"`` (the default) is the G14 expression above. ``kernel="exact"`` is
     the OLS projection variance of the baseline at the reporting drivers,
@@ -542,9 +552,18 @@ def avoided_energy_savings(
     )
     caveats = list(cov.caveats)
     if m < n_report:
+        # 0.105 (#159): say how many had no projection -- a missing or screened temperature (a
+        # TOWT row with no temperature now projects NaN rather than its time-of-week level)
+        n_no_proj = int((~np.isfinite(proj_all)).sum())
         caveats.append(
             f"{n_report - m} of {n_report} reporting rows were excluded from the savings sums "
             "(no finite baseline projection or actual energy)"
+            + (
+                f"; {n_no_proj} of them had no finite baseline projection (a missing or "
+                "implausible temperature)"
+                if n_no_proj
+                else ""
+            )
         )
     k = None
     if kernel == "exact":
@@ -870,7 +889,7 @@ def regression_tests(
     if len(names) != X.shape[1]:
         raise ValueError(f"{len(names)} names for {X.shape[1]} design columns")
     ok = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
-    idx = None if time_index is None else np.asarray(time_index)[ok]
+    idx = None if time_index is None else _time_array(time_index)[ok]
     w, _scale = fit_weights(weights, ok)
     X, y = X[ok], y[ok]
     n, k = X.shape

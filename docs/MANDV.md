@@ -874,12 +874,72 @@ or, for a store facility, from the zone the facility records, looked up as the r
 entry (a per-site zone, as each BDG2 site records), the catalog entry's `local_timezone` (for
 example `cofactor-drammen`, Europe/Oslo), then an open-fdd ingest's zone. Every daily `mv` path takes it: the plain run, each
 declared method, the ledger and the versioned baselines of `camber mv`. A source with no zone
-keeps the historical days. Hourly frames are not changed.
+keeps the historical days.
+
+**Hourly frames (0.105, #158).** `mandv.intervalfit.hourly_energy_vs_temp` used to sum duplicate
+timestamps, so an export that kept both readings of the repeated hour counted that hour's energy
+twice. It has no zone to tell which reading is which, so now:
+
+- With `timezone=` (also on `caltrack_savings_hourly`), the samples are placed on their real
+  instants (`timegrid.localize`'s convention), and both real hours of the fall-back are kept,
+  each with its own energy and temperature. A lone sample in the repeated hour (the store's
+  hourly mean of the two passes) stands for both, as `repeated_hour_weights` counts it twice on
+  the daily path. The fall-back day has 25 rows and the frame a tz-aware local index; `hour` is
+  the local clock hour.
+- Without a zone, duplicate timestamps are one hour. Energy and temperature are averaged per
+  stamp (`timegrid.regularize(dedupe="mean")`), never summed, and
+  `attrs["n_duplicate_stamps"]` counts them. A `camber.tsparse.TimezoneWarning` says to pass the
+  zone; `caltrack_savings_hourly` adds the count to its caveats.
+
+A rate meter's step is now taken from the positive gaps only, so heavily duplicated stamps no
+longer give a zero step and zero energy. Hourly data without duplicates is unchanged.
 
 On the COFACTOR import meters (hourly, stored on the Oslo clock) the fall-back days now match
 the publisher's fixed-offset data exactly, where they were 3 to 5 % short. The spring-forward days
 were already right. The same holds for a US series in America/Los_Angeles (the `lbnl-b59`
 whole-building electricity, published in UTC).
+
+## Day coverage (0.105, #157)
+
+A daily frame used to sum whatever samples a day held, so a day missing hours counted as a whole
+day and read low. On a gappy meter that biases the baseline low. `daily_energy_vs_temp` now keeps
+a day only when its samples cover at least `min_coverage` of it (default 0.9). Coverage is the
+samples present times the meter's interval (`timegrid.interval_hours`, the modal step), over the
+day's hours. With the site's zone a daylight-saving day is as long as its clock: 23 or 25 hours,
+a repeated-hour sample counting twice. Without a zone every day is 24 hours, and the 23-sample
+spring-forward day still passes 0.9. `mandv.intervalfit.day_coverage` gives each day's share.
+
+Dropped days are counted in the frame's `attrs["dropped_days"]`, and the results report them:
+
+- `caltrack_savings`: a savings caveat;
+- the non-routine detectors: `n_days_dropped`;
+- a config's `mv_baseline` finding: the metric `n_days_dropped` and a caveat;
+- the `mv_savings` findings: a caveat for dropped baseline or reporting days.
+
+The threshold is the config key `mv[].min_coverage`, a number from 0 to 1; billing entries
+already had one. `min_coverage=0` keeps every day, the frame before 0.105. Frames of whole days
+(the BDG2 benchmark keeps complete days first) are unchanged.
+
+`daily_energy_vs_temp` and `hourly_energy_vs_temp` default to `rate_is_energy_rate=True` (the
+meter is a rate), while `caltrack_savings`, `caltrack_savings_hourly` and the non-routine
+detectors default to `False` (energy per interval). The defaults are historical and are kept;
+pass the flag explicitly.
+
+## Implausible temperatures (0.105, #159)
+
+A weather or BAS export sometimes writes a placeholder, such as -237, for a missing outdoor
+temperature. Left in a fit, it is the coldest point: TOWT took it as its first temperature
+breakpoint, and a heating change-point model bent its arm toward it. Every baseline fit now
+screens its temperatures first. `fit_towt`, `models.fit_model` / `best_model`,
+`degreeday.fit_degree_day` and the `intervalfit` frame builders treat a value outside the
+sensor-health outdoor-air range (`sensorhealth.PHYSICAL_BOUNDS`, -40 to 140 °F) as missing. The
+count is on the model (`n_temp_screened`, serialised only when non-zero), on the frame
+(`attrs["n_temp_screened"]`) and in the savings caveats. `temp_bounds=(lo, hi)` sets another
+range, and `(-inf, inf)` turns the screen off.
+
+A row with no temperature has no weather to project. `TOWTModel.predict` used to give such a row
+its time-of-week level alone; it now returns NaN for it. `stats.avoided_energy_savings` leaves the
+row out of its sums, as before, and its caveat now says how many rows had no finite projection.
 
 ## Change-point + driver models
 

@@ -197,6 +197,10 @@ Repeat the two commands with `Fox_lodging_Stephen__electricity` for the second m
 ## Caveats
 
 - A saving with no documented measure behind it is a change to explain, not a saving to claim.
+- A daily baseline keeps only days the meter covers (since 0.105, at least 90 % of the day; the
+  entry's `min_coverage`). Here that drops two near-empty days from `b6400_ElImp`'s 2018
+  baseline, which counted as whole days and read far too low; without them the fit improves
+  (R² 0.87 to 0.89). The `mv_baseline` finding reports them as `n_days_dropped`, with a caveat.
 - CAMBER's G14 gate (above) is CAMBER's reading of the guideline; CalTRACK is stricter in other
   ways (see [M&V](../MANDV.md)).
 - The occupied-day driver knows public holidays, not school breaks or academic calendars. Both

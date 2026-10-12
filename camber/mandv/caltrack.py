@@ -21,13 +21,14 @@ This is the daily method (CalTRACK Daily). The hourly method maps onto
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from ..ingest.quality import outlier_mask
 from .coverage import ExtrapolationPolicy
-from .intervalfit import daily_energy_vs_temp, hourly_energy_vs_temp
+from .intervalfit import _frame_caveats, daily_energy_vs_temp, hourly_energy_vs_temp
 from .models import N_PARAMS, best_model
 from .nonroutine import residual_outliers
 from .stats import SavingsResult, avoided_energy_savings, cv_rmse_max_for, fit_stats
@@ -69,6 +70,8 @@ def caltrack_savings(
     exclude_non_routine: bool = False,
     nre_z: float = 3.5,
     extrapolation: ExtrapolationPolicy | None = None,
+    min_coverage: float = 0.9,
+    timezone: str | None = None,
 ) -> NMECResult:
     """CalTRACK Daily / IPMVP Option-C avoided energy use from baseline + reporting.
 
@@ -91,10 +94,19 @@ def caltrack_savings(
 
     A baseline under ``min_days`` raises :class:`camber.mandv.sufficiency.InsufficientBaseline`
     (a ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed.
+
+    Days whose meter data cover less than ``min_coverage`` of the day are dropped from both periods
+    and temperatures outside the plausible outdoor range are treated as missing (0.105; see
+    :func:`~camber.mandv.intervalfit.daily_energy_vs_temp`, which also takes ``timezone``); the
+    savings caveats count both.
     """
-    base = daily_energy_vs_temp(
-        baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
-    )
+    kw: dict[str, Any] = {
+        "rate_is_energy_rate": rate_is_energy_rate,
+        "min_coverage": min_coverage,
+        "timezone": timezone,
+    }
+    base = daily_energy_vs_temp(baseline_energy, baseline_temp, **kw)
+    notes = _frame_caveats(base, "baseline")
     if len(base) < min_days:
         raise InsufficientBaseline(
             f"need >= {min_days} baseline days, got {len(base)}",
@@ -121,9 +133,8 @@ def caltrack_savings(
         time_index=base.index,
     )
 
-    rep = daily_energy_vs_temp(
-        reporting_energy, reporting_temp, rate_is_energy_rate=rate_is_energy_rate
-    )
+    rep = daily_energy_vs_temp(reporting_energy, reporting_temp, **kw)
+    notes += _frame_caveats(rep, "reporting")
     if rep.empty:
         raise ValueError("no usable reporting-period data")
     savings = avoided_energy_savings(
@@ -143,6 +154,7 @@ def caltrack_savings(
             f"the baseline spans {span} days (< 365): it cannot cover a full weather year, so "
             "reporting conditions outside it are more likely"
         )
+    savings.caveats.extend(notes)
 
     return NMECResult(
         model_kind=model.kind,
@@ -198,6 +210,7 @@ def caltrack_savings_hourly(
     n_temp_segments: int = 6,
     occ_split: bool = True,
     extrapolation: ExtrapolationPolicy | None = None,
+    timezone: str | None = None,
 ) -> HourlyNMECResult:
     """Hourly NMEC / IPMVP Option-C avoided energy on a **TOWT** baseline.
 
@@ -236,10 +249,16 @@ def caltrack_savings_hourly(
     A baseline under ``min_hours``, missing hour-of-week bins, or with bins under
     ``min_obs_per_bin`` raises :class:`camber.mandv.sufficiency.InsufficientBaseline` (a
     ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed.
+
+    ``timezone`` (0.105, #158) places the hours on the site's clock, so a daylight-saving
+    fall-back hour is two hours, not one counted twice (see
+    :func:`~camber.mandv.intervalfit.hourly_energy_vs_temp`); without it duplicate stamps are
+    averaged into one hour. Implausible temperatures are treated as missing. The savings caveats
+    count what either step merged or dropped.
     """
-    base = hourly_energy_vs_temp(
-        baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
-    )
+    kw: dict[str, Any] = {"rate_is_energy_rate": rate_is_energy_rate, "timezone": timezone}
+    base = hourly_energy_vs_temp(baseline_energy, baseline_temp, **kw)
+    notes = _frame_caveats(base, "baseline")
     if len(base) < min_hours:
         raise InsufficientBaseline(
             f"need >= {min_hours} baseline hours, got {len(base)}",
@@ -274,9 +293,8 @@ def caltrack_savings_hourly(
         time_index=base.index,
     )
 
-    rep = hourly_energy_vs_temp(
-        reporting_energy, reporting_temp, rate_is_energy_rate=rate_is_energy_rate
-    )
+    rep = hourly_energy_vs_temp(reporting_energy, reporting_temp, **kw)
+    notes += _frame_caveats(rep, "reporting")
     if rep.empty:
         raise ValueError("no usable reporting-period data")
     if not model.covers(rep.index):
@@ -296,6 +314,7 @@ def caltrack_savings_hourly(
         rho=st.rho_lag1,
         extrapolation=extrapolation,
     )
+    savings.caveats.extend(notes)
 
     return HourlyNMECResult(
         baseline_cv_rmse=st.cv_rmse,
