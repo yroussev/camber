@@ -74,6 +74,12 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   the period-mean-temperature degree-day model (see Deprecated).
 
 ### Changed
+- **The period-mean degree-day model counts a searched balance point in its parameters (#163).**
+  `fit_mean_temp_degree_day` now adds 1 to p when it searches for the balance point, as
+  `basetemp` does for its fitted bases, so its fit statistics and uncertainty band are no longer
+  optimistic; a fixed `balance_point` is unchanged. Savings and projections do not move; the band
+  widens slightly (in the coverage test, 65.9 → 66.93, fractional 0.1153 → 0.1171). No benchmark,
+  M&V vector or workbook answer uses this model.
 - Clean data (whole days, plausible temperatures, no duplicate stamps) gives the same numbers as
   before. Where a day is partial, a temperature is implausible or an hourly stamp repeats, the
   M&V frames, fits and savings change as described under Fixed. The default `rate_is_energy_rate`

@@ -218,9 +218,9 @@ _ROWS = (
         "camber.mandv.degreeday.fit_mean_temp_degree_day",
         "Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean "
         "temperature, about one balance point shared by both legs, so a shoulder month's swing "
-        "days are undercounted. The searched balance point is not counted in p. Renamed in 0.105 "
-        "from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). For VBDD on bills use "
-        "`basetemp` (DD-H / DD-C / DD-HC).",
+        "days are undercounted. The searched balance point is counted in p (since 0.105). "
+        "Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). "
+        "For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC).",
         "degree-day model",
     ),
     # --- other baseline models ------------------------------------------------------------------

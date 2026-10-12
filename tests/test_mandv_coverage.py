@@ -549,11 +549,11 @@ GOLDEN = {
         "savings_pct": -0.0923,
     },
     "degreeday": {
-        "abs_uncertainty": 65.9,
+        "abs_uncertainty": 66.93,
         "avoided_energy": 571.45,
         "baseline_projected": 5525.09,
         "confidence": 0.9,
-        "fractional_uncertainty": 0.1153,
+        "fractional_uncertainty": 0.1171,
         "fsu_autocorrelation_adjusted": False,
         "n_effective": 36.0,
         "reporting_actual": 4953.65,

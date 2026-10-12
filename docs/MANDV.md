@@ -78,7 +78,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 | Degree-day heating | `DD-H`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating model, PRISM heating-only form | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Daily degree-days summed over each bill, the base chosen from a grid by days-weighted least squares with a profile-likelihood range (`select_bases`); with a numeric `base_f` the base is fixed (a fixed-base degree-day model, base not counted in p). |
 | Degree-day cooling | `DD-C`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | The cooling analogue of DD-H (PRISM's original model is heating-only); same base search. |
 | Degree-day heating and cooling | `DD-HC`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating-and-cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Separate heating and cooling bases (heating base no higher than the cooling base), each searched on its own grid; p counts both fitted bases. |
-| Degree-day on period-mean temperature (CAMBER) | `degreeday`, `mandv.degreeday.fit_mean_temp_degree_day` | — | — | Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean temperature, about one balance point shared by both legs, so a shoulder month's swing days are undercounted. The searched balance point is not counted in p. Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC). |
+| Degree-day on period-mean temperature (CAMBER) | `degreeday`, `mandv.degreeday.fit_mean_temp_degree_day` | — | — | Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean temperature, about one balance point shared by both legs, so a shoulder month's swing days are undercounted. The searched balance point is counted in p (since 0.105). Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC). |
 
 **Other baseline models**
 
@@ -1629,8 +1629,8 @@ m.predict(normal_year_tavg)  # normalize / project the baseline
 `degree_days(tavg, balance_point)` returns the `(HDD, CDD)` arrays. Flags: `balance_point` (fix it
 or leave None to search), `balance_range`/`step` (search grid), `kind` (`heating`/`cooling`/`both`).
 Fit statistics (R², CV(RMSE), NMBE, G14 acceptance) come from `mandv.stats.fit_stats`; their `p`
-counts the intercept and the slopes but not a searched balance point (unlike `basetemp`, which
-counts its fitted bases), so they are slightly optimistic when the balance point is searched.
+counts the intercept, the slopes and, when the fit searches for it, the balance point (as
+`basetemp` counts its fitted bases; since 0.105, #163). A fixed `balance_point` is not counted.
 
 Until 0.105 these were `fit_degree_day` and `DegreeDayModel`; both names still work and raise a
 `DeprecationWarning`. Stored models keep `"type": "DegreeDayModel"` and read back unchanged.

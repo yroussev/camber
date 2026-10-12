@@ -17,11 +17,9 @@ cooling bases -- use :func:`camber.mandv.basetemp.fit_bill_degree_day` /
 and :class:`MeanTempDegreeDayModel`; the old names ``fit_degree_day`` / ``DegreeDayModel`` remain as
 deprecated aliases.
 
-**Parameter count.** ``p`` counts the intercept and the slopes (``kind="both"``: 3; one leg: 2).
-A balance point the fit chose is **not** counted, unlike :mod:`camber.mandv.basetemp`, which
-counts its fitted bases; the fit statistics and the uncertainty band are therefore slightly
-optimistic when the balance point is searched. Counting it changes reported numbers, so it waits
-for sign-off (#163).
+**Parameter count.** ``p`` counts the intercept and the slopes (``kind="both"``: 3; one leg: 2),
+plus 1 for the balance point when the fit searches for it (a fixed ``balance_point`` is not
+counted), as :mod:`camber.mandv.basetemp` counts its fitted bases (0.105, #163).
 
 numpy only; fit statistics reuse :func:`camber.mandv.stats.fit_stats`.
 """
@@ -129,7 +127,7 @@ def _wrong_signs(heating_slope: float, cooling_slope: float) -> list:
     return out
 
 
-def _fit_at(tavg, energy, bp: float, kind: str):
+def _fit_at(tavg, energy, bp: float, kind: str, p_extra: int = 0):
     hdd, cdd = degree_days(tavg, bp)
     cols = [np.ones(len(tavg))]
     idx = {}
@@ -141,7 +139,7 @@ def _fit_at(tavg, energy, bp: float, kind: str):
         cols.append(cdd)
     X = np.column_stack(cols)
     coef, *_ = np.linalg.lstsq(X, energy, rcond=None)
-    fs = fit_stats(energy, X @ coef, p=X.shape[1])
+    fs = fit_stats(energy, X @ coef, p=X.shape[1] + p_extra)
     base = float(coef[0])
     hs = float(coef[idx["h"]]) if "h" in idx else 0.0
     cs = float(coef[idx["c"]]) if "c" in idx else 0.0
@@ -193,7 +191,9 @@ def fit_mean_temp_degree_day(
     finite = np.isfinite(tavg) & np.isfinite(energy)  # drop NaN/inf pairs (a missing bill month)
     idx = None if time_index is None else np.asarray(time_index)[finite]
     tavg, energy = tavg[finite], energy[finite]
-    p = 3 if kind == "both" else 2  # intercept + one or two slopes
+    # intercept + one or two slopes, plus the balance point when the fit chooses it
+    p_extra = 1 if balance_point is None else 0
+    p = (3 if kind == "both" else 2) + p_extra
     if len(tavg) <= p:  # need > p points, else the fit is degenerate
         raise ValueError(
             f"need more than {p} finite (tavg, energy) points for kind={kind!r}, have {len(tavg)}"
@@ -206,7 +206,7 @@ def fit_mean_temp_degree_day(
     )
     best = None
     for bp in candidates:
-        base, hs, cs, fs = _fit_at(tavg, energy, bp, kind)
+        base, hs, cs, fs = _fit_at(tavg, energy, bp, kind, p_extra)
         cv = fs.cv_rmse if fs.cv_rmse == fs.cv_rmse else float("inf")
         key = (bool(_wrong_signs(hs, cs)), cv)  # a logical fit beats any illogical one
         if best is None or key < best[0]:
