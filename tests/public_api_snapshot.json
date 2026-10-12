@@ -705,6 +705,7 @@
   ],
   "camber.forecast": [
     "AnomalyReport",
+    "ForecastHorizonWarning",
     "backtest",
     "forecast_anomalies",
     "seasonal_forecast"
@@ -1266,6 +1267,7 @@
   ],
   "camber.mandv.models": [
     "ChangePointModel",
+    "ModelFitError",
     "N_PARAMS",
     "best_model",
     "fit_model",

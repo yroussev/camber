@@ -21,6 +21,7 @@ numpy/pandas only.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -30,10 +31,25 @@ from ._validate import require_datetime_index
 
 __all__ = [
     "seasonal_forecast",
+    "ForecastHorizonWarning",
     "AnomalyReport",
     "forecast_anomalies",
     "backtest",
 ]
+
+
+_DEFAULT_MAX_HORIZON = pd.Timedelta(days=14)
+"""The horizon :func:`seasonal_forecast` is built for: next-day to next-week use, with margin."""
+
+
+class ForecastHorizonWarning(UserWarning):
+    """A :func:`seasonal_forecast` was asked for more than it is built for (0.105).
+
+    Issued when the horizon reaches further past the end of history than ``max_horizon``, or when
+    target intervals fall in time-of-week slots history never saw (those take the overall mean).
+    The forecast is still returned; the warning says how far it reaches or how many intervals
+    fell back.
+    """
 
 
 def _time_of_week(index: pd.DatetimeIndex, freq_hours: float) -> np.ndarray:
@@ -44,7 +60,11 @@ def _time_of_week(index: pd.DatetimeIndex, freq_hours: float) -> np.ndarray:
 
 
 def seasonal_forecast(
-    history: pd.Series, horizon_index: pd.DatetimeIndex, *, drift_window: int = 168
+    history: pd.Series,
+    horizon_index: pd.DatetimeIndex,
+    *,
+    drift_window: int = 168,
+    max_horizon: pd.Timedelta | None = _DEFAULT_MAX_HORIZON,
 ) -> pd.Series:
     """Forecast ``horizon_index`` from ``history``: seasonal-naïve shape + additive drift.
 
@@ -54,6 +74,14 @@ def seasonal_forecast(
     (actual − its own slot mean). This keeps occupied and unoccupied predictions unbiased (unlike a
     global-level blend, which biases them differently). Slots unseen in history fall back to the
     overall mean.
+
+    **Intended horizon: next day to next week.** The drift term is the level of the last
+    ``drift_window`` samples held flat, so the forecast cannot follow a season turning; months
+    ahead, its bias grows large. ``max_horizon`` (default 14 days) is
+    how far past the last history timestamp the latest target may reach before a
+    :class:`ForecastHorizonWarning` is issued; ``None`` turns the check off. The same warning, with
+    the count, says when target intervals fell back to the overall mean because their
+    time-of-week slot never appears in history. The forecast is returned either way.
     """
     require_datetime_index(history, "history")
     if not isinstance(horizon_index, pd.DatetimeIndex):
@@ -76,7 +104,35 @@ def seasonal_forecast(
 
     tgt_slots = _time_of_week(horizon_index, freq_hours)
     seasonal = np.array([slot_mean.get(s, overall) for s in tgt_slots], dtype=float)
+    _warn_horizon(h.index, horizon_index, max_horizon)
+    n_fallback = int((~np.isin(tgt_slots, slot_mean.index.to_numpy())).sum())
+    if n_fallback:
+        warnings.warn(
+            f"{n_fallback} of {len(tgt_slots)} forecast intervals fall in time-of-week slots "
+            "history never saw and take the overall mean; give history covering a full week",
+            ForecastHorizonWarning,
+            stacklevel=2,
+        )
     return pd.Series(seasonal + drift, index=horizon_index)
+
+
+def _warn_horizon(hist_index, horizon_index, max_horizon) -> None:
+    """Warn when the latest target lies more than ``max_horizon`` past the end of history."""
+    if max_horizon is None or len(horizon_index) == 0:
+        return
+    limit = pd.Timedelta(max_horizon)
+    try:
+        reach = horizon_index.max() - hist_index.max()
+    except TypeError:  # tz-aware vs naive: no common clock to measure the reach on
+        return
+    if reach > limit:
+        warnings.warn(
+            f"seasonal_forecast reaches {reach} past the end of history, beyond max_horizon="
+            f"{limit}; it is built for next-day to next-week use and its bias grows with the "
+            "horizon (pass a larger max_horizon, or None, to accept it)",
+            ForecastHorizonWarning,
+            stacklevel=3,
+        )
 
 
 def _infer_freq_hours(index: pd.DatetimeIndex) -> float:
@@ -132,7 +188,12 @@ def forecast_anomalies(actual: pd.Series, forecast: pd.Series, *, k: float = 3.5
 
 def backtest(history: pd.Series, *, test_frac: float = 0.25, **fc_kw) -> dict:
     """Hold out the last ``test_frac`` of ``history``, forecast it, and report accuracy
-    (MAE, MAPE, CV(RMSE)) — a quick honesty check on the forecaster for a given series."""
+    (MAE, MAPE, CV(RMSE)) — a quick honesty check on the forecaster for a given series.
+
+    The hold-out is forecast in one piece, so its length is the horizon: a hold-out longer than
+    ``max_horizon`` (passed through ``fc_kw``; default 14 days) draws a
+    :class:`ForecastHorizonWarning`, and the accuracy reported is then that of a longer horizon
+    than the forecaster is built for."""
     require_datetime_index(history, "history")
     h = history.dropna()
     n = len(h)

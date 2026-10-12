@@ -68,3 +68,53 @@ def test_forecast_anomalies_clean_series_few_flags():
     rep = forecast_anomalies(h.loc[horizon], fc, k=4.0)
     assert rep.anomaly_frac < 0.05  # a matching forecast -> few anomalies
     assert rep.mae >= 0
+
+
+# --- #161: the horizon check and the slot-fallback warning --------------------------------------
+
+
+def test_forecast_warns_past_max_horizon_only():
+    import warnings
+
+    import pytest
+
+    from camber.forecast import ForecastHorizonWarning
+
+    h = _weekly_load(weeks=4)
+    start = h.index[-1] + pd.Timedelta(hours=1)
+    week = pd.date_range(start, periods=7 * 24, freq="1h")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ForecastHorizonWarning)
+        seasonal_forecast(h, week)  # a week ahead: within the default 14 days
+        seasonal_forecast(h, pd.date_range(start, periods=14 * 24, freq="1h"))  # exactly 14 d
+    months = pd.date_range(start, periods=90 * 24, freq="1h")
+    with pytest.warns(ForecastHorizonWarning, match="beyond max_horizon=14 days"):
+        fc = seasonal_forecast(h, months)
+    assert isinstance(fc, pd.Series) and len(fc) == len(months) and fc.notna().all()
+    with warnings.catch_warnings():  # a larger limit, or None, accepts the long horizon
+        warnings.simplefilter("error", ForecastHorizonWarning)
+        seasonal_forecast(h, months, max_horizon=pd.Timedelta(days=120))
+        seasonal_forecast(h, months, max_horizon=None)
+    with pytest.warns(ForecastHorizonWarning, match="max_horizon=1 days"):
+        seasonal_forecast(h, week, max_horizon=pd.Timedelta(days=1))
+
+
+def test_forecast_warns_with_count_when_slots_fall_back():
+    import warnings
+
+    import pytest
+
+    from camber.forecast import ForecastHorizonWarning
+
+    h = _weekly_load(weeks=4)
+    two_days = h.iloc[:48]  # history covers only two weekdays' slots
+    target = pd.date_range(two_days.index[-1] + pd.Timedelta(hours=1), periods=48, freq="1h")
+    with pytest.warns(ForecastHorizonWarning, match="48 of 48 forecast intervals") as rec:
+        fc = seasonal_forecast(two_days, target)
+    assert len(rec) == 1
+    assert np.allclose(fc.to_numpy(), fc.iloc[0])  # every target took the overall mean (+ drift)
+    with warnings.catch_warnings():  # full-week history: no slot falls back
+        warnings.simplefilter("error", ForecastHorizonWarning)
+        seasonal_forecast(
+            h, pd.date_range(h.index[-1] + pd.Timedelta(hours=1), periods=48, freq="1h")
+        )

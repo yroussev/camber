@@ -72,6 +72,19 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   lists them.
 - `mandv.degreeday.fit_mean_temp_degree_day` and `MeanTempDegreeDayModel`, the honest names of
   the period-mean-temperature degree-day model (see Deprecated).
+- **`best_model` says why no model could be fit (#160).** It raised a bare `ValueError("no model
+  could be fit")`. It now raises `mandv.models.ModelFitError`, a `ValueError`, whose message
+  lists every kind tried with its parameter count and why it was refused: the fit's own error,
+  `n - p < 1` with the counts, or a non-finite BIC. The list is also on `.candidates`.
+  `best_model(..., return_candidates=True)` returns `(model, candidates)`, with each fitted
+  kind's `n`, `sse`, `bic` and `selected`. The choice of model is unchanged.
+- **`seasonal_forecast` warns past its horizon (#161).** The forecaster is built for next-day
+  to next-week use. A new `max_horizon=` (default 14 days, `None` to turn it off) issues a
+  `forecast.ForecastHorizonWarning` when the latest target lies further than that past the end
+  of history. The same warning, with the count, says when target intervals take the overall
+  mean because history never saw their time-of-week slot. The forecast is still returned.
+  `backtest` passes `max_horizon` through, so a hold-out longer than 14 days warns too.
+  `docs/FORECAST.md` documents the intended horizon.
 
 ### Changed
 - **The period-mean degree-day model counts a searched balance point in its parameters (#163).**
