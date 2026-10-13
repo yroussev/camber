@@ -607,8 +607,10 @@ def towt_lbnl_config(units: str = "degF") -> TOWTReferenceConfig:
     compares bin means with their median), its ensemble of locally weighted fits (one fit
     centred every ~14 days, predictions averaged with the same weight function), its 15-minute
     time-of-week intervals (CAMBER bins by the hour) and its NaN for an unseen time of week.
-    ``units`` is ``"degF"`` (CAMBER's temperature unit) or ``"degC"`` for the same knots in
-    Celsius.
+    :func:`camber.mandv.towt_rmv2.fit_towt_rmv2` (0.105, #165) reproduces all four; prefer it for
+    a like-for-like comparison with RMV2.0 and for long-horizon baselines, where one weighted fit
+    centred on the end of the baseline drifts. ``units`` is ``"degF"`` (CAMBER's temperature
+    unit) or ``"degC"`` for the same knots in Celsius.
     """
     knots: tuple
     if units == "degF":

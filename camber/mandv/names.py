@@ -245,6 +245,25 @@ _ROWS = (
         "other baseline model",
     ),
     MVName(
+        "towt_rmv2",
+        "TOWT, LBNL RMV2.0 variant",
+        "Time-of-Week-and-Temperature (TOWT) model, LBNL RMV2.0 implementation (towt_baseline)",
+        (_RMV2, _TOWT),
+        "camber.mandv.towt_rmv2.fit_towt_rmv2",
+        "Opt-in (0.105). Reproduces RMV2.0 1.1.0's makeBaseline (R/towt_baseline.R, commit "
+        "979a963): its occupancy rule (a regression of load on temperature hinged at 50 and "
+        "65 degF; an interval is occupied when over 65% of its residuals are positive, and the "
+        "split needs more than two), its knots and pruning, and its ensemble of local fits "
+        "centred every ~14 days by row count, each prediction clipped at zero and averaged with "
+        "the weights s^2/(s^2+dt^2) about the prediction time. An unseen time of week is NaN. "
+        "Differences: hour-of-week intervals by default (RMV2.0: 15 minutes, the same on hourly "
+        "data); RMV2.0's data cleaning (clean_eload, clean_Temp) is not applied, CAMBER's "
+        "temperature screen is; the final approx() fill of NaN is opt-in "
+        '(`unseen="previous"`). Differs from Mathieu et al. (2011): data-driven occupancy and '
+        "time weighting.",
+        "other baseline model",
+    ),
+    MVName(
         "multivariable",
         "Change-point + drivers (multivariable)",
         "Multivariable change-point regression model (SEP 50001 M&V Protocol §6.3.2)",

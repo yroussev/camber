@@ -133,6 +133,24 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   ensemble of local fits are not reproduced, and the registry's TOWT row says so. Models with
   these options serialise `open_ends` / `weighted`; older stored models load unchanged.
   `camber.references` adds `lbnl-rmv2`.
+- **TOWT, LBNL RMV2.0 variant (#165).** New module `mandv.towt_rmv2`: `fit_towt_rmv2(...)` is
+  an opt-in reimplementation of RMV2.0 1.1.0's `makeBaseline` (`R/towt_baseline.R`, commit
+  979a963). It returns a `TOWTRMV2Model` with `predict`, `as_dict` and `from_dict`, and
+  reproduces:
+  - RMV2.0's occupancy rule: a load regression hinged at 50 and 65 °F, with an interval occupied
+    when over 65 % of its residuals are positive;
+  - its ensemble of local fits, centred about every 14 days by row count across the baseline;
+  - its prediction, in which each local fit is clipped at zero and the fits are averaged with
+    the weights `s² / (s² + Δt²)` about the prediction time;
+  - its NaN for an unseen time of week, with `unseen="previous"`, `"raise"` and `"fallback"`
+    opt-in.
+
+  It supports any interval of the week that divides a day; the default is hourly. It matches
+  RMV2.0's own `makeBaseline` to 1e-8 on synthetic data. A dev-only test runs that comparison
+  when `CAMBER_RMV2_RSCRIPT` is set; R is not a dependency. On a synthetic held-out year with a
+  seasonal schedule, its hourly CV(RMSE) is about 3 points lower than one recency-weighted fit
+  (`towt_lbnl_config()`). The registry has a new row, "TOWT, LBNL RMV2.0 variant"
+  (`towt_rmv2`), and `towt_lbnl_config()`'s documentation points long-horizon baselines to it.
 
 ### Changed
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily
