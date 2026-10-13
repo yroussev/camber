@@ -141,8 +141,9 @@ def hourly_temperature(temp: pd.Series, *, interpolate: bool = True) -> tuple:
     """
     t = pd.to_numeric(temp, errors="coerce").astype(float).sort_index()
     t = t[~t.index.duplicated(keep="first")] if t.index.has_duplicates else t
-    if t.dropna().empty:
-        return pd.Series(dtype=float), 0
+    if t.dropna().empty:  # an empty series on a (still datetime) index, so frames join it
+        empty = pd.DatetimeIndex([], tz=getattr(t.index, "tz", None))
+        return pd.Series(dtype=float, index=empty), 0
     from ..timegrid import interval_hours
 
     step = interval_hours(t.dropna().index)
@@ -179,6 +180,41 @@ class WLSFit:
     pvalues: np.ndarray
 
 
+def _solve(Xw: np.ndarray, yw: np.ndarray) -> tuple:
+    """``(params, (Xw'Xw)^+, rank)`` for the least-squares problem ``Xw b = yw`` (#166).
+
+    The pseudo-inverse first (the minimum-norm solution, statsmodels' way); when its SVD does not
+    converge, ``lstsq`` (LAPACK ``gelsd``, the same minimum-norm solution) with ``pinv(Xw'Xw)``
+    (or its ``lstsq`` solve) for the covariance; then a QR solve, which has no iteration to fail
+    (for a full-rank design). ``LinAlgError`` when every path fails.
+    """
+    n, k = Xw.shape
+    LinAlgError = np.linalg.LinAlgError
+    try:
+        P = np.linalg.pinv(Xw, rcond=1e-15)
+        rank = int(np.linalg.matrix_rank(Xw)) if n else 0
+        return P @ yw, P @ P.T, rank
+    except LinAlgError:
+        pass
+    xtx = Xw.T @ Xw
+    try:
+        params, _res, rank, _sv = np.linalg.lstsq(Xw, yw, rcond=None)
+        try:
+            cov = np.linalg.pinv(xtx, rcond=1e-15)
+        except LinAlgError:  # the minimum-norm inverse of the small Gram matrix, by lstsq
+            cov = np.linalg.lstsq(xtx, np.eye(k), rcond=None)[0]
+        return params, cov, int(rank)
+    except LinAlgError:
+        pass
+    Q, R = np.linalg.qr(Xw)  # may raise LinAlgError (k > n, or a singular R below)
+    d = np.abs(np.diag(R))
+    rank = int((d > d.max(initial=0.0) * max(n, k) * np.finfo(float).eps).sum())
+    if rank < k:
+        raise LinAlgError("least squares did not converge and the design is rank-deficient")
+    Rinv = np.linalg.inv(R)
+    return Rinv @ (Q.T @ yw), Rinv @ Rinv.T, rank
+
+
 def wls(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None, *, has_const: bool = True):
     """Weighted least squares with the statistics CalTRACK selects on (CT-D-6.5, CT-D-8.1).
 
@@ -187,6 +223,11 @@ def wls(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None, *, has_const:
     a constant, ``SS_tot = sum(w (y - ybar_w)^2)``; ``R2_adj = 1 - (n - 1)/(n - rank) (1 - R2)``,
     which is the CalTRACK formula ``1 - (SS_res/(P - c - 1)) / (SS_tot/(P - 1))`` for a design of
     full rank (statsmodels' ``rsquared_adj``). An undefined statistic is NaN.
+
+    The pseudo-inverse's SVD can fail to converge on a finite, full-rank design (LAPACK, seen
+    with numpy 2 on Accelerate; 0.105, #166). The solve then falls back to ``lstsq`` (a different
+    LAPACK driver, the same minimum-norm solution) and then to a QR solve; on a well-conditioned
+    design every path gives the same coefficients. When all three fail ``LinAlgError`` is raised.
     """
     X = np.asarray(X, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -194,9 +235,7 @@ def wls(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None, *, has_const:
     ww = np.ones(n) if w is None else np.asarray(w, dtype=float)
     sw = np.sqrt(ww)
     Xw = X * sw[:, None]
-    pinv = np.linalg.pinv(Xw, rcond=1e-15)
-    params = pinv @ (y * sw)
-    rank = int(np.linalg.matrix_rank(Xw)) if n else 0
+    params, cov_unscaled, rank = _solve(Xw, y * sw)
     fitted = X @ params
     resid = y - fitted
     ss_res = float((ww * resid**2).sum())
@@ -211,7 +250,7 @@ def wls(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None, *, has_const:
         k_const = 1 if has_const else 0
         adj = 1.0 - (n - k_const) / df_resid * (1.0 - r2) if df_resid > 0 else float("nan")
         sigma2 = ss_res / df_resid if df_resid > 0 else float("nan")
-        cov = pinv @ pinv.T * sigma2
+        cov = cov_unscaled * sigma2
         bse = np.sqrt(np.clip(np.diag(cov), 0.0, None))
         tvals = params / bse
     from .stats import _t_two_sided_p

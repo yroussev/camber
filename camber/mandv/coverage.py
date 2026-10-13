@@ -808,10 +808,15 @@ def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverag
     """
     import pandas as pd
 
+    from ._temperature import screen_temperature
     from .towt import hour_of_week
 
     pol = policy or ExtrapolationPolicy()
-    t = np.asarray(temp, dtype=float).ravel()
+    # a temperature the predict-time screen sets to missing (0.105, #168) is a row without a
+    # driver -- excluded and counted by the savings -- not an extrapolation
+    t, _ = screen_temperature(
+        np.asarray(temp, dtype=float).ravel(), getattr(model, "temp_bounds", None)
+    )
     n = len(t)
     rec = getattr(model, "_fit_record", None)
     support = rec.towt if isinstance(rec, _FitRecord) else None

@@ -1329,7 +1329,10 @@
     "GROUPS",
     "MVName",
     "MV_NAMES",
+    "SHORT_CITATIONS",
     "citations",
+    "component_description",
+    "ensemble_description",
     "label",
     "model_label",
     "mv_name"

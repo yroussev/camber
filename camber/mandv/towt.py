@@ -143,6 +143,8 @@ class TOWTModel:
     open_ends: bool = False
     # 0.105 (#162): fitted by weighted least squares (fit_towt(weights=...))
     weighted: bool = False
+    # 0.105 (#168): the fit's temp_bounds (None: the default range), applied again at predict
+    temp_bounds: tuple | None = None
 
     def as_dict(self) -> dict:
         """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model."""
@@ -166,11 +168,16 @@ class TOWTModel:
             d["open_ends"] = True
         if self.weighted:
             d["weighted"] = True
+        if self.temp_bounds is not None:  # 0.105 (#168): only when not the default range
+            from ._temperature import bounds_to_json
+
+            d["temp_bounds"] = bounds_to_json(self.temp_bounds)
         return d
 
     @classmethod
     def from_dict(cls, d: dict) -> TOWTModel:
         """Rebuild a model written by :meth:`as_dict` (a dict from before 0.105 loads too)."""
+        from ._temperature import bounds_from_json as _bounds_from_json
         from .coverage import _FitRecord
 
         occ = d.get("occ_bins")
@@ -185,6 +192,7 @@ class TOWTModel:
             n_temp_screened=int(d.get("n_temp_screened", 0)),
             open_ends=bool(d.get("open_ends", False)),
             weighted=bool(d.get("weighted", False)),
+            temp_bounds=_bounds_from_json(d.get("temp_bounds")),
         )
 
     def coverage(self, index, temp, *, projected=None, policy=None):
@@ -241,9 +249,10 @@ class TOWTModel:
             return self._rows(tow, temp), counts
         if _check_unseen(unseen) == "raise":
             n_rows = int(np.isin(tow, missing).sum())
+            eg = [int(b) for b in sorted(missing)[:5]]  # plain ints, not np.int32(9) (#173)
             raise ValueError(
                 f"cannot project: {len(missing)} hour-of-week bin(s) were never seen at fit "
-                f"({n_rows} of {len(tow)} timestamps), e.g. {sorted(missing)[:5]}. The baseline "
+                f"({n_rows} of {len(tow)} timestamps), e.g. {eg}. The baseline "
                 "does not cover this period's schedule -- refit over a window that does, or "
                 "restrict the projection to covered hours (or predict with unseen='fallback')."
             )
@@ -317,11 +326,16 @@ class TOWTModel:
         A row whose temperature is missing (NaN, or screened out as implausible) predicts NaN
         (0.105, #159). It used to predict the time-of-week level alone, a number with no weather
         in it; :func:`camber.mandv.stats.avoided_energy_savings` now excludes such rows from its
-        sums and counts them in its caveats.
+        sums and counts them in its caveats. The screen is applied here too, with the bounds the
+        model was fitted with (0.105, #168): a temperature outside them predicts NaN, counted as
+        ``n_temp_screened`` (``n_no_temperature`` counts the rows given no temperature at all).
         """
+        from ._temperature import screen_temperature
+
         idx = pd.DatetimeIndex(index)
         tow = hour_of_week(idx)
-        t = np.asarray(temp, dtype="float64")
+        t_in = np.asarray(temp, dtype="float64")
+        t, n_screened = screen_temperature(t_in, self.temp_bounds)
         X, counts = self._design_at(tow, t, _check_unseen(unseen))
         out = X @ self.beta
         n_clipped = 0
@@ -332,7 +346,8 @@ class TOWTModel:
         if not return_counts:
             return out
         counts["n_clipped"] = n_clipped
-        counts["n_no_temperature"] = int((~np.isfinite(t)).sum())
+        counts["n_no_temperature"] = int(np.isnan(t_in).sum())
+        counts["n_temp_screened"] = n_screened
         return out, counts
 
     def covers(self, index) -> bool:
@@ -482,6 +497,7 @@ def fit_towt(
         n_temp_screened=n_screened,
         open_ends=open_ends,
         weighted=w_norm is not None,
+        temp_bounds=None if temp_bounds is None else (float(temp_bounds[0]), float(temp_bounds[1])),
     )
 
 

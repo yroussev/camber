@@ -63,3 +63,25 @@ def screened_caveat(n: int, what: str = "temperature value(s)") -> str:
         f"{n} {what} outside the plausible outdoor range ({lo:g} to {hi:g} degF) were treated as "
         "missing before fitting (a placeholder or sensor fault, not weather)"
     )
+
+
+def bounds_to_json(bounds: tuple | None) -> list | None:
+    """``bounds`` as a JSON-safe list (an infinite end as ``None``); ``None`` stays ``None``, the
+    default range (0.105, #168: a model records the bounds it was fitted with)."""
+    if bounds is None:
+        return None
+    return [float(b) if np.isfinite(b) else None for b in (bounds[0], bounds[1])]
+
+
+def bounds_from_json(v) -> tuple | None:
+    """The inverse of :func:`bounds_to_json`."""
+    if v is None:
+        return None
+    lo, hi = v
+    return (-np.inf if lo is None else float(lo), np.inf if hi is None else float(hi))
+
+
+def fitted_bounds(bounds: tuple | None) -> tuple | None:
+    """The ``temp_bounds`` a fit was given, as a model stores it: ``None`` for the default range,
+    else ``(lo, hi)`` as floats."""
+    return None if bounds is None else (float(bounds[0]), float(bounds[1]))

@@ -331,8 +331,9 @@ def test_backcast_results_restate_the_measured_baseline(site):
     )  # fmt: skip
     a2 = apply_adjustments(bc, [sf])
     assert a2.abs_uncertainty == pytest.approx(bc.abs_uncertainty, rel=1e-3)
+    # 130 degF: far beyond the fit, but inside the plausible range (150 is screened since #168)
     with pytest.raises(ValueError, match="declined"):
-        declined = backcast_savings(mr, np.full(50, 150.0), np.full(50, 500.0), cv_rmse=0.1,
+        declined = backcast_savings(mr, np.full(50, 130.0), np.full(50, 500.0), cv_rmse=0.1,
                                     n_reporting=365, p_reporting=3)  # fmt: skip
         apply_adjustments(declined, [eng])
 

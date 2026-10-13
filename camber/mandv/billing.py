@@ -384,7 +384,8 @@ class BillingSeries:
         Columns ``energy`` (per day), ``oat`` (period mean), ``hdd`` / ``cdd`` (period totals),
         ``days``, ``start``, ``end``, ``estimated`` and ``coverage``; indexed by bill start.
         Bills with less than ``min_coverage`` of their days covered by temperature data, a
-        missing energy value, or negative energy are dropped.
+        missing energy value, or negative energy are dropped; ``attrs["dropped_bills"]`` counts
+        those dropped for temperature (0.105).
 
         ``heating_base_f`` / ``cooling_base_f`` (0.94, #72) give the two legs their own bases
         (each defaults to ``base_f``); the frame's ``attrs`` record the bases its HDD / CDD are
@@ -416,8 +417,11 @@ class BillingSeries:
             & (out["coverage"] >= min_coverage)
             & (out["energy"] >= 0)
         )
+        # 0.105 (#172): bills dropped for temperature coverage, named if nothing is left to fit
+        dropped = int((out["oat"].isna() | ~(out["coverage"] >= min_coverage)).sum())
         out = out[keep]
         out.attrs["billing"] = True
+        out.attrs["dropped_bills"] = dropped
         out.attrs["heating_base_f"] = float(hb)
         out.attrs["cooling_base_f"] = float(cb)
         return out

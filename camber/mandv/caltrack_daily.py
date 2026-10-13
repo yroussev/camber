@@ -45,7 +45,13 @@ import pandas as pd
 
 from . import _caltrack as K
 from ._caltrack import CalTRACKResult, ProjectionView, caltrack_fsu, caltrack_metrics, wls
-from ._temperature import screen_temperature, screened_caveat
+from ._temperature import (
+    bounds_from_json,
+    bounds_to_json,
+    fitted_bounds,
+    screen_temperature,
+    screened_caveat,
+)
 
 __all__ = [
     "MODEL_TYPES",
@@ -85,12 +91,19 @@ def _dedupe_or_raise(s: pd.Series, timezone: str | None, what: str) -> pd.Series
     dup = idx[idx.duplicated()].unique()
     from .intervalfit import repeated_hour_weights
 
+    if not timezone:
+        # without a zone a fall-back hour cannot be told from a real duplicate (0.105, #170)
+        raise ValueError(
+            f"{what} has {len(dup)} duplicate timestamp(s) and no timezone was given, so a "
+            "daylight-saving fall-back hour cannot be told from a real duplicate (possibly more "
+            "than one meter in one series, CalTRACK M#L198); pass the site's timezone= (an IANA "
+            "zone) to average the repeated hour's two readings"
+        )
     w = repeated_hour_weights(dup, timezone)
     if w is None or not np.all(w == 2.0):
         raise ValueError(
             f"{what} has {len(dup)} duplicate timestamp(s) outside a daylight-saving fall-back "
-            "hour: possibly more than one meter in one series (CalTRACK M#L198); pass the site's "
-            "timezone= if they are the repeated hour"
+            f"hour in {timezone}: possibly more than one meter in one series (CalTRACK M#L198)"
         )
     return s.groupby(level=0).mean()
 
@@ -662,6 +675,8 @@ class CalTRACKDailyModel:
     metrics: dict = field(default_factory=dict)
     totals_metrics: dict = field(default_factory=dict)
     temperature_range: tuple | None = None
+    # 0.105 (#168): the fit's temp_bounds (None: the default range), applied again at predict
+    temp_bounds: tuple | None = None
     granularity = "daily"
 
     @property
@@ -685,27 +700,49 @@ class CalTRACKDailyModel:
         out = self.intercept + self.beta_hdd * self._hdd(t) + self.beta_cdd * self._cdd(t)
         return np.where(np.isfinite(t), out, np.nan)
 
-    def predict(self, index, temp, *, timezone: str | None = None, disaggregate: bool = False):
+    def predict(
+        self,
+        index,
+        temp,
+        *,
+        timezone: str | None = None,
+        disaggregate: bool = False,
+        clip_negative: bool = False,
+        return_counts: bool = False,
+    ):
         """Predicted usage per day for the days of ``index`` (CT-D-10.1, CT-D-10.2, CT-D-10.5).
 
         ``temp`` is a temperature series (hourly or finer, or daily means), prepared like the
-        baseline's (:func:`daily_temperature`), or an array of daily means aligned with ``index``.
-        A day without a valid mean temperature predicts NaN (CT-D-10.3). With ``disaggregate``
-        returns a frame of ``predicted``, ``base_load``, ``heating_load`` and ``cooling_load``.
+        baseline's (:func:`daily_temperature`, with the ``temp_bounds`` the model was fitted
+        with), or an array of daily means aligned with ``index``, screened to the same bounds
+        (0.105, #168). A day without a valid mean temperature predicts NaN (CT-D-10.3). With
+        ``disaggregate`` returns a frame of ``predicted``, ``base_load``, ``heating_load`` and
+        ``cooling_load``. ``clip_negative=True`` (0.105, #171; opt-in) sets a negative
+        ``predicted`` to zero after the linear prediction; ``return_counts=True`` also returns
+        ``{"n_clipped", "n_temp_screened"}``.
         """
         days = pd.DatetimeIndex(index).normalize()
         if isinstance(temp, pd.Series) and isinstance(temp.index, pd.DatetimeIndex):
-            dt = daily_temperature(temp, timezone=timezone, eemeter_compat=self.eemeter_compat)
+            dt = daily_temperature(
+                temp,
+                timezone=timezone,
+                eemeter_compat=self.eemeter_compat,
+                temp_bounds=self.temp_bounds,
+            )
+            n_screened = int(dt.attrs.get("n_temp_screened", 0))
             t = dt["temp"].reindex(days).to_numpy(float)
         else:
             t = np.asarray(temp, dtype=float)
             if len(t) != len(days):
                 raise ValueError("temp must align with index")
+            t, n_screened = screen_temperature(t, self.temp_bounds)
         pred = pd.Series(self.usage_per_day(t), index=days, name="predicted")
+        pred, n_clipped = _clip(pred, clip_negative)
+        counts = {"n_clipped": n_clipped, "n_temp_screened": n_screened}
         if not disaggregate:
-            return pred
+            return (pred, counts) if return_counts else pred
         fin = np.isfinite(t)
-        return pd.DataFrame(
+        out = pd.DataFrame(
             {
                 "predicted": pred,
                 "base_load": np.where(fin, self.intercept, np.nan),
@@ -714,6 +751,7 @@ class CalTRACKDailyModel:
             },
             index=days,
         )
+        return (out, counts) if return_counts else out
 
     def as_dict(self) -> dict:
         """A JSON-safe dict; :meth:`from_dict` rebuilds the model."""
@@ -736,6 +774,12 @@ class CalTRACKDailyModel:
             "temperature_range": None
             if self.temperature_range is None
             else list(self.temperature_range),
+            # 0.105 (#168): only when not the default range, so a default dict is unchanged
+            **(
+                {}
+                if self.temp_bounds is None
+                else {"temp_bounds": bounds_to_json(self.temp_bounds)}
+            ),
         }
 
     @classmethod
@@ -757,6 +801,7 @@ class CalTRACKDailyModel:
             metrics=dict(d.get("metrics") or {}),
             totals_metrics=dict(d.get("totals_metrics") or {}),
             temperature_range=None if tr is None else tuple(tr),
+            temp_bounds=bounds_from_json(d.get("temp_bounds")),
         )
 
 
@@ -769,18 +814,33 @@ class CalTRACKBillingModel(CalTRACKDailyModel):
     granularity = "billing"
 
     def predict(  # billing predicts per bill (``periods``), not per day
-        self, periods, temp, *, timezone: str | None = None, disaggregate: bool = False
+        self,
+        periods,
+        temp,
+        *,
+        timezone: str | None = None,
+        disaggregate: bool = False,
+        clip_negative: bool = False,
+        return_counts: bool = False,
     ):
         """Predicted usage per bill (CT-D-10.1, CT-D-10.2): ``n_days * (mu + beta_H HDD_p +
         beta_C CDD_p)``, the degree days the mean over the bill's days with a valid temperature
         (so missing days count at that mean). A bill whose hourly temperature covers under 90 %
         of it predicts NaN (CT-D-3.3, E11). ``periods`` is a :class:`~camber.mandv.billing.
         BillingSeries` or a frame with ``start`` and ``end`` (exclusive). Indexed by ``start``.
+        Temperatures are screened to the bounds the model was fitted with (0.105, #168);
+        ``clip_negative`` and ``return_counts`` as :meth:`CalTRACKDailyModel.predict` (#171).
         """
         if isinstance(periods, pd.DataFrame) and "energy" not in periods.columns:
             periods = periods.assign(energy=np.nan)
         f = _billing_frame(periods)
-        bt = billing_temperature(f, temp, timezone=timezone, eemeter_compat=self.eemeter_compat)
+        bt = billing_temperature(
+            f,
+            temp,
+            timezone=timezone,
+            eemeter_compat=self.eemeter_compat,
+            temp_bounds=self.temp_bounds,
+        )
         rows = list(bt["day_temps"])
         hdd = (
             _dd(rows, self.heating_balance_point, "hdd")
@@ -798,10 +858,13 @@ class CalTRACKBillingModel(CalTRACKDailyModel):
         cool = self.beta_cdd * cdd * n_days
         ok = bt["n_days_kept"].to_numpy() > 0
         pred = np.where(ok, base + heat + cool, np.nan)
+        pred, n_clipped = _clip(pred, clip_negative)
+        counts = {"n_clipped": n_clipped, "n_temp_screened": int(bt.attrs["n_temp_screened"])}
         idx = pd.DatetimeIndex(f["start"], name="start")
         if not disaggregate:
-            return pd.Series(pred, index=idx, name="predicted")
-        return pd.DataFrame(
+            s = pd.Series(pred, index=idx, name="predicted")
+            return (s, counts) if return_counts else s
+        out = pd.DataFrame(
             {
                 "predicted": pred,
                 "base_load": np.where(ok, base, np.nan),
@@ -811,6 +874,21 @@ class CalTRACKBillingModel(CalTRACKDailyModel):
             },
             index=idx,
         )
+        return (out, counts) if return_counts else out
+
+
+def _clip(pred, clip: bool) -> tuple:
+    """``(pred, n_clipped)``: negatives set to zero when ``clip`` (NaN stays NaN; 0.105, #171)."""
+    if not clip:
+        return pred, 0
+    arr = np.asarray(pred, dtype=float)
+    neg = arr < 0
+    n = int(neg.sum())
+    if not n:
+        return pred, 0
+    if isinstance(pred, pd.Series):
+        return pred.mask(neg, 0.0), n
+    return np.where(neg, 0.0, arr), n
 
 
 def _model_from(cand, cls, **kw):
@@ -1108,6 +1186,7 @@ def fit_caltrack_daily(
         bp_step=step,
         n=len(upd),
         temperature_range=(float(T.min()), float(T.max())),
+        temp_bounds=fitted_bounds(temp_bounds),
     )
     pred = model.usage_per_day(T)
     model.metrics = caltrack_metrics(upd, pred, model.num_parameters)
@@ -1400,6 +1479,7 @@ def fit_caltrack_billing(
         bp_step=step,
         n=len(upd),
         temperature_range=(float(allT.min()), float(allT.max())),
+        temp_bounds=fitted_bounds(temp_bounds),
     )
     pred = _billing_upd(model, dd_rows)
     model.metrics = caltrack_metrics(upd, pred, model.num_parameters)

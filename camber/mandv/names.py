@@ -16,6 +16,9 @@ registry.
 standard counterpart; its ``differences`` say what it is. A non-empty ``differences`` on a row
 with a standard name lists where CAMBER's implementation departs from the cited source -- report
 the result under the standard name *with* those differences, or under the CAMBER label.
+``differences`` are descriptions only, safe to paste into a report verbatim (0.105, #174); how to
+cite lives in ``docs/MANDV.md``, "Naming and citations". :func:`ensemble_description` builds the
+"Ensemble approach combining ..." sentence for a prediction that combines several models.
 
 Provisional (0.105): the row set and wording may change before 1.0; the ``kind`` codes will not.
 Dependency-free.
@@ -29,10 +32,13 @@ __all__ = [
     "MVName",
     "MV_NAMES",
     "GROUPS",
+    "SHORT_CITATIONS",
     "mv_name",
     "label",
     "model_label",
     "citations",
+    "component_description",
+    "ensemble_description",
 ]
 
 _G14 = "ashrae-g14-2014"
@@ -177,7 +183,7 @@ _ROWS = (
         (_G14, _IMT),
         "camber.mandv.models.best_model",
         "Fits 2P, 3PC, 3PH, 4P and 5P and keeps the lowest BIC, n ln(SSE/n) + p ln(n), with every "
-        "change point counted in p. Report the kind it chose by that kind's standard name.",
+        "change point counted in p; the model it returns is one of those kinds.",
         "change-point model",
     ),
     # --- degree-day models ----------------------------------------------------------------------
@@ -220,8 +226,7 @@ _ROWS = (
         "Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean "
         "temperature, about one balance point shared by both legs, so a shoulder month's swing "
         "days are undercounted. The searched balance point is counted in p (since 0.105). "
-        "Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). "
-        "For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC).",
+        "Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases).",
         "degree-day model",
     ),
     # --- other baseline models ------------------------------------------------------------------
@@ -317,8 +322,7 @@ _ROWS = (
         (_SEP,),
         "camber.mandv.methods.select_method",
         "Proposes a method in the SEP order and ranks models by SEP validity then adjusted R² "
-        "(the DOE EnPI tool's order); it only proposes, a reported saving needs a declared "
-        "method.",
+        "(the DOE EnPI tool's order). It proposes a method; it computes no saving itself.",
         "savings method",
     ),
     # --- IPMVP options --------------------------------------------------------------------------
@@ -471,6 +475,22 @@ _ROWS = (
 #: every name, by code (table order)
 MV_NAMES: dict = {r.code: r for r in _ROWS}
 
+#: short citation texts by :mod:`camber.references` id (the docs table's Citation column, and
+#: :func:`component_description`)
+SHORT_CITATIONS: dict = {
+    _G14: "ASHRAE G14-2014",
+    _IMT: "Kissock et al. 2003 (RP-1050 IMT)",
+    _PRISM: "Fels 1986 (PRISM)",
+    _TOWT: "Mathieu et al. 2011",
+    _RMV2: "LBNL RMV2.0",
+    "granderson-2015-baselines": "Granderson et al. 2015",
+    "lbnl-187225": "LBNL-187225",
+    "lbnl-6963e": "LBNL-6963E",
+    _CALTRACK: "CalTRACK 2.0",
+    _IPMVP: "IPMVP Core Concepts 2022",
+    _SEP: "SEP 50001 M&V Protocol 2019",
+}
+
 # labels for a 5P / 5PZ fit that fell back to a straight line (kind kept, no change points)
 _FALLBACK = {"5P": "2P (5P fallback)", "5PZ": "2P (5P zero-base fallback)"}
 # serialised model types that have no ``kind`` of their own, or whose kind is not the registry's
@@ -534,3 +554,91 @@ def citations(code: str) -> list:
     from ..references import REFERENCES
 
     return [REFERENCES[i] for i in mv_name(code).citation_id]
+
+
+# --------------------------------------------------------------------------- ensembles (#174)
+def _code_and_note(component) -> tuple:
+    """``(code, note)`` for a code, an :class:`MVName`, a ``(code, note)`` pair, a fitted model
+    or its ``as_dict`` payload. A 5P / 5PZ that fell back to a line is described as the 2P it is."""
+    if isinstance(component, MVName):
+        return component.code, None
+    if isinstance(component, tuple) and len(component) == 2 and isinstance(component[0], str):
+        return component[0], component[1]
+    if isinstance(component, str):
+        return component, None
+    if isinstance(component, dict):
+        typ = str(component.get("type") or "")
+        kind, cps = component.get("kind"), component.get("change_points")
+    else:
+        typ = type(component).__name__
+        kind = getattr(component, "kind", None)
+        cps = getattr(component, "change_points", None)
+    if typ in _TYPE_CODES:
+        return _TYPE_CODES[typ], None
+    if kind is None:
+        raise ValueError(f"cannot name an ensemble component of type {typ!r}")
+    if kind in _FALLBACK and cps is not None and len(tuple(cps)) == 0:
+        return "2P", _FALLBACK[kind].split("(", 1)[1].rstrip(")")
+    return str(kind), None
+
+
+def _lower_first(name: str) -> str:
+    """``name`` with its first letter lowercased for use mid-sentence, unless the first word is
+    an acronym or a proper name (any capital after its first letter: "TOWT", "CalTRACK")."""
+    first = name.split(" ", 1)[0]
+    if not first or any(c.isupper() for c in first[1:]):
+        return name
+    return name[0].lower() + name[1:]
+
+
+def component_description(component, note: str | None = None, *, cite: str = "primary") -> str:
+    """One model as an ensemble names it: its standard name (its CAMBER label when it has none),
+    with an indefinite article, a note, and its citation in square brackets (0.105, #174).
+
+    ``component`` is a registry code, an :class:`MVName`, a fitted model or its ``as_dict``
+    payload. ``note`` is added after the name; a row that has a standard name and a CAMBER label
+    (TOWT) gets ``"CAMBER variant"``. ``cite`` is ``"primary"`` (the row's first citation),
+    ``"all"`` or ``"none"``. E.g. ``component_description("3PC")`` is ``"a three-parameter
+    cooling change-point model (3PC) [ASHRAE G14-2014]"``.
+    """
+    if cite not in ("primary", "all", "none"):
+        raise ValueError(f"cite must be 'primary', 'all' or 'none', got {cite!r}")
+    code, auto_note = _code_and_note(component)
+    row = mv_name(code)
+    name = _lower_first(row.standard_name or row.label)
+    notes = [n for n in (note, auto_note) if n]
+    if row.standard_name and "CAMBER" in row.label and not notes:
+        notes.append("CAMBER variant")
+    text = ("an " if name[:1].lower() in "aeiou" else "a ") + name
+    if notes:
+        text += ", " + ", ".join(notes)
+    ids = () if cite == "none" else row.citation_id[:1] if cite == "primary" else row.citation_id
+    if ids:
+        text += " [" + "; ".join(SHORT_CITATIONS.get(i, i) for i in ids) + "]"
+    return text
+
+
+def ensemble_description(components, rule: str, *, cite: str = "primary") -> str:
+    """The sentence that names a prediction combining several models (0.105, #174).
+
+    ``"Ensemble approach combining <component>, <component> and <component>; <rule>."`` -- each
+    component by :func:`component_description` (its standard name and citation, never a CAMBER
+    nickname), then the combination ``rule`` exactly as applied: the weights, or how one model
+    is selected. This is the rule of ``docs/MANDV.md``, "Naming and citations". ``components``
+    are registry codes, :class:`MVName` rows, ``(code, note)`` pairs, fitted models or their
+    ``as_dict`` payloads (at least two); ``rule`` must not be empty. For example::
+
+        ensemble_description(["3PC", "towt"], "the prediction is the unweighted mean of the two")
+
+    gives "Ensemble approach combining a three-parameter cooling change-point model (3PC) [ASHRAE
+    G14-2014] and a Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0),
+    CAMBER variant [Mathieu et al. 2011]; the prediction is the unweighted mean of the two."
+    """
+    parts = [component_description(c, cite=cite) for c in components]
+    if len(parts) < 2:
+        raise ValueError("an ensemble combines at least two models")
+    rule = (rule or "").strip().rstrip(".")
+    if not rule:
+        raise ValueError("give the combination rule: the weights, or how a model is selected")
+    joined = ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"Ensemble approach combining {joined}; {rule}."

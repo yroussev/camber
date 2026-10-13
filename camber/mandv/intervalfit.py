@@ -175,7 +175,11 @@ def daily_energy_vs_temp(
     its clock: the autumn fall-back day sums 25 hours of energy (the repeated hour counts twice,
     see :func:`repeated_hour_weights`) and its mean temperature weights that hour twice; the
     spring-forward day has 23 hours (its skipped hour holds no sample). Only the fall-back days
-    change; without ``timezone`` the frame is exactly as before.
+    change. Without ``timezone`` duplicate timestamps are one hour each (0.105, #169): energy and
+    temperature are averaged per stamp, so a repeated fall-back hour no longer counts twice, a
+    :class:`camber.tsparse.TimezoneWarning` says how many were merged and
+    ``attrs["n_duplicate_stamps"]`` counts them, as :func:`hourly_energy_vs_temp` does (#158).
+    Data without duplicates is unchanged.
     """
     from .billing import BillingSeries, as_billing_series, is_billing_like
 
@@ -185,6 +189,10 @@ def daily_energy_vs_temp(
         out.attrs["billing"] = True
         out.attrs["n_temp_screened"] = n_screened
         return out
+    n_dup = 0
+    if not timezone:
+        # 0.105 (#169): a repeated stamp is one hour, as on the hourly path (#158)
+        rate, oat, n_dup = _merge_duplicates(rate, oat)
     if rate_is_energy_rate:
         e = rate_to_energy(rate, "D", timezone=timezone)
     else:
@@ -200,6 +208,7 @@ def daily_energy_vs_temp(
     df.attrs["dropped_days"] = dropped
     df.attrs["min_coverage"] = float(min_coverage)
     df.attrs["n_temp_screened"] = n_screened
+    df.attrs["n_duplicate_stamps"] = n_dup
     return df
 
 
@@ -335,6 +344,27 @@ def _on_zone_clock(s: pd.Series, timezone: str) -> tuple:
     return regularize(out, dedupe="mean"), int(lone.sum())
 
 
+def _merge_duplicates(rate: pd.Series, oat: pd.Series) -> tuple:
+    """``(rate, oat, n_dup)`` with duplicate timestamps averaged into one each, for data without a
+    site timezone (0.105, #158 hourly, #169 daily). ``n_dup`` counts the merged energy stamps; a
+    :class:`camber.tsparse.TimezoneWarning` says how many were merged. Unchanged when none."""
+    n_dup = int(pd.DatetimeIndex(rate.index).duplicated().sum())
+    n_dup_t = int(pd.DatetimeIndex(oat.index).duplicated().sum())
+    if not (n_dup or n_dup_t):
+        return rate, oat, 0
+    from ..tsparse import TimezoneWarning
+
+    warnings.warn(
+        f"{max(n_dup, n_dup_t)} duplicate timestamp(s) (a daylight-saving fall-back hour, "
+        "or overlapping exports) were averaged into one hour each because no site "
+        "timezone was given; pass timezone='<IANA zone>' (config: source.timezone) to "
+        "keep both real hours of a fall-back",
+        TimezoneWarning,
+        stacklevel=3,
+    )
+    return regularize(rate, dedupe="mean"), regularize(oat, dedupe="mean"), n_dup
+
+
 def hourly_energy_vs_temp(
     rate: pd.Series,
     oat: pd.Series,
@@ -369,21 +399,7 @@ def hourly_energy_vs_temp(
         rate, n_copied = _on_zone_clock(rate, timezone)
         oat, _ = _on_zone_clock(oat, timezone)
     else:
-        n_dup = int(pd.DatetimeIndex(rate.index).duplicated().sum())
-        n_dup_t = int(pd.DatetimeIndex(oat.index).duplicated().sum())
-        if n_dup or n_dup_t:
-            from ..tsparse import TimezoneWarning
-
-            warnings.warn(
-                f"{max(n_dup, n_dup_t)} duplicate timestamp(s) (a daylight-saving fall-back hour, "
-                "or overlapping exports) were averaged into one hour each because no site "
-                "timezone was given; pass timezone='<IANA zone>' (config: source.timezone) to "
-                "keep both real hours of a fall-back",
-                TimezoneWarning,
-                stacklevel=2,
-            )
-            rate = regularize(rate, dedupe="mean")
-            oat = regularize(oat, dedupe="mean")
+        rate, oat, n_dup = _merge_duplicates(rate, oat)
     if rate_is_energy_rate:
         e = rate_to_energy(rate, "1h")
     else:

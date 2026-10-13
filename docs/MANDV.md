@@ -69,7 +69,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 | 4P | `4P`, `mandv.models.fit_model` | Four-parameter change-point model (4P) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Change points grid-searched over 40 points between the 5th and 95th temperature percentiles, slopes by least squares at each (the RP-1050 approach). `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
 | 5P | `5P`, `mandv.models.fit_model` | Five-parameter change-point model (5P) | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Both change points grid-searched on the same 40-point grid, the dead-band at least one grid step wide. When no dead-band fits, the fit falls back to a 2P line and keeps kind "5P" with no change points; it is then labelled "2P (5P fallback)". `best_model` chooses among the kinds by BIC, a CAMBER choice (G14 and the IMT do not prescribe a selection criterion). |
 | 5P heating and cooling, zero base (CAMBER) | `5PZ`, `mandv.models.fit_model` | — | — | CAMBER extension, not a G14 / IMT model: the intercept is fixed at zero (no base load), so p counts the slope(s) and change point(s) only. Opt-in (not in `best_model`'s default set). Falls back to a 2P line (with an intercept) like 5P: "2P (5P zero-base fallback)". |
-| daily change-point (2P–5P, BIC) | `mandv.models.best_model` | Change-point regression model (ASHRAE Guideline 14 / RP-1050 IMT), selected by BIC | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Fits 2P, 3PC, 3PH, 4P and 5P and keeps the lowest BIC, n ln(SSE/n) + p ln(n), with every change point counted in p. Report the kind it chose by that kind's standard name. |
+| daily change-point (2P–5P, BIC) | `mandv.models.best_model` | Change-point regression model (ASHRAE Guideline 14 / RP-1050 IMT), selected by BIC | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Fits 2P, 3PC, 3PH, 4P and 5P and keeps the lowest BIC, n ln(SSE/n) + p ln(n), with every change point counted in p; the model it returns is one of those kinds. |
 
 **Degree-day models**
 
@@ -78,7 +78,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 | Degree-day heating | `DD-H`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating model, PRISM heating-only form | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Daily degree-days summed over each bill, the base chosen from a grid by days-weighted least squares with a profile-likelihood range (`select_bases`); with a numeric `base_f` the base is fixed (a fixed-base degree-day model, base not counted in p). |
 | Degree-day cooling | `DD-C`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | The cooling analogue of DD-H (PRISM's original model is heating-only); same base search. |
 | Degree-day heating and cooling | `DD-HC`, `mandv.basetemp.fit_bill_degree_day` | Variable-base degree-day (VBDD) heating-and-cooling model | [Fels 1986 (PRISM)](https://doi.org/10.1016/0378-7788(86)90003-4); [Kissock et al. 2003 (RP-1050 IMT)](https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451) | Separate heating and cooling bases (heating base no higher than the cooling base), each searched on its own grid; p counts both fitted bases. |
-| Degree-day on period-mean temperature (CAMBER) | `degreeday`, `mandv.degreeday.fit_mean_temp_degree_day` | — | — | Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean temperature, about one balance point shared by both legs, so a shoulder month's swing days are undercounted. The searched balance point is counted in p (since 0.105). Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). For VBDD on bills use `basetemp` (DD-H / DD-C / DD-HC). |
+| Degree-day on period-mean temperature (CAMBER) | `degreeday`, `mandv.degreeday.fit_mean_temp_degree_day` | — | — | Not a variable-base degree-day (PRISM) model: degree-days come from each period's mean temperature, about one balance point shared by both legs, so a shoulder month's swing days are undercounted. The searched balance point is counted in p (since 0.105). Renamed in 0.105 from `fit_degree_day` / `DegreeDayModel` (deprecated aliases). |
 
 **Other baseline models**
 
@@ -97,7 +97,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 | Standard conditions (normalized savings) | `standard_conditions`, `mandv.methods.standard_conditions_savings` | Standard conditions method (SEP 50001 M&V Protocol §6.2.3); IPMVP normalized savings | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [IPMVP Core Concepts 2022](https://evo-world.org/en/products-services-mainmenu-en/protocols/ipmvp) | — |
 | Chaining | `chaining`, `mandv.methods.chained_savings` | Chaining method (SEP 50001 M&V Protocol §6.2.4) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | — |
 | Sequential chain (CAMBER extension) | `mandv.methods.sequential_chain` | — | — | A multi-link chain; the SEP Protocol defines exactly one intermediate period. |
-| Method proposal (SEP order) | `auto`, `mandv.methods.select_method` | — | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | Proposes a method in the SEP order and ranks models by SEP validity then adjusted R² (the DOE EnPI tool's order); it only proposes, a reported saving needs a declared method. |
+| Method proposal (SEP order) | `auto`, `mandv.methods.select_method` | — | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol) | Proposes a method in the SEP order and ranks models by SEP validity then adjusted R² (the DOE EnPI tool's order). It proposes a method; it computes no saving itself. |
 
 **IPMVP options**
 
@@ -183,8 +183,9 @@ model_label(model)  # a fitted model's label, e.g. '2P (5P fallback)'
 ```
 
 - **Name the fitted kind, not the search.** `best_model` reports the kind it chose; cite that
-  kind ("three-parameter cooling change-point model (3PC), ASHRAE Guideline 14 / RP-1050 IMT,
-  selected among 2P–5P by BIC"), not "CAMBER best model".
+  kind by its own standard name ("three-parameter cooling change-point model (3PC), ASHRAE
+  Guideline 14 / RP-1050 IMT, selected among 2P–5P by BIC"), not "CAMBER best model".
+  `model_label(model)` and `mv_name(model.kind)` give the chosen kind's row.
 - **State the differences.** A row with differences is reported under the standard name *with*
   them ("TOWT (Mathieu et al. 2011), CAMBER variant: quantile-spaced temperature knots,
   hour-of-week bins, load-median occupancy"), or under the CAMBER label alone.
@@ -195,11 +196,30 @@ model_label(model)  # a fitted model's label, e.g. '2P (5P fallback)'
   what they fit. `caltrack_daily_savings`, `caltrack_billing_savings` and
   `caltrack_hourly_savings` are CalTRACK 2.0 Daily, Billing and Hourly.
 - **An ensemble is its components.** A prediction that combines several models is described as
-  "Ensemble approach combining" each component's standard name, then the combination rule, for
-  example: *"Ensemble approach combining a three-parameter cooling change-point model (3PC;
-  ASHRAE Guideline 14) and a Time-of-Week-and-Temperature model (TOWT, CAMBER variant; Mathieu et
-  al. 2011); the prediction is the unweighted mean of the two."* Give the weights or the selection
-  rule exactly; a name such as "CAMBER ensemble" alone is not a model type.
+  "Ensemble approach combining" each component's standard name, then the combination rule.
+  `ensemble_description(components, rule)` in `camber.mandv.names` builds the sentence from the
+  registry rows (codes, fitted models or their `as_dict` payloads), so the names and citations
+  match the table above:
+
+  ```python
+  from camber.mandv.names import ensemble_description
+
+  ensemble_description(["3PC", "towt"], "the prediction is the unweighted mean of the two")
+  # 'Ensemble approach combining a three-parameter cooling change-point model (3PC) [ASHRAE
+  # G14-2014] and a Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL
+  # RMV2.0), CAMBER variant [Mathieu et al. 2011]; the prediction is the unweighted mean of the
+  # two.'
+  ```
+
+  Give the weights or the selection rule exactly; a name such as "CAMBER ensemble" alone is not
+  a model type. `cite="all"` lists every citation of each row, `cite="none"` none.
+- **Choose the variable-base form for bills.** The period-mean degree-day model (`degreeday`) is
+  not a variable-base degree-day model; for VBDD on bills use `mandv.basetemp` (DD-H, DD-C,
+  DD-HC).
+- **Differences paste verbatim.** Each row's `differences` text only describes where CAMBER
+  departs from the cited standard (no instructions), so it can go into a report as it is.
+- **A proposal is not a method.** `select_method` (`auto`) proposes a method; a reported saving
+  names the method it declared.
 - **Cite the method too.** The savings method has its own name (forecast / avoided energy,
   backcast, standard conditions / normalized savings, chaining; SEP 50001 M&V Protocol §6.2,
   IPMVP), and so does the uncertainty band (ASHRAE Guideline 14 Annex B for the measured kernel,
@@ -1079,6 +1099,14 @@ A row with no temperature has no weather to project. `TOWTModel.predict` used to
 its time-of-week level alone; it now returns NaN for it. `stats.avoided_energy_savings` leaves the
 row out of its sums, as before, and its caveat now says how many rows had no finite projection.
 
+**At prediction time too (#168).** A fitted model screens the temperatures it is asked to predict
+with the bounds it was fitted with: `TOWTModel`, `ChangePointModel`, `MeanTempDegreeDayModel`
+and the CalTRACK Daily, Billing and Hourly models predict NaN for a value outside them instead of
+extrapolating to it, and `return_counts=True` counts it as `n_temp_screened`. The coverage check
+treats such a row as a row without a driver, not as an extrapolation, so one placeholder cannot
+make a saving "severe". A model records `temp_bounds` in its `as_dict` only when they are not the
+default range; a model stored before 0.105 predicts with the default range.
+
 ## Why no model could be fit (0.105, #160)
 
 `best_model` tries each kind in `kinds` and keeps the lowest BIC. When none can be fit it used
@@ -1096,6 +1124,15 @@ tried wins).
 degree-day model at the bills' bases, raises the same `ModelFitError` when neither can be fit:
 the change-point kinds as above, then the degree-day kind with its error or the caveat that
 refused it (a slope of the wrong sign).
+
+**When no points were left (#172).** If the day-coverage rule, the temperature screen or missing
+values left too few points to fit, the message says so after the list: "only 0 usable point(s)
+remained upstream of the fit: 20 day(s) dropped by the day-coverage rule (min_coverage)", or
+temperature values screened, or rows missing a temperature or energy value. The exception's
+`causes` holds the counts (`None` when points were not the problem). `best_model` counts what it
+screens and finds missing itself; `upstream=frame.attrs` adds the counts of the frame builder
+(`dropped_days`, `n_temp_screened`; a pandas `T` brings its own `attrs`), and the billing
+selector passes the bills frame's `attrs` (`dropped_bills`).
 
 ## TOWT options (0.105, #154, #155, #162)
 
@@ -1126,7 +1163,8 @@ declined as severe extrapolation by the default policy.
 
 **Non-negative predictions (#155).** `predict(..., clip_negative=True)` sets negative predictions
 to zero, as LBNL's RMV2.0 does for its prediction period; `ChangePointModel.predict` and
-`MeanTempDegreeDayModel.predict` take the same option with `return_counts=True` for the count.
+`MeanTempDegreeDayModel.predict` take the same option with `return_counts=True` for the count, and
+so do the CalTRACK Daily, Billing and Hourly predicts (#171).
 Clipping comes after the linear projection `X @ beta`: the projection variance and the exact
 kernel are computed on the unclipped projection, and a bound TOWT's savings caveat says how many
 projections were clipped.
@@ -1734,8 +1772,13 @@ Every savings function returns a `CalTRACKResult`:
 - `candidates`: every candidate model with its status (Daily and Billing).
 
 Inputs follow CAMBER's conventions. Naive timestamps are the site's wall clock, and `timezone=`
-names it. Temperatures are °F and screened to the plausible outdoor range. A duplicate timestamp
-that is not a fall-back hour raises, since it may be two meters in one series.
+names it. Temperatures are °F and screened to the plausible outdoor range, at fit and at
+prediction. A duplicate timestamp that is not a fall-back hour raises, since it may be two meters
+in one series; without `timezone=` a fall-back hour cannot be told from a real duplicate, so any
+duplicate raises and the message asks for the zone (#170). A month segment whose least-squares
+solve fails is `unfit` with a reason, and the other months are still fitted (#166). Hourly
+savings decline when no reporting hour can be predicted (#167). Every CalTRACK `predict` takes
+`clip_negative=True` (#171).
 
 **Daily and Billing.**
 

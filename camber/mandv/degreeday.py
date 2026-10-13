@@ -61,27 +61,39 @@ class MeanTempDegreeDayModel:
     caveats: list = field(default_factory=list)
     # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
     n_temp_screened: int = 0
+    # 0.105 (#168): the fit's temp_bounds (None: the default range), applied again at predict
+    temp_bounds: tuple | None = None
 
     def predict(self, tavg, *, clip_negative: bool = False, return_counts: bool = False):
         """Predicted energy for period average temperature(s) ``tavg``.
 
+        A temperature outside the bounds the model was fitted with predicts NaN (0.105, #168).
         ``clip_negative`` / ``return_counts`` (0.105, #155; opt-in) as
         :meth:`camber.mandv.models.ChangePointModel.predict`.
         """
-        hdd, cdd = degree_days(tavg, self.balance_point)
+        from ._temperature import screen_temperature
+
+        t, n_screened = screen_temperature(np.asarray(tavg, dtype=float), self.temp_bounds)
+        hdd, cdd = degree_days(t, self.balance_point)
         out = self.base + self.heating_slope * hdd + self.cooling_slope * cdd
         if not (clip_negative or return_counts):
             return out
         from .models import _clip_negative
 
-        return _clip_negative(out, clip_negative, return_counts)
+        res = _clip_negative(out, clip_negative, return_counts)
+        if return_counts:
+            res[1]["n_temp_screened"] = n_screened
+        return res
 
     def coverage(self, tavg, *, projected=None, policy=None):
         """How well the fitted temperature range covers ``tavg`` (a
-        :class:`~camber.mandv.coverage.Coverage`)."""
+        :class:`~camber.mandv.coverage.Coverage`); a temperature the predict-time screen sets to
+        missing is a row without a driver (0.105, #168)."""
+        from ._temperature import screen_temperature
         from .coverage import _linear_coverage
 
-        return _linear_coverage(self, tavg, projected=projected, policy=policy)
+        t, _ = screen_temperature(np.asarray(tavg, dtype=float), self.temp_bounds)
+        return _linear_coverage(self, t, projected=projected, policy=policy)
 
     def as_dict(self) -> dict:
         d = {
@@ -95,6 +107,10 @@ class MeanTempDegreeDayModel:
             d["caveats"] = list(self.caveats)
         if self.n_temp_screened:  # 0.105 (#159): only when the screen removed something
             d["n_temp_screened"] = int(self.n_temp_screened)
+        if self.temp_bounds is not None:  # 0.105 (#168): only when not the default range
+            from ._temperature import bounds_to_json
+
+            d["temp_bounds"] = bounds_to_json(self.temp_bounds)
         d["fit"] = self.fit.as_dict() if hasattr(self.fit, "as_dict") else self.fit
         from .coverage import _FitRecord
 
@@ -106,6 +122,7 @@ class MeanTempDegreeDayModel:
     @classmethod
     def from_dict(cls, d: dict) -> MeanTempDegreeDayModel:
         """Rebuild a model written by :meth:`as_dict` (unknown ``fit`` keys are ignored)."""
+        from ._temperature import bounds_from_json
         from .coverage import _FitRecord
         from .stats import FitStats
 
@@ -123,6 +140,7 @@ class MeanTempDegreeDayModel:
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
             caveats=list(d.get("caveats") or []),
             n_temp_screened=int(d.get("n_temp_screened", 0)),
+            temp_bounds=bounds_from_json(d.get("temp_bounds")),
         )
 
 
@@ -191,7 +209,7 @@ def fit_mean_temp_degree_day(
     """
     if kind not in ("heating", "cooling", "both"):
         raise ValueError("kind must be 'heating', 'cooling', or 'both'")
-    from ._temperature import screen_temperature
+    from ._temperature import fitted_bounds, screen_temperature
 
     tavg, n_screened = screen_temperature(np.asarray(tavg, dtype=float), temp_bounds)
     energy = np.asarray(energy, dtype=float)
@@ -246,6 +264,7 @@ def fit_mean_temp_degree_day(
         fit=fs,
         caveats=caveats,
         n_temp_screened=n_screened,
+        temp_bounds=fitted_bounds(temp_bounds),
     )
     # the record's s2 is the reported (rounded) model's, so an exact band matches its predictions
     resid = energy - model.predict(tavg)

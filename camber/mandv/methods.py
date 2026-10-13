@@ -596,6 +596,11 @@ def _ts(x):
     return pd.Timestamp(x).normalize()
 
 
+def _dates(p) -> list:
+    """A period's ends as ISO dates for a message (not ``Timestamp(...)`` reprs; #173)."""
+    return [str(_ts(x).date()) for x in p]
+
+
 def _period_days(p) -> int:
     if not (isinstance(p, (list, tuple)) and len(p) == 2):
         raise ValueError(f"a period must be a [start, end] pair, got {p!r}")
@@ -628,8 +633,8 @@ def _check_sep_periods(periods) -> dict:
     if not (_ts(b[1]) < _ts(i[0]) and _ts(i[1]) < _ts(r[0])):
         raise ValueError(
             f"SEP chaining needs the intermediate period to lie between the baseline and "
-            f"reporting periods (§6.2.4); got baseline {list(b)}, intermediate {list(i)}, "
-            f"reporting {list(r)}"
+            f"reporting periods (§6.2.4); got baseline {_dates(b)}, intermediate {_dates(i)}, "
+            f"reporting {_dates(r)}"
         )
     return {"baseline_days": lb, "intermediate_days": li, "reporting_days": lr}
 

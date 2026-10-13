@@ -56,6 +56,33 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - With the site's zone, an energy-per-interval export that kept both readings of the repeated
   hour under one stamp counted each reading twice on the daily path. Both readings now count
   once each.
+- **CalTRACK Hourly survives a least-squares solve that does not converge (#166).** The
+  pseudo-inverse's SVD can fail to converge on a finite, full-rank design, and one failing month
+  segment aborted all twelve. The solve now falls back to `lstsq` and then to a QR solve (the
+  same coefficients on a well-conditioned design). A segment that still cannot be fitted is
+  `unfit`, with a `reason` and a caveat, and only its month predicts NaN.
+- **CalTRACK Hourly declines when no reporting hour can be predicted (#167).**
+  `caltrack_hourly_savings` returned a saving of 0 with only a caveat when every reporting hour
+  lacked a model or a temperature. It now declines (`savings.declined`, with a reason that counts
+  the causes), as the other savings functions do when nothing can be projected.
+- **The temperature screen also runs at prediction time (#168).** `TOWTModel.predict`,
+  `CalTRACKHourlyModel.predict`, the CalTRACK Daily and Billing predicts,
+  `ChangePointModel.predict` and `MeanTempDegreeDayModel.predict` extrapolated to a placeholder
+  such as -237 °F. A temperature outside the bounds the model was fitted with now predicts NaN,
+  counted as `n_temp_screened` in `return_counts`. The coverage check treats such a row as a row
+  without a driver, not an extrapolation, and the savings sums exclude and count it. A model
+  stores `temp_bounds` only when they are not the default range, so default and older stored
+  models are unchanged.
+- **Daily frames count a duplicate timestamp once without a zone (#169).**
+  `daily_energy_vs_temp` without `timezone=` summed a repeated fall-back hour twice. Duplicate
+  stamps are now averaged into one hour, with the same `TimezoneWarning` and
+  `attrs["n_duplicate_stamps"]` as the hourly path (#158). The zone-aware path is unchanged.
+- **The CalTRACK duplicate-timestamp message says a zone is needed (#170).** Without
+  `timezone=` it said the duplicates fell outside a fall-back hour, which it cannot know. It now
+  says a timezone is needed to tell a fall-back hour from a real duplicate, and suggests
+  `timezone=`.
+- **Error messages print plain numbers (#173).** The TOWT unseen-bin error printed
+  `np.int32(9)`; it prints `9`. The SEP chaining period error prints dates, not `Timestamp(...)`.
 
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
@@ -133,6 +160,14 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   ensemble of local fits are not reproduced, and the registry's TOWT row says so. Models with
   these options serialise `open_ends` / `weighted`; older stored models load unchanged.
   `camber.references` adds `lbnl-rmv2`.
+- **`clip_negative` on the CalTRACK predicts (#171).** `CalTRACKHourlyModel.predict`, and the
+  Daily and Billing predicts, take `clip_negative=False`. Negative predictions are set to zero
+  after the linear prediction and counted as `n_clipped` in `return_counts`. The uncertainty is
+  unchanged, as for #155.
+- **`mandv.names.ensemble_description` (#174)** builds the "Ensemble approach combining ..."
+  sentence of docs/MANDV.md, "Naming and citations". It names each component by its registry
+  standard name and citation (`component_description`), then the combination rule. The short
+  citation texts are `names.SHORT_CITATIONS`.
 
 ### Changed
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily
@@ -172,6 +207,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `seasonal_forecast` is "Mean-Week + drift (LBNL M4 analogue), not an M&V method"; and
   `docs/MANDV.md` no longer says `caltrack_savings` is "exactly" CalTRACK Daily (it is not;
   faithful CalTRACK methods follow, #156).
+- **`ModelFitError` names why no points were left (#172).** When the day-coverage rule, the
+  temperature screen or missing values left too few points, `best_model` and
+  `best_billing_model` listed each kind as "need >=3 finite points". The message now names the
+  cause, such as days dropped by `min_coverage`, temperatures screened or rows missing, and
+  `.causes` holds the counts. `.candidates` is unchanged. `best_model(upstream=)` takes a
+  frame's `attrs`, and billing frames count `attrs["dropped_bills"]`.
+- **Registry `differences` texts paste verbatim (#174).** Instructions such as `best_model`'s
+  "Report the kind it chose…" moved to docs/MANDV.md, "Naming and citations". The texts now only
+  describe how CAMBER departs from the cited standard.
 
 ### Deprecated
 - `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 1.0: the

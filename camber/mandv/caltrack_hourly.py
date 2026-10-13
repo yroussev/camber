@@ -46,7 +46,13 @@ from ._caltrack import (
     floats_or_none,
     wls,
 )
-from ._temperature import screen_temperature, screened_caveat
+from ._temperature import (
+    bounds_from_json,
+    bounds_to_json,
+    fitted_bounds,
+    screen_temperature,
+    screened_caveat,
+)
 
 __all__ = [
     "SEGMENT_NAMES",
@@ -239,7 +245,7 @@ def bin_features(temp, endpoints) -> np.ndarray:
 class _Segment:
     name: str
     centre: int | None
-    status: str  # "fitted" | "insufficient" | "no_data"
+    status: str  # "fitted" | "insufficient" | "no_data" | "unfit" (0.105, #166)
     month_coverage: dict = field(default_factory=dict)
     occupancy: np.ndarray = field(default_factory=lambda: np.full(168, np.nan))
     endpoints: list = field(default_factory=list)
@@ -250,6 +256,7 @@ class _Segment:
     n_rows: int = 0
     num_parameters: int = 0
     metrics: dict = field(default_factory=dict)
+    reason: str | None = None  # why an "unfit" segment could not be fitted (#166)
 
     def predict(self, tow: np.ndarray, T: np.ndarray) -> tuple:
         """``(prediction, unseen)``: NaN where the temperature or the hour's coefficient is
@@ -270,6 +277,7 @@ class _Segment:
         return np.where(bad, np.nan, pred), unseen
 
     def as_dict(self) -> dict:
+        extra = {} if self.reason is None else {"reason": self.reason}
         return {
             "name": self.name,
             "centre_month": self.centre,
@@ -284,6 +292,7 @@ class _Segment:
             "n_rows": int(self.n_rows),
             "num_parameters": int(self.num_parameters),
             "metrics": dict(self.metrics),
+            **extra,
         }
 
     @classmethod
@@ -302,7 +311,16 @@ class _Segment:
             n_rows=int(d.get("n_rows", 0)),
             num_parameters=int(d.get("num_parameters", 0)),
             metrics=dict(d.get("metrics") or {}),
+            reason=d.get("reason"),
         )
+
+
+def _unfit(seg: _Segment, err: Exception) -> _Segment:
+    """``seg`` marked ``unfit``: its least-squares solve failed on every path (#166). Only this
+    segment predicts NaN; the other months are fitted as usual."""
+    seg.status = "unfit"
+    seg.reason = f"least squares failed ({type(err).__name__}: {err})"
+    return seg
 
 
 def _month_coverage(frame: pd.DataFrame, grid: pd.DatetimeIndex) -> dict:
@@ -350,7 +368,10 @@ def _fit_segment(
             np.maximum(K.PRELIM_HDD_BP - Tf, 0.0),
         ]
     )
-    prelim = wls(Xp, y[fit_rows], w[fit_rows])
+    try:
+        prelim = wls(Xp, y[fit_rows], w[fit_rows])
+    except np.linalg.LinAlgError as e:
+        return _unfit(seg, e)
     occ = occupancy_lookup(
         tow[fit_rows],
         prelim.resid,
@@ -382,7 +403,10 @@ def _fit_segment(
         X = np.hstack([D, F * o[:, None], F * (1.0 - o)[:, None]])
     else:
         X = np.hstack([D, F])
-    r = wls(X, y[fit_rows], w[fit_rows], has_const=False)
+    try:
+        r = wls(X, y[fit_rows], w[fit_rows], has_const=False)
+    except np.linalg.LinAlgError as e:
+        return _unfit(seg, e)
     tow_coef = np.full(168, np.nan)
     trained = set(np.unique(rows_tow).tolist())
     for h, j in col_of.items():
@@ -414,7 +438,8 @@ class CalTRACKHourlyModel:
     """A fitted CalTRACK 2.0 hourly model: one segment per calendar month (or one for the year).
 
     ``segments`` maps a segment name (eemeter's, e.g. ``"dec-jan-feb-weighted"``, or ``"all"``)
-    to its fit: status (``fitted``, ``insufficient`` under CT-H-1.1, or ``no_data``), occupancy
+    to its fit: status (``fitted``, ``insufficient`` under CT-H-1.1, ``no_data``, or ``unfit``
+    when its least-squares solve failed on every path, with a ``reason``; 0.105, #166), occupancy
     per hour of the week, kept bin endpoints, the 168 hour-of-week coefficients (NaN for an hour
     the segment never saw) and the occupied / unoccupied bin coefficients. Build one with
     :func:`fit_caltrack_hourly`; :meth:`predict` projects it, :meth:`as_dict` / :meth:`from_dict`
@@ -428,25 +453,36 @@ class CalTRACKHourlyModel:
     baseline_start: str | None = None
     baseline_end: str | None = None
     temperature_range: tuple | None = None
+    # 0.105 (#168): the fit's temp_bounds (None: the default range), applied again at predict
+    temp_bounds: tuple | None = None
 
-    def predict(self, index, temp, *, return_counts: bool = False):
+    def predict(self, index, temp, *, clip_negative: bool = False, return_counts: bool = False):
         """Predicted hourly energy at ``index`` for temperatures ``temp`` (CT-H-8).
 
         A reporting hour uses the model of its own calendar month (CT-H-8.1): hour of the week
         from the timestamp, occupancy from that segment's lookup, bin features from its kept
         endpoints (CT-H-8.2; beyond the baseline range the edge bins extrapolate linearly). NaN
         for a missing temperature, an hour of the week the segment never saw, or a segment with
-        no model (CT-H-8.3). ``temp`` is an array aligned with ``index`` or a series (reindexed to
-        it). The series' ``attrs`` (and, with ``return_counts``, a second return value) count
-        ``n_unseen_hour_of_week``, ``n_no_segment_model`` and ``n_no_temperature``.
+        no model (CT-H-8.3). A temperature outside the bounds the model was fitted with
+        (``temp_bounds``, default the plausible outdoor range) predicts NaN too (0.105, #168), as
+        it was treated as missing at fit. ``temp`` is an array aligned with ``index`` or a series
+        (reindexed to it).
+
+        ``clip_negative=True`` (0.105, #171; opt-in) sets negative predictions to zero after the
+        linear prediction, as :meth:`camber.mandv.towt.TOWTModel.predict` (#155); uncertainty is
+        unchanged. The series' ``attrs`` (and, with ``return_counts``, a second return value)
+        count ``n_unseen_hour_of_week``, ``n_no_segment_model``, ``n_no_temperature``,
+        ``n_temp_screened`` and ``n_clipped``.
         """
         idx = pd.DatetimeIndex(index)
         if isinstance(temp, pd.Series) and isinstance(temp.index, pd.DatetimeIndex):
-            T = temp.reindex(idx).to_numpy(float)
+            T_in = temp.reindex(idx).to_numpy(float)
         else:
-            T = np.asarray(temp, dtype=float)
-            if len(T) != len(idx):
+            T_in = np.asarray(temp, dtype=float)
+            if len(T_in) != len(idx):
                 raise ValueError("temp must align with index")
+        T, _ = screen_temperature(T_in, self.temp_bounds)
+        screened = ~np.isnan(T_in) & np.isnan(T)
         tow = hour_of_week(idx)
         months = idx.month.to_numpy()
         out = np.full(len(idx), np.nan)
@@ -465,10 +501,17 @@ class CalTRACKHourlyModel:
             p, u = seg.predict(tow[rows], T[rows])
             out[rows] = p
             unseen[rows] = u & np.isfinite(T[rows])
+        n_clipped = 0
+        if clip_negative:
+            neg = out < 0  # NaN compares False: a missing prediction stays missing
+            n_clipped = int(neg.sum())
+            out[neg] = 0.0
         counts = {
             "n_unseen_hour_of_week": int(unseen.sum()),
             "n_no_segment_model": int(no_model.sum()),
-            "n_no_temperature": int((~np.isfinite(T) & ~no_model).sum()),
+            "n_no_temperature": int((np.isnan(T_in) & ~no_model).sum()),
+            "n_temp_screened": int((screened & ~no_model).sum()),
+            "n_clipped": n_clipped,
         }
         s = pd.Series(out, index=idx, name="predicted")
         s.attrs.update(counts)
@@ -493,6 +536,12 @@ class CalTRACKHourlyModel:
             if self.temperature_range is None
             else list(self.temperature_range),
             "segments": {k: s.as_dict() for k, s in self.segments.items()},
+            # 0.105 (#168): only when not the default range, so a default dict is unchanged
+            **(
+                {}
+                if self.temp_bounds is None
+                else {"temp_bounds": bounds_to_json(self.temp_bounds)}
+            ),
         }
 
     @classmethod
@@ -507,6 +556,7 @@ class CalTRACKHourlyModel:
             baseline_start=d.get("baseline_start"),
             baseline_end=d.get("baseline_end"),
             temperature_range=None if tr is None else tuple(tr),
+            temp_bounds=bounds_from_json(d.get("temp_bounds")),
         )
 
 
@@ -543,9 +593,11 @@ def fit_caltrack_hourly(
     :func:`single_model_tests` evaluates). There is no fixed minimum baseline length (CT-H-1.1):
     a month segment whose month or either neighbour has consumption for 90 % of its baseline
     hours or fewer is ``insufficient`` and predicts NaN (not checked under ``eemeter_compat``,
-    as in eemeter 2.10). ``info`` holds ``frame`` (the baseline hours), ``month_coverage`` and the
-    preparation counts. A baseline in which no segment could be fitted raises
-    :class:`~camber.mandv.sufficiency.InsufficientBaseline`.
+    as in eemeter 2.10). A segment whose least-squares solve fails on every path (#166) is
+    ``unfit`` with a reason, and the other segments are fitted as usual. ``info`` holds ``frame``
+    (the baseline hours), ``month_coverage`` and the preparation counts. A baseline in which no
+    segment could be fitted raises :class:`~camber.mandv.sufficiency.InsufficientBaseline`
+    (``numpy.linalg.LinAlgError``, a ``ValueError``, when every segment with data was unfit).
     """
     if segment_type not in ("three_month_weighted", "single"):
         raise ValueError("segment_type must be 'three_month_weighted' or 'single'")
@@ -585,6 +637,12 @@ def fit_caltrack_hourly(
         )
         segments[seg.name] = seg
     if not any(s.status == "fitted" for s in segments.values()):
+        unfit = [s for s in segments.values() if s.status == "unfit"]
+        if unfit:
+            raise np.linalg.LinAlgError(
+                f"CalTRACK hourly: no segment could be fitted; {len(unfit)} failed in least "
+                f"squares ({unfit[0].name}: {unfit[0].reason})"
+            )
         from .sufficiency import InsufficientBaseline, baseline_need
 
         n_have = int(f["energy"].notna().sum())
@@ -603,6 +661,7 @@ def fit_caltrack_hourly(
         baseline_start=str(start),
         baseline_end=str(end),
         temperature_range=(float(fin.min()), float(fin.max())) if len(fin) else None,
+        temp_bounds=fitted_bounds(temp_bounds),
     )
     info = {
         "frame": f,
@@ -680,9 +739,11 @@ def caltrack_hourly_savings(
     Guideline 14 band, computed on the baseline hours each predicted by its own month's model,
     with ``p`` the parameters of all fitted segments (the pooled form of eemeter's per-segment
     ``n - num_parameters``). CalTRACK 2.0 publishes FSU coefficients for daily and billing only,
-    so ``result.fsu`` is ``None``. ``result.sufficiency`` holds each month's coverage, the
-    segments' statuses and the single-model tests (CT-H-2.3); a reporting temperature far outside
-    the baseline's range adds a caveat (E16).
+    so ``result.fsu`` is ``None``. When no reporting hour has both a prediction and usage the
+    saving is declined (``savings.declined``, with the reason; 0.105, #167), as the other savings
+    functions decline when nothing can be projected. ``result.sufficiency`` holds each month's
+    coverage, the segments' statuses and the single-model tests (CT-H-2.3); a reporting
+    temperature far outside the baseline's range adds a caveat (E16).
     """
     model, info = fit_caltrack_hourly(
         baseline_energy,
@@ -777,11 +838,18 @@ def caltrack_hourly_savings(
         )
     statuses = {k: s.status for k, s in model.segments.items()}
     not_fitted = [k for k, v in statuses.items() if v != "fitted"]
-    if not_fitted:
+    short = [k for k in not_fitted if statuses[k] != "unfit"]
+    if short:
         caveats.append(
-            f"{len(not_fitted)} month segment(s) not fitted ({', '.join(not_fitted)}): too few "
+            f"{len(short)} month segment(s) not fitted ({', '.join(short)}): too few "
             "baseline hours in the month or a neighbour (CT-H-1.1)"
         )
+    for k in not_fitted:
+        if statuses[k] == "unfit":  # 0.105 (#166)
+            caveats.append(
+                f"month segment {k} could not be fitted: {model.segments[k].reason}; its "
+                "reporting hours have no prediction"
+            )
     if info.get("n_hours_outside_baseline"):
         caveats.append(
             f"{info['n_hours_outside_baseline']} meter hour(s) outside the 365-day baseline before "
@@ -810,6 +878,25 @@ def caltrack_hourly_savings(
             "model in this case (CT-H-2.3(b), E16)"
         )
     savings.caveats.extend(caveats)
+    usable = np.isfinite(pr.to_numpy(float)) & np.isfinite(yr)
+    if not usable.any():  # 0.105 (#167): nothing to sum is not a saving of zero
+        from .stats import _decline
+
+        why = [
+            f"{counts[k]} {what}"
+            for k, what in (
+                ("n_no_segment_model", "in a month without a model"),
+                ("n_no_temperature", "without a temperature"),
+                ("n_temp_screened", "with an implausible temperature"),
+                ("n_unseen_hour_of_week", "on an hour of the week the segment never saw"),
+            )
+            if counts[k]
+        ]
+        _decline(
+            savings,
+            f"no reporting hour could be predicted with usage to compare ({len(rep_idx)} "
+            "hour(s)" + (": " + ", ".join(why) if why else "") + ")",
+        )
     sufficiency = {
         "status": "PASS" if not not_fitted else "PARTIAL",
         "segment_type": model.segment_type,

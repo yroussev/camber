@@ -66,19 +66,30 @@ class ChangePointModel:
     _fit_record: object = field(default=None, repr=False, compare=False)
     # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
     n_temp_screened: int = 0
+    # 0.105 (#168): the fit's temp_bounds (None: the default range), applied again at predict
+    temp_bounds: tuple | None = None
 
     def predict(self, T, *, clip_negative: bool = False, return_counts: bool = False):
         """Predicted energy for temperature(s) T (scalar or array).
 
+        A temperature outside the bounds the model was fitted with (``temp_bounds``; the default
+        plausible outdoor range, -40 to 140 degF) predicts NaN (0.105, #168), as it was treated as
+        missing at fit: a -237 degF placeholder is not extrapolated to.
         ``clip_negative=True`` (0.105, #155; opt-in) sets negative predictions to zero after the
         linear projection; the projection variance stays on the unclipped projection.
-        ``return_counts=True`` returns ``(prediction, {"n_clipped": ...})``.
+        ``return_counts=True`` returns ``(prediction, {"n_clipped": ..., "n_temp_screened": ...})``.
         """
+        from ._temperature import screen_temperature
+
         fn: Any = self._predict
-        out = fn(np.asarray(T, dtype=float))
+        t, n_screened = screen_temperature(np.asarray(T, dtype=float), self.temp_bounds)
+        out = fn(t)
         if not (clip_negative or return_counts):
             return out
-        return _clip_negative(out, clip_negative, return_counts)
+        res = _clip_negative(out, clip_negative, return_counts)
+        if return_counts:
+            res[1]["n_temp_screened"] = n_screened
+        return res
 
     def as_dict(self) -> dict:
         """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model.
@@ -103,6 +114,10 @@ class ChangePointModel:
         }
         if self.n_temp_screened:  # 0.105 (#159): only when the screen removed something
             d["n_temp_screened"] = int(self.n_temp_screened)
+        if self.temp_bounds is not None:  # 0.105 (#168): only when not the default range
+            from ._temperature import bounds_to_json
+
+            d["temp_bounds"] = bounds_to_json(self.temp_bounds)
         return d
 
     @classmethod
@@ -130,17 +145,28 @@ class ChangePointModel:
             fit_range=None if fr is None else (float(fr[0]), float(fr[1])),
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
             n_temp_screened=int(d.get("n_temp_screened", 0)),
+            temp_bounds=_bounds_in(d),
         )
 
     def coverage(self, T, *, projected=None, policy=None):
         """How well the fitted temperature range covers ``T``.
 
         Returns a :class:`~camber.mandv.coverage.Coverage`; see
-        :func:`~camber.mandv.coverage.assess_coverage`.
+        :func:`~camber.mandv.coverage.assess_coverage`. A temperature the predict-time screen
+        sets to missing (0.105, #168) is a row without a driver, not an extrapolation.
         """
+        from ._temperature import screen_temperature
         from .coverage import _linear_coverage
 
-        return _linear_coverage(self, T, projected=projected, policy=policy)
+        t, _ = screen_temperature(np.asarray(T, dtype=float), self.temp_bounds)
+        return _linear_coverage(self, t, projected=projected, policy=policy)
+
+
+def _bounds_in(d: dict) -> tuple | None:
+    """A model dict's stored ``temp_bounds`` (absent before 0.105 and for the default range)."""
+    from ._temperature import bounds_from_json
+
+    return bounds_from_json(d.get("temp_bounds"))
 
 
 # --- design matrices for each model kind, given change point(s) ---
@@ -539,7 +565,7 @@ def fit_model(
     :func:`camber.mandv._temperature.screen_temperature`) are treated as missing, so a sentinel
     placeholder cannot become a change point; the model's ``n_temp_screened`` counts them.
     """
-    from ._temperature import screen_temperature
+    from ._temperature import fitted_bounds, screen_temperature
 
     T, n_screened = screen_temperature(np.asarray(T, dtype=float), temp_bounds)
     y = np.asarray(y, dtype=float)
@@ -583,6 +609,7 @@ def fit_model(
             weight_scale=scale,
         ),
         n_temp_screened=n_screened,
+        temp_bounds=fitted_bounds(temp_bounds),
     )
 
 
@@ -603,14 +630,71 @@ class ModelFitError(ValueError):
     (``kind``, ``p``, ``refused``), in the order the kinds were tried.
     :func:`camber.mandv._mvform.best_billing_model` raises it too, its degree-day candidate
     included (``p`` is ``None`` for a candidate refused before it was fitted).
+
+    When too few points were left to fit (0.105, #172) the message also names the upstream
+    cause and ``causes`` holds its counts: ``n_points`` (the usable points left), and when
+    non-zero ``dropped_days`` (days dropped by the ``min_coverage`` day-coverage rule),
+    ``dropped_bills`` (bills dropped for temperature coverage), ``n_temp_screened`` (temperatures
+    outside the plausible range, set to missing) and ``n_missing`` (rows with no temperature or
+    energy). ``causes`` is ``None`` when points were not the problem.
     """
 
-    def __init__(self, candidates: list):
+    def __init__(self, candidates: list, causes: dict | None = None):
         self.candidates = candidates
+        self.causes = causes
         detail = "; ".join(
             f"{c['kind']} (p={c['p']}): {c.get('refused', 'not selected')}" for c in candidates
         )
-        super().__init__("no model could be fit" + (f" ({detail})" if detail else " (no kinds)"))
+        msg = "no model could be fit" + (f" ({detail})" if detail else " (no kinds)")
+        if causes is not None:
+            msg += "; " + _causes_text(causes)
+        super().__init__(msg)
+
+
+_CAUSE_TEXT = (
+    ("dropped_days", "{} day(s) dropped by the day-coverage rule (min_coverage)"),
+    ("dropped_bills", "{} bill(s) dropped for temperature coverage below min_coverage"),
+    ("n_temp_screened", "{} temperature value(s) outside the plausible outdoor range screened out"),
+    ("n_missing", "{} row(s) missing a temperature or energy value"),
+)
+
+
+def _causes_text(causes: dict) -> str:
+    n = int(causes.get("n_points", 0))
+    parts = [t.format(int(causes[k])) for k, t in _CAUSE_TEXT if causes.get(k)]
+    head = f"only {n} usable point(s) remained"
+    return head + (" upstream of the fit: " + ", ".join(parts) if parts else " (no input rows)")
+
+
+def _too_few_points(T, y, *, temp_bounds=None, upstream: dict | None = None, min_points=3):
+    """The counts :class:`ModelFitError` reports when fewer than ``min_points`` usable
+    ``(T, y)`` points remain (#172), else ``None``. ``upstream`` is a frame's ``attrs`` (the day
+    coverage and screen counts of :func:`camber.mandv.intervalfit.daily_energy_vs_temp`); a
+    ``T`` that is a pandas object brings its own ``attrs``."""
+    from ._temperature import screen_temperature
+
+    up = dict(getattr(T, "attrs", None) or {}) if upstream is None else dict(upstream)
+    t_raw = np.asarray(T, dtype=float).ravel()
+    yy = np.asarray(y, dtype=float).ravel()
+    if len(t_raw) != len(yy):
+        return None
+    t, n_screened = screen_temperature(t_raw, temp_bounds)
+    ok = np.isfinite(t) & np.isfinite(yy)
+    n_points = int(ok.sum())
+    if n_points >= min_points:
+        return None
+    screened = ~np.isnan(t_raw) & np.isnan(t)
+    causes = {"n_points": n_points}
+    for k in ("dropped_days", "dropped_bills"):
+        if up.get(k):
+            causes[k] = int(up[k])
+    n_scr = int(up.get("n_temp_screened") or 0) + n_screened
+    if n_scr:
+        causes["n_temp_screened"] = n_scr
+    n_missing = int((~ok & ~screened).sum())
+    if n_missing:
+        causes["n_missing"] = n_missing
+    return causes
 
 
 @overload
@@ -622,6 +706,7 @@ def best_model(
     time_index=...,
     weights=...,
     temp_bounds: tuple | None = ...,
+    upstream: dict | None = ...,
     return_candidates: Literal[False] = ...,
 ) -> ChangePointModel:
     """Typing overload: the selected model alone (see the implementation below)."""
@@ -636,6 +721,7 @@ def best_model(
     time_index=...,
     weights=...,
     temp_bounds: tuple | None = ...,
+    upstream: dict | None = ...,
     return_candidates: Literal[True],
 ) -> tuple[ChangePointModel, list]:
     """Typing overload: ``(model, candidates)`` (see the implementation below)."""
@@ -649,6 +735,7 @@ def best_model(
     time_index=None,
     weights=None,
     temp_bounds: tuple | None = None,
+    upstream: dict | None = None,
     return_candidates: bool = False,
 ) -> ChangePointModel | tuple[ChangePointModel, list]:
     """Fit several model kinds and return the one with the lowest BIC.
@@ -667,7 +754,11 @@ def best_model(
 
     ``return_candidates=True`` (0.105, #160) returns ``(model, candidates)``: one dict per kind
     tried, with ``kind``, ``p`` and either ``n``, ``sse``, ``bic`` and ``selected`` or the
-    ``refused`` reason. When no kind can be fit, a :class:`ModelFitError` lists each reason.
+    ``refused`` reason. When no kind can be fit, a :class:`ModelFitError` lists each reason;
+    when too few points were left, it also names why (0.105, #172): the rows missing or screened
+    here, and the days ``upstream`` dropped -- a frame's ``attrs``, e.g. ``upstream=frame.attrs``
+    for a frame from :func:`camber.mandv.intervalfit.daily_energy_vs_temp` (a pandas ``T`` brings
+    its own). ``upstream`` is only read for that message.
     """
     n_params = N_PARAMS
     best, best_score = None, np.inf
@@ -697,7 +788,8 @@ def best_model(
         if bic < best_score - _BIC_TIE:  # inf - tie is inf: the first finite kind is taken
             best, best_score, best_row = m, bic, row
     if best is None:
-        raise ModelFitError(candidates)
+        causes = _too_few_points(T, y, temp_bounds=temp_bounds, upstream=upstream)
+        raise ModelFitError(candidates, causes)
     if best_row is not None:
         best_row["selected"] = True
     return (best, candidates) if return_candidates else best

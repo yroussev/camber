@@ -307,7 +307,9 @@ def fit(frame: pd.DataFrame, *, family: str | None = None):
     if not cols:
         from .models import best_model
 
-        return best_model(T, y, time_index=frame.index, weights=row_days(frame))
+        return best_model(
+            T, y, time_index=frame.index, weights=row_days(frame), upstream=frame.attrs
+        )
     from .multivariable import fit_cp_driver_model
 
     return fit_cp_driver_model(
@@ -326,11 +328,12 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
 
     When no candidate can be fit it raises :class:`camber.mandv.models.ModelFitError` (a
     ``ValueError``) listing each candidate tried and why it was refused (0.105, as
-    :func:`camber.mandv.models.best_model`): the change-point kinds, and the degree-day model."""
+    :func:`camber.mandv.models.best_model`): the change-point kinds, and the degree-day model.
+    When too few bills were left it names why (#172; the frame's ``attrs`` counts)."""
     import numpy as np
 
     from .basetemp import _LEGS, fit_bill_degree_day, rows_at_bases
-    from .models import ModelFitError, best_model
+    from .models import ModelFitError, _too_few_points, best_model
 
     T = frame["oat"].to_numpy(dtype=float)
     y = frame["energy"].to_numpy(dtype=float)
@@ -341,7 +344,9 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
     tried: list = []  # one dict per refused candidate, for ModelFitError
     if family in (None, "cp"):
         try:
-            cands.append(best_model(T, y, time_index=frame.index, weights=days))
+            cands.append(
+                best_model(T, y, time_index=frame.index, weights=days, upstream=frame.attrs)
+            )
         except ModelFitError as e:
             tried.extend(e.candidates)
         except ValueError as e:
@@ -367,7 +372,7 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
         except ValueError as e:
             tried.append({"kind": kind, "p": None, "refused": f"{type(e).__name__}: {e}"})
     if not cands:
-        raise ModelFitError(tried)
+        raise ModelFitError(tried, _too_few_points(T, y, upstream=frame.attrs))
     from .models import fit_weights
 
     w, _ = fit_weights(days)

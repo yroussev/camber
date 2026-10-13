@@ -70,7 +70,10 @@ def test_clean_fits_are_bit_for_bit_unchanged():
     T, y = _daily(seed=3)
     a = best_model(T, y)
     b = best_model(T, y, temp_bounds=(-np.inf, np.inf))
-    assert a.as_dict() == b.as_dict() and a.n_temp_screened == 0
+    db = b.as_dict()
+    # the fit is identical; b records its non-default bounds for the predict-time screen (#168)
+    assert db.pop("temp_bounds") == [None, None] and "temp_bounds" not in a.as_dict()
+    assert a.as_dict() == db and a.n_temp_screened == 0
 
 
 def test_degree_day_fit_ignores_a_sentinel():
