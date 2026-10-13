@@ -1463,6 +1463,14 @@
     "lbnl_time_weights",
     "towt_lbnl_config"
   ],
+  "camber.mandv.towt_rmv2": [
+    "RMV2_UNSEEN_MODES",
+    "TOWTRMV2Model",
+    "fit_towt_rmv2",
+    "interval_of_week",
+    "rmv2_centres",
+    "rmv2_occupied_intervals"
+  ],
   "camber.mandv.weather": [
     "EPW_DRYBULB_COL",
     "c_to_f",

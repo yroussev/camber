@@ -73,6 +73,10 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   without a driver, not an extrapolation, and the savings sums exclude and count it. A model
   stores `temp_bounds` only when they are not the default range, so default and older stored
   models are unchanged.
+- **A saving with nothing to sum is declined.** `avoided_energy_savings` returned a saving of 0
+  when no reporting row had both a finite baseline projection and actual energy (every
+  temperature missing or screened, for example). It now declines with a reason that counts the
+  rows without a projection and without energy, as CalTRACK Hourly does (#167).
 - **Daily frames count a duplicate timestamp once without a zone (#169).**
   `daily_energy_vs_temp` without `timezone=` summed a repeated fall-back hour twice. Duplicate
   stamps are now averaged into one hour, with the same `TimezoneWarning` and
@@ -157,7 +161,8 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   squares. `towt_lbnl_config()` returns the settings verified against LBNL's RMV2.0 1.1.0
   (knots 40, 55, 65, 80, 90 °F, pruning under 20 observations, zero clip, recency weight
   `s² / (s² + Δt²)` with `s = 14` days, `lbnl_time_weights`); RMV2.0's occupancy rule and its
-  ensemble of local fits are not reproduced, and the registry's TOWT row says so. Models with
+  ensemble of local fits are not part of `fit_towt` but of `fit_towt_rmv2` (#165), and the
+  registry's TOWT row points there. Models with
   these options serialise `open_ends` / `weighted`; older stored models load unchanged.
   `camber.references` adds `lbnl-rmv2`.
 - **`clip_negative` on the CalTRACK predicts (#171).** `CalTRACKHourlyModel.predict`, and the
@@ -168,6 +173,27 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   sentence of docs/MANDV.md, "Naming and citations". It names each component by its registry
   standard name and citation (`component_description`), then the combination rule. The short
   citation texts are `names.SHORT_CITATIONS`.
+- **TOWT, LBNL RMV2.0 variant (#165).** New module `mandv.towt_rmv2`: `fit_towt_rmv2(...)` is
+  an opt-in reimplementation of RMV2.0 1.1.0's `makeBaseline` (`R/towt_baseline.R`, commit
+  979a963). It returns a `TOWTRMV2Model` with `predict`, `as_dict` and `from_dict`, and
+  reproduces:
+  - RMV2.0's occupancy rule: a load regression hinged at 50 and 65 °F, with an interval occupied
+    when over 65 % of its residuals are positive;
+  - its ensemble of local fits, centred about every 14 days by row count across the baseline;
+  - its prediction, in which each local fit is clipped at zero and the fits are averaged with
+    the weights `s² / (s² + Δt²)` about the prediction time;
+  - its NaN for an unseen time of week, with `unseen="previous"`, `"raise"` and `"fallback"`
+    opt-in.
+
+  It supports any interval of the week that divides a day; the default is hourly. It matches
+  RMV2.0's own `makeBaseline` to 1e-8 on synthetic data. A dev-only test runs that comparison
+  when `CAMBER_RMV2_RSCRIPT` is set; R is not a dependency. On a synthetic held-out year with a
+  seasonal schedule, its hourly CV(RMSE) is about 3 points lower than one recency-weighted fit
+  (`towt_lbnl_config()`). The registry has a new row, "TOWT, LBNL RMV2.0 variant"
+  (`towt_rmv2`), and `towt_lbnl_config()`'s documentation points long-horizon baselines to it.
+  A stored `TOWTRMV2Model` rebuilds through `rebaseline.mv_model_from_dict`, and its predict
+  counts a temperature outside its fitted bounds as `n_temp_screened` and a missing one as
+  `n_no_temperature`, as the other predicts do (#168).
 
 ### Changed
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily

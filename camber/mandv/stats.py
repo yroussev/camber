@@ -489,7 +489,8 @@ def avoided_energy_savings(
     the policy says ``decline=False``. Reporting rows without a finite projection or actual energy
     are excluded from the sums and counted (``coverage["n_used"]`` vs ``["n_report"]``), not
     dropped silently; the caveat also says how many had no finite projection (0.105, #159: a
-    missing or screened temperature). A TOWT baseline bound with
+    missing or screened temperature). When no reporting row is left the saving is **declined**
+    with a reason (0.105), not reported as zero. A TOWT baseline bound with
     :class:`~camber.mandv.towt.TOWTAtIndex` ``(unseen="fallback", clip_negative=True)``
     (0.105, #154 / #155) adds a caveat counting the rows it filled or clipped.
 
@@ -515,6 +516,7 @@ def avoided_energy_savings(
     n_report = int(len(y_report))
     proj_all = np.asarray(baseline_model.predict(T_report), dtype=float)
     pcounts = getattr(baseline_model, "predict_counts", None)  # a TOWTAtIndex's (0.105)
+    y_all = y_report
     mask = np.isfinite(proj_all) & np.isfinite(y_report)
     d_all = None if days is None else _days_array(days, n_report)
     if d_all is not None:
@@ -612,6 +614,24 @@ def avoided_energy_savings(
     )
     if declined:
         _decline(res, cov.reason)
+    if m == 0 and n_report:
+        # 0.105: nothing to sum is not a saving of zero (as CalTRACK Hourly, #167)
+        n_no_proj = int((~np.isfinite(proj_all)).sum())
+        n_no_y = int((np.isfinite(proj_all) & ~np.isfinite(y_all)).sum())
+        why = [
+            f"{n} {what}"
+            for n, what in (
+                (n_no_proj, "without a finite baseline projection"),
+                (n_no_y, "without actual energy"),
+            )
+            if n
+        ]
+        _decline(
+            res,
+            f"no reporting row could be projected with usage to compare ({n_report} row(s)"
+            + (": " + ", ".join(why) if why else "")
+            + "; a missing or implausible temperature has no projection)",
+        )
     return res
 
 

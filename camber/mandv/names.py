@@ -242,11 +242,31 @@ _ROWS = (
         "the median of bin means; no time-weighting of observations. Opt-in (0.105): "
         "`towt_lbnl_config()` matches RMV2.0's knots (40, 55, 65, 80, 90 degF, open outer "
         "segments, outer knots pruned under 20 observations), its zero clip and its recency "
-        "weight function (`fit_towt(weights=lbnl_time_weights(...))`); it still differs in "
-        "occupancy (RMV2.0: a 65% positive-residual rule), in fitting one weighted model "
-        "rather than RMV2.0's ensemble of local fits, in hour-of-week bins where RMV2.0 "
-        "defaults to 15-minute intervals (the same on hourly data), and in refusing (or, opt-in, "
-        "filling) an unseen time of week where RMV2.0 predicts NaN.",
+        "weight function (`fit_towt(weights=lbnl_time_weights(...))`); it still fits one "
+        "weighted model with load-median occupancy, in hour-of-week bins where RMV2.0 defaults "
+        "to 15-minute intervals (the same on hourly data), and refuses (or, opt-in, fills) an "
+        "unseen time of week where RMV2.0 predicts NaN. RMV2.0's 65% positive-residual "
+        "occupancy rule and its ensemble of local fits are in `towt_rmv2` "
+        "(`fit_towt_rmv2`).",
+        "other baseline model",
+    ),
+    MVName(
+        "towt_rmv2",
+        "TOWT, LBNL RMV2.0 variant",
+        "Time-of-Week-and-Temperature (TOWT) model, LBNL RMV2.0 implementation (towt_baseline)",
+        (_RMV2, _TOWT),
+        "camber.mandv.towt_rmv2.fit_towt_rmv2",
+        "Opt-in (0.105). Reproduces RMV2.0 1.1.0's makeBaseline (R/towt_baseline.R, commit "
+        "979a963): its occupancy rule (a regression of load on temperature hinged at 50 and "
+        "65 degF; an interval is occupied when over 65% of its residuals are positive, and the "
+        "split needs more than two), its knots and pruning, and its ensemble of local fits "
+        "centred every ~14 days by row count, each prediction clipped at zero and averaged with "
+        "the weights s^2/(s^2+dt^2) about the prediction time. An unseen time of week is NaN. "
+        "Differences: hour-of-week intervals by default (RMV2.0: 15 minutes, the same on hourly "
+        "data); RMV2.0's data cleaning (clean_eload, clean_Temp) is not applied, CAMBER's "
+        "temperature screen is; the final approx() fill of NaN is opt-in "
+        '(`unseen="previous"`). Differs from Mathieu et al. (2011): data-driven occupancy and '
+        "time weighting.",
         "other baseline model",
     ),
     MVName(

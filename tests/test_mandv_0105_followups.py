@@ -502,3 +502,52 @@ def test_differences_are_descriptions_not_instructions():
     for code, row in MV_NAMES.items():
         for word in imperative:
             assert word not in row.differences, (code, word)
+
+
+# ----------------------------------------------------------------- after #165: TOWT RMV2.0 variant
+def _rmv2_model(**kw):
+    from camber.mandv.towt_rmv2 import fit_towt_rmv2
+
+    e, t = _weeks(weeks=6)
+    return fit_towt_rmv2(e, t, **kw), e, t
+
+
+def test_rmv2_model_round_trips_through_the_stored_model_dispatch():
+    from camber.mandv.rebaseline import mv_model_from_dict
+    from camber.mandv.towt_rmv2 import TOWTRMV2Model
+
+    m, e, t = _rmv2_model()
+    d = json.loads(json.dumps(m.as_dict()))
+    m2 = mv_model_from_dict(d)
+    assert isinstance(m2, TOWTRMV2Model) and m2.as_dict() == d
+    np.testing.assert_array_equal(
+        m2.predict(t.index, t.to_numpy()), m.predict(t.index, t.to_numpy())
+    )
+    inf, _, _ = _rmv2_model(temp_bounds=(-np.inf, np.inf))
+    d = json.loads(json.dumps(inf.as_dict()))  # strict JSON: no Infinity
+    assert d["temp_bounds"] == [None, None]
+    assert mv_model_from_dict(d).temp_bounds == (-np.inf, np.inf)
+
+
+def test_rmv2_predict_screens_like_the_other_predicts():
+    m, e, t = _rmv2_model()
+    out, c = m.predict(t.index[:3], [SENTINEL, 50.0, np.nan], return_counts=True)
+    assert np.isnan(out[0]) and np.isfinite(out[1]) and np.isnan(out[2])
+    assert c["n_temp_screened"] == 1 and c["n_no_temperature"] == 1
+    wide, _, _ = _rmv2_model(temp_bounds=(-300.0, 200.0))
+    assert np.isfinite(wide.predict(t.index[:1], [SENTINEL])).all()
+
+
+# ----------------------------------------------------------------- nothing to sum declines
+def test_avoided_energy_savings_declines_when_no_row_is_projected():
+    T, y = _daily()
+    m = best_model(T, y)
+    kw = {"cv_rmse": 0.05, "n_baseline": len(T), "p_baseline": 5}
+    s = avoided_energy_savings(m, np.full(30, SENTINEL), np.full(30, 100.0), **kw)
+    assert s.declined and "no reporting row could be projected" in s.declined_reason
+    assert "30 without a finite baseline projection" in s.declined_reason
+    assert s.avoided_energy is None and s.baseline_projected is None
+    s = avoided_energy_savings(m, np.full(30, 50.0), np.full(30, np.nan), **kw)
+    assert s.declined and "30 without actual energy" in s.declined_reason
+    ok = avoided_energy_savings(m, np.r_[50.0, np.full(29, SENTINEL)], np.full(30, 100.0), **kw)
+    assert not ok.declined and ok.coverage["n_used"] == 1

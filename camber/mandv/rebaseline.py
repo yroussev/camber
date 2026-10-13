@@ -158,11 +158,13 @@ def mv_model_from_dict(d: dict):
     from .models import ChangePointModel
     from .multivariable import ChangePointDriverModel
     from .towt import TOWTModel
+    from .towt_rmv2 import TOWTRMV2Model
 
     types: dict[str, Any] = {
         "ChangePointModel": ChangePointModel,
         "ChangePointDriverModel": ChangePointDriverModel,
         "TOWTModel": TOWTModel,
+        "TOWTRMV2Model": TOWTRMV2Model,  # 0.105 (#165)
         "DegreeDayModel": MeanTempDegreeDayModel,  # the stored name, kept (0.105 rename)
         "BillingDegreeDayModel": BillingDegreeDayModel,  # 0.94 (#72)
     }
