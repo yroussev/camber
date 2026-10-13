@@ -67,9 +67,18 @@ class ChangePointModel:
     # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
     n_temp_screened: int = 0
 
-    def predict(self, T):
-        """Predicted energy for temperature(s) T (scalar or array)."""
-        return self._predict(np.asarray(T, dtype=float))
+    def predict(self, T, *, clip_negative: bool = False, return_counts: bool = False):
+        """Predicted energy for temperature(s) T (scalar or array).
+
+        ``clip_negative=True`` (0.105, #155; opt-in) sets negative predictions to zero after the
+        linear projection; the projection variance stays on the unclipped projection.
+        ``return_counts=True`` returns ``(prediction, {"n_clipped": ...})``.
+        """
+        fn: Any = self._predict
+        out = fn(np.asarray(T, dtype=float))
+        if not (clip_negative or return_counts):
+            return out
+        return _clip_negative(out, clip_negative, return_counts)
 
     def as_dict(self) -> dict:
         """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model.
@@ -233,6 +242,24 @@ def _predict_from_design(kind: str, change_points: tuple, beta):
         return out[0] if t.ndim == 0 else out.reshape(t.shape)
 
     return predict
+
+
+def _clip_negative(out, clip: bool, return_counts: bool):
+    """Shared by the change-point and degree-day ``predict`` (0.105, #155): set negative
+    predictions to zero when ``clip`` (NaN stays NaN) and optionally count them."""
+    import pandas as pd
+
+    arr = np.asarray(out, dtype=float)
+    neg = arr < 0
+    n = int(neg.sum()) if clip else 0
+    if clip and n:
+        if isinstance(out, pd.Series):
+            out = out.mask(neg, 0.0)
+        elif arr.ndim == 0:
+            out = 0.0
+        else:
+            out = np.where(neg, 0.0, arr)
+    return (out, {"n_clipped": n}) if return_counts else out
 
 
 def _lstsq_sse(X, y, w=None):
@@ -574,6 +601,8 @@ class ModelFitError(ValueError):
     A :class:`ValueError`, so existing ``except ValueError`` handlers still catch it. The message
     lists every candidate and why it was refused; ``candidates`` holds the same as a list of dicts
     (``kind``, ``p``, ``refused``), in the order the kinds were tried.
+    :func:`camber.mandv._mvform.best_billing_model` raises it too, its degree-day candidate
+    included (``p`` is ``None`` for a candidate refused before it was fitted).
     """
 
     def __init__(self, candidates: list):

@@ -84,7 +84,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 
 | Label | CAMBER | Standard name | Citation | Differences |
 |---|---|---|---|---|
-| TOWT (CAMBER variant) | `towt`, `mandv.towt.fit_towt` | Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0) | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308); [Granderson et al. 2015](https://www.osti.gov/pages/biblio/1247594); [LBNL-187225](https://www.osti.gov/biblio/1236174); [LBNL-6963E](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | One pooled model over the baseline; hour-of-week bins (168); `n_temp_segments` quantile-spaced temperature knots rather than the reference's fixed knots; occupancy from each bin's mean load against the median of bin means; no time-weighting of observations. |
+| TOWT (CAMBER variant) | `towt`, `mandv.towt.fit_towt` | Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0) | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308); [LBNL RMV2.0](https://github.com/LBNL-ETA/RMV2.0); [Granderson et al. 2015](https://www.osti.gov/pages/biblio/1247594); [LBNL-187225](https://www.osti.gov/biblio/1236174); [LBNL-6963E](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | One pooled model over the baseline; hour-of-week bins (168); by default `n_temp_segments` quantile-spaced temperature knots held flat beyond the fitted range rather than the reference's fixed knots; occupancy from each bin's mean load against the median of bin means; no time-weighting of observations. Opt-in (0.105): `towt_lbnl_config()` matches RMV2.0's knots (40, 55, 65, 80, 90 degF, open outer segments, outer knots pruned under 20 observations), its zero clip and its recency weight function (`fit_towt(weights=lbnl_time_weights(...))`); it still differs in occupancy (RMV2.0: a 65% positive-residual rule), in fitting one weighted model rather than RMV2.0's ensemble of local fits, in hour-of-week bins where RMV2.0 defaults to 15-minute intervals (the same on hourly data), and in refusing (or, opt-in, filling) an unseen time of week where RMV2.0 predicts NaN. |
 | Change-point + drivers (multivariable) | `multivariable`, `mandv.multivariable.fit_cp_driver_model` | Multivariable change-point regression model (SEP 50001 M&V Protocol §6.3.2) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | Change points grid-searched with the drivers in the design; drivers enter linearly. |
 | Categorical change-point (one model per category) | `categorical`, `mandv.categorical.fit_categorical` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | A CAMBER construct: a separate change-point model per category combination (day type, occupancy mode), routed by category, with pooled fit statistics; not indicator terms in one regression. |
 
@@ -133,6 +133,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 - `ashrae-rp1050-imt`: Kissock, J.K., Haberl, J.S., Claridge, D.E. (2003). Inverse Modeling Toolkit: Numerical Algorithms (ASHRAE RP-1050). ASHRAE Transactions 109(2). KC-03-02-1. <https://iifiir.org/en/fridoc/inverse-modelling-toolkit-imt-numerical-algorithms-22451>
 - `fels-1986-prism`: Fels, M.F. (1986). PRISM: An introduction. Energy and Buildings 9(1-2):5-18. doi:10.1016/0378-7788(86)90003-4. <https://doi.org/10.1016/0378-7788(86)90003-4>
 - `mathieu-2011-towt`: Mathieu, J.L., Price, P.N., Kiliccote, S., Piette, M.A. (2011). Quantifying Changes in Building Electricity Use, With Application to Demand Response. IEEE Transactions on Smart Grid 2(3):507-518. LBNL-4944E. doi:10.1109/TSG.2011.2145010. <https://www.osti.gov/biblio/1048308>
+- `lbnl-rmv2`: Touzani, S. (2017). RMV2.0: an R package for measurement and verification 2.0 (towt_baseline, version 1.1.0). <https://github.com/LBNL-ETA/RMV2.0>
 - `granderson-2015-baselines`: Granderson, J., Price, P.N., Jump, D., Addy, N., Sohn, M.D. (2015). Automated measurement and verification: Performance of public domain whole-building electric baseline models. Applied Energy 144:106-113. LBNL-187596. doi:10.1016/j.apenergy.2015.01.026. <https://www.osti.gov/pages/biblio/1247594>
 - `lbnl-187225`: Granderson, J., Touzani, S., Custodio, C., Sohn, M.D., Fernandes, S., Jump, D. (2015). Assessment of Automated Measurement and Verification (M&V) Methods. LBNL-187225. doi:10.2172/1236174. <https://www.osti.gov/biblio/1236174>
 - `lbnl-6963e`: Granderson, J., Jump, D., Price, P.N., Sohn, M.D. (2014). Performance Metrics and Objective Testing Methods for Energy Baseline Modeling Software. 2014 ACEEE Summer Study on Energy Efficiency in Buildings, paper 11-734. LBNL-6963E. <https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf>
@@ -310,8 +311,13 @@ the model's temperature segments, above it). A reporting hour is unsupported whe
 fewer than 20 baseline hours (`min_cell_obs`) or lies beyond its mode's fitted range; distances
 are per mode. Hour-of-week × temperature sparsity is reported in `coverage["info"]` for information
 and never changes the tier. TOWT clips its temperature basis at the breakpoints, so it holds its
-response **flat** beyond the fitted range: the error there is bias, not parameter variance, so TOWT
-is flagged but its FSU is never widened. The unseen hour-of-week check still raises.
+response **flat** beyond the fitted range (with fixed `knots` it continues its outer slopes
+instead): the error there is bias, not parameter variance, so TOWT is flagged but its FSU is never
+widened. A reporting hour in an hour-of-week bin the baseline never saw is **unsupported** whatever
+its temperature, counted in `coverage["info"]["n_unseen_tow_bin"]` with a caveat; before 0.105 it
+was silently graded as an unoccupied hour. By default `TOWTModel.predict` still raises on such
+hours; `unseen="fallback"` predicts them from neighbouring bins
+(see [TOWT options](#towt-options-0105-154-155-162)), and they stay unsupported here.
 
 **The daily change-point path** (`daily_changepoint_savings`) also caveats a baseline shorter than
 365 days, which cannot span a weather year.
@@ -1085,6 +1091,84 @@ counts, or a non-finite BIC. The same list is on the exception's `candidates`.
 in order, with `kind`, `p` and either `n`, `sse`, `bic` and `selected` or `refused`. The selection
 itself is unchanged, with the same BIC and the same tie rule (within `1e-9`, the first kind
 tried wins).
+
+`_mvform.best_billing_model`, the billing selector between the best change-point model and the
+degree-day model at the bills' bases, raises the same `ModelFitError` when neither can be fit:
+the change-point kinds as above, then the degree-day kind with its error or the caveat that
+refused it (a slope of the wrong sign).
+
+## TOWT options (0.105, #154, #155, #162)
+
+All three are opt-in; with the defaults every number is unchanged.
+
+**Unseen hour-of-week bins (#154).** `TOWTModel.predict(index, temp)` raises when a timestamp
+falls in an hour-of-week bin the fit never saw: the one-hot design has no column for it, so the
+prediction would collapse to the temperature term alone (a weekday-only fit projected onto a
+weekend predicts −1.2 where the truth is 40). `predict(..., unseen="fallback")` predicts such a
+row instead, in two steps:
+
+1. The unseen bin takes the occupancy class held by the majority of the seen bins at the same hour
+   of day on the same day type (Monday–Friday, or Saturday–Sunday). The row is predicted as the
+   seen bin of that hour, class and day type on the nearest day of the week (counted around the
+   week; a tie takes the earlier day), with that bin's level and its class's temperature response.
+2. With no such donor (no seen bin at that hour on that day type, or a tie between the classes),
+   the row is the mean of the predictions of every seen bin at the same hour of day.
+
+A bin with no seen bin at its hour of day at all predicts NaN. `return_counts=True` returns
+`(prediction, counts)` with `n_unseen_fallback`, `n_unseen_hour_mean`, `n_unseen_unfilled`,
+`n_clipped` and `n_no_temperature`, as `CalTRACKHourlyModel.predict(return_counts=True)` does.
+`TOWTAtIndex(model, index, unseen="fallback")` carries the option into
+`stats.avoided_energy_savings`, whose caveats count the filled rows, and into the exact kernel,
+whose design rows are the fallback's. `towt_savings_hourly(..., unseen="fallback")` also accepts
+a baseline missing some hour-of-week bins (each bin present still needs `min_obs_per_bin`). Filled
+rows are not fitted levels: coverage grades them unsupported, so a period with many of them is
+declined as severe extrapolation by the default policy.
+
+**Non-negative predictions (#155).** `predict(..., clip_negative=True)` sets negative predictions
+to zero, as LBNL's RMV2.0 does for its prediction period; `ChangePointModel.predict` and
+`MeanTempDegreeDayModel.predict` take the same option with `return_counts=True` for the count.
+Clipping comes after the linear projection `X @ beta`: the projection variance and the exact
+kernel are computed on the unclipped projection, and a bound TOWT's savings caveat says how many
+projections were clipped.
+
+**Fixed knots, weights and the LBNL reference (#162).** `fit_towt(..., knots=[...])` replaces the
+`n_temp_segments` quantile breakpoints with fixed temperature knots: `k` knots give `k + 1`
+segments whose outer two are unbounded, so the first and last slopes continue beyond the fitted
+range — the component temperatures of Mathieu et al. (2011), section 4.2 and Table 3, and RMV2.0's
+`piecewiseVariables`. `knot_min_obs` drops an outer knot with fewer than that many temperatures
+beyond it, keeping at least one. `fit_towt(..., weights=w)` fits by weighted least squares
+(weights normalised to mean 1; equal weights are the unweighted fit exactly); the exact kernel
+then reads the weights as variance weights and a reporting hour as one of average weight.
+
+`towt_lbnl_config()` returns the settings verified against LBNL's RMV2.0 R package (version 1.1.0,
+`R/towt_baseline.R`) and Mathieu et al. (2011), LBNL-4944E:
+
+| Setting | Value | Source |
+|---|---|---|
+| knots | 40, 55, 65, 80, 90 °F (`units="degC"` converts) | RMV2.0 `makeBaseline` |
+| outer segments | unbounded | Mathieu et al. §4.2, Table 3; RMV2.0 `piecewiseVariables` |
+| knot pruning | drop an outer knot with < 20 temperatures beyond it, keep one | RMV2.0 `fitLBNLregress` |
+| occupancy split | separate occupied and unoccupied temperature responses | RMV2.0 `fitLBNLregress` |
+| negative predictions | set to zero | RMV2.0 `fitLBNLregress` |
+| recency weight | `s² / (s² + Δt²)`, `Δt` in days from the fit's centre, `s = 14` days | RMV2.0 `makeBaseline` |
+
+```python
+from camber.mandv.towt import fit_towt, towt_lbnl_config
+
+cfg = towt_lbnl_config()
+w = cfg.time_weights(energy.index, energy.index[-1])  # lbnl_time_weights
+model = fit_towt(energy, temp, **cfg.fit_kwargs(), weights=w)
+pred = model.predict(index, reporting_temp, **cfg.predict_kwargs())
+```
+
+A model fitted this way is still a CAMBER TOWT, not RMV2.0's. Not reproduced: RMV2.0's occupancy
+rule (an interval is occupied when a load regression on temperature, hinged at 50 and 65 °F,
+under-predicts it more than 65 % of the time), its ensemble of locally weighted fits (one fit
+centred about every 14 days, the predictions averaged with the same weight function), its
+15-minute time-of-week intervals (the same as hour-of-week bins on hourly data) and its NaN for
+an unseen time of week. The Mathieu et al. paper itself differs again: six equal-width intervals
+over the facility's temperature range, a manually set occupied period and a single unoccupied
+slope, and no time weighting.
 
 ## Change-point + driver models
 

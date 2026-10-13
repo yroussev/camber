@@ -75,6 +75,7 @@ _SHORT = {
     "ashrae-rp1050-imt": "Kissock et al. 2003 (RP-1050 IMT)",
     "fels-1986-prism": "Fels 1986 (PRISM)",
     "mathieu-2011-towt": "Mathieu et al. 2011",
+    "lbnl-rmv2": "LBNL RMV2.0",
     "granderson-2015-baselines": "Granderson et al. 2015",
     "lbnl-187225": "LBNL-187225",
     "lbnl-6963e": "LBNL-6963E",

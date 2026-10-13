@@ -62,10 +62,19 @@ class MeanTempDegreeDayModel:
     # 0.105 (#159): temperatures outside the plausible range set to missing before the fit
     n_temp_screened: int = 0
 
-    def predict(self, tavg):
-        """Predicted energy for period average temperature(s) ``tavg``."""
+    def predict(self, tavg, *, clip_negative: bool = False, return_counts: bool = False):
+        """Predicted energy for period average temperature(s) ``tavg``.
+
+        ``clip_negative`` / ``return_counts`` (0.105, #155; opt-in) as
+        :meth:`camber.mandv.models.ChangePointModel.predict`.
+        """
         hdd, cdd = degree_days(tavg, self.balance_point)
-        return self.base + self.heating_slope * hdd + self.cooling_slope * cdd
+        out = self.base + self.heating_slope * hdd + self.cooling_slope * cdd
+        if not (clip_negative or return_counts):
+            return out
+        from .models import _clip_negative
+
+        return _clip_negative(out, clip_negative, return_counts)
 
     def coverage(self, tavg, *, projected=None, policy=None):
         """How well the fitted temperature range covers ``tavg`` (a

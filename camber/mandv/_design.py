@@ -67,11 +67,19 @@ def fit_record(model) -> _FitRecord | None:
     return rec if isinstance(rec, _FitRecord) else None
 
 
-def design_rows(model, drivers, *, index=None) -> np.ndarray:
+def design_rows(model, drivers, *, index=None, unseen=None) -> np.ndarray:
     """Design rows of a fitted ``model`` at ``drivers`` (``X`` with ``X @ beta`` = prediction).
 
     Change-point, degree-day and driver models use their recorded design spec. A TOWT model needs
     the timestamps: pass ``index``, or a :class:`~camber.mandv.towt.TOWTAtIndex` binding.
+
+    ``unseen`` (TOWT only; 0.105, #154) is the hour-of-week rule of
+    :meth:`~camber.mandv.towt.TOWTModel.predict`: ``"raise"`` refuses an unseen bin and
+    ``"fallback"`` gives its row the fallback's design (a donor bin's row, or the mean of the
+    hour-of-day's rows; NaN where nothing is filled), so ``X @ beta`` is the fallback prediction
+    and the projection variance covers it. ``None`` (the default) takes a binding's own setting,
+    and for a bare model keeps the raw design, whose unseen-bin rows have no time-of-week term.
+    A binding's ``clip_negative`` does not enter: design rows are the unclipped projection.
     """
     inner, bound = _unwrap(model)
     rec = fit_record(model)
@@ -80,13 +88,16 @@ def design_rows(model, drivers, *, index=None) -> np.ndarray:
     if rec.towt is not None:
         import pandas as pd
 
-        from .towt import _build_design, hour_of_week
+        from .towt import hour_of_week
 
         idx = pd.DatetimeIndex(index if index is not None else bound)
         t = np.asarray(drivers, dtype=float).ravel()
         if len(idx) != len(t):
             raise ValueError(f"index has {len(idx)} timestamps but drivers has {len(t)} values")
-        return _build_design(hour_of_week(idx), t, inner.bins, inner.breakpoints, inner.occ_bins)
+        if unseen is None and bound is not None:
+            unseen = getattr(model, "unseen", None)
+        X, _ = inner._design_at(hour_of_week(idx), t, unseen)
+        return X
     if rec.design is None:
         raise TypeError(f"{type(model).__name__} has no linear design")
     return _design(rec.design, _as_2d(drivers))

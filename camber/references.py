@@ -354,6 +354,18 @@ _ALL = (
         doi="10.1109/TSG.2011.2145010",
     ),
     Reference(
+        "lbnl-rmv2",
+        "RMV2.0: an R package for measurement and verification 2.0 (towt_baseline, version 1.1.0)",
+        "Lawrence Berkeley National Laboratory",
+        "",
+        "https://github.com/LBNL-ETA/RMV2.0",
+        RELATED_TOOL,
+        _MV_VERIFIED,
+        section="R/towt_baseline.R: makeBaseline, fitLBNLregress, piecewiseVariables",
+        authors="Touzani, S.",
+        year="2017",
+    ),
+    Reference(
         "granderson-2015-baselines",
         "Automated measurement and verification: Performance of public domain whole-building "
         "electric baseline models",
@@ -514,6 +526,7 @@ MV_REFERENCES: tuple = (
     "ashrae-rp1050-imt",
     "fels-1986-prism",
     "mathieu-2011-towt",
+    "lbnl-rmv2",
     "granderson-2015-baselines",
     "lbnl-187225",
     "lbnl-6963e",

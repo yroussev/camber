@@ -39,7 +39,7 @@ from .models import N_PARAMS, best_model
 from .nonroutine import residual_outliers
 from .stats import SavingsResult, avoided_energy_savings, cv_rmse_max_for, fit_stats
 from .sufficiency import InsufficientBaseline, baseline_need
-from .towt import TOWTAtIndex, fit_towt, hour_of_week
+from .towt import TOWTAtIndex, _check_unseen, fit_towt, hour_of_week
 
 
 @dataclass
@@ -231,6 +231,8 @@ def towt_savings_hourly(
     occ_split: bool = True,
     extrapolation: ExtrapolationPolicy | None = None,
     timezone: str | None = None,
+    unseen: str = "raise",
+    clip_negative: bool = False,
 ) -> TOWTHourlyResult:
     """Hourly NMEC / IPMVP Option-C avoided energy on a **TOWT** baseline.
 
@@ -267,11 +269,18 @@ def towt_savings_hourly(
     Reporting hours are checked against the baseline's (occupancy mode x temperature cell) support
     (:func:`camber.mandv.coverage.towt_coverage`); a severe extrapolation declines by default. TOWT
     holds its temperature response flat beyond the fitted range, so it is flagged but never
-    widened. The unseen hour-of-week check below still raises, as before.
+    widened.
 
     A baseline under ``min_hours``, missing hour-of-week bins, or with bins under
     ``min_obs_per_bin`` raises :class:`camber.mandv.sufficiency.InsufficientBaseline` (a
-    ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed.
+    ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed, and a
+    reporting period in hour-of-week bins the baseline never saw raises ``ValueError``.
+    ``unseen="fallback"`` (0.105, #154; opt-in) accepts a baseline missing some bins (each bin
+    present still needs ``min_obs_per_bin``) and predicts reporting hours in them by
+    :meth:`~camber.mandv.towt.TOWTModel.predict`'s fallback rule; coverage grades those hours
+    unsupported and the savings caveats count them. ``clip_negative=True`` (0.105, #155;
+    opt-in) sets negative reporting projections to zero; the band stays on the unclipped
+    projection and a caveat counts them.
 
     ``timezone`` (0.105, #158) places the hours on the site's clock, so a daylight-saving
     fall-back hour is two hours, not one counted twice (see
@@ -287,7 +296,8 @@ def towt_savings_hourly(
             f"need >= {min_hours} baseline hours, got {len(base)}",
             baseline_need("hourly", len(base), min_n=min_hours),
         )
-    _require_bin_coverage(base.index, min_obs_per_bin)
+    allow_missing = _check_unseen(unseen) == "fallback"
+    _require_bin_coverage(base.index, min_obs_per_bin, allow_missing=allow_missing)
 
     excluded = 0
     if exclude_non_routine:
@@ -303,7 +313,7 @@ def towt_savings_hourly(
             keep = ~pd.Index(base.index.normalize()).isin(bad_days)
             excluded = int(len(bad_days))
             base = base[keep]
-            _require_bin_coverage(base.index, min_obs_per_bin)
+            _require_bin_coverage(base.index, min_obs_per_bin, allow_missing=allow_missing)
 
     model = fit_towt(
         base["energy"], base["oat"], n_temp_segments=n_temp_segments, occ_split=occ_split
@@ -320,14 +330,14 @@ def towt_savings_hourly(
     notes += _frame_caveats(rep, "reporting")
     if rep.empty:
         raise ValueError("no usable reporting-period data")
-    if not model.covers(rep.index):
+    if not allow_missing and not model.covers(rep.index):
         raise ValueError(
             "the baseline does not cover the reporting period's hour-of-week schedule; "
             "projecting anyway would silently under-predict the baseline (see TOWTModel.predict)"
         )
 
     savings = avoided_energy_savings(
-        TOWTAtIndex(model, rep.index),
+        TOWTAtIndex(model, rep.index, unseen=unseen, clip_negative=clip_negative),
         rep["oat"].to_numpy(),
         rep["energy"].to_numpy(),
         cv_rmse=st.cv_rmse,
@@ -337,6 +347,10 @@ def towt_savings_hourly(
         rho=st.rho_lag1,
         extrapolation=extrapolation,
     )
+    if len(model.bins) < 168:
+        savings.caveats.append(
+            f"the baseline covers {len(model.bins)} of 168 hour-of-week bins (unseen='fallback')"
+        )
     savings.caveats.extend(notes)
 
     return TOWTHourlyResult(
@@ -357,11 +371,12 @@ def towt_savings_hourly(
     )
 
 
-def _require_bin_coverage(index, min_obs_per_bin: int) -> None:
-    """Raise unless every hour-of-week bin present carries at least ``min_obs_per_bin`` samples."""
+def _require_bin_coverage(index, min_obs_per_bin: int, *, allow_missing: bool = False) -> None:
+    """Raise unless every hour-of-week bin present carries at least ``min_obs_per_bin`` samples
+    (and, unless ``allow_missing``, all 168 bins are present)."""
     tow = hour_of_week(pd.DatetimeIndex(index))
     present, counts = np.unique(tow, return_counts=True)
-    if len(present) < 168:
+    if len(present) < 168 and not allow_missing:
         raise InsufficientBaseline(
             f"baseline covers only {len(present)} of 168 hour-of-week bins; a TOWT baseline "
             "cannot project onto the hours it never saw",

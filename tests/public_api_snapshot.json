@@ -1450,10 +1450,15 @@
     "baseline_need"
   ],
   "camber.mandv.towt": [
+    "LBNL_KNOTS_F",
     "TOWTAtIndex",
     "TOWTModel",
+    "TOWTReferenceConfig",
+    "UNSEEN_MODES",
     "fit_towt",
-    "hour_of_week"
+    "hour_of_week",
+    "lbnl_time_weights",
+    "towt_lbnl_config"
   ],
   "camber.mandv.weather": [
     "EPW_DRYBULB_COL",

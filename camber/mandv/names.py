@@ -39,6 +39,7 @@ _G14 = "ashrae-g14-2014"
 _IMT = "ashrae-rp1050-imt"
 _PRISM = "fels-1986-prism"
 _TOWT = "mathieu-2011-towt"
+_RMV2 = "lbnl-rmv2"
 _CALTRACK = "caltrack-2"
 _IPMVP = "evo-ipmvp-core-2022"
 _SEP = "doe-sep-mv-2019"
@@ -228,12 +229,19 @@ _ROWS = (
         "towt",
         "TOWT (CAMBER variant)",
         "Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0)",
-        (_TOWT,) + _LBNL_TEST,
+        (_TOWT, _RMV2) + _LBNL_TEST,
         "camber.mandv.towt.fit_towt",
-        "One pooled model over the baseline; hour-of-week bins (168); `n_temp_segments` "
-        "quantile-spaced temperature knots rather than the reference's fixed knots; occupancy "
-        "from each bin's mean load against the median of bin means; no time-weighting of "
-        "observations.",
+        "One pooled model over the baseline; hour-of-week bins (168); by default "
+        "`n_temp_segments` quantile-spaced temperature knots held flat beyond the fitted range "
+        "rather than the reference's fixed knots; occupancy from each bin's mean load against "
+        "the median of bin means; no time-weighting of observations. Opt-in (0.105): "
+        "`towt_lbnl_config()` matches RMV2.0's knots (40, 55, 65, 80, 90 degF, open outer "
+        "segments, outer knots pruned under 20 observations), its zero clip and its recency "
+        "weight function (`fit_towt(weights=lbnl_time_weights(...))`); it still differs in "
+        "occupancy (RMV2.0: a 65% positive-residual rule), in fitting one weighted model "
+        "rather than RMV2.0's ensemble of local fits, in hour-of-week bins where RMV2.0 "
+        "defaults to 15-minute intervals (the same on hourly data), and in refusing (or, opt-in, "
+        "filling) an unseen time of week where RMV2.0 predicts NaN.",
         "other baseline model",
     ),
     MVName(

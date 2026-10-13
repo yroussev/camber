@@ -489,7 +489,9 @@ def avoided_energy_savings(
     the policy says ``decline=False``. Reporting rows without a finite projection or actual energy
     are excluded from the sums and counted (``coverage["n_used"]`` vs ``["n_report"]``), not
     dropped silently; the caveat also says how many had no finite projection (0.105, #159: a
-    missing or screened temperature).
+    missing or screened temperature). A TOWT baseline bound with
+    :class:`~camber.mandv.towt.TOWTAtIndex` ``(unseen="fallback", clip_negative=True)``
+    (0.105, #154 / #155) adds a caveat counting the rows it filled or clipped.
 
     **Kernel.** ``kernel="g14"`` (the default) is the G14 expression above. ``kernel="exact"`` is
     the OLS projection variance of the baseline at the reporting drivers,
@@ -512,6 +514,7 @@ def avoided_energy_savings(
     y_report = np.asarray(y_report, dtype=float)
     n_report = int(len(y_report))
     proj_all = np.asarray(baseline_model.predict(T_report), dtype=float)
+    pcounts = getattr(baseline_model, "predict_counts", None)  # a TOWTAtIndex's (0.105)
     mask = np.isfinite(proj_all) & np.isfinite(y_report)
     d_all = None if days is None else _days_array(days, n_report)
     if d_all is not None:
@@ -568,6 +571,7 @@ def avoided_energy_savings(
                 else ""
             )
         )
+    caveats += _predict_count_caveats(pcounts)
     k = None
     if kernel == "exact":
         k = 1.0  # the leverage of the reporting drivers is already inside the exact kernel
@@ -609,6 +613,30 @@ def avoided_energy_savings(
     if declined:
         _decline(res, cov.reason)
     return res
+
+
+def _predict_count_caveats(counts) -> list:
+    """Caveats for a TOWT projection's opt-in fallback and clipping counts (0.105, #154/#155)."""
+    if not isinstance(counts, dict):
+        return []
+    out = []
+    n_fb, n_none = int(counts.get("n_unseen_fallback", 0)), int(counts.get("n_unseen_unfilled", 0))
+    if n_fb or n_none:
+        n_mean = int(counts.get("n_unseen_hour_mean", 0))
+        out.append(
+            f"{n_fb + n_none} reporting row(s) fall in hour-of-week bins the baseline never saw; "
+            f"unseen='fallback' predicted {n_fb - n_mean} from the nearest day's bin of the same "
+            f"hour and occupancy class and {n_mean} from the hour-of-day mean"
+            + (f", and left {n_none} without a prediction" if n_none else "")
+            + ". They are not fitted levels, and coverage grades them unsupported"
+        )
+    n_clip = int(counts.get("n_clipped", 0))
+    if n_clip:
+        out.append(
+            f"{n_clip} negative baseline projection(s) were set to zero (clip_negative=True); "
+            "the uncertainty band is computed on the unclipped projection"
+        )
+    return out
 
 
 _KERNELS = ("g14", "exact")

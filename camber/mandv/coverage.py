@@ -732,6 +732,11 @@ def _categorical_coverage(model, T, cat, *, projected=None, policy=None) -> Cove
 
 
 def _towt_modes(tow: np.ndarray, occ_bins) -> np.ndarray:
+    """Occupancy mode per hour-of-week bin: 0 occupied (or the one mode), 1 unoccupied.
+
+    An hour-of-week bin the fit never saw is not in ``occ_bins`` either, so it maps to 1 here;
+    :func:`towt_coverage` reports such hours as unseen rather than unoccupied (0.105, #154).
+    """
     if occ_bins is None:
         return np.zeros(len(tow), dtype=int)
     occ = np.fromiter((int(b) in occ_bins for b in tow), dtype=bool, count=len(tow))
@@ -791,7 +796,15 @@ def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverag
     range; cells below and above the fitted range hold none. Distances are per mode. The share of
     reporting hours whose (hour-of-week x temperature cell) the baseline never saw is reported in
     ``info`` for information only. TOWT is flagged, never widened: its temperature response is held
-    flat beyond the fitted range, so the error there is bias rather than parameter variance.
+    flat beyond the fitted range (or, with fixed knots, continues its outer slopes), so the error
+    there is bias rather than parameter variance.
+
+    **Unseen hour-of-week bins** (0.105, #154). A reporting hour in an hour-of-week bin the fit
+    never saw is unsupported whatever its temperature: it is counted outside the support, left
+    out of the per-mode temperature variables, and reported in ``info["n_unseen_tow_bin"]`` with
+    a caveat. (Before 0.105 such an hour was silently graded as an unoccupied one.)
+    ``TOWTModel.predict`` raises on them unless ``unseen="fallback"`` predicts them from
+    neighbouring bins; either way they are not a fitted level.
     """
     import pandas as pd
 
@@ -809,6 +822,8 @@ def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverag
         raise ValueError(f"index has {len(idx)} timestamps but temp has {n} values")
     tow = hour_of_week(idx)
     rows = np.isfinite(t)
+    fit_bins = getattr(model, "bins", None)
+    unseen = np.zeros(n, dtype=bool) if fit_bins is None else ~np.isin(tow, np.asarray(fit_bins))
     mode = _towt_modes(tow, getattr(model, "occ_bins", None) if len(support.modes) == 2 else None)
     bps = support.breakpoints
     n_seg = len(bps) - 1
@@ -819,12 +834,12 @@ def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverag
     mmin = support.mode_min[mode]
     mmax = support.mode_max[mode]
     with np.errstate(invalid="ignore"):
-        below = rows & ~(t >= mmin)  # also true for a mode never seen at fit (NaN range)
-        above = rows & (t > mmax)
-    outside = rows & ((cell < pol.min_cell_obs) | below | above)
+        below = rows & ~unseen & ~(t >= mmin)  # also true for a mode never seen at fit (NaN range)
+        above = rows & ~unseen & (t > mmax)
+    outside = rows & ((cell < pol.min_cell_obs) | below | above | unseen)
     variables = []
     for i, name in enumerate(support.modes):
-        sel = rows & (mode == i)
+        sel = rows & ~unseen & (mode == i)
         if not sel.any():
             continue
         lo, hi = support.mode_min[i], support.mode_max[i]
@@ -880,9 +895,24 @@ def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverag
         "breakpoints": [_r(b, 3) for b in bps],
     }
     caveats = []
-    if beyond_fit.any():
+    n_unseen = int((rows & unseen).sum())
+    if n_unseen:
+        info["n_unseen_tow_bin"] = n_unseen
+        k_bins = len(np.unique(tow[rows & unseen]))
         caveats.append(
-            f"TOWT holds its temperature response flat beyond the fitted range "
+            f"{n_unseen} reporting hour(s) fall in {k_bins} hour-of-week bin(s) the baseline "
+            "never saw: graded unsupported, not as unoccupied hours. TOWT has no fitted level "
+            "for them; TOWTModel.predict refuses them unless unseen='fallback' predicts them "
+            "from neighbouring bins"
+        )
+    if beyond_fit.any():
+        held = (
+            "continues its outermost temperature slopes linearly"
+            if getattr(model, "open_ends", False)
+            else "holds its temperature response flat"
+        )
+        caveats.append(
+            f"TOWT {held} beyond the fitted range "
             f"({_fmt(float(bps[0]))} to {_fmt(float(bps[-1]))}); {int(beyond_fit.sum())} reporting "
             "hour(s) lie there, where the error is bias rather than parameter variance, so the "
             "uncertainty band is not widened to cover it"

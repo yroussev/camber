@@ -45,6 +45,10 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   sensor-health outdoor-air range (-40 to 140 °F) as missing. The count is reported as
   `n_temp_screened` on the model and the frame, and in the savings caveats. `temp_bounds=` sets
   another range.
+- **TOWT coverage no longer grades an unseen hour-of-week bin as unoccupied (#154).** An hour
+  in a bin the baseline never saw took the unoccupied mode's temperature cells and could pass as
+  supported. It is now unsupported whatever its temperature, counted in
+  `coverage["info"]["n_unseen_tow_bin"]` and caveated.
 - **A TOWT row without a temperature predicts NaN (#159).** `TOWTModel.predict` used to give it
   its time-of-week level alone, a projection with no weather in it. `avoided_energy_savings`
   excludes such rows, as it did any non-finite projection, and its caveat now says how many rows
@@ -99,7 +103,9 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   lists every kind tried with its parameter count and why it was refused: the fit's own error,
   `n - p < 1` with the counts, or a non-finite BIC. The list is also on `.candidates`.
   `best_model(..., return_candidates=True)` returns `(model, candidates)`, with each fitted
-  kind's `n`, `sse`, `bic` and `selected`. The choice of model is unchanged.
+  kind's `n`, `sse`, `bic` and `selected`. The choice of model is unchanged. The billing
+  selector `_mvform.best_billing_model` raises the same `ModelFitError` when neither the
+  change-point kinds nor the degree-day model can be fit, listing each with its reason.
 - **`seasonal_forecast` warns past its horizon (#161).** The forecaster is built for next-day
   to next-week use. A new `max_horizon=` (default 14 days, `None` to turn it off) issues a
   `forecast.ForecastHorizonWarning` when the latest target lies further than that past the end
@@ -107,6 +113,26 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   mean because history never saw their time-of-week slot. The forecast is still returned.
   `backtest` passes `max_horizon` through, so a hold-out longer than 14 days warns too.
   `docs/FORECAST.md` documents the intended horizon.
+- **TOWT can predict hour-of-week bins the fit never saw, on request (#154).**
+  `TOWTModel.predict(..., unseen="fallback")` fills such a row from the seen bin of the same hour
+  and occupancy class on the nearest day of the same day type, or else from the mean of that
+  hour's seen bins (NaN when the hour was never seen); `return_counts=True` counts each step.
+  `TOWTAtIndex(unseen=)`, `_design.design_rows(unseen=)` and
+  `towt_savings_hourly(unseen=)` carry it through, `avoided_energy_savings` caveats the count,
+  and coverage grades the filled rows unsupported. The default still raises.
+- **Optional non-negative predictions (#155).** `clip_negative=True` on `TOWTModel.predict`,
+  `TOWTAtIndex`, `towt_savings_hourly`, `ChangePointModel.predict` and
+  `MeanTempDegreeDayModel.predict` sets negative predictions to zero after `X @ beta` and counts
+  them; the uncertainty stays on the unclipped projection. Off by default.
+- **TOWT with fixed knots, weights and the LBNL reference settings (#162).**
+  `fit_towt(..., knots=, knot_min_obs=, weights=)`: fixed temperature knots with unbounded outer
+  segments (Mathieu et al. 2011, Table 3), RMV2.0's outer-knot pruning, and weighted least
+  squares. `towt_lbnl_config()` returns the settings verified against LBNL's RMV2.0 1.1.0
+  (knots 40, 55, 65, 80, 90 °F, pruning under 20 observations, zero clip, recency weight
+  `s² / (s² + Δt²)` with `s = 14` days, `lbnl_time_weights`); RMV2.0's occupancy rule and its
+  ensemble of local fits are not reproduced, and the registry's TOWT row says so. Models with
+  these options serialise `open_ends` / `weighted`; older stored models load unchanged.
+  `camber.references` adds `lbnl-rmv2`.
 
 ### Changed
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily

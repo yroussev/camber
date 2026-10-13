@@ -322,11 +322,15 @@ def fit(frame: pd.DataFrame, *, family: str | None = None):
 def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
     """The better by BIC of the best change-point model and the degree-day model at the frame's
     bases (``attrs["dd_kind"]``, ``attrs["dd_bases_fitted"]``), both days-weighted; BIC counts
-    every parameter (change points, fitted bases). ``family`` keeps one form (provisional, 0.94)."""
+    every parameter (change points, fitted bases). ``family`` keeps one form (provisional, 0.94).
+
+    When no candidate can be fit it raises :class:`camber.mandv.models.ModelFitError` (a
+    ``ValueError``) listing each candidate tried and why it was refused (0.105, as
+    :func:`camber.mandv.models.best_model`): the change-point kinds, and the degree-day model."""
     import numpy as np
 
     from .basetemp import _LEGS, fit_bill_degree_day, rows_at_bases
-    from .models import best_model
+    from .models import ModelFitError, best_model
 
     T = frame["oat"].to_numpy(dtype=float)
     y = frame["energy"].to_numpy(dtype=float)
@@ -334,11 +338,14 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
     kind = frame.attrs["dd_kind"]
     legs = _LEGS[kind]
     cands: list = []
+    tried: list = []  # one dict per refused candidate, for ModelFitError
     if family in (None, "cp"):
         try:
             cands.append(best_model(T, y, time_index=frame.index, weights=days))
-        except ValueError:
-            pass
+        except ModelFitError as e:
+            tried.extend(e.candidates)
+        except ValueError as e:
+            tried.append({"kind": "change-point", "p": None, "refused": f"ValueError: {e}"})
     if family in (None, "dd"):
         hb = frame.attrs.get("heating_base_f") if "h" in legs else None
         cb = frame.attrs.get("cooling_base_f") if "c" in legs else None
@@ -355,10 +362,12 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
             )
             if not m.caveats:  # a slope of the wrong sign is refused, never selected
                 cands.append(m)
-        except ValueError:
-            pass
+            else:
+                tried.append({"kind": kind, "p": int(m.p), "refused": "; ".join(m.caveats)})
+        except ValueError as e:
+            tried.append({"kind": kind, "p": None, "refused": f"{type(e).__name__}: {e}"})
     if not cands:
-        raise ValueError("no model could be fit")
+        raise ModelFitError(tried)
     from .models import fit_weights
 
     w, _ = fit_weights(days)
