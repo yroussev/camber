@@ -148,7 +148,7 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   faithful CalTRACK methods follow, #156).
 
 ### Deprecated
-- `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 2.0: the
+- `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 1.0: the
   names said "variable-base degree-day", but the model uses each period's mean temperature and one
   shared balance point. Use `fit_mean_temp_degree_day` and `MeanTempDegreeDayModel`; the old
   names keep working with a `DeprecationWarning`, and stored models keep `"type":

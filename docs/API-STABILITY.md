@@ -747,8 +747,8 @@ Currently deprecated names and code paths, each with its replacement. Each emits
 | `mandv.caltrack.NMECResult` | 0.105 | 1.0 | `mandv.caltrack.DailyNMECResult` |
 | `mandv.caltrack.caltrack_savings_hourly` (a pooled TOWT, not CalTRACK Hourly) | 0.105 | 1.0 | `mandv.caltrack.towt_savings_hourly` (same numbers); for CalTRACK Hourly, `mandv.caltrack_hourly.caltrack_hourly_savings` |
 | `mandv.caltrack.HourlyNMECResult` | 0.105 | 1.0 | `mandv.caltrack.TOWTHourlyResult` |
-| `camber.mandv.degreeday.fit_degree_day` | 0.105 | 2.0 | `fit_mean_temp_degree_day` (same arguments and result) |
-| `camber.mandv.degreeday.DegreeDayModel` | 0.105 | 2.0 | `MeanTempDegreeDayModel` (stored models keep `"type": "DegreeDayModel"` and read back unchanged) |
+| `camber.mandv.degreeday.fit_degree_day` | 0.105 | 1.0 | `fit_mean_temp_degree_day` (same arguments and result) |
+| `camber.mandv.degreeday.DegreeDayModel` | 0.105 | 1.0 | `MeanTempDegreeDayModel` (stored models keep `"type": "DegreeDayModel"` and read back unchanged) |
 
 Stores opened **without** a facility (plain stores outside a portfolio workspace) are not
 deprecated in this release and do not warn: nothing there can be migrated to a facility id yet.

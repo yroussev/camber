@@ -257,13 +257,13 @@ def fit_mean_temp_degree_day(
 # --- deprecated names (0.105, #163) ---------------------------------------------------------------
 
 
-@deprecated(since="0.105", remove_in="2.0", use="camber.mandv.degreeday.MeanTempDegreeDayModel")
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.degreeday.MeanTempDegreeDayModel")
 class DegreeDayModel(MeanTempDegreeDayModel):
     """Deprecated alias of :class:`MeanTempDegreeDayModel` (the old name said "variable-base",
     which the model is not). ``from_dict`` on it still reads stored models."""
 
 
-@deprecated(since="0.105", remove_in="2.0", use="camber.mandv.degreeday.fit_mean_temp_degree_day")
+@deprecated(since="0.105", remove_in="1.0", use="camber.mandv.degreeday.fit_mean_temp_degree_day")
 def fit_degree_day(tavg, energy, **kwargs) -> MeanTempDegreeDayModel:
     """Deprecated alias of :func:`fit_mean_temp_degree_day`."""
     return fit_mean_temp_degree_day(tavg, energy, **kwargs)
