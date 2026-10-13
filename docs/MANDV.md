@@ -85,7 +85,7 @@ counterpart. See [Naming and citations](#naming-and-citations) for how to cite t
 | Label | CAMBER | Standard name | Citation | Differences |
 |---|---|---|---|---|
 | TOWT (CAMBER variant) | `towt`, `mandv.towt.fit_towt` | Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011; LBNL RMV2.0) | [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308); [LBNL RMV2.0](https://github.com/LBNL-ETA/RMV2.0); [Granderson et al. 2015](https://www.osti.gov/pages/biblio/1247594); [LBNL-187225](https://www.osti.gov/biblio/1236174); [LBNL-6963E](https://www.aceee.org/wp-content/uploads/proceedings-1980-2020/2014/11-734.pdf) | One pooled model over the baseline; hour-of-week bins (168); by default `n_temp_segments` quantile-spaced temperature knots held flat beyond the fitted range rather than the reference's fixed knots; occupancy from each bin's mean load against the median of bin means; no time-weighting of observations. Opt-in (0.105): `towt_lbnl_config()` matches RMV2.0's knots (40, 55, 65, 80, 90 degF, open outer segments, outer knots pruned under 20 observations), its zero clip and its recency weight function (`fit_towt(weights=lbnl_time_weights(...))`); it still fits one weighted model with load-median occupancy, in hour-of-week bins where RMV2.0 defaults to 15-minute intervals (the same on hourly data), and refuses (or, opt-in, fills) an unseen time of week where RMV2.0 predicts NaN. RMV2.0's 65% positive-residual occupancy rule and its ensemble of local fits are in `towt_rmv2` (`fit_towt_rmv2`). |
-| TOWT, LBNL RMV2.0 variant | `towt_rmv2`, `mandv.towt_rmv2.fit_towt_rmv2` | Time-of-Week-and-Temperature (TOWT) model, LBNL RMV2.0 implementation (towt_baseline) | [LBNL RMV2.0](https://github.com/LBNL-ETA/RMV2.0); [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Opt-in (0.105). Reproduces RMV2.0 1.1.0's makeBaseline (R/towt_baseline.R, commit 979a963): its occupancy rule (a regression of load on temperature hinged at 50 and 65 degF; an interval is occupied when over 65% of its residuals are positive, and the split needs more than two), its knots and pruning, and its ensemble of local fits centred every ~14 days by row count, each prediction clipped at zero and averaged with the weights s^2/(s^2+dt^2) about the prediction time. An unseen time of week is NaN. Differences: hour-of-week intervals by default (RMV2.0: 15 minutes, the same on hourly data); RMV2.0's data cleaning (clean_eload, clean_Temp) is not applied, CAMBER's temperature screen is; the final approx() fill of NaN is opt-in (`unseen="previous"`). Differs from Mathieu et al. (2011): data-driven occupancy and time weighting. |
+| TOWT (LBNL RMV2.0 variant) | `towt_rmv2`, `mandv.towt_rmv2.fit_towt_rmv2` | Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011) | [LBNL RMV2.0](https://github.com/LBNL-ETA/RMV2.0); [Mathieu et al. 2011](https://www.osti.gov/biblio/1048308) | Opt-in (0.105). Reproduces RMV2.0 1.1.0's makeBaseline (R/towt_baseline.R, commit 979a963): its occupancy rule (a regression of load on temperature hinged at 50 and 65 degF; an interval is occupied when over 65% of its residuals are positive, and the split needs more than two), its knots and pruning, and its ensemble of local fits centred every ~14 days by row count, each prediction clipped at zero and averaged with the weights s^2/(s^2+dt^2) about the prediction time. An unseen time of week is NaN. Differences: hour-of-week intervals by default (RMV2.0: 15 minutes, the same on hourly data); RMV2.0's data cleaning (clean_eload, clean_Temp) is not applied, CAMBER's temperature screen is; the final approx() fill of NaN is opt-in (`unseen="previous"`). Differs from Mathieu et al. (2011): data-driven occupancy and time weighting. As in RMV2.0, a prediction leans on the local fits centred nearest it, in the reporting period those at the end of the baseline: suited to short horizons and to tracking recent conditions; several months ahead, in a season the baseline saw little of, it can be less accurate than unweighted TOWT. |
 | Change-point + drivers (multivariable) | `multivariable`, `mandv.multivariable.fit_cp_driver_model` | Multivariable change-point regression model (SEP 50001 M&V Protocol §6.3.2) | [SEP 50001 M&V Protocol 2019](https://betterbuildingssolutioncenter.energy.gov/iso-50001/sep-50001/resources/sep-50001-measurement-and-verification-protocol); [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | Change points grid-searched with the drivers in the design; drivers enter linearly. |
 | Categorical change-point (one model per category) | `categorical`, `mandv.categorical.fit_categorical` | — | [ASHRAE G14-2014](https://www.ashrae.org/technical-resources/standards-and-guidelines/titles-purposes-and-scopes) | A CAMBER construct: a separate change-point model per category combination (day type, occupancy mode), routed by category, with pooled fit statistics; not indicator terms in one regression. |
 
@@ -1128,14 +1128,30 @@ degree-day model at the bills' bases, raises the same `ModelFitError` when neith
 the change-point kinds as above, then the degree-day kind with its error or the caveat that
 refused it (a slope of the wrong sign).
 
-**When no points were left (#172).** If the day-coverage rule, the temperature screen or missing
-values left too few points to fit, the message says so after the list: "only 0 usable point(s)
-remained upstream of the fit: 20 day(s) dropped by the day-coverage rule (min_coverage)", or
-temperature values screened, or rows missing a temperature or energy value. The exception's
-`causes` holds the counts (`None` when points were not the problem). `best_model` counts what it
-screens and finds missing itself; `upstream=frame.attrs` adds the counts of the frame builder
-(`dropped_days`, `n_temp_screened`; a pandas `T` brings its own `attrs`), and the billing
-selector passes the bills frame's `attrs` (`dropped_bills`).
+**When no points were left (#172, #175).** If the day-coverage rule, the temperature screen or
+missing values left too few points to fit, the message says so after the list. It states what
+the fit itself saw, the same for every candidate, then why the other rows were lost: "every
+candidate saw 0 finite (temperature, energy) point(s), fewer than the 3 a fit needs; why: 20
+day(s) dropped by the day-coverage rule (min_coverage) before the fit". The causes are rows
+missing a temperature or energy value, temperature values screened, days dropped by the
+day-coverage rule and bills dropped for temperature coverage. The exception's `causes` holds the
+counts (`None` when points were not the problem), and `upstream_given` says whether the frame
+builder's counts were available.
+
+`best_model` counts the rows it screens and finds missing itself. The days or bills dropped
+before the call are counted by the frame builder in the frame's `attrs` (`dropped_days`,
+`dropped_bills`, `n_temp_screened`), and `best_model` finds them in any of these:
+
+- the frame itself: `best_model(frame)` fits its `oat` and `energy` columns and takes its index
+  as `time_index`;
+- its columns as pandas objects: `best_model(frame["oat"], frame["energy"])` (pandas carries
+  `attrs` to a column);
+- `upstream=frame.attrs` (or `upstream=frame`) when the data are NumPy arrays.
+
+Without any of these, the message says that rows dropped before the call are not known, instead
+of implying that there were none. `upstream` only feeds the message; it never changes the fit.
+The billing selector `best_billing_model(frame)` takes the bills frame and always reads its
+`attrs`.
 
 ## TOWT options (0.105, #154, #155, #162)
 
@@ -1210,11 +1226,12 @@ centred about every 14 days, the predictions averaged with the same weight funct
 an unseen time of week. The Mathieu et al. paper itself differs again: six equal-width intervals
 over the facility's temperature range, a manually set occupied period and a single unoccupied
 slope, and no time weighting.
-The RMV2.0 variant below reproduces all four. Use it for a like-for-like comparison with RMV2.0
-and for long-horizon baselines: one recency-weighted fit centred on the end of the baseline
-drifts when the reporting period is long.
+The RMV2.0 variant below reproduces all four. Use it for a like-for-like comparison with RMV2.0,
+and in place of one recency-weighted fit centred on the end of the baseline, which drifts when
+the reporting period is long (see [Horizon](#towt-lbnl-rmv20-variant-0105-165) for its own
+reach).
 
-### TOWT, LBNL RMV2.0 variant (0.105, #165)
+### TOWT (LBNL RMV2.0 variant) (0.105, #165)
 
 `camber.mandv.towt_rmv2.fit_towt_rmv2(energy, temp)` reimplements RMV2.0 1.1.0's `makeBaseline`
 (`R/towt_baseline.R` at commit `979a963`, LBNL-ETA/RMV2.0). It is opt-in, and every other TOWT
@@ -1232,9 +1249,11 @@ is unchanged. Each step was read from the R source; the line numbers refer to th
 | prediction | each local prediction set to zero where negative, then `Σ w_k p_k / Σ w_k` with `w_k = s² / (s² + (c_k − t)²)` about the prediction time | 404–406, 454, 472 |
 | unseen interval | `NA` in every local fit, so `NA` | 386, 399, 472 |
 
-The centres lie within the training period. In the reporting period, a prediction far beyond the
-baseline weights the local fits almost equally, so it does not lean on the last two weeks. The
-occupancy rule and the knot pruning are unweighted, so every local fit shares one design.
+The centres lie within the training period. The occupancy rule and the knot pruning are
+unweighted, so every local fit shares one design. CAMBER factors that design once and solves each
+local fit as a narrow weighted problem (#176), with the same minimum-norm coefficients as a
+separate weighted least-squares fit per centre; a year of hourly data fits in about the time of
+one pooled TOWT fit.
 
 ```python
 from camber.mandv.towt_rmv2 import fit_towt_rmv2
@@ -1257,6 +1276,10 @@ Options:
     stays NaN.
   - `"raise"` raises an error.
   - `"fallback"` uses the TOWT fallback rule above. It is not RMV2.0 and needs hourly intervals.
+- `return_counts=True` counts `n_clipped`, the rows whose final prediction was clipped, as for
+  the other models. It is 0 by construction, because each local prediction is clipped before
+  the average. `n_local_clipped` counts the rows where at least one local prediction was
+  clipped (#178).
 - `local_predictions` and `weights` return the ensemble's parts. `TOWTAtIndex(model, index)`
   binds the model for `stats.avoided_energy_savings`.
 - `units="degC"` takes Celsius. The occupancy hinges stay at 50 and 65 °F.
@@ -1281,10 +1304,25 @@ unless `CAMBER_RMV2_RSCRIPT` names an `Rscript`; set `CAMBER_RMV2_SOURCE` to a c
 `towt_baseline.R` from that commit (its model functions need base R only). R is not a
 dependency.
 
-**Long horizons.** On a synthetic two-year series with a shorter summer schedule, fitting the
-first year and predicting the second gives an hourly CV(RMSE) of about 14.8 % with this variant,
-against 18.1 % with one recency-weighted fit centred on the last baseline hour
-(`towt_lbnl_config()`).
+**Horizon (#177).** A prediction weights each local fit by `s² / (s² + (c_k − t)²)` about its
+own time `t`, so it leans on the local fits centred nearest it. In the reporting period those are
+the fits at the end of the baseline: 90 days after a one-year baseline, the last centre weighs
+about 25 times the first, and the weights even out only slowly after that. This is how RMV2.0
+itself behaves, not a CAMBER departure.
+
+- **Prefer it** for short reporting horizons, the first weeks and months after the baseline, and
+  where the baseline's recent conditions matter (a schedule or load change late in the
+  baseline). On synthetic data with a shorter summer schedule, it did better than an unweighted
+  TOWT over the first months.
+- **Compare it with an unweighted TOWT** (`fit_towt`) when the reporting period runs several
+  months beyond the baseline into a season the baseline saw little of, or saw long before its
+  end. There the prediction still rests mostly on the last local fits, and on the same synthetic
+  data it was a little less accurate than unweighted TOWT five months and more after the
+  baseline.
+- It still does better than one recency-weighted fit centred on the last baseline hour
+  (`towt_lbnl_config()`), which ignores the earlier seasons. On a synthetic two-year series with
+  a shorter summer schedule, fitting the first year and predicting the second gives an hourly
+  CV(RMSE) of about 14.8 % with this variant, against 18.1 % with that single fit.
 
 ## Change-point + driver models
 

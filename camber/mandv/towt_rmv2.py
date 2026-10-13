@@ -1,4 +1,4 @@
-"""TOWT, LBNL RMV2.0 variant: RMV2.0's occupancy rule and weighted ensemble (opt-in, 0.105, #165).
+"""TOWT (LBNL RMV2.0 variant): RMV2.0's occupancy rule and weighted ensemble (opt-in, 0.105, #165).
 
 A reimplementation of the Time-of-Week-and-Temperature baseline in LBNL's RMV2.0 R package
 (version 1.1.0, ``R/towt_baseline.R`` at commit ``979a963``, GitHub ``LBNL-ETA/RMV2.0``), for a
@@ -6,7 +6,7 @@ like-for-like comparison with the LBNL reference. Default CAMBER TOWT
 (:func:`camber.mandv.towt.fit_towt`) and :func:`~camber.mandv.towt.towt_lbnl_config` are
 unchanged.
 
-**Name: "TOWT, LBNL RMV2.0 variant"** (:mod:`camber.mandv.names`, code ``towt_rmv2``).
+**Name: "TOWT (LBNL RMV2.0 variant)"** (:mod:`camber.mandv.names`, code ``towt_rmv2``).
 
 What RMV2.0 does, function by function (line numbers in ``R/towt_baseline.R`` at ``979a963``):
 
@@ -329,8 +329,12 @@ class TOWTRMV2Model:
 
         ``return_counts=True`` returns ``(prediction, counts)`` with ``n_unseen_fallback``,
         ``n_unseen_hour_mean``, ``n_unseen_previous``, ``n_unseen_unfilled`` (unseen rows left
-        NaN), ``n_clipped`` (rows where any local prediction was clipped), ``n_no_temperature``
-        and ``n_temp_screened``.
+        NaN), ``n_clipped``, ``n_local_clipped``, ``n_no_temperature`` and ``n_temp_screened``.
+        ``n_clipped`` counts rows whose final prediction was clipped at zero, as for the other
+        models; it is 0 by construction here, since the local predictions are clipped before they
+        are averaged and an average of non-negative values is non-negative.
+        ``n_local_clipped`` counts rows where at least one local prediction was clipped (0.105,
+        #178). Both are 0 with ``clip_negative=False``.
         """
         if unseen not in RMV2_UNSEEN_MODES:
             raise ValueError(f"unseen must be one of {RMV2_UNSEEN_MODES}, got {unseen!r}")
@@ -341,7 +345,7 @@ class TOWTRMV2Model:
         t_in = np.asarray(temp, dtype="float64")
         t, n_screened = screen_temperature(t_in, bounds)
         X, unseen_rows, counts = self._design(idx, t, unseen)
-        P, n_clipped = self._local(X, clip_negative)
+        P, n_local_clipped = self._local(X, clip_negative)
         W = self.weights(idx)
         out = (P * W).sum(axis=1) / W.sum(axis=1)  # NaN propagates, as R's sum does
         n_prev = 0
@@ -351,7 +355,8 @@ class TOWTRMV2Model:
             return out
         counts["n_unseen_previous"] = n_prev
         counts["n_unseen_unfilled"] = int((unseen_rows & np.isnan(out)).sum())
-        counts["n_clipped"] = n_clipped
+        counts["n_clipped"] = 0  # the local predictions were clipped first (#178)
+        counts["n_local_clipped"] = n_local_clipped
         # as the other predicts (#168): n_no_temperature is the rows given none, n_temp_screened
         # the rows outside the fitted bounds
         counts["n_no_temperature"] = int(np.isnan(t_in).sum())
@@ -397,6 +402,63 @@ def _fill_previous(idx: pd.DatetimeIndex, out: np.ndarray, unseen_rows: np.ndarr
     return res, n
 
 
+def _bin_means(col: np.ndarray, n_bins: int, w: np.ndarray, V: np.ndarray) -> np.ndarray:
+    """``(n_bins, V.shape[1])``: the ``w``-weighted mean of each column of ``V`` per bin."""
+    sw = np.bincount(col, weights=w, minlength=n_bins)
+    sums = [np.bincount(col, weights=w * V[:, j], minlength=n_bins) for j in range(V.shape[1])]
+    return np.column_stack(sums) / sw[:, None]
+
+
+def _null_space(X: np.ndarray) -> np.ndarray | None:
+    """An orthonormal basis (columns) of the null space of ``X``, with the rank cutoff
+    ``np.linalg.lstsq`` uses (``rcond=None``); ``None`` when ``X`` has full column rank."""
+    R = np.linalg.qr(X, mode="r")  # the same singular values and right vectors as X
+    _u, s, vt = np.linalg.svd(R)
+    tol = s[0] * max(X.shape) * np.finfo(float).eps if len(s) else 0.0
+    rank = int((s > tol).sum())
+    return vt[rank:].T if rank < X.shape[1] else None
+
+
+def _local_betas(X: np.ndarray, col: np.ndarray, n_bins: int, y, W: np.ndarray) -> np.ndarray:
+    """``(W.shape[1], X.shape[1])``: the minimum-norm weighted least-squares fit of ``y`` on ``X``
+    for each column of weights in ``W`` (all positive), as ``np.linalg.lstsq(X * sqrt(w)[:, None],
+    y * sqrt(w), rcond=None)`` gives it, without a full dense solve per local fit (0.105, #176).
+
+    ``X`` is ``[one-hot of col | temperature columns]`` (:func:`~camber.mandv.towt._build_design`;
+    every row has exactly one one-hot column, ``col``). By Frisch-Waugh-Lovell the temperature
+    coefficients are the weighted fit of the within-bin weighted-demeaned temperature columns
+    (a narrow ``n x q`` least squares) and each bin's level is its weighted mean of ``y`` minus
+    its weighted mean temperature terms. With positive weights the null space of the weighted
+    design is that of ``X`` for every local fit, so a rank-deficient design is computed once and
+    each solution projected off it: the minimum-norm solution, as before. A local fit whose
+    numerical rank differs from the design's falls back to the direct dense solve.
+    """
+    n, p = X.shape
+    q = p - n_bins
+    T = X[:, n_bins:]
+    TY = np.column_stack([T, y])
+    ones = np.ones(n)
+    rank_t = int(np.linalg.matrix_rank(T - _bin_means(col, n_bins, ones, T)[col])) if q else 0
+    null = _null_space(X) if rank_t < q else None
+    if null is not None and null.shape[1] != q - rank_t:  # disagreeing rank tests: direct solves
+        rank_t = -1
+    betas = np.empty((W.shape[1], p), dtype="float64")
+    for k in range(W.shape[1]):
+        w = W[:, k]
+        sw = np.sqrt(w)
+        means = _bin_means(col, n_bins, w, TY)
+        V = TY - means[col]
+        z, _res, rk, _sv = np.linalg.lstsq(V[:, :q] * sw[:, None], V[:, q] * sw, rcond=None)
+        if rk != rank_t:
+            betas[k], *_ = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)
+            continue
+        b = np.concatenate([means[:, q] - means[:, :q] @ z, z])
+        if null is not None:
+            b -= null @ (null.T @ b)
+        betas[k] = b
+    return betas
+
+
 def fit_towt_rmv2(
     energy: pd.Series,
     temp: pd.Series,
@@ -423,7 +485,22 @@ def fit_towt_rmv2(
     :func:`~camber.mandv.towt.lbnl_time_weights` about its centre; occupancy
     (:func:`rmv2_occupied_intervals`) and knot pruning use every row unweighted, so all local fits
     share one design. A 365-day year of hourly data gives 28 local fits (27 segments of about 13.5
-    days).
+    days). The local fits share their design, so it is factored once and each fit is a narrow
+    weighted solve (0.105, #176); the coefficients are those of a separate minimum-norm weighted
+    least-squares fit per centre.
+
+    **Horizon** (0.105, #177). The prediction at time ``t`` weights local fit ``k`` by ``s^2 /
+    (s^2 + (c_k - t)^2)``, so it leans on the fits whose centres are nearest ``t``. In the
+    reporting period those are the fits at the end of the baseline: 90 days after it, the last
+    centre weighs about 25 times the first of a one-year baseline. This is RMV2.0's own behaviour,
+    not a CAMBER departure. It tracks recent conditions (a schedule or load change late in the
+    baseline) and does well over the first weeks and months. Several months ahead, in a season
+    the baseline saw little of or saw long before its end, the prediction still rests mostly on
+    the last local fits and can be worse than one unweighted TOWT fit over the whole baseline
+    (:func:`~camber.mandv.towt.fit_towt`). Prefer this model for short reporting horizons and for
+    tracking recent conditions; for a reporting period that runs well beyond the baseline's end
+    into other seasons, compare it with an unweighted TOWT. It still does better than one
+    recency-weighted fit centred on the last baseline hour, which ignores the earlier seasons.
     """
     from ._temperature import screen_temperature
 
@@ -457,10 +534,8 @@ def fit_towt_rmv2(
     X = _build_design(tow, t, bins, breakpoints, occ_bins, open_ends=True)
     pos = rmv2_centres(idx, timescale_days)
     centres = idx[pos]
-    betas = np.empty((len(pos), X.shape[1]), dtype="float64")
-    for r, c in enumerate(centres):
-        sw = np.sqrt(lbnl_time_weights(idx, c, timescale_days=timescale_days))
-        betas[r], *_ = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)
+    W = np.column_stack([lbnl_time_weights(idx, c, timescale_days=timescale_days) for c in centres])
+    betas = _local_betas(X, np.searchsorted(bins, tow), len(bins), y, W)
     return TOWTRMV2Model(
         bins=bins,
         breakpoints=breakpoints,

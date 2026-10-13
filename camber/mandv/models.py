@@ -631,49 +631,79 @@ class ModelFitError(ValueError):
     :func:`camber.mandv._mvform.best_billing_model` raises it too, its degree-day candidate
     included (``p`` is ``None`` for a candidate refused before it was fitted).
 
-    When too few points were left to fit (0.105, #172) the message also names the upstream
-    cause and ``causes`` holds its counts: ``n_points`` (the usable points left), and when
-    non-zero ``dropped_days`` (days dropped by the ``min_coverage`` day-coverage rule),
-    ``dropped_bills`` (bills dropped for temperature coverage), ``n_temp_screened`` (temperatures
-    outside the plausible range, set to missing) and ``n_missing`` (rows with no temperature or
-    energy). ``causes`` is ``None`` when points were not the problem.
+    When too few points were left to fit (0.105, #172, #175) the message says how many finite
+    (temperature, energy) points every candidate saw and why the others were lost, and
+    ``causes`` holds the counts: ``n_points`` (the finite points the fit saw), and when non-zero
+    ``n_missing`` (rows given with no temperature or energy), ``n_temp_screened`` (temperatures
+    outside the plausible range, set to missing here or by the frame builder), and, from the
+    frame's ``attrs``, ``dropped_days`` (days dropped by the ``min_coverage`` day-coverage rule)
+    and ``dropped_bills`` (bills dropped for temperature coverage). ``causes`` is ``None`` when
+    points were not the problem. ``upstream_given`` is whether the frame builder's counts were
+    available (``None`` when the raiser did not say); when they were not, the message says so
+    rather than assume nothing was dropped before the fit.
     """
 
-    def __init__(self, candidates: list, causes: dict | None = None):
+    def __init__(
+        self, candidates: list, causes: dict | None = None, *, upstream_given: bool | None = None
+    ):
         self.candidates = candidates
         self.causes = causes
+        self.upstream_given = upstream_given
         detail = "; ".join(
             f"{c['kind']} (p={c['p']}): {c.get('refused', 'not selected')}" for c in candidates
         )
         msg = "no model could be fit" + (f" ({detail})" if detail else " (no kinds)")
         if causes is not None:
-            msg += "; " + _causes_text(causes)
+            msg += "; " + _causes_text(causes, upstream_given)
         super().__init__(msg)
 
 
 _CAUSE_TEXT = (
-    ("dropped_days", "{} day(s) dropped by the day-coverage rule (min_coverage)"),
-    ("dropped_bills", "{} bill(s) dropped for temperature coverage below min_coverage"),
-    ("n_temp_screened", "{} temperature value(s) outside the plausible outdoor range screened out"),
     ("n_missing", "{} row(s) missing a temperature or energy value"),
+    ("n_temp_screened", "{} temperature value(s) outside the plausible outdoor range screened out"),
+    ("dropped_days", "{} day(s) dropped by the day-coverage rule (min_coverage) before the fit"),
+    ("dropped_bills", "{} bill(s) dropped for temperature coverage below min_coverage"),
 )
 
 
-def _causes_text(causes: dict) -> str:
+def _causes_text(causes: dict, upstream_given: bool | None = None) -> str:
     n = int(causes.get("n_points", 0))
     parts = [t.format(int(causes[k])) for k, t in _CAUSE_TEXT if causes.get(k)]
-    head = f"only {n} usable point(s) remained"
-    return head + (" upstream of the fit: " + ", ".join(parts) if parts else " (no input rows)")
+    text = f"every candidate saw {n} finite (temperature, energy) point(s)"
+    text += ", fewer than the 3 a fit needs"
+    if parts:
+        text += "; why: " + ", ".join(parts)
+    if upstream_given is False:
+        text += (
+            "; days or bills dropped before the call are not known here: pass the frame, its "
+            "columns as pandas objects, or upstream=frame.attrs"
+        )
+    elif upstream_given and not any(causes.get(k) for k in ("dropped_days", "dropped_bills")):
+        text += "; no day or bill was dropped before the call"
+    return text
+
+
+def _upstream_attrs(upstream, *data) -> tuple:
+    """``(attrs, given)``: ``upstream`` (a dict, or a pandas object's ``attrs``), else the first
+    non-empty ``attrs`` of ``data`` (pandas ``T``, ``y`` or a frame); ``given`` is whether any was
+    found."""
+    if upstream is not None:
+        return dict(getattr(upstream, "attrs", upstream) or {}), True
+    for obj in data:
+        attrs = getattr(obj, "attrs", None)
+        if attrs:
+            return dict(attrs), True
+    return {}, False
 
 
 def _too_few_points(T, y, *, temp_bounds=None, upstream: dict | None = None, min_points=3):
     """The counts :class:`ModelFitError` reports when fewer than ``min_points`` usable
     ``(T, y)`` points remain (#172), else ``None``. ``upstream`` is a frame's ``attrs`` (the day
     coverage and screen counts of :func:`camber.mandv.intervalfit.daily_energy_vs_temp`); a
-    ``T`` that is a pandas object brings its own ``attrs``."""
+    pandas ``T`` or ``y`` brings its own (see :func:`_upstream_attrs`)."""
     from ._temperature import screen_temperature
 
-    up = dict(getattr(T, "attrs", None) or {}) if upstream is None else dict(upstream)
+    up, _given = _upstream_attrs(upstream, T, y)
     t_raw = np.asarray(T, dtype=float).ravel()
     yy = np.asarray(y, dtype=float).ravel()
     if len(t_raw) != len(yy):
@@ -697,16 +727,24 @@ def _too_few_points(T, y, *, temp_bounds=None, upstream: dict | None = None, min
     return causes
 
 
+def _fit_error(candidates: list, T, y, *, temp_bounds=None, upstream=None) -> ModelFitError:
+    """The :class:`ModelFitError` for ``candidates``, with the point counts when too few points
+    were left (#172) and whether the frame builder's counts were known (#175)."""
+    causes = _too_few_points(T, y, temp_bounds=temp_bounds, upstream=upstream)
+    given = _upstream_attrs(upstream, T, y)[1] if causes is not None else None
+    return ModelFitError(candidates, causes, upstream_given=given)
+
+
 @overload
 def best_model(
     T,
-    y,
+    y=None,
     kinds=...,
     *,
     time_index=...,
     weights=...,
     temp_bounds: tuple | None = ...,
-    upstream: dict | None = ...,
+    upstream: Any = ...,
     return_candidates: Literal[False] = ...,
 ) -> ChangePointModel:
     """Typing overload: the selected model alone (see the implementation below)."""
@@ -715,13 +753,13 @@ def best_model(
 @overload
 def best_model(
     T,
-    y,
+    y=None,
     kinds=...,
     *,
     time_index=...,
     weights=...,
     temp_bounds: tuple | None = ...,
-    upstream: dict | None = ...,
+    upstream: Any = ...,
     return_candidates: Literal[True],
 ) -> tuple[ChangePointModel, list]:
     """Typing overload: ``(model, candidates)`` (see the implementation below)."""
@@ -729,13 +767,13 @@ def best_model(
 
 def best_model(
     T,
-    y,
+    y=None,
     kinds=("2P", "3PC", "3PH", "4P", "5P"),
     *,
     time_index=None,
     weights=None,
     temp_bounds: tuple | None = None,
-    upstream: dict | None = None,
+    upstream: Any = None,
     return_candidates: bool = False,
 ) -> ChangePointModel | tuple[ChangePointModel, list]:
     """Fit several model kinds and return the one with the lowest BIC.
@@ -755,11 +793,34 @@ def best_model(
     ``return_candidates=True`` (0.105, #160) returns ``(model, candidates)``: one dict per kind
     tried, with ``kind``, ``p`` and either ``n``, ``sse``, ``bic`` and ``selected`` or the
     ``refused`` reason. When no kind can be fit, a :class:`ModelFitError` lists each reason;
-    when too few points were left, it also names why (0.105, #172): the rows missing or screened
-    here, and the days ``upstream`` dropped -- a frame's ``attrs``, e.g. ``upstream=frame.attrs``
-    for a frame from :func:`camber.mandv.intervalfit.daily_energy_vs_temp` (a pandas ``T`` brings
-    its own). ``upstream`` is only read for that message.
+    when too few points were left, it also says how many finite points every candidate saw and
+    why the others were lost (0.105, #172, #175): the rows missing or screened here, and the days
+    or bills dropped before the call.
+
+    **The frame and** ``upstream`` (0.105, #175). The rows dropped before the call are counted
+    by the frame builder, :func:`camber.mandv.intervalfit.daily_energy_vs_temp` (or the billing
+    frame), in the frame's ``attrs`` (``dropped_days``, ``dropped_bills``, ``n_temp_screened``).
+    ``best_model`` finds them when given the frame itself, ``best_model(frame)`` (its ``oat`` and
+    ``energy`` columns, and its index as ``time_index`` unless one is passed), or the columns as
+    pandas objects, ``best_model(frame["oat"], frame["energy"])``, which carry the frame's
+    ``attrs``. With NumPy arrays pass ``upstream=frame.attrs`` (a dict, or the frame); without
+    any of these the message says the upstream counts are not known. ``upstream`` is only read
+    for that message: it never changes the fit.
     """
+    if hasattr(T, "columns"):  # a frame: its oat and energy columns, its attrs and its index
+        if y is not None:
+            raise TypeError("pass a frame alone, or T and y")
+        frame = T
+        missing = [c for c in ("oat", "energy") if c not in frame.columns]
+        if missing:
+            raise ValueError(
+                f"best_model(frame) needs columns 'oat' and 'energy'; missing {missing}"
+            )
+        T, y = frame["oat"], frame["energy"]
+        upstream = frame.attrs if upstream is None else upstream
+        time_index = frame.index if time_index is None else time_index
+    elif y is None:
+        raise TypeError("best_model needs y, unless T is a frame with 'oat' and 'energy' columns")
     n_params = N_PARAMS
     best, best_score = None, np.inf
     candidates: list = []
@@ -788,8 +849,7 @@ def best_model(
         if bic < best_score - _BIC_TIE:  # inf - tie is inf: the first finite kind is taken
             best, best_score, best_row = m, bic, row
     if best is None:
-        causes = _too_few_points(T, y, temp_bounds=temp_bounds, upstream=upstream)
-        raise ModelFitError(candidates, causes)
+        raise _fit_error(candidates, T, y, temp_bounds=temp_bounds, upstream=upstream)
     if best_row is not None:
         best_row["selected"] = True
     return (best, candidates) if return_candidates else best

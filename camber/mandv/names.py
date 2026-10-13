@@ -252,8 +252,8 @@ _ROWS = (
     ),
     MVName(
         "towt_rmv2",
-        "TOWT, LBNL RMV2.0 variant",
-        "Time-of-Week-and-Temperature (TOWT) model, LBNL RMV2.0 implementation (towt_baseline)",
+        "TOWT (LBNL RMV2.0 variant)",
+        "Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011)",
         (_RMV2, _TOWT),
         "camber.mandv.towt_rmv2.fit_towt_rmv2",
         "Opt-in (0.105). Reproduces RMV2.0 1.1.0's makeBaseline (R/towt_baseline.R, commit "
@@ -266,7 +266,10 @@ _ROWS = (
         "data); RMV2.0's data cleaning (clean_eload, clean_Temp) is not applied, CAMBER's "
         "temperature screen is; the final approx() fill of NaN is opt-in "
         '(`unseen="previous"`). Differs from Mathieu et al. (2011): data-driven occupancy and '
-        "time weighting.",
+        "time weighting. As in RMV2.0, a prediction leans on the local fits centred nearest it, "
+        "in the reporting period those at the end of the baseline: suited to short horizons and "
+        "to tracking recent conditions; several months ahead, in a season the baseline saw "
+        "little of, it can be less accurate than unweighted TOWT.",
         "other baseline model",
     ),
     MVName(
@@ -611,13 +614,21 @@ def _lower_first(name: str) -> str:
     return name[0].lower() + name[1:]
 
 
+def _variant(label: str) -> str | None:
+    """The variant a label names: ``"TOWT (CAMBER variant)"`` -> ``"CAMBER variant"``."""
+    if label.endswith(" variant)") and "(" in label:
+        return label[label.rindex("(") + 1 : -1]
+    return "CAMBER variant" if "CAMBER" in label else None
+
+
 def component_description(component, note: str | None = None, *, cite: str = "primary") -> str:
     """One model as an ensemble names it: its standard name (its CAMBER label when it has none),
     with an indefinite article, a note, and its citation in square brackets (0.105, #174).
 
     ``component`` is a registry code, an :class:`MVName`, a fitted model or its ``as_dict``
-    payload. ``note`` is added after the name; a row that has a standard name and a CAMBER label
-    (TOWT) gets ``"CAMBER variant"``. ``cite`` is ``"primary"`` (the row's first citation),
+    payload. ``note`` is added after the name; a row that has a standard name and a label naming
+    a variant gets that variant: ``"CAMBER variant"`` for TOWT, ``"LBNL RMV2.0 variant"`` for
+    ``towt_rmv2``. ``cite`` is ``"primary"`` (the row's first citation),
     ``"all"`` or ``"none"``. E.g. ``component_description("3PC")`` is ``"a three-parameter
     cooling change-point model (3PC) [ASHRAE G14-2014]"``.
     """
@@ -627,8 +638,10 @@ def component_description(component, note: str | None = None, *, cite: str = "pr
     row = mv_name(code)
     name = _lower_first(row.standard_name or row.label)
     notes = [n for n in (note, auto_note) if n]
-    if row.standard_name and "CAMBER" in row.label and not notes:
-        notes.append("CAMBER variant")
+    if row.standard_name and not notes:
+        variant = _variant(row.label)
+        if variant:
+            notes.append(variant)
     text = ("an " if name[:1].lower() in "aeiou" else "a ") + name
     if notes:
         text += ", " + ", ".join(notes)

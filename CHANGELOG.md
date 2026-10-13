@@ -173,7 +173,7 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   sentence of docs/MANDV.md, "Naming and citations". It names each component by its registry
   standard name and citation (`component_description`), then the combination rule. The short
   citation texts are `names.SHORT_CITATIONS`.
-- **TOWT, LBNL RMV2.0 variant (#165).** New module `mandv.towt_rmv2`: `fit_towt_rmv2(...)` is
+- **TOWT (LBNL RMV2.0 variant) (#165).** New module `mandv.towt_rmv2`: `fit_towt_rmv2(...)` is
   an opt-in reimplementation of RMV2.0 1.1.0's `makeBaseline` (`R/towt_baseline.R`, commit
   979a963). It returns a `TOWTRMV2Model` with `predict`, `as_dict` and `from_dict`, and
   reproduces:
@@ -189,8 +189,11 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   RMV2.0's own `makeBaseline` to 1e-8 on synthetic data. A dev-only test runs that comparison
   when `CAMBER_RMV2_RSCRIPT` is set; R is not a dependency. On a synthetic held-out year with a
   seasonal schedule, its hourly CV(RMSE) is about 3 points lower than one recency-weighted fit
-  (`towt_lbnl_config()`). The registry has a new row, "TOWT, LBNL RMV2.0 variant"
-  (`towt_rmv2`), and `towt_lbnl_config()`'s documentation points long-horizon baselines to it.
+  (`towt_lbnl_config()`). The registry has a new row, labelled "TOWT (LBNL RMV2.0 variant)"
+  with the standard name "Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011)", so
+  the two read together without repeating the name, as the TOWT row does (#179); its ensemble
+  description is "... TOWT model (Mathieu et al. 2011), LBNL RMV2.0 variant [LBNL RMV2.0]".
+  `towt_lbnl_config()`'s documentation points to it in place of one end-centred weighted fit.
   A stored `TOWTRMV2Model` rebuilds through `rebaseline.mv_model_from_dict`, and its predict
   counts a temperature outside its fitted bounds as `n_temp_screened` and a missing one as
   `n_no_temperature`, as the other predicts do (#168).
@@ -242,6 +245,29 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - **Registry `differences` texts paste verbatim (#174).** Instructions such as `best_model`'s
   "Report the kind it chose…" moved to docs/MANDV.md, "Naming and citations". The texts now only
   describe how CAMBER departs from the cited standard.
+
+- **`ModelFitError` says what the fit saw (#175).** Without the frame's counts it said "(no
+  input rows)" even when points remained or rows were dropped before the call. It now states how
+  many finite (temperature, energy) points every candidate saw, why the others were lost, and,
+  when the frame builder's counts were not available, that rows dropped before the call are not
+  known. `best_model(frame)` takes a frame with `oat` and `energy` columns (its index as
+  `time_index`), and a pandas `y` carries the frame's `attrs` as a pandas `T` did, so the cause
+  is found without `upstream=`; `upstream=` also takes the frame itself. `.candidates` and
+  `.causes` are unchanged, and `.upstream_given` is new.
+- **`fit_towt_rmv2` solves its local fits on one shared design (#176).** The design is factored
+  once and each local fit is a narrow weighted solve, about 16 times faster on a year of hourly
+  data (28 local fits), close to one pooled TOWT fit. The coefficients are the same
+  minimum-norm weighted least-squares solutions as before, to about 1e-10, rank-deficient designs
+  included, and the RMV2.0 cross-check still matches to 1e-8.
+- **RMV2.0 TOWT's horizon is documented (#177).** Its weighting about the prediction time leans
+  on the local fits at the end of the baseline, so several months into a season the baseline saw
+  little of it can do worse than unweighted TOWT. This is RMV2.0's own behaviour. The
+  `fit_towt_rmv2` docstring, the `towt_rmv2` registry row and docs/MANDV.md say when to prefer it
+  (short horizons, tracking recent conditions) and when to compare it with unweighted TOWT.
+- **`TOWTRMV2Model.predict` counts clipping as the other models do (#178).** `n_clipped` is now
+  the rows whose final prediction was clipped, 0 by construction since the local predictions are
+  clipped first. The new `n_local_clipped` counts rows where any local prediction was clipped,
+  which `n_clipped` counted before.
 
 ### Deprecated
 - `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 1.0: the

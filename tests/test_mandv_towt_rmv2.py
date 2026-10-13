@@ -1,4 +1,4 @@
-"""TOWT, LBNL RMV2.0 variant (0.105, #165): RMV2.0's occupancy rule and weighted ensemble.
+"""TOWT (LBNL RMV2.0 variant) (0.105, #165): RMV2.0's occupancy rule and weighted ensemble.
 
 Synthetic fixtures and hand-computed cases only. ``test_matches_rmv2_makebaseline`` compares with
 RMV2.0 itself and is skipped unless ``CAMBER_RMV2_RSCRIPT`` names an ``Rscript`` (dev-only; R is
@@ -176,8 +176,11 @@ def test_each_local_prediction_is_clipped_before_averaging():
     np.testing.assert_allclose(m.predict([t0], [60.0]), [(0.5 * 0 + 0.2 * 20) / 0.7])
     raw, counts = m.predict([t0], [60.0], clip_negative=False, return_counts=True)
     np.testing.assert_allclose(raw, [(0.5 * -15 + 0.2 * 20) / 0.7])
-    assert counts["n_clipped"] == 0
-    assert m.predict([t0], [60.0], return_counts=True)[1]["n_clipped"] == 1
+    assert counts["n_clipped"] == counts["n_local_clipped"] == 0
+    # #178: n_clipped counts final predictions clipped, as the other models do -- none, since
+    # the local predictions are clipped first; n_local_clipped counts rows with a clipped local
+    counts = m.predict([t0, t0], [60.0, 60.0], return_counts=True)[1]
+    assert counts["n_clipped"] == 0 and counts["n_local_clipped"] == 2
 
 
 def test_predict_is_the_weighted_average_of_the_local_fits():
@@ -281,12 +284,26 @@ def test_as_dict_round_trip(tz):
 
 def test_registry_row_and_label():
     row = N.mv_name("towt_rmv2")
-    assert row.label == "TOWT, LBNL RMV2.0 variant"
+    assert row.label == "TOWT (LBNL RMV2.0 variant)"
     assert row.citation_id[:2] == ("lbnl-rmv2", "mathieu-2011-towt")
     assert row.callable == "camber.mandv.towt_rmv2.fit_towt_rmv2"
     e, t = _synthetic(30)
     m = fit_towt_rmv2(e, t)
-    assert N.model_label(m) == N.model_label(m.as_dict()) == "TOWT, LBNL RMV2.0 variant"
+    assert N.model_label(m) == N.model_label(m.as_dict()) == "TOWT (LBNL RMV2.0 variant)"
+
+
+def test_registry_row_reads_with_its_label():
+    # #179: standard name and label join without repeating the name, as the TOWT row does
+    row = N.mv_name("towt_rmv2")
+    joined = f"{row.standard_name}, {row.label}"
+    assert joined.count("RMV2.0") == 1 and joined.count("towt_baseline") == 0
+    assert N.component_description("towt_rmv2") == (
+        "a Time-of-Week-and-Temperature (TOWT) model (Mathieu et al. 2011), LBNL RMV2.0 variant "
+        "[LBNL RMV2.0]"
+    )
+    assert N.component_description("towt").endswith(", CAMBER variant [Mathieu et al. 2011]")
+    text = N.ensemble_description(["towt", "towt_rmv2"], "the mean of the two")
+    assert text.count("LBNL RMV2.0 variant") == 1 and text.count("CAMBER variant") == 1
 
 
 def test_binds_with_towt_at_index():
@@ -294,7 +311,61 @@ def test_binds_with_towt_at_index():
     m = fit_towt_rmv2(e, t)
     b = TOWTAtIndex(m, e.index[-48:])
     np.testing.assert_array_equal(b.predict(t[-48:]), m.predict(e.index[-48:], t[-48:]))
-    assert b.predict_counts["n_clipped"] == 0
+    assert b.predict_counts["n_clipped"] == 0 and "n_local_clipped" in b.predict_counts
+
+
+# --------------------------------------------------------------------------- local fits (#176)
+
+
+def _direct_betas(X, y, W):
+    """The per-centre dense solve the shared factorisation replaced."""
+    out = []
+    for w in W.T:
+        sw = np.sqrt(w)
+        out.append(np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)[0])
+    return np.array(out)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    ["none", "zero", "bin_constant", "duplicate", "two"],
+)
+def test_local_betas_match_a_dense_solve_per_centre(extra, monkeypatch):
+    # full-rank and rank-deficient designs: the minimum-norm solution, as np.linalg.lstsq gives
+    import camber.mandv.towt_rmv2 as R
+
+    rng = np.random.default_rng(1)
+    n, nb = 600, 12
+    col = np.r_[np.arange(nb), rng.integers(0, nb, n - nb)]
+    t = rng.normal(55, 15, n)
+    T = np.column_stack([np.minimum(t, 40), np.clip(t - 40, 0, 25), np.maximum(t - 65, 0)])
+    T = {
+        "none": T,
+        "zero": np.column_stack([T, np.zeros(n)]),
+        "bin_constant": np.column_stack([T, col * 2.0 + 1]),
+        "duplicate": np.column_stack([T, T[:, 1]]),
+        "two": np.column_stack([T, np.full(n, 40.0), T[:, 0] + T[:, 2]]),
+    }[extra]
+    X = np.hstack([(col[:, None] == np.arange(nb)).astype(float), T])
+    y = 5 + col * 0.3 + 0.5 * T[:, 1] + rng.normal(0, 1, n)
+    W = np.column_stack([1 / (1 + ((np.arange(n) - c) / 100) ** 2) for c in (0, 300, 599)])
+    want = _direct_betas(X, y, W)
+    np.testing.assert_allclose(R._local_betas(X, col, nb, y, W), want, rtol=0, atol=1e-10)
+    # a local fit whose numerical rank disagrees with the design's takes the dense solve
+    monkeypatch.setattr(R.np.linalg, "matrix_rank", lambda A: -2)
+    np.testing.assert_allclose(R._local_betas(X, col, nb, y, W), want, rtol=0, atol=1e-10)
+
+
+def test_fit_matches_a_dense_solve_per_centre():
+    from camber.mandv.towt import _build_design, lbnl_time_weights
+
+    e, t = _synthetic(120, seed=3)
+    m = fit_towt_rmv2(e, t, temp_bounds=_NO_SCREEN)
+    tow = interval_of_week(e.index)
+    X = _build_design(tow, t.to_numpy(), m.bins, m.breakpoints, m.occ_bins, open_ends=True)
+    W = np.column_stack([lbnl_time_weights(e.index, c) for c in m.centres])
+    want = _direct_betas(X, e.to_numpy(), W)
+    np.testing.assert_allclose(m.betas, want, rtol=1e-9, atol=1e-9)
 
 
 # --------------------------------------------------------------------------- long horizon

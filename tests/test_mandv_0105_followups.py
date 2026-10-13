@@ -398,7 +398,7 @@ def test_model_fit_error_names_screened_temperatures():
         best_model(np.full(30, SENTINEL), y)
     err = ei.value
     assert err.causes == {"n_points": 0, "n_temp_screened": 30}
-    assert "only 0 usable point(s) remained" in str(err)
+    assert "every candidate saw 0 finite (temperature, energy) point(s)" in str(err)
     assert [c["kind"] for c in err.candidates] == ["2P", "3PC", "3PH", "4P", "5P"]
     T2 = T.copy()
     T2[2:] = np.nan
@@ -424,7 +424,63 @@ def test_model_fit_error_without_a_points_problem_is_unchanged():
     T, y = _daily()
     with pytest.raises(ModelFitError) as ei:
         best_model(T, y, kinds=("NOPE",))
-    assert ei.value.causes is None and "remained" not in str(ei.value)
+    assert ei.value.causes is None and "finite" not in str(ei.value)
+    assert ei.value.upstream_given is None
+
+
+def test_model_fit_error_states_what_the_fit_saw_without_upstream():
+    # #175: two points and nothing upstream known -- not "(no input rows)"
+    with pytest.raises(ModelFitError) as ei:
+        best_model([50.0, 60.0], [1.0, 2.0])
+    err = ei.value
+    msg = str(err)
+    assert "every candidate saw 2 finite (temperature, energy) point(s)" in msg
+    assert "no input rows" not in msg and "remained" not in msg
+    assert "not known here" in msg and "upstream=frame.attrs" in msg
+    assert err.causes == {"n_points": 2} and err.upstream_given is False
+    assert [c["kind"] for c in err.candidates] == ["2P", "3PC", "3PH", "4P", "5P"]
+
+
+def _half_covered_frame(days=20):
+    idx = pd.date_range("2018-01-01", periods=24 * days, freq="h")
+    e = pd.Series(1.0, index=idx)[idx.hour < 12]  # every day half covered
+    return daily_energy_vs_temp(e, pd.Series(50.0, index=idx), rate_is_energy_rate=False)
+
+
+def test_model_fit_error_finds_the_frame_attrs_without_upstream():
+    # #175: the frame, or its columns as pandas objects, bring the frame builder's counts
+    frame = _half_covered_frame()
+    for args in [(frame,), (frame["oat"], frame["energy"])]:
+        with pytest.raises(ModelFitError, match="20 day\\(s\\) dropped") as ei:
+            best_model(*args)
+        assert ei.value.causes == {"n_points": 0, "dropped_days": 20}
+        assert ei.value.upstream_given is True and "not known" not in str(ei.value)
+    with pytest.raises(ModelFitError) as ei:  # arrays: the counts need upstream=
+        best_model(frame["oat"].to_numpy(), frame["energy"].to_numpy())
+    assert ei.value.upstream_given is False and "dropped_days" not in ei.value.causes
+    for up in (frame.attrs, frame):
+        with pytest.raises(ModelFitError, match="20 day\\(s\\) dropped"):
+            best_model(frame["oat"].to_numpy(), frame["energy"].to_numpy(), upstream=up)
+    two = pd.DataFrame(
+        {"energy": [1.0, 2.0], "oat": [40.0, 60.0]}, index=pd.date_range("2024-01-01", periods=2)
+    )
+    two.attrs.update(dropped_days=0, n_temp_screened=0)
+    with pytest.raises(ModelFitError, match="no day or bill was dropped before the call"):
+        best_model(two)
+
+
+def test_best_model_takes_a_frame():
+    T, y = _daily()
+    frame = pd.DataFrame({"oat": T, "energy": y}, index=pd.date_range("2023-01-01", periods=len(T)))
+    a = best_model(frame)
+    b = best_model(frame["oat"].to_numpy(), frame["energy"].to_numpy(), time_index=frame.index)
+    assert a.as_dict() == b.as_dict()
+    with pytest.raises(TypeError):
+        best_model(frame, y)
+    with pytest.raises(TypeError):
+        best_model(T)
+    with pytest.raises(ValueError, match="'oat' and 'energy'"):
+        best_model(frame.rename(columns={"oat": "t"}))
 
 
 def test_billing_model_fit_error_names_dropped_bills():
@@ -437,6 +493,7 @@ def test_billing_model_fit_error_names_dropped_bills():
     with pytest.raises(ModelFitError, match="7 bill\\(s\\) dropped") as ei:
         best_billing_model(frame)
     assert ei.value.causes == {"n_points": 0, "dropped_bills": 7}
+    assert ei.value.upstream_given is True
     assert any(c["kind"] == "DD-H" for c in ei.value.candidates)
 
 

@@ -333,7 +333,7 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
     import numpy as np
 
     from .basetemp import _LEGS, fit_bill_degree_day, rows_at_bases
-    from .models import ModelFitError, _too_few_points, best_model
+    from .models import ModelFitError, _fit_error, best_model
 
     T = frame["oat"].to_numpy(dtype=float)
     y = frame["energy"].to_numpy(dtype=float)
@@ -372,7 +372,7 @@ def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
         except ValueError as e:
             tried.append({"kind": kind, "p": None, "refused": f"{type(e).__name__}: {e}"})
     if not cands:
-        raise ModelFitError(tried, _too_few_points(T, y, upstream=frame.attrs))
+        raise _fit_error(tried, T, y, upstream=frame.attrs)
     from .models import fit_weights
 
     w, _ = fit_weights(days)
