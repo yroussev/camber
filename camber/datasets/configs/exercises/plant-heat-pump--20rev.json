@@ -1,0 +1,27 @@
+{
+  "_comment": "Workbook exercise plant-heat-pump, the threshold lesson: heatpump_defrost with max_reversals_per_day at 20 instead of the generic 24 (warn at 20, fault at 40), as a ceiling set just above the healthy sister unit's 13.57 a day might be. ASHP__defrost_timer (a 60-minute time-temperature defrost, 23.43 a day) then warns. The limit belongs to the unit's defrost control, not to CAMBER: take it from the unit's documentation or a known-good cold spell.",
+  "_dataset": "synthetic-heat-pump",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-heat-pump"
+  },
+  "resample": "5min",
+  "equipment": [
+    {
+      "class": "ASHP",
+      "marker_role": "reversing_valve_cmd"
+    }
+  ],
+  "rules": [
+    {
+      "name": "heatpump_defrost",
+      "params": {
+        "max_reversals_per_day": 20.0
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

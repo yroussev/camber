@@ -89,6 +89,7 @@ nav:
       - "Central plant: warm-weather lockout": workbook/plant-lockout.md
       - "Central plant: boiler cycling and low delta-T": workbook/plant-boiler-cycling.md
       # BEGIN slot #147 (heat pump)
+      - "Heat pumps: defrost, mode, capacity and the source loop": workbook/plant-heat-pump.md
       # END slot #147 (heat pump)
       - "Central plant: chiller staging and condenser water": workbook/plant-chiller-staging.md
       # BEGIN slot #145 (two-chiller plant)

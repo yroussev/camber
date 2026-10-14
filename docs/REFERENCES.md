@@ -61,12 +61,38 @@ often no BAS. Its measures chapter is the closest match for a packaged unit's co
 
 | Resource | Number | Rules | Checked against (headings) | Verified |
 |---|---|---|---|---|
-| [Small/Medium-Sized Commercial Building Re-tuning Training, chapter 3: Identifying and Implementing Re-tuning Measures](https://www.pnnl.gov/sites/default/files/media/file/ch3_sm_identifying_and_implementing_retuning_measures.pdf) | PNNL-SA-92685 | `compressor_short_cycle` | Building HVAC Implementation: Different HVAC System General Guidance Examples (packaged units); Building HVAC Implementation: Thermostats | 2026-10-10 |
+| [Small/Medium-Sized Commercial Building Re-tuning Training, chapter 3: Identifying and Implementing Re-tuning Measures](https://www.pnnl.gov/sites/default/files/media/file/ch3_sm_identifying_and_implementing_retuning_measures.pdf) | PNNL-SA-92685 | `compressor_short_cycle`, `compressor_staging` | Building HVAC Implementation: Different HVAC System General Guidance Examples (packaged units); Building HVAC Implementation: Thermostats | 2026-10-10 |
 
 `compressor_short_cycle` maps here since 0.103 (#125). The chapter has no heading on compressor
 starts. Its packaged-unit and thermostat sections cover the settings that make a unit cycle: the
 thermostat's set points, its location and its fan mode. The large-building course's chapter 8
-covers chillers, but not their compressor starts.
+covers chillers, but not their compressor starts. `compressor_staging` maps here since 0.105
+(#147) for the same reason: the thermostat and its stage settings decide how often a stage
+changes.
+
+## Heat pumps
+
+No PNNL re-tuning guide or chapter covers heat pumps, so the heat-pump rules (0.105, #147) link
+to public guides from a government program, an efficiency nonprofit and a research institute.
+Each mapping was checked against the headings listed. None of them gives a threshold the rules
+use: the reversals-per-day, wrong-mode and room-imbalance limits stay CAMBER's screening
+judgment (`camber rules params <rule>`), and so does `source_loop_deltat`'s 10 °F design
+delta-T.
+
+| Resource | Publisher | Rules | Checked against (headings) | Verified |
+|---|---|---|---|---|
+| [Heating and cooling with a heat pump](https://natural-resources.canada.ca/energy-efficiency/energy-star/heating-cooling-heat-pump) | Natural Resources Canada | `heatpump_defrost`, `hp_capacity_shortfall`, `hp_mode_vs_need` | Air-source heat pumps: The defrost cycle; Supplementary heat sources; Related equipment: Supplementary heating systems; Thermostats | 2026-10-13 |
+| [Guide to Installing Air-Source Heat Pumps in Cold Climates](https://neep.org/sites/default/files/Installing%20Air-Source%20Heat%20Pumps%20in%20Cold%20Climates.pdf) | Northeast Energy Efficiency Partnerships (NEEP), 2018 | `hp_mode_vs_need`, `hp_room_imbalance` | System Setup: Thermostat - Installer Setup | 2026-10-13 |
+| [Variable Flow Pumping: The Key to Energy Efficiency in Water Loop and Geothermal Heat Pump System Applications](https://restservice.epri.com/publicdownload/TB-114673/0/Product) | Electric Power Research Institute (EPRI), TB-114673, 1999 | `source_loop_deltat` | Making Water Source Heat Pumps Efficient: Improved Loop Pump Control; Variable Flow System Design and Control Details | 2026-10-13 |
+
+The NRCan guide describes the defrost cycle (the reversing valve switches to cooling and the
+outdoor fan stops), demand defrost against a time-temperature control on a 30-, 60- or 90-minute
+interval, the balance point below which supplementary heat is needed, and moderate setbacks for
+heat pumps. The NEEP guide is written for residential installers; its thermostat section (a
+control representative of the space, on an interior wall away from sun, appliances and drafts)
+is the point `hp_room_imbalance` and `hp_mode_vs_need` check. EPRI's brief explains why loop
+pumps at constant speed, through heat pumps without shutoff valves, move water the loop does not
+need.
 
 ## Other resources
 
@@ -115,8 +141,9 @@ These rules have no Re-tuning guide or chapter that clearly covers them, so they
   which check a trim-and-respond sequence the guides predate;
 - the G36 fault conditions (`g36_afdd`), which cite ASHRAE Guideline 36 itself;
 - `filter_fouling`;
-- the DX and heat-pump rules other than `compressor_short_cycle`, and `source_loop_deltat` (the
-  course covers built-up air handlers and central plants);
+- the DX rules other than `compressor_short_cycle` and `compressor_staging` (the course covers
+  built-up air handlers and central plants; the heat-pump rules link to the
+  [heat-pump guides](#heat-pumps));
 - the drift detectors, except `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift`,
   which map to chapter 8.
 
