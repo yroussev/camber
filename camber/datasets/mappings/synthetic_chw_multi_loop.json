@@ -1,0 +1,12 @@
+{
+  "_comment": "Synthetic two-chiller plant (generator chw_plant_multi, camber/datasets/_synthetic_chw_plant_multi.py; 0.105, #145) -> CAMBER Role mapping for the secondary chilled-water loop, its own equipment beside the two chillers. SEC_SWT / SEC_RWT are the secondary supply (downstream of the decoupler) and return in F, CHWS_SP the plant's supply setpoint in F, SEC_GPM the secondary flow in gpm, SEC_PUMP_SPD the secondary pumps' speed in % and SEC_PUMP_KW their power in kW (0 while the plant is off), OAT the outdoor dry-bulb in F. The pumps' power is the loop's generic power role, as on lbnl-chiller's SECPUMP; the chilled-water rules read it as the loop's run signal.",
+  "aliases": {
+    "SEC_SWT": "chw_supply_temp",
+    "SEC_RWT": "chw_return_temp",
+    "CHWS_SP": "chw_supply_temp_sp",
+    "SEC_GPM": "chw_flow",
+    "SEC_PUMP_SPD": "chw_pump_speed",
+    "SEC_PUMP_KW": "power",
+    "OAT": "oat"
+  }
+}

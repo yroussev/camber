@@ -93,6 +93,7 @@ nav:
       # END slot #147 (heat pump)
       - "Central plant: chiller staging and condenser water": workbook/plant-chiller-staging.md
       # BEGIN slot #145 (two-chiller plant)
+      - "Central plant: two chillers, a secondary loop and a fouled tower": workbook/plant-chiller-multi.md
       # END slot #145 (two-chiller plant)
       - "Central plant: sensor vs equipment faults": workbook/plant-sensor-vs-equipment.md
       # END workbook-plant (#82)
