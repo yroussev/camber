@@ -129,7 +129,7 @@ What the rules read from a duty:
 
 | Question | Read | Used by |
 |---|---|---|
-| How long did it run? | the duty itself (its mean, or duty-weighted shares) | `runtime_pct` of the start-counting rules; `boiler_running_pct` and `summer_run_pct` of `boiler_summer_lockout`; `night_weekend_setback` |
+| How long did it run? | the duty itself (its mean, or duty-weighted shares) | `runtime_pct` of the start-counting rules; `boiler_running_pct` and `summer_run_pct` of `boiler_summer_lockout`; `pump_running_pct`, `summer_run_pct` and `boiler_off_pct` of `hw_pump_summer_lockout` from a pump status (0.105; a speed or flow stand-in has no duty and reads 0/1 against its running cut); `night_weekend_setback` |
 | Was it running in this sample, to judge the other points of the sample? | duty > 0.5 (on for most of the sample) | the fan, pump and plant gates (`camber.schedules.fan_on_mask`, `plant_run_mask`); the loop delta-T and reset checks |
 | How many times did it start? | the fewest starts consistent with the duties | `boiler_short_cycle`, `compressor_short_cycle` |
 

@@ -45,6 +45,7 @@ class CondenserWaterReset:
         *,
         elevation_ft: float | None = None,
         pressure_psia: float | None = None,
+        design_approach_f: float = 7.0,
     ):
         # An ideal reset tracks wet-bulb ~1:1; below this slope it is effectively flat.
         self.reset_slope_flat = reset_slope_flat
@@ -52,6 +53,9 @@ class CondenserWaterReset:
         # (or a measured barometric pressure) is given -- as in the cooling-tower rules
         self.elevation_ft = elevation_ft
         self.pressure_psia = pressure_psia
+        # 0.105 (#148): the tower's design approach, for the information-only metric of how far
+        # CW supply sits above wet-bulb + approach (cooling_tower_approach's parameter and default)
+        self.design_approach_f = design_approach_f
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -63,6 +67,7 @@ class CondenserWaterReset:
             reset_slope_flat=self.reset_slope_flat,
             elevation_ft=self.elevation_ft,
             pressure_psia=self.pressure_psia,
+            design_approach_f=self.design_approach_f,
         )
         if res is None:
             return Finding(
@@ -96,6 +101,9 @@ class CondenserWaterReset:
                 "reset_present": res.reset_present,
                 "wetbulb_source": res.wetbulb_source,
                 "n_operating": res.n_operating,
+                # 0.105 (#148): information only, never the verdict
+                "cws_above_wb_plus_approach_median_f": res.cws_above_wb_plus_approach_median_f,
+                "design_approach_f": res.design_approach_f,
             },
             caveats=caveats,
             summary=(

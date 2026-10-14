@@ -17,6 +17,10 @@ from ..chillerstaging import analyze_chiller_staging
 from ..model.roles import Role
 from .base import Finding
 
+#: 0.105 (#148): running tons whose 10th-90th percentile spread is within this share (%) of the
+#: observed peak are "one output": every run at the same load, give or take rounding jitter.
+_CONSTANT_OUTPUT_SPREAD_PCT = 5.0
+
 _ROLE_TO_COL = {
     Role.POWER: "Power",
     Role.CHW_SUPPLY_TEMP: "CHWS_Temp",
@@ -82,6 +86,16 @@ class ChillerStaging:
                 "averaged power reading hides an off-and-on cycle shorter than the interval, so "
                 "starts_per_day is a floor; run at the stored interval for the true count"
             )
+        # 0.105 (#148): a chiller that only ever runs at one output (its minimum, say) reads a
+        # 100 % load factor, since that output is also its observed peak; the tons say so
+        spread = res.load_spread_pct
+        if spread == spread and spread <= _CONSTANT_OUTPUT_SPREAD_PCT:  # NaN-safe
+            caveats.append(
+                f"every run is at about the same output (the 10th-90th percentile of the running "
+                f"tons spans {spread:g} % of their peak): the load factor is read against that "
+                "same output, so it says nothing about part load -- compare the tons with the "
+                "chiller's rated capacity"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -93,6 +107,7 @@ class ChillerStaging:
                 "runtime_pct": res.runtime_pct,
                 "load_factor_median_pct": res.load_factor_median_pct,
                 "low_load_pct": res.low_load_pct,
+                "load_spread_pct": res.load_spread_pct,  # 0.105 (#148)
                 "n_days": res.n_days,
             },
             summary=(

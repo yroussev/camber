@@ -1176,7 +1176,8 @@ fixed 85 °F (a floor of 85 °F). `PLANT__high_floor` resets but never below 80 
 1. *Staging.* Two plants **fault**, for different reasons. `PLANT__short_cycling` starts 13.2
    times a day (fault at 12); every run is at its minimum output, which is the most it ever
    delivers, so its load factor reads 100% and it is never at low load: the starts alone fail
-   it. `PLANT__left_on` starts once in three weeks but runs all the time: 66.3% of its running
+   it. The finding says so: its `load_spread_pct` is 0.0 (every run at one output) and a caveat
+   warns that the load factor says nothing about part load there. `PLANT__left_on` starts once in three weeks but runs all the time: 66.3% of its running
    samples are below 40 % of its own peak load (fault at 50 %), with a median load factor of
    10.8%, idling through nights and weekends. `PLANT__well_staged` starts 0.71 times a day (once
    each weekday) and spends 12.9% of its running time at low load: `ok`.
@@ -1189,6 +1190,9 @@ fixed 85 °F (a floor of 85 °F). `PLANT__high_floor` resets but never below 80 
    the heat wave's: the slope comes from the hottest days, and the median, 80.0 °F against
    72.8 °F on the well-staged plant, shows the condenser water it could have had. The rule asks
    whether there is a reset, not whether it is a good one: read the median and the floor too.
+   `cws_above_wb_plus_approach_median_f` puts a number on it: the high-floor plant's water sits a
+   median 7.5 °F above the wet-bulb plus the 7 °F design approach, the well-staged plant's 0.3 °F
+   and the fixed tower's 12.5 °F.
 4. *Score.* Both rules score TPR 100% and FPR 0 %: `chiller_staging` catches both staging faults
    and passes the other three plants; `condenser_water_reset` catches the fixed tower. The
    high-floor plant is labelled healthy, and the default check agrees.
@@ -1211,7 +1215,8 @@ fixed 85 °F (a floor of 85 °F). `PLANT__high_floor` resets but never below 80 
 
 **Common mistakes**
 
-- Reading `PLANT__short_cycling`'s 100 % load factor as a well-loaded chiller.
+- Reading `PLANT__short_cycling`'s 100 % load factor as a well-loaded chiller (its caveat says
+  why it is not).
 - Reading `PLANT__high_floor`'s `ok` as "the reset is fine".
 - Raising `reset_slope_flat` until a plant fails, and calling that a finding.
 - Citing these figures as evidence about real plants: the data are synthetic.
