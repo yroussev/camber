@@ -148,7 +148,7 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
           grep -qx "$f" "$out/sdist.txt" || { echo "missing in sdist: $f" >>"$out/pkg.log"; miss=1; }
         done < <(git ls-files camber)
         "$PYTHON" -m venv "$out/smoke" >/dev/null 2>&1 && "$out/smoke/bin/pip" install -q "$whl" >>"$out/pkg.log" 2>&1 \
-          && (cd "$out" && "$out/smoke/bin/python" -c "import camber, camber.datasets; from importlib.resources import files; assert files('camber.datasets').joinpath('catalog.json').is_file(); print(camber.__version__)") >>"$out/pkg.log" 2>&1 \
+          && (cd "$out" && "$out/smoke/bin/python" -c "import camber, camber.datasets; from importlib.resources import files; assert files('camber.datasets').joinpath('catalog.json').is_file(); assert len(camber.datasets.catalog(kind='synthetic')) >= 3; print(camber.__version__)") >>"$out/pkg.log" 2>&1 \
           || miss=1
         [ $miss -eq 0 ] && res build_install PASS || res build_install "FAIL (see $out/pkg.log)"
       else

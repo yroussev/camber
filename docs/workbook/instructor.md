@@ -354,6 +354,9 @@ Figures from the real `ornl-frp-ops` default subset, CAMBER 0.97.0-dev, with the
 
 <!-- END air-scheduling -->
 
+<!-- BEGIN slot #146 (AHU maintenance) -->
+<!-- END slot #146 (AHU maintenance) -->
+
 ## Terminal units and ventilation
 
 <!-- BEGIN zone-reheat-overcooling -->
@@ -742,6 +745,9 @@ Addendum f and secondary sources); no standard text is quoted here.
 - Lowering the minimum on the strength of the CO₂ readings alone, without the design schedule.
 
 <!-- END zone-min-oa -->
+
+<!-- BEGIN slot #144 (G36 VAV fleet) -->
+<!-- END slot #144 (G36 VAV fleet) -->
 
 ## Central plant
 
@@ -1153,6 +1159,9 @@ at low loads it cycles every three hours or so.
 
 <!-- END plant-boiler-cycling -->
 
+<!-- BEGIN slot #147 (heat pump) -->
+<!-- END slot #147 (heat pump) -->
+
 <!-- BEGIN plant-chiller-staging -->
 
 ### `plant-chiller-staging`: Chiller staging and condenser-water reset
@@ -1222,6 +1231,9 @@ fixed 85 °F (a floor of 85 °F). `PLANT__high_floor` resets but never below 80 
 - Citing these figures as evidence about real plants: the data are synthetic.
 
 <!-- END plant-chiller-staging -->
+
+<!-- BEGIN slot #145 (two-chiller plant) -->
+<!-- END slot #145 (two-chiller plant) -->
 
 <!-- BEGIN plant-sensor-vs-equipment -->
 

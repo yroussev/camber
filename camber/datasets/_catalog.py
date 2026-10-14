@@ -1,5 +1,11 @@
 """The dataset catalog: schema, loader and validator for ``camber/datasets/catalog.json``.
 
+**Per-entry files** (0.105). An entry may instead live in a file of its own,
+``camber/datasets/catalog.d/<NNN>-<id>.json``, holding that one entry object. The loader
+(:func:`load_catalog_data`) appends those entries after ``catalog.json``'s, in the order of their
+three-digit ``NNN`` prefix, and the result is validated as one catalog. The synthetic entries
+live there, so a new one adds a file instead of editing the shared tail of ``catalog.json``.
+
 The catalog is package data -- a reviewed list of open building datasets CAMBER knows how to fetch,
 verify and ingest. It never contains the data itself (CAMBER redistributes nothing; every file is
 downloaded from its publisher). :func:`validate_catalog` is the gate a catalog change must pass:
@@ -392,9 +398,53 @@ class DatasetEntry:
         return out
 
 
+#: the directory of per-entry catalog files, beside ``catalog.json`` (0.105)
+CATALOG_DIR = "catalog.d"
+#: a per-entry file's name: a three-digit order prefix, a dash and the entry id
+_ENTRY_FILE_RE = re.compile(r"^(\d{3})-([a-z0-9][a-z0-9-]*)\.json$")
+
+
+def catalog_entry_files() -> list:
+    """The per-entry catalog files (``catalog.d/*.json``), in load order (their prefix).
+
+    ``ValueError`` for a file whose name is not ``<NNN>-<id>.json``, or for two files sharing a
+    prefix (the order must be explicit).
+    """
+    node = _files("camber.datasets").joinpath(CATALOG_DIR)
+    if not node.is_dir():
+        return []
+    names = sorted(c.name for c in node.iterdir() if c.name.endswith(".json"))
+    seen: dict = {}
+    for name in names:
+        m = _ENTRY_FILE_RE.match(name)
+        if m is None:
+            raise ValueError(f"{CATALOG_DIR}/{name}: a per-entry file is named <NNN>-<id>.json")
+        if m.group(1) in seen:
+            raise ValueError(
+                f"{CATALOG_DIR}/{name}: prefix {m.group(1)} is also used by {seen[m.group(1)]}"
+            )
+        seen[m.group(1)] = name
+    return names
+
+
+def _entry_file_data(name: str) -> dict:
+    d = json.loads(package_text(CATALOG_DIR, name))
+    m = _ENTRY_FILE_RE.match(name)
+    if not isinstance(d, dict) or m is None or d.get("id") != m.group(2):
+        raise ValueError(
+            f"{CATALOG_DIR}/{name}: must hold one entry object whose id is in its name"
+        )
+    return d
+
+
 def load_catalog_data() -> dict:
-    """The raw catalog JSON shipped with the package."""
-    return json.loads(package_text("catalog.json"))
+    """The raw catalog shipped with the package: ``catalog.json``'s entries, then those of the
+    per-entry files in ``catalog.d/`` (:func:`catalog_entry_files` order)."""
+    data = json.loads(package_text("catalog.json"))
+    extra = [_entry_file_data(name) for name in catalog_entry_files()]
+    if extra and isinstance(data, dict) and isinstance(data.get("datasets"), list):
+        data["datasets"] = data["datasets"] + extra
+    return data
 
 
 def load_entries(data: dict | None = None) -> list:

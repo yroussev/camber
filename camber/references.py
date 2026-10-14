@@ -436,6 +436,12 @@ _ALL = (
         _MV_VERIFIED,
         year="2023",
     ),
+    # Reserved slots (0.105): the synthetic workbook entries add their references only between
+    # their own markers, so their branches do not touch the same lines.
+    # BEGIN slot #146 (AHU maintenance: filter_fouling, control_hunting)
+    # END slot #146
+    # BEGIN slot #147 (heat pump)
+    # END slot #147
 )
 
 #: every reference, by id (insertion order is page order on the references page)
@@ -467,6 +473,8 @@ RULE_REFERENCES: dict = {
     "simultaneous_heat_cool": ("pnnl-guide-ahu-heat-cool", _CH5),
     "leaking_valve": ("pnnl-guide-ahu-heat-cool", _CH5),
     "control_hunting": (_CH5,),
+    # BEGIN slot #146 (AHU maintenance): rule mappings
+    # END slot #146
     # scheduling
     "night_weekend_setback": ("pnnl-guide-occupancy-scheduling", _CH5),
     # zones and terminal units
@@ -489,14 +497,18 @@ RULE_REFERENCES: dict = {
     "static_rogue_zone_census": ("pnnl-guide-static-pressure", _CH7),
     "sat_cohort_starvation": (_CH5, _CH7),
     "static_cohort_starvation": ("pnnl-guide-static-pressure", _CH5, _CH7),
-    # Left unmapped (no guide or chapter clearly covers them): the G36 reset-effectiveness rules
-    # (sat_/static_reset_effectiveness, trim-and-respond, a G36 sequence the guides predate),
-    # filter_fouling, g36_afdd (cites Guideline 36 itself), the DX and heat-pump rules other than
-    # compressor_short_cycle and source_loop_deltat (the course covers built-up air handlers and
-    # central plants), and the drift detectors other than the two plant ones mapped below.
+    # Left unmapped (no guide or chapter clearly covers them):
+    # - filter_fouling;
+    # - the G36 reset-effectiveness rules (sat_/static_reset_effectiveness, trim-and-respond, a
+    #   G36 sequence the guides predate) and g36_afdd (cites Guideline 36 itself);
+    # - the DX and heat-pump rules other than compressor_short_cycle and source_loop_deltat (the
+    #   course covers built-up air handlers and central plants);
+    # - the drift detectors other than the two plant ones mapped below.
     # packaged units (0.103, #125): the small-building course's measures chapter covers packaged
     # units and the thermostats that cycle them
     "compressor_short_cycle": ("pnnl-small-retuning-ch3",),
+    # BEGIN slot #147 (heat pump): rule mappings
+    # END slot #147
     # central plant, cooling
     "chw_plant_reset": ("pnnl-guide-plant-cooling", _CH8),
     "chw_pump_dp_reset": ("pnnl-guide-plant-cooling", _CH8),

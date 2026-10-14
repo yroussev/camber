@@ -21,12 +21,13 @@ import pytest
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SCRIPT = os.path.join(_ROOT, ".github", "scripts", "site_neutrality_patterns.py")
 _CATALOG = "camber/datasets/catalog.json"
+_CATALOG_DIR = "camber/datasets/catalog.d"  # the catalog's per-entry files (0.105)
 _EUI_REF = "camber/energy_factors/energy_star_us_median_eui_2024.json"
 _LABEL_RULE = "specific-site building-type label"
 # every rule allowed an exemption, and exactly the paths it may exempt
 _ALLOWED = {
-    "third-party dataset DOI prefix": (_CATALOG,),
-    "third-party dataset host (licence status unreliable)": (_CATALOG,),
+    "third-party dataset DOI prefix": (_CATALOG, _CATALOG_DIR),
+    "third-party dataset host (licence status unreliable)": (_CATALOG, _CATALOG_DIR),
     _LABEL_RULE: (_EUI_REF,),
 }
 
@@ -52,7 +53,9 @@ def test_only_the_allowed_rules_are_exempt_and_only_for_their_one_file():
 def test_the_exempt_files_exist_and_the_eui_reference_needs_its_exemption():
     for paths in _ALLOWED.values():
         for p in paths:
-            assert os.path.isfile(os.path.join(_ROOT, p)), p
+            # a file, or (the catalog's per-entry files) a directory git excludes as a whole
+            full = os.path.join(_ROOT, p)
+            assert os.path.isfile(full) or (p == _CATALOG_DIR and os.path.isdir(full)), p
     rx = next(rx for rx, why, _ex in _mod().rules() if why == _LABEL_RULE)
     with open(os.path.join(_ROOT, _EUI_REF), encoding="utf-8") as fh:
         text = fh.read()
@@ -89,7 +92,7 @@ def test_output_has_three_tab_fields():
     for ln in lines:
         fields = ln.split("\t")
         assert len(fields) == 3
-        assert fields[2] in ("", _CATALOG, _EUI_REF)
+        assert fields[2] in ("", f"{_CATALOG},{_CATALOG_DIR}", _EUI_REF)
     assert sum(1 for ln in lines if ln.split("\t")[2]) == 3
 
 
@@ -121,14 +124,21 @@ def test_pre_commit_hook_applies_exemptions_per_rule(tmp_path):
         _git(repo, "add", path)
         return subprocess.run(["bash", hook], cwd=repo, capture_output=True, text=True)
 
-    # the host in the catalog passes...
+    # the host in the catalog passes, in catalog.json and in a per-entry file under catalog.d...
     assert staged(_CATALOG, f'{{"url": "https://{host}.example/x"}}').returncode == 0
-    # ...but not anywhere else
-    r = staged("notes.md", f"see {host}.example")
-    assert r.returncode != 0 and "third-party dataset host" in r.stderr
-    _git(repo, "rm", "-q", "--cached", "notes.md")
+    os.makedirs(os.path.join(repo, _CATALOG_DIR))
+    entry = f"{_CATALOG_DIR}/100-x.json"
+    assert staged(entry, f'{{"url": "https://{host}.example/y"}}').returncode == 0
+    # ...but not anywhere else (a sibling of catalog.d included)
+    for path in ("notes.md", "camber/datasets/catalog.d.json"):
+        r = staged(path, f"see {host}.example")
+        assert r.returncode != 0 and "third-party dataset host" in r.stderr, path
+        _git(repo, "rm", "-q", "--cached", path)
     # and an encumbered name is refused even in the catalog
     r = staged(_CATALOG, f'{{"note": "{enc}"}}')
+    assert r.returncode != 0 and "licence-encumbered" in r.stderr
+    _git(repo, "rm", "-q", "--cached", _CATALOG)
+    r = staged(entry, f'{{"note": "{enc}"}}')
     assert r.returncode != 0 and "licence-encumbered" in r.stderr
 
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Regenerate the "Data issues and how CAMBER handles them" section of docs/DATASETS.md.
 
-The section is rendered from ``camber/datasets/catalog.json`` (``camber.datasets._issues``), so the
-documentation always says exactly what the ingester does. Run it after editing a catalog entry's
-``data_issues``; ``--check`` exits 1 (without writing) when the document is out of date, which is
-what ``tests/test_datasets_catalog.py`` asserts too.
+The section is rendered from the catalog (``camber/datasets/catalog.json`` and its per-entry
+files in ``catalog.d/``) by ``camber.datasets._issues``, so the documentation always says exactly
+what the ingester does. Run it after editing a catalog entry's ``data_issues`` or adding an entry;
+``--check`` exits 1 (without writing) when the document is out of date, which is what
+``tests/test_datasets_catalog.py`` asserts too.
 
     python scripts/datasets_issues_doc.py          # rewrite docs/DATASETS.md in place
     python scripts/datasets_issues_doc.py --check  # verify only

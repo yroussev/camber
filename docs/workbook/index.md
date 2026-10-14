@@ -19,8 +19,8 @@ and find the problems it teaches you to look for.
   [catalog](../DATASETS.md). A research-only dataset appears only as a marked optional extra.
   Where no open dataset shows a fault, an exercise uses a
   [synthetic dataset](../DATASETS.md#synthetic-datasets) that CAMBER generates on your computer,
-  labelled synthetic wherever it appears (0.103: [`plant-lockout`](plant-lockout.md); 0.104:
-  [`plant-boiler-cycling`](plant-boiler-cycling.md) and [`plant-chiller-staging`](plant-chiller-staging.md)).
+  labelled synthetic wherever it appears. The [synthetic datasets](../DATASETS.md#synthetic-datasets)
+  table names the exercise each one serves.
 - **Two ways in.** Every exercise gives the steps both in the lab (a local web page:
   `camber lab`, then **Fetch & ingest**, **trends**, **report**) and on the command line.
 - **Tuned configs.** Where the dataset's default config doesn't fit an exercise, the exercise
@@ -70,6 +70,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 [pnnl-trending-requirements]: https://www.pnnl.gov/sites/default/files/media/file/trending_requirements_retuning.pdf "Re-Tuning Training Guide: Trending Requirements for Re-Tuning"
 
 <!-- BEGIN workbook-air (#80) -->
+<!-- slot #146 (AHU maintenance): its row goes right after the air-scheduling row -->
 ### Air side
 
 | PNNL reading | Exercise | Datasets |
@@ -82,6 +83,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 <!-- END workbook-air (#80) -->
 
 <!-- BEGIN workbook-zone (#81) -->
+<!-- slot #144 (G36 VAV fleet): its row goes right after the zone-min-oa row -->
 ### Terminal units and ventilation
 
 | PNNL reading | Exercise | Datasets |
@@ -94,6 +96,8 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 <!-- END workbook-zone (#81) -->
 
 <!-- BEGIN workbook-plant (#82) -->
+<!-- slot #147 (heat pump): its row goes right after the plant-boiler-cycling row -->
+<!-- slot #145 (two-chiller plant): its row goes right after the plant-chiller-staging row -->
 ### Central plant
 
 | PNNL reading | Exercise | Datasets |
