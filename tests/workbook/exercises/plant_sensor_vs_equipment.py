@@ -9,6 +9,8 @@ Real-data figures were recorded from::
     camber datasets score lbnl-chiller --store lab_store --findings sensor_out/findings.json
 
 (CAMBER 0.97.0-dev, lbnl-chiller full subset, all 24 runs, 2026-09-29.)
+Since 0.105 (#164) the secondary pumps are their own equipment, so the chw_pump_dp_reset
+figures are read on SECPUMP__<run> instead of PLANT__<run>; the values did not change.
 """  # noqa: E501
 
 from __future__ import annotations
@@ -53,8 +55,8 @@ def _dp_bias_moves_the_pump(ctx) -> None:
     """The DP sensor reading high slows the secondary pump; reading low speeds it up."""
     speed = {}
     for run in ("fault_free", f"{_SEC}_020", f"{_SEC}_m020"):
-        f = ctx.finding("chw_pump_dp_reset", f"PLANT__{run}")
-        assert f is not None, f"no chw_pump_dp_reset finding on PLANT__{run}"
+        f = ctx.finding("chw_pump_dp_reset", f"SECPUMP__{run}")
+        assert f is not None, f"no chw_pump_dp_reset finding on SECPUMP__{run}"
         speed[run] = f.metrics["median_speed_pct"]
     lo, mid, hi = speed[f"{_SEC}_020"], speed["fault_free"], speed[f"{_SEC}_m020"]
     assert lo < mid < hi, f"median pump speeds +20 %: {lo}, fault-free: {mid}, -20 %: {hi}"
@@ -99,10 +101,10 @@ EXERCISE = Exercise(
             quote="0.67",
         ),
         # 2. the same low-reading chiller sensor surfaces as a pump fault
-        Finding("chw_pump_dp_reset", "PLANT__chiller_bias_m2", severity=("fault",)),
+        Finding("chw_pump_dp_reset", "SECPUMP__chiller_bias_m2", severity=("fault",)),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__chiller_bias_m2",
+            "SECPUMP__chiller_bias_m2",
             "pct_running_near_full",
             82.1,
             0.1,
@@ -131,10 +133,10 @@ EXERCISE = Exercise(
         ),
         # 4. the loop DP sensor: the reading holds at setpoint, the pump speed carries the bias
         Check("a DP sensor bias moves the secondary pump", _dp_bias_moves_the_pump),
-        Finding("chw_pump_dp_reset", f"PLANT__{_SEC}_020", severity=("ok",)),
+        Finding("chw_pump_dp_reset", f"SECPUMP__{_SEC}_020", severity=("ok",)),
         Metric(
             "chw_pump_dp_reset",
-            f"PLANT__{_SEC}_020",
+            f"SECPUMP__{_SEC}_020",
             "median_speed_pct",
             74.4,
             0.05,
@@ -143,7 +145,7 @@ EXERCISE = Exercise(
         ),
         Metric(
             "chw_pump_dp_reset",
-            f"PLANT__{_SEC}_m020",
+            f"SECPUMP__{_SEC}_m020",
             "median_speed_pct",
             97.0,
             0.05,

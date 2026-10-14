@@ -52,6 +52,19 @@ def packaged_mapping(name):
     return json.loads(text)
 
 
+def run_equipment_mapping(mapping):
+    """``mapping`` without the columns its ``equipment`` map moves to other equipment.
+
+    A grouped mapping (``lbnl_chiller.json`` since 0.105, #164) sends some columns to their own
+    equipment (the secondary pumps' ``SECPUMP``) and leaves the rest on the run's equipment
+    (``PLANT``). These loaders build one frame per run, so they keep only the run's own columns:
+    the frame is the ingest's ``PLANT__<run>``, never a mix of chiller and pump roles.
+    """
+    moved = {str(c).lower() for c in mapping.get("equipment") or {}}
+    aliases = {c: r for c, r in mapping["aliases"].items() if str(c).lower() not in moved}
+    return {"aliases": aliases}
+
+
 def catalog_quirks(dataset_id):
     """The ingest quirks the catalog declares for ``dataset_id`` (applied before mapping)."""
     from camber.datasets import get
@@ -790,7 +803,9 @@ def main(argv=None) -> int:
     # Chiller-plant plant-level detectors (opt-in via fetch.py --chiller)
     chiller_base = os.path.join(DATA, "chiller")
     if os.path.exists(os.path.join(chiller_base, CHILLER_FAULT_FREE)):
-        chiller_mapping = MappingProvider.from_dict(packaged_mapping("lbnl_chiller.json"))
+        chiller_mapping = MappingProvider.from_dict(
+            run_equipment_mapping(packaged_mapping("lbnl_chiller.json"))
+        )
         chiller_spec = catalog_spec("lbnl-chiller")
         chiller_frames = {
             f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping, spec=chiller_spec)

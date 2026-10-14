@@ -34,8 +34,10 @@ Read these first (PNNL, free):
 
 Each run becomes `PLANT__<run>` in the facility `ds-lbnl-chiller`. The default subset holds
 `PLANT__fault_free`, `PLANT__coolingtower_fouling_065`, `PLANT__bypass_stuck_075` and
-`PLANT__chiller_bias_2`. The chilled-water temperatures are chiller 1's; the pump is the
-secondary loop's lead pump.
+`PLANT__chiller_bias_2`. The chilled-water temperatures are chiller 1's. The secondary loop's
+two pumps, with the loop's flow and DP, are their own equipment beside each run,
+`SECPUMP__<run>` (`SECPUMP__fault_free` and so on); the speed is the lead pump's, which both
+pumps share whenever they run.
 
 ## Setup
 
@@ -55,20 +57,21 @@ camber datasets config lbnl-chiller --exercise plant-chw-reset-pumping --store l
 camber run chw.json --out chw_out
 ```
 
-The exercise's config (`--exercise plant-chw-reset-pumping`) runs two rules. `chw_plant_reset`
-fits chiller 1's leaving-water temperature against the outdoor dry-bulb over the chiller's
-running, occupied hours, checks that the slope goes the way a reset should, and reports the
-loop delta-T against an 8 °F design minimum (`design_deltaT_min_f`). It also reads chiller 1's
-flow: on a constant-flow plant the delta-T is reported but not judged. `chw_pump_dp_reset` reads
-the secondary pump's speed and the loop's DP setpoint, and learns the pump's VFD floor from its
-speeds. The exercise keeps every parameter at its default. The plant's chiller status point is
+The exercise's config (`--exercise plant-chw-reset-pumping`) runs two rules. `chw_plant_reset` fits
+chiller 1's leaving-water temperature against the outdoor dry-bulb over the chiller's running,
+occupied hours, checks that the slope goes the way a reset should, and reports the loop delta-T
+against an 8 °F design minimum (`design_deltaT_min_f`). It also reads chiller 1's flow: on a
+constant-flow plant the delta-T is reported but not judged. `chw_pump_dp_reset` reads the secondary
+pump's speed and the loop's DP setpoint on `SECPUMP__<run>`, and learns the pump's VFD floor from
+its speeds. The exercise keeps every parameter at its default. The plant's chiller status point is
 an enable, not a run status, so CAMBER decides when the chiller runs from its power.
 
 ## Steps
 
 1. **Look before you judge.** In the trend viewer, open `PLANT__fault_free` and plot chiller 1's
-   leaving and return water with the outdoor temperature over a spring month. Then plot the
-   secondary pump speed and the loop DP with its setpoint over the same month.
+   leaving and return water with the outdoor temperature over a spring month. Then open
+   `SECPUMP__fault_free` and plot the pump speed and the loop DP with its setpoint over the same
+   month.
 2. **Run the exercise's config** (the commands above) and read the findings.
 3. **Reset.** In `chw_out/findings.json`, read `chw_plant_reset` for the fault-free run:
    `chwst_reset_present`, `chwst_reset_direction`, `chwst_slope_per_F` and `chwst_median_f`.
@@ -77,8 +80,9 @@ an enable, not a run status, so CAMBER decides when the chiller runs from its po
 5. **Pumping.** Read `chw_pump_dp_reset` for the fault-free run: `median_speed_pct`,
    `pct_running_near_full`, `pct_running_near_min`, `vfd_floor_pct`, `near_min_band_pct` and
    `dp_sp_reset_present`. Then find the run where the pump's median speed is lowest.
-6. **The stuck bypass.** Compare both findings for `PLANT__bypass_stuck_075` with the fault-free
-   run's.
+6. **The stuck bypass.** Compare both findings for the stuck bypass (`chw_plant_reset` on
+   `PLANT__bypass_stuck_075`, `chw_pump_dp_reset` on `SECPUMP__bypass_stuck_075`) with the
+   fault-free run's.
 
 ## Questions
 
@@ -127,6 +131,9 @@ an enable, not a run status, so CAMBER decides when the chiller runs from its po
 - The learned floor is a plateau in the speeds, not the drive's setting: a pump that rarely
   reaches its floor falls back to the 25 % band. Set `near_min_pct` from the VFD parameters when
   you know them.
+- The pumps report no usable run status, and their speed point holds its last value while they
+  are stopped, so the hours the rule counts near the minimum include stopped hours
+  ([#180](https://github.com/yroussev/camber/issues/180)).
 - The data are simulated: one plant, one climate, one control sequence.
 
 ## Going further

@@ -2584,7 +2584,7 @@
     "url": "https://data.openei.org/submissions/5763",
     "expect": "creativecommons.org/licenses/by/4.0"
    },
-   "equipment": "3 chillers, 3 cooling towers, primary/secondary CHW loops; unit 1 mapped",
+   "equipment": "3 chillers, 3 cooling towers, primary/secondary CHW loops; chiller 1, tower 1 and the plant points on PLANT, the two secondary CHW pumps as one SECPUMP",
    "labels": {
     "targets": {
      "chiller_efficiency": [
@@ -2709,6 +2709,22 @@
       "issue": "secondary-supply-return-swapped"
      }
     ],
+    "derive": [
+     {
+      "column": "SECPUMP_KW",
+      "sum": [
+       "CWL_SEC_PM_POW_1",
+       "CWL_SEC_PM_POW_2"
+      ]
+     },
+     {
+      "column": "SECPUMP_ON",
+      "above": [
+       "CWL_SEC_PM_POW_1",
+       0.5
+      ]
+     }
+    ],
     "runs": [
      {
       "id": "fault_free",
@@ -2716,7 +2732,11 @@
       "member": "ChillerPlant.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": ""
+      "label": "",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "bypass_leakage_025",
@@ -2724,7 +2744,11 @@
       "member": "ChillerPlant_bypass_leakage_025.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "bypass_valve"
+      "label": "bypass_valve",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "bypass_leakage_050",
@@ -2732,7 +2756,11 @@
       "member": "ChillerPlant_bypass_leakage_050.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "bypass_valve"
+      "label": "bypass_valve",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "bypass_leakage_075",
@@ -2740,7 +2768,11 @@
       "member": "ChillerPlant_bypass_leakage_075.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "bypass_valve"
+      "label": "bypass_valve",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "bypass_stuck_050",
@@ -2748,7 +2780,11 @@
       "member": "ChillerPlant_bypass_stuck_050.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "bypass_valve"
+      "label": "bypass_valve",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "bypass_stuck_075",
@@ -2756,7 +2792,11 @@
       "member": "ChillerPlant_bypass_stuck_075.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "bypass_valve"
+      "label": "bypass_valve",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_bias_m1",
@@ -2764,7 +2804,11 @@
       "member": "ChillerPlant_chiller_bias_-1.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_bias_m2",
@@ -2772,7 +2816,11 @@
       "member": "ChillerPlant_chiller_bias_-2.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_bias_1",
@@ -2780,7 +2828,11 @@
       "member": "ChillerPlant_chiller_bias_1.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_bias_2",
@@ -2788,7 +2840,11 @@
       "member": "ChillerPlant_chiller_bias_2.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_fouling_065",
@@ -2796,7 +2852,11 @@
       "member": "ChillerPlant_chiller_fouling_065.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "chiller_fouling"
+      "label": "chiller_fouling",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "chiller_fouling_095",
@@ -2804,7 +2864,11 @@
       "member": "ChillerPlant_chiller_fouling_095.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "chiller_fouling"
+      "label": "chiller_fouling",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_bias_m1",
@@ -2812,7 +2876,11 @@
       "member": "ChillerPlant_coolingtower_bias_-1.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_bias_m2",
@@ -2820,7 +2888,11 @@
       "member": "ChillerPlant_coolingtower_bias_-2.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_bias_1",
@@ -2828,7 +2900,11 @@
       "member": "ChillerPlant_coolingtower_bias_1.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_bias_2",
@@ -2836,7 +2912,11 @@
       "member": "ChillerPlant_coolingtower_bias_2.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_fouling_065",
@@ -2844,7 +2924,11 @@
       "member": "ChillerPlant_coolingtower_fouling_065.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "tower_fouling"
+      "label": "tower_fouling",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_fouling_080",
@@ -2852,7 +2936,11 @@
       "member": "ChillerPlant_coolingtower_fouling_080.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "tower_fouling"
+      "label": "tower_fouling",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_fouling_095",
@@ -2860,7 +2948,11 @@
       "member": "ChillerPlant_coolingtower_fouling_095.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "tower_fouling"
+      "label": "tower_fouling",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "coolingtower_PI",
@@ -2868,7 +2960,11 @@
       "member": "ChillerPlant_coolingtower_PI.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "control"
+      "label": "control",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "secondary_chilled_water_pressure_bias_m010",
@@ -2876,7 +2972,11 @@
       "member": "ChillerPlant_secondary_chilled_water_pressure_bias_-010.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "secondary_chilled_water_pressure_bias_m020",
@@ -2884,7 +2984,11 @@
       "member": "ChillerPlant_secondary_chilled_water_pressure_bias_-020.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "secondary_chilled_water_pressure_bias_010",
@@ -2892,7 +2996,11 @@
       "member": "ChillerPlant_secondary_chilled_water_pressure_bias_010.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      },
      {
       "id": "secondary_chilled_water_pressure_bias_020",
@@ -2900,7 +3008,11 @@
       "member": "ChillerPlant_secondary_chilled_water_pressure_bias_020.csv",
       "equip": "PLANT",
       "class": "CHW_PLANT",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "group": "mapping",
+      "target": [
+       "PLANT"
+      ]
      }
     ],
     "derived": []
@@ -2918,6 +3030,7 @@
     "Two label swaps in the export (outdoor wet/dry-bulb; secondary-loop supply/return) are fixed at ingest; see the data issues.",
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it.",
+    "Since 0.105 (#164) the two secondary chilled-water pumps are their own equipment, SECPUMP__<run> (class CHW_PUMP: the set's summed kW, the loop flow, the shared speed, a run status derived from pump 1's kW, and the loop DP and setpoint), recorded beside PLANT__<run> and never scored; PLANT keeps chiller 1's power and constant primary flow. Until 0.104 the pump speed and DP sat on PLANT, so a pump rule read chiller kW as pump power. The pumps report no usable status and their speed never reads zero; see the data issues.",
     "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees).",
     "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning; cooling_tower_fan_effort_drift (0.98) sees tower fouling. The sensor-bias runs are negatives for all three, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports.",
     "A controlled tower holds its approach, so tower fouling shows in fan effort, not approach: since 0.98 (#86) the template's drift section scores cooling_tower_fan_effort_drift against the declared reference PLANT__fault_free (drift.families[].reference, fitted in memory on every run and never stored). It catches fouling 065 and 080 (+17.8 / +10.9 fan %-points at matched load and wet-bulb) and misses 095 (+3.3, under the 5-point floor), with no alarm on the other 20 runs; the +1 / +2 F tower-sensor-bias runs are reported as sensor offsets (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 21."
@@ -2981,6 +3094,23 @@
      },
      "handling": "annotate",
      "handling_note": "Not mapped: rules that need a chiller or tower run status decline instead of reading the enable as running."
+    },
+    {
+     "id": "secondary-pump-status-and-speed",
+     "title": "The secondary pumps' status 1 is an enable, and their speed parks above zero while they are stopped",
+     "columns": [
+      "CWL_SEC_PM_STA_1",
+      "CWL_SEC_PM_STA_2",
+      "CWL_SEC_PM_SPD_1",
+      "CWL_SEC_DP"
+     ],
+     "evidence": "CWL_SEC_PM_STA_1 is 1 in every row of all 24 runs, while pump 1 draws 0.5 kW or less in 32.8% of fault-free rows (172,379), with the loop flow at zero. CWL_SEC_PM_STA_2 does follow pump 2 (it draws 0.5 kW or less in all but 2 of the rows where STA_2 reads 0), but pump 1 runs alone in 22,728 fault-free rows (4.3%), which STA_2 reads as off. Pump 2 never runs without pump 1, and when both run their speeds and kW are identical. While pump 1 is stopped CWL_SEC_PM_SPD_1 reads 0.345 (fault-free; 0.315 and 0.386 in the +20% and -20% secondary pressure-bias runs) instead of zero, and the loop DP reads its 961 setpoint at zero flow: the speed is the stopped DP loop's parked output, not a VFD floor the pump idles at (running, pump 1's fault-free speed has a median of 0.92).",
+     "contradicts": {
+      "document": "Chiller-plant Brick model LBNL_FDD_Data_Sets_chiller_plant.ttl (CWL_SEC_PM_STA_1 / _2 are the Pump_On_Off_Status and CWL_SEC_PM_SPD_1 / _2 the Speed_Status of Secondary_Chilled_Water_Loop_Pump_1 / _2)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. Neither status point is mapped: SECPUMP's pump_status is derived from pump 1's kW (SECPUMP_ON, above 0.5 kW: on whenever either pump runs), so the status-gated pump drift rules read only running samples. The speed is mapped as published, so chw_pump_dp_reset, which reads speed without a status, counts the stopped hours as hours near the minimum on this plant."
     },
     {
      "id": "chiller-fouling-runs-undocumented",

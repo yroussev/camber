@@ -31,7 +31,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
 
-from benchmark import catalog_spec, load_role_frame, packaged_mapping  # noqa: E402
+from benchmark import (  # noqa: E402
+    catalog_spec,
+    load_role_frame,
+    packaged_mapping,
+    run_equipment_mapping,
+)
 
 from camber.model.mapping import MappingProvider  # noqa: E402
 from camber.rules.boiler_efficiency_rule import BoilerEfficiencyDrift  # noqa: E402
@@ -80,7 +85,8 @@ def load_frames(plant: str) -> dict:
     """``{run file: hourly role frame}`` through the catalog's mapping and ingest spec."""
     if plant == "chiller":
         paths = sorted(glob.glob(os.path.join(CHILLER_DIR, "*.csv")))
-        mapping, spec = packaged_mapping("lbnl_chiller.json"), catalog_spec("lbnl-chiller")
+        mapping = run_equipment_mapping(packaged_mapping("lbnl_chiller.json"))
+        spec = catalog_spec("lbnl-chiller")
     else:
         paths = sorted(glob.glob(BOILER_GLOB))
         mapping, spec = packaged_mapping("lbnl_boiler.json"), catalog_spec("lbnl-boiler")
