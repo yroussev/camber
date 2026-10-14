@@ -338,6 +338,17 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   loop ΔT "holds near its baseline", with the signed shift and its σ. `warn` and `fault` keep the
   direction and the cause. Only the text moves: in `tests/golden/pumpsim_fullsize.json` the 17 `ok`
   `loop_deltat_drift` summaries change, and every severity, metric and caveat is unchanged.
+- **Pump rules on `lbnl-chiller` read pump data (#164).** The plant's secondary pump speed and
+  loop DP sat on the plant equipment, so a pump rule read chiller 1's kW as pump power and its
+  constant primary flow as the pump's flow. The secondary pumps are now their own equipment,
+  `SECPUMP__<run>` (class `CHW_PUMP`), with the two pumps' summed kW, the loop flow, the shared
+  speed, the loop DP and setpoint, and a run status derived from pump 1's kW. Each run keeps
+  `PLANT__<run>` with chiller 1's power and constant flow. The new pump equipment is recorded
+  beside the plant and never scored, so `camber datasets score` is unchanged. The new data issue
+  `secondary-pump-status-and-speed` records that the pumps' first status point is an enable and
+  their speed holds its last value while they are stopped. In `plant-chw-reset-pumping` and
+  `plant-sensor-vs-equipment` the `chw_pump_dp_reset` answers move from `PLANT__<run>` to
+  `SECPUMP__<run>` with the same values.
 
 ## [0.104.0] — Unreleased
 

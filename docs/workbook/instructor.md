@@ -905,20 +905,21 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
    by design: a property of this plant, and a design question (variable primary flow, a higher
    supply setpoint in mild weather), not a broken component. On a variable-flow plant the same
    figures would count, against `design_deltaT_min_f` (8 °F unless set from the loop's design).
-3. *DP reset and pumping.* No: the DP setpoint is flat (`dp_sp_reset_present` false, the same
-   value all year). The secondary pump runs at a median 84.9% and at 90 % or more in 38.0% of
-   its hours: a **warn** for riding the curve.
+3. *DP reset and pumping.* No: the DP setpoint is flat (`dp_sp_reset_present` false, the same value
+   all year). The secondary pump (`SECPUMP__fault_free`) runs at a median 84.9% and at 90 % or more
+   in 38.0% of its hours: a **warn** for riding the curve.
 4. *VFD minimum.* The pump's floor is 34.5%: the rule learns it from the speeds
    (`vfd_floor_pct`, `near_min_source: learned`) and counts 31.3% of the fault-free run's hours
    at or near it (the band is the floor plus a point, 35.5 %). The pump also runs all year, with
    no cooling load in winter. On the chiller-bias run the pump idles at its floor (a median of
    34.5%) for 68.6% of its hours, a **warn** for sitting at the minimum.
-5. *Stuck bypass.* The plant cannot make chilled water: the supply median is 65.0 °F and the
-   delta-T 0.7 °F, and the pump runs at a median 100%. The supply warms as the weather warms, a
-   slope of +0.76 °F per °F, the reverse of a reset: `chw_plant_reset` is a **warn** with
+5. *Stuck bypass.* The plant cannot make chilled water: the supply median is 65.0 °F and the delta-T
+   0.7 °F, and the pump runs at a median 100%. The supply warms as the weather warms, a slope of
+   +0.76 °F per °F, the reverse of a reset: `chw_plant_reset` is a **warn** with
    `chwst_reset_direction: reverse` (its low delta-T is not judged on this constant-flow plant).
-   That warn and `chw_pump_dp_reset` (a warn) are both symptoms; the cause is the tower bypass,
-   which only `condenser_bypass_leak` names ([`plant-cooling-tower`](plant-cooling-tower.md)).
+   That warn and `chw_pump_dp_reset` on `SECPUMP__bypass_stuck_075` (a warn) are both symptoms; the
+   cause is the tower bypass, which only `condenser_bypass_leak` names
+   ([`plant-cooling-tower`](plant-cooling-tower.md)).
 
 **Discussion points**
 
@@ -1250,12 +1251,12 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
    sensor at setpoint, so the real water is colder (or warmer) than it reads; the chiller works
    harder (or less), and the tons CAMBER computes from the biased temperature are wrong as well.
    A kW/ton better than the healthy machine's is itself a clue.
-2. *Where the low-reading sensor also shows.* In the secondary pump: `chw_pump_dp_reset` is a
-   **fault** on the 2 °C-low run, with the pump at 90 % or more in 82.1% of its hours (a median
-   of 100 %). The real chilled water is warmer, so the air handlers' valves open wider and the
-   pump works harder to hold the loop DP. The high-reading runs do the opposite: the pump idles
-   at its 34.5 % VFD floor for most of its hours, a warn for sitting at the minimum (0.98 learns
-   the floor; before, the rule's 25 % band missed it).
+2. *Where the low-reading sensor also shows.* In the secondary pumps: `chw_pump_dp_reset` is a
+   **fault** on the 2 °C-low run (`SECPUMP__chiller_bias_m2`), with the pump at 90 % or more in
+   82.1% of its hours (a median of 100 %). The real chilled water is warmer, so the air handlers'
+   valves open wider and the pump works harder to hold the loop DP. The high-reading runs do the
+   opposite: the pump idles at its 34.5 % VFD floor for most of its hours, a warn for sitting at the
+   minimum (0.98 learns the floor; before, the rule's 25 % band missed it).
 3. *Tower sensor vs bypass.* `condenser_bypass_leak` reports both ±2 °C tower-sensor biases as
    `info` with `attribution: sensor_offset`: the water entering the chillers reads -3.1 °F and
    +3.6 °F from the tower's leaving water, and the difference stays the same at every load.

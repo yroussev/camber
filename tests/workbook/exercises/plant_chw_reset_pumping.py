@@ -11,6 +11,8 @@ Real-data figures were recorded from::
 in the full subset. Re-recorded for 0.98.0-dev on 2026-09-30 after #86 items 2 and 3: the reset's
 sign is checked, a constant-flow plant's delta-T is not judged, and the pump's VFD floor is
 learned.)
+Since 0.105 (#164) the secondary pumps are their own equipment, so the chw_pump_dp_reset
+figures are read on SECPUMP__<run> instead of PLANT__<run>; the values did not change.
 """  # noqa: E501
 
 from __future__ import annotations
@@ -54,8 +56,8 @@ def _no_dp_reset_floor_learned(ctx) -> None:
         if f.rule != "chw_pump_dp_reset":
             continue
         assert f.metrics["dp_sp_reset_present"] is False, f"{f.equip}: DP reset found"
-    f = ctx.finding("chw_pump_dp_reset", "PLANT__fault_free")
-    assert f is not None, "no chw_pump_dp_reset finding on PLANT__fault_free"
+    f = ctx.finding("chw_pump_dp_reset", "SECPUMP__fault_free")
+    assert f is not None, "no chw_pump_dp_reset finding on SECPUMP__fault_free"
     assert f.metrics["near_min_source"] == "learned", f.metrics["near_min_source"]
     assert f.metrics["near_min_band_pct"] > 25.0, f.metrics["near_min_band_pct"]
     assert f.metrics["pct_running_near_min"] > 0.0, "no hours near the minimum"
@@ -131,11 +133,11 @@ EXERCISE = Exercise(
             quote="80.1%",
         ),
         # 3. the secondary pump rides the curve against a flat DP setpoint
-        Finding("chw_pump_dp_reset", "PLANT__fault_free", severity=("warn",)),
+        Finding("chw_pump_dp_reset", "SECPUMP__fault_free", severity=("warn",)),
         Check("no DP reset; the VFD floor is learned", _no_dp_reset_floor_learned),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__fault_free",
+            "SECPUMP__fault_free",
             "pct_running_near_full",
             38.0,
             0.1,
@@ -144,7 +146,7 @@ EXERCISE = Exercise(
         ),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__fault_free",
+            "SECPUMP__fault_free",
             "median_speed_pct",
             84.9,
             0.1,
@@ -155,7 +157,7 @@ EXERCISE = Exercise(
         # median is the floor itself
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__fault_free",
+            "SECPUMP__fault_free",
             "vfd_floor_pct",
             34.5,
             0.05,
@@ -164,7 +166,7 @@ EXERCISE = Exercise(
         ),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__fault_free",
+            "SECPUMP__fault_free",
             "pct_running_near_min",
             31.3,
             0.1,
@@ -173,17 +175,17 @@ EXERCISE = Exercise(
         ),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__chiller_bias_2",
+            "SECPUMP__chiller_bias_2",
             "median_speed_pct",
             34.5,
             0.1,
             on=REAL,
             quote="34.5%",
         ),
-        Finding("chw_pump_dp_reset", "PLANT__chiller_bias_2", severity=("warn",)),
+        Finding("chw_pump_dp_reset", "SECPUMP__chiller_bias_2", severity=("warn",)),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__chiller_bias_2",
+            "SECPUMP__chiller_bias_2",
             "pct_running_near_min",
             68.6,
             0.1,
@@ -221,10 +223,10 @@ EXERCISE = Exercise(
             on=REAL,
             quote="0.7 °F",
         ),
-        Finding("chw_pump_dp_reset", "PLANT__bypass_stuck_075", present=True),
+        Finding("chw_pump_dp_reset", "SECPUMP__bypass_stuck_075", present=True),
         Metric(
             "chw_pump_dp_reset",
-            "PLANT__bypass_stuck_075",
+            "SECPUMP__bypass_stuck_075",
             "median_speed_pct",
             100.0,
             0.05,

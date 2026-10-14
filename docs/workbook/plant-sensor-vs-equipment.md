@@ -36,7 +36,9 @@ labelled `sensor_bias`: chiller 1's leaving-water sensor (`PLANT__chiller_bias_1
 (`PLANT__coolingtower_bias_1` ... `_m2`) and the secondary loop's DP sensor
 (`PLANT__secondary_chilled_water_pressure_bias_010`, `_020`, `_m010`, `_m020`: +10, +20, -10,
 -20 %). For comparison the exercise also reads real equipment faults: the stuck tower bypass
-(`PLANT__bypass_stuck_075`) and the fouled chiller (`PLANT__chiller_fouling_065`).
+(`PLANT__bypass_stuck_075`) and the fouled chiller (`PLANT__chiller_fouling_065`). The
+secondary pumps, with the loop's flow and DP, are their own equipment beside each run,
+`SECPUMP__<run>`: `chw_pump_dp_reset` reports there (`SECPUMP__chiller_bias_m2` and so on).
 
 ## Setup
 

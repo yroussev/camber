@@ -1,13 +1,13 @@
 """Synthetic stand-ins for the central-plant workbook exercises (#82).
 
 ``lbnl-chiller`` and ``lbnl-boiler`` are simulated plants, one year per labelled run; each run is
-ingested as one piece of equipment, ``PLANT__<run id>``, in ``ds-lbnl-chiller`` (class
-``CHW_PLANT``) or ``ds-lbnl-boiler`` (class ``HW_PLANT``), with the roles the catalog mappings
-produce. These builders write four weeks of hourly data per run with the same ids, classes and
-roles, and encode the *behaviour* each exercise teaches -- not the real data's figures. The only
-published parameters reused are the ones the configs also use: the 1.44 kW/ton and 8.1 F ceilings
-the lbnl-chiller template calibrates, the plant's constant DP setpoints and its 34.5 % secondary
-pump floor.
+ingested as ``PLANT__<run id>``, in ``ds-lbnl-chiller`` (class ``CHW_PLANT``, with the secondary
+pumps beside it as ``SECPUMP__<run id>``, class ``CHW_PUMP``, since 0.105) or ``ds-lbnl-boiler``
+(class ``HW_PLANT``), with the roles the catalog mappings produce. These builders write four weeks
+of hourly data per run with the same ids, classes and roles, and encode the *behaviour* each
+exercise teaches -- not the real data's figures. The only published parameters reused are the ones
+the configs also use: the 1.44 kW/ton and 8.1 F ceilings the lbnl-chiller template calibrates, the
+plant's constant DP setpoints and its 34.5 % secondary pump floor.
 
 The shared weather: four weeks warming from spring to summer (daily mean dry-bulb 50 -> 85 F,
 +/- 8 F a day), the wet-bulb a few degrees below it; the building's cooling load follows the
@@ -151,10 +151,37 @@ def chiller_plant(idx: pd.DatetimeIndex, fault: dict) -> pd.DataFrame:
     )
 
 
+#: the roles the lbnl-chiller ingest puts on the secondary pumps' own equipment (0.105, #164)
+SECPUMP_ROLES = (Role.CHW_PUMP_SPEED, Role.CHW_DIFF_PRESS, Role.CHW_DIFF_PRESS_SP)
+SECPUMP_DESIGN_GPM = 840.0  # the secondary loop's flow at full speed
+SECPUMP_DESIGN_KW = 103.4  # the two pumps' kW at full speed
+
+
+def secondary_pumps(plant: pd.DataFrame) -> pd.DataFrame:
+    """One ``SECPUMP__<run>`` frame: the speed and loop DP of :func:`chiller_plant`, plus the
+    loop flow (proportional to speed), the pumps' kW (its cube) and a running status, as the
+    real ingest gives the secondary pumps their own equipment."""
+    speed = plant[Role.CHW_PUMP_SPEED]
+    out = plant[list(SECPUMP_ROLES)].copy()
+    out[Role.CHW_FLOW] = SECPUMP_DESIGN_GPM * speed
+    out[Role.POWER] = SECPUMP_DESIGN_KW * speed**3
+    out[Role.PUMP_STATUS] = 1.0
+    return out
+
+
 def chiller_standin(store, runs) -> None:
-    """``ds-lbnl-chiller`` with the named runs of :data:`CHILLER_RUNS`, labelled as published."""
+    """``ds-lbnl-chiller`` with the named runs of :data:`CHILLER_RUNS`, labelled as published.
+
+    Each run is ``PLANT__<run>`` (chiller 1, tower 1, the plant points) plus ``SECPUMP__<run>``
+    (the secondary pumps: speed and loop DP), the layout the catalog's grouped ingest makes since
+    0.105 (#164); only ``PLANT`` carries the run's label, as only it is the ingest's target.
+    """
     idx = hourly_index(days=28)
-    frames = {f"PLANT__{r}": ("CHW_PLANT", chiller_plant(idx, CHILLER_RUNS[r][1])) for r in runs}
+    frames: dict = {}
+    for r in runs:
+        plant = chiller_plant(idx, CHILLER_RUNS[r][1])
+        frames[f"PLANT__{r}"] = ("CHW_PLANT", plant.drop(columns=list(SECPUMP_ROLES)))
+        frames[f"SECPUMP__{r}"] = ("CHW_PUMP", secondary_pumps(plant))
     labels = {f"PLANT__{r}": CHILLER_RUNS[r][0] for r in runs}
     write_standin(store, "lbnl-chiller", frames, labels=labels)
 
