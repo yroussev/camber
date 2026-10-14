@@ -1,0 +1,41 @@
+{
+ "_comment": "0.105 (#147): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "heat_pump",
+ "seed": 147,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "ZAT",
+  "SAT",
+  "FAN",
+  "OCC",
+  "HTG_SP",
+  "CLG_SP",
+  "COMP",
+  "RV",
+  "STAGE",
+  "LOOP_SWT",
+  "LOOP_RWT",
+  "LOOP_PUMP",
+  "LOOP_SPD",
+  "LOOP_DP"
+ ],
+ "scenarios": [
+  "healthy",
+  "defrost_sensor",
+  "defrost_timer",
+  "no_aux_heat",
+  "classroom",
+  "classroom_twin",
+  "stuck_heating",
+  "stage_hunting",
+  "window_side",
+  "door_side",
+  "loop_ok",
+  "loop_flat"
+ ],
+ "rows_per_scenario": 4032,
+ "max_bytes": 3500000
+}

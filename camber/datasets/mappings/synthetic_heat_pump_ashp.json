@@ -1,0 +1,14 @@
+{
+  "_comment": "Synthetic heat pumps (generator heat_pump, camber.datasets._synthetic_heat_pump; 0.105, #147), the air-source units -> CAMBER Role mapping. Every column is CAMBER's own: ZAT is the unit's own zone sensor and SAT its discharge air in F, FAN the supply fan (1 = running), OCC the occupied period (weekdays 07:00-18:00), HTG_SP / CLG_SP the active zone setpoints in F, COMP the compressor (1 = running) and RV the reversing valve (1 = heating, 0 = cooling or defrosting), OAT the outdoor temperature in F. The scenario column selects one unit per ingest run and is not a point; the water-source and loop columns are blank on these rows and are not mapped.",
+  "aliases": {
+    "OAT": "oat",
+    "ZAT": "space_temp",
+    "SAT": "supply_air_temp",
+    "FAN": "supply_fan_status",
+    "OCC": "occupancy",
+    "HTG_SP": "heat_sp",
+    "CLG_SP": "cool_sp",
+    "COMP": "compressor_status",
+    "RV": "reversing_valve_cmd"
+  }
+}

@@ -441,6 +441,43 @@ _ALL = (
     # BEGIN slot #146 (AHU maintenance: filter_fouling, control_hunting)
     # END slot #146
     # BEGIN slot #147 (heat pump)
+    # --- heat pumps (0.105, #147): no PNNL re-tuning guide or chapter covers them ---------------
+    Reference(
+        "nrcan-heat-pump-guide",
+        "Heating and cooling with a heat pump",
+        "Natural Resources Canada",
+        "",
+        "https://natural-resources.canada.ca/energy-efficiency/energy-star/heating-cooling-heat-pump",
+        GUIDE,
+        "2026-10-13",
+        "Air-source heat pumps: The defrost cycle; Supplementary heat sources; Related "
+        "equipment: Supplementary heating systems; Thermostats",
+    ),
+    Reference(
+        "neep-ashp-install-guide",
+        "Guide to Installing Air-Source Heat Pumps in Cold Climates",
+        "Northeast Energy Efficiency Partnerships (NEEP)",
+        "",
+        "https://neep.org/sites/default/files/Installing%20Air-Source%20Heat%20Pumps%20in%20Cold"
+        "%20Climates.pdf",
+        GUIDE,
+        "2026-10-13",
+        "System Setup: Thermostat - Installer Setup",
+        year="2018",
+    ),
+    Reference(
+        "epri-tb-114673",
+        "Variable Flow Pumping: The Key to Energy Efficiency in Water Loop and Geothermal Heat "
+        "Pump System Applications",
+        "Electric Power Research Institute (EPRI)",
+        "TB-114673",
+        "https://restservice.epri.com/publicdownload/TB-114673/0/Product",
+        REPORT,
+        "2026-10-13",
+        "Making Water Source Heat Pumps Efficient: Improved Loop Pump Control; Variable Flow "
+        "System Design and Control Details",
+        year="1999",
+    ),
     # END slot #147
 )
 
@@ -501,13 +538,24 @@ RULE_REFERENCES: dict = {
     # - filter_fouling;
     # - the G36 reset-effectiveness rules (sat_/static_reset_effectiveness, trim-and-respond, a
     #   G36 sequence the guides predate) and g36_afdd (cites Guideline 36 itself);
-    # - the DX and heat-pump rules other than compressor_short_cycle and source_loop_deltat (the
-    #   course covers built-up air handlers and central plants);
+    # - the DX rules other than compressor_short_cycle and compressor_staging (the course covers
+    #   built-up air handlers and central plants; the heat-pump rules map to slot #147's guides);
     # - the drift detectors other than the two plant ones mapped below.
     # packaged units (0.103, #125): the small-building course's measures chapter covers packaged
     # units and the thermostats that cycle them
     "compressor_short_cycle": ("pnnl-small-retuning-ch3",),
     # BEGIN slot #147 (heat pump): rule mappings
+    # heat pumps (0.105, #147). NRCan's guide covers the defrost cycle (demand against
+    # time-temperature control), the balance point and supplementary heat, and the reversing
+    # valve; NEEP's installation guide covers where a unit's thermostat goes; EPRI's brief covers
+    # loop pumps that run at constant speed through units without shutoff valves.
+    "heatpump_defrost": ("nrcan-heat-pump-guide",),
+    "hp_capacity_shortfall": ("nrcan-heat-pump-guide",),
+    "hp_mode_vs_need": ("nrcan-heat-pump-guide", "neep-ashp-install-guide"),
+    "hp_room_imbalance": ("neep-ashp-install-guide",),
+    "source_loop_deltat": ("epri-tb-114673",),
+    # staging is set by the same thermostat and packaged-unit settings as compressor starts
+    "compressor_staging": ("pnnl-small-retuning-ch3",),
     # END slot #147
     # central plant, cooling
     "chw_plant_reset": ("pnnl-guide-plant-cooling", _CH8),

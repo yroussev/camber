@@ -1,0 +1,11 @@
+{
+  "_comment": "Synthetic heat pumps (generator heat_pump, camber.datasets._synthetic_heat_pump; 0.105, #147), the water-source units' loop -> CAMBER Role mapping. Every column is CAMBER's own: LOOP_SWT / LOOP_RWT are the water supplied to and returned from the heat pumps in F, LOOP_PUMP the loop pump (1 = running), LOOP_SPD its speed in %, LOOP_DP the loop differential pressure in psi, OAT the outdoor temperature in F. The scenario column selects one loop per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "LOOP_SWT": "source_loop_supply_temp",
+    "LOOP_RWT": "source_loop_return_temp",
+    "LOOP_PUMP": "pump_status",
+    "LOOP_SPD": "source_loop_pump_speed",
+    "LOOP_DP": "source_loop_diff_press"
+  }
+}
