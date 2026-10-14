@@ -68,7 +68,9 @@ class PumpDriftDiagnosis:
 
 
 def _get(findings, rule):
-    return next((f for f in findings if getattr(f, "rule", None) == rule), None)
+    """The Finding of ``rule`` -- or of its hot-water twin ``hw_<rule>`` (0.105, #152)."""
+    names = (rule, f"hw_{rule}")
+    return next((f for f in findings if getattr(f, "rule", None) in names), None)
 
 
 def _declined(f, caveats) -> bool:
@@ -85,7 +87,9 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
     ``findings`` is an iterable of :class:`camber.rules.base.Finding` (from ``run_periods``); the
     pump/hydronic ones (``pump_flow_drift``, ``pump_head_drift``, ``loop_deltat_drift``,
     ``loop_dp_drift``, ``pump_power_drift``) are picked out by rule name and the rest ignored. A
-    declined signal is a caveat, not a cause.
+    declined signal is a caveat, not a cause. The hot-water family's detectors (0.105, #152: the
+    same names with an ``hw_`` prefix) are read the same way, and ``signals`` is keyed by the rule
+    name each Finding carries. Pass one loop's Findings per call.
     """
     fs = list(findings)
     if equip is None:
@@ -111,7 +115,7 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
         head_deg = hf.severity in _DEGRADING
         if head_deg:
             _record(
-                "pump_head_drift",
+                hf.rule,
                 hf.severity,
                 hf.metrics.get("pump_head_drift_psi"),
                 "pump head deficit (worn impeller / cavitation)",
@@ -143,7 +147,7 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
                     "flow deficit but no pump-head point is mapped to disambiguate pump wear "
                     "from system resistance"
                 )
-            _record("pump_flow_drift", ff.severity, drift, cause, side)
+            _record(ff.rule, ff.severity, drift, cause, side)
 
     # --- loop ΔT: hydraulic ----------------------------------------------------------------------
     df = _get(fs, "loop_deltat_drift")
@@ -154,9 +158,7 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
             if m.get("loop_deltat_drift_direction") == "down"
             else "underflow / starvation"
         )
-        _record(
-            "loop_deltat_drift", df.severity, m.get("loop_deltat_drift_f"), cause, "distribution"
-        )
+        _record(df.rule, df.severity, m.get("loop_deltat_drift_f"), cause, "distribution")
 
     # --- loop DP: hydraulic ----------------------------------------------------------------------
     pf = _get(fs, "loop_dp_drift")
@@ -167,14 +169,14 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
             if m.get("loop_dp_drift_direction") == "up"
             else "bypass / short-circuit"
         )
-        _record("loop_dp_drift", pf.severity, m.get("loop_dp_drift"), cause, "distribution")
+        _record(pf.rule, pf.severity, m.get("loop_dp_drift"), cause, "distribution")
 
     # --- pump power: mechanical (a rise is efficiency loss) --------------------------------------
     wf = _get(fs, "pump_power_drift")
     if wf is not None and not _declined(wf, caveats):
         if wf.severity in _DEGRADING:
             _record(
-                "pump_power_drift",
+                wf.rule,
                 wf.severity,
                 wf.metrics.get("pump_power_drift_kw"),
                 "pump efficiency loss (wire-to-water / mechanical drag / recirculation)",

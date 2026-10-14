@@ -1478,3 +1478,16 @@ How to calibrate:
 - `constant_cv`: Compute the coefficient of variation of the normalizer (flow or speed) over the running hours of a known period; a constant-flow loop sits near zero. *Note:* At or under it the baseline is a flat level valid within 5 % of the median normalizer beyond its observed band; samples outside it are not scored.
 
 Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `power_role` (a role: which point the detector reads); `flow_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).
+
+### Hot-water pump and loop drift detectors
+
+The hot-water drift family (`"family": "hw_pump"`) builds the same five detectors on the
+hot-water roles (`hw_flow`, `hw_pump_speed`, `hw_supply_temp`, `hw_return_temp`, `hw_diff_press`,
+`hw_diff_press_sp`), under their own rule names and baseline-store kinds. Their parameters,
+defaults and calibration are the chilled-water detector's:
+
+- `hw_loop_deltat_drift`: as [`loop_deltat_drift`](#loop_deltat_drift)
+- `hw_loop_dp_drift`: as [`loop_dp_drift`](#loop_dp_drift)
+- `hw_pump_flow_drift`: as [`pump_flow_drift`](#pump_flow_drift)
+- `hw_pump_head_drift`: as [`pump_head_drift`](#pump_head_drift)
+- `hw_pump_power_drift`: as [`pump_power_drift`](#pump_power_drift)

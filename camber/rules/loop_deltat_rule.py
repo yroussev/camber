@@ -82,6 +82,7 @@ class LoopDeltaTDrift:
     """
 
     name = "loop_deltat_drift"
+    kind = _KIND  # the baseline-store model kind (0.105, #152: overridable per loop)
 
     def __init__(
         self,
@@ -143,12 +144,12 @@ class LoopDeltaTDrift:
 
     def _frozen_baseline(self, equip, base_frame, caveats, gate=None, mode="variable"):
         """The frozen ΔT~flow baseline, freezing an initial one from ``base_frame`` if none."""
-        frozen = self.store.model_for(self.site, equip, _KIND)
+        frozen = self.store.model_for(self.site, equip, self.kind)
         if frozen is not None:
             return frozen
         if not self.freeze_if_missing:
             caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
+                f"could not evaluate {self.kind}: no frozen baseline and freezing is disabled"
             )
             return None
         if gate is None:
@@ -181,7 +182,8 @@ class LoopDeltaTDrift:
                 min_load_span=None if level else span,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
+                f"could not evaluate {self.kind}: the baseline period would not support a fit "
+                f"-- {why}"
             )
             return None
         idx = base_frame.index
@@ -189,7 +191,7 @@ class LoopDeltaTDrift:
             fit,
             site=self.site,
             equip=equip,
-            kind=_KIND,
+            kind=self.kind,
             frozen_at=self.run_id,
             period=(str(idx.min()), str(idx.max())),
             reason="initial baseline frozen from the supplied baseline period",
@@ -216,7 +218,7 @@ class LoopDeltaTDrift:
     # ------------------------------------------------------------------ pattern J evidence
     def drift_signature(self):
         """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
-        return _KIND, self.load_role, _METRIC
+        return self.kind, self.load_role, _METRIC
 
     def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         """The prepared frame the baseline is fitted on (loop delta-T at matched load)."""
@@ -279,7 +281,7 @@ class LoopDeltaTDrift:
                 baseline=frozen,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: nothing scoreable in the current period -- {why}"
+                f"could not evaluate {self.kind}: nothing scoreable in the current period -- {why}"
             )
             return Finding(
                 rule=self.name,
@@ -293,7 +295,7 @@ class LoopDeltaTDrift:
         severity = self._severity(drift, caveats)
         direction = "up" if drift.drift_f >= 0 else "down"
         cause = "underflow / starvation" if direction == "up" else "low-ΔT syndrome (overpumping)"
-        rec = self.store.get(self.site, equip, _KIND)
+        rec = self.store.get(self.site, equip, self.kind)
         metrics = {
             "loop_deltat_drift_f": drift.drift_f,
             "loop_deltat_drift_sigma": drift.drift_sigma,
@@ -357,15 +359,25 @@ class LoopDeltaTDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        arrow = "widened" if direction == "up" else "collapsed"
+        if severity == "ok":
+            # 0.105 (#153): an ok finding names no fault -- the cause belongs to warn and fault
+            shift = f"{drift.drift_f:+.1f}"
+            shift = "0.0" if shift in ("+0.0", "-0.0") else shift
+            summary = (
+                f"{equip}: loop ΔT holds near its baseline ({shift}°F, "
+                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            )
+        else:
+            arrow = "widened" if direction == "up" else "collapsed"
+            summary = (
+                f"{equip}: loop ΔT {arrow} {abs(drift.drift_f):.1f}°F "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched flow -- {cause}"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: loop ΔT {arrow} {abs(drift.drift_f):.1f}°F "
-                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched flow -- {cause}"
-            ),
+            summary=summary,
             caveats=caveats,
         )

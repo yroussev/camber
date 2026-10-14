@@ -74,6 +74,12 @@ _MODEL_TYPES = {
     # 0.100 (#100): a coil's valve-shut air rise, fitted on the mixed air (opt-in leak drift)
     "coil_leak_cool": LoadBaseline,
     "coil_leak_heat": LoadBaseline,
+    # 0.105 (#152): the hw_pump family's hot-water loop, kept apart from the chilled-water kinds
+    "hw_pump_flow": LoadBaseline,
+    "hw_pump_head": LoadBaseline,
+    "hw_pump_power": LoadBaseline,
+    "hw_loop_deltat": LoadBaseline,
+    "hw_loop_dp": LoadBaseline,
 }
 
 

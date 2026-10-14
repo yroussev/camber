@@ -2153,6 +2153,13 @@
     "max_resolvable_per_hour",
     "reversals_per_hour"
   ],
+  "camber.rules.hw_pump_rules": [
+    "HwLoopDPDrift",
+    "HwLoopDeltaTDrift",
+    "HwPumpFlowDrift",
+    "HwPumpHeadDrift",
+    "HwPumpPowerDrift"
+  ],
   "camber.rules.hwplant_deltat_rule": [
     "HWPlantDeltaT"
   ],
@@ -2216,6 +2223,7 @@
     "DRIFT_PARAM_DOCS",
     "EXEMPT",
     "FIXED",
+    "HW_PUMP_DRIFT_TWINS",
     "PARAM_DOCS",
     "ParamDoc",
     "RuleParam",

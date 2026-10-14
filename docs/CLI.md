@@ -213,8 +213,8 @@ the reference. Both live in a `drift` section of the same config:
 }
 ```
 
-`family` is one of `ahu · chiller · condenser · evaporator · pump · vav · boiler · tower · dx`;
-each `class` must appear in the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
+`family` is one of `ahu · chiller · condenser · evaporator · pump · hw_pump · vav · boiler · tower · dx`;
+each `class` must appear in the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump, hw_pump)
 adds the cross-pump roll-up; `sustained_alarm` (chiller) appends the opt-in CUSUM alarm rule. A
 family may override `baseline` / `current` — a chiller re-commissioned later has its own reference
 window. Any `trust_gate`, `shared_oat` and `resample` settings apply unchanged.
