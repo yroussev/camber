@@ -72,7 +72,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`compressor_short_cycle`](#compressor_short_cycle) | 2 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
-| [`condenser_water_reset`](#condenser_water_reset) | 3 |  |
+| [`condenser_water_reset`](#condenser_water_reset) | 4 |  |
 | [`control_hunting`](#control_hunting) | 4 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
 | [`damper_census`](#damper_census) | 1 | yes |
@@ -397,12 +397,14 @@ How to calibrate:
 | `reset_slope_flat` | `0.3` | °F CW supply per °F wet-bulb | 0.05 to 0.8 | CAMBER judgment: an ideal reset tracks wet-bulb about 1:1, so below this it is effectively flat |
 | `elevation_ft` | `null` | ft | -300.0 to 10000.0 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
 | `pressure_psia` | `null` | psia | 10.0 to 15.5 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
+| `design_approach_f` | `7.0` | °F | 2.0 to 15.0 | CAMBER judgment: cooling_tower_approach's default; a well-sized, clean tower achieves ~3-7 °F |
 
 How to calibrate:
 
 - `reset_slope_flat`: Check the reset schedule in the sequence of operations: a reset limited by a minimum condenser-water temperature has a lower slope over the year; fit the slope over a known-good period with the reset working and set this well below it. *Note:* No reset is reported as warn (an efficiency opportunity), never fault. A wet-bulb derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a little: give elevation_ft near this threshold.
 - `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, condenser_water_reset and the tower drift detectors. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, +2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are given; a rule's own value wins over the config's site_elevation_ft.
 - `pressure_psia`: Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the site, or leave None and give elevation_ft. *Note:* None = use elevation_ft, or sea level when that is also None.
+- `design_approach_f`: Use the design approach from the tower selection (leaving water minus design wet-bulb), the same value as cooling_tower_approach's design_approach_f. *Note:* Information only: it sets the metric cws_above_wb_plus_approach_median_f (the median of CW supply minus wet-bulb plus this approach over the operating samples), which shows a reset held up by a high floor. It never changes the verdict, which reads the slope.
 
 ## control_hunting
 
@@ -1476,3 +1478,16 @@ How to calibrate:
 - `constant_cv`: Compute the coefficient of variation of the normalizer (flow or speed) over the running hours of a known period; a constant-flow loop sits near zero. *Note:* At or under it the baseline is a flat level valid within 5 % of the median normalizer beyond its observed band; samples outside it are not scored.
 
 Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `freeze_if_missing` (set by the drift run (never from a config)); `power_role` (a role: which point the detector reads); `flow_role` (a role: which point the detector reads); `status_role` (a role: which point the detector reads).
+
+### Hot-water pump and loop drift detectors
+
+The hot-water drift family (`"family": "hw_pump"`) builds the same five detectors on the
+hot-water roles (`hw_flow`, `hw_pump_speed`, `hw_supply_temp`, `hw_return_temp`, `hw_diff_press`,
+`hw_diff_press_sp`), under their own rule names and baseline-store kinds. Their parameters,
+defaults and calibration are the chilled-water detector's:
+
+- `hw_loop_deltat_drift`: as [`loop_deltat_drift`](#loop_deltat_drift)
+- `hw_loop_dp_drift`: as [`loop_dp_drift`](#loop_dp_drift)
+- `hw_pump_flow_drift`: as [`pump_flow_drift`](#pump_flow_drift)
+- `hw_pump_head_drift`: as [`pump_head_drift`](#pump_head_drift)
+- `hw_pump_power_drift`: as [`pump_power_drift`](#pump_power_drift)

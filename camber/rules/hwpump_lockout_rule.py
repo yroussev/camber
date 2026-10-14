@@ -10,10 +10,14 @@ This rule reads when the pump runs -- its run status (``pump_status``), else its
 above 5 % of its own 95th percentile) -- and reports the share of its running hours at an outdoor
 temperature above the lockout, with the same semantics and severity as ``boiler_summer_lockout``
 (occupied hours on the generic weekday schedule; warn at 5 %, fault at 20 %; no OAT -> not
-evaluated). It is a separate rule, not more metrics on the boiler's, so each finding names one
-piece of equipment to lock out: a boiler and its pump can be locked out by different sequences,
-a pump can be its own equipment (class ``pump``), and the boiler's finding and its existing answers
-do not change.
+evaluated). Since 0.105 (#149) a run status is read as its duty, as ``boiler_summer_lockout`` does
+since #143: on a resampled trend the running shares weight each sample by the share of it the pump
+ran (see :func:`camber.plant.analyze_hw_pump_lockout`).
+
+It is a separate rule, not more metrics on the boiler's, so each finding names one piece of
+equipment to lock out: a boiler and its pump can be locked out by different sequences, a pump can
+be its own equipment (class ``pump``), and the boiler's finding and its existing answers do not
+change.
 
 **The lockout is shared.** The parameter has the boiler rule's name and default
 (``summer_lockout_oat_f``, :data:`camber.plant.SUMMER_LOCKOUT_OAT_F`). In a config that sets it on
@@ -67,11 +71,16 @@ def _num(frame: pd.DataFrame, role):
 
 
 def pump_run(frame: pd.DataFrame):
-    """``(run, role)``: the pump's 0/1 running series (missing where its source has no reading)
-    and the role it was read from, strongest evidence first; ``(None, None)`` when none."""
+    """``(run, role)``: the pump's running series (missing where its source has no reading) and
+    the role it was read from, strongest evidence first; ``(None, None)`` when none.
+
+    0.105 (#149): from a run status the series is its duty, clipped to 0..1 -- on a trend
+    resampled coarser than it was logged, the share of each sample the pump ran (#143); on a
+    0/1 status it is that 0/1 series. A speed or flow stand-in has no duty: it reads 0/1 against
+    its running cut, as before."""
     status = _num(frame, Role.PUMP_STATUS)
     if status is not None:
-        return (status > 0.5).astype(float).where(status.notna()), Role.PUMP_STATUS
+        return status.clip(0.0, 1.0), Role.PUMP_STATUS
     speed = _num(frame, Role.HW_PUMP_SPEED)
     if speed is not None:
         speed = normalize_percent(speed)
@@ -119,7 +128,8 @@ class HWPumpSummerLockout:
         boiler, _src = with_boiler_status(frame)
         fire = _num(boiler, Role.BOILER_STATUS)
         if fire is not None:
-            legacy["BoilerRun"] = (fire > 0.5).astype(float).where(fire.notna())
+            # 0.105 (#149): the boiler's duty (0..1), as the pump's, so a part-hour firing counts
+            legacy["BoilerRun"] = fire.clip(0.0, 1.0)
         return legacy, role
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
@@ -147,6 +157,10 @@ class HWPumpSummerLockout:
                     if role is Role.HW_PUMP_SPEED
                     else f"(above {PUMP_RUN_FLOW_FRAC:.0%} of its own 95th percentile)"
                 )
+                # 0.105 (#149): a status is weighted by its duty, a stand-in cannot be
+                + "; a speed or flow has no duty, so on a trend resampled coarser than it was "
+                "logged each sample counts as running or not from its average, not by the share "
+                "of it the pump ran"
             )
         sp = res.summer_run_pct
         severity = lockout_severity(sp)
@@ -187,13 +201,13 @@ class HWPumpSummerLockout:
 
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
         """The occupied samples (the hours the rule judges) in which the pump ran at an OAT above
-        the lockout."""
+        the lockout: any running at all (duty above 0), the samples ``summer_run_pct`` weights."""
         from ..schedules import occupied_mask
 
         legacy, _role = self._legacy(frame)
         if legacy is None or "OAT" not in legacy.columns:
             return pd.Series(False, index=frame.index)
-        warm = (legacy["PumpRun"] > 0.5) & (legacy["OAT"] > self.summer_lockout_oat_f)
+        warm = (legacy["PumpRun"] > 0) & (legacy["OAT"] > self.summer_lockout_oat_f)
         return warm & occupied_mask(frame.index)
 
     def evidence(self, equip: str, frame: pd.DataFrame):

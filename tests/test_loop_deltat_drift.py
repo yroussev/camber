@@ -89,6 +89,19 @@ def test_a_steady_loop_does_not_flag():
     assert f.severity == "ok"
     assert abs(f.metrics["loop_deltat_drift_f"]) < 1.0
     assert f.metrics["loop_deltat_sustained_alarm"] is False
+    # 0.105 (#153): an ok finding names no fault and no direction
+    assert "holds near its baseline" in f.summary
+    for word in ("collapsed", "widened", "syndrome", "starvation"):
+        assert word not in f.summary
+
+
+def test_an_ok_drift_short_of_the_floors_is_worded_neutrally():
+    """A shift under the warn floors keeps its sign in the text but names no cause (#153)."""
+    rule = _rule(BaselineStore(), warn_f=5.0, fault_f=10.0)
+    f = rule.analyze_periods("L_1", *_base_and({"offset_f": -3.0}))
+    assert f.severity == "ok"
+    assert f.summary.startswith("L_1: loop ΔT holds near its baseline (-3.0°F")
+    assert "low-ΔT syndrome" not in f.summary
 
 
 def test_a_collapse_and_an_equal_widen_score_the_same_magnitude():

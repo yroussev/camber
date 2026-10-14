@@ -14,80 +14,6 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 ## [0.105.0] — Unreleased
 
-### Fixed
-- **Daily M&V frames drop partial days (#157).** `mandv.intervalfit.daily_energy_vs_temp` summed
-  whatever samples a day held, so a day missing hours counted as a whole day and biased a gappy
-  meter's baseline low. A day is now kept only when its samples cover at least `min_coverage`
-  of it (default 0.9): the samples present times the meter's modal interval, over the day's
-  hours. With the site's zone a daylight-saving day is judged against its own 23 or 25 hours.
-  The frame's `attrs["dropped_days"]` counts the days dropped. `daily_changepoint_savings`, the
-  non-routine detectors and a config's `mv` findings take `min_coverage` (config:
-  `mv[].min_coverage`) and report what was dropped. `min_coverage=0` keeps every day, as before.
-  The docstring no longer implies a rule that did not exist. The workbook answers move with it,
-  because the real datasets hold partial days. In `mv-baselines`, `b6400_ElImp` loses two
-  near-empty baseline days (R² 0.868 to 0.887). Its forecast saving goes from 5.8 % to 6.2 %, with
-  a band of 24,051 to 24,347, and its backcast from 5.1 % to 5.7 %. The closure chain goes from
-  -0.9 % to -0.4 %, and from -8.1 % to -7.5 % adjusted. `UVA_A` goes from R² 0.66 to 0.67 and a
-  saving of -0.1 % to -0.2 %, and `UVA_B`'s saving from 12.6 % to 12.7 %. In
-  `data-energy-charting`, `UVA_A`'s CV(RMSE) goes from 26.1 % to 26.0 %.
-- **The hourly fall-back hour is no longer counted twice (#158).** `hourly_energy_vs_temp`
-  summed duplicate timestamps, so an export that kept both readings of the repeated
-  daylight-saving hour gave that hour double energy. With the new `timezone=` (also on
-  `towt_savings_hourly` and `daily_changepoint_savings`), both real hours are kept on a tz-aware local
-  index. A lone stored sample in the repeated hour stands for both, as on the daily path. Without
-  a zone, duplicate stamps are averaged into one hour, counted in `attrs["n_duplicate_stamps"]`,
-  with a `TimezoneWarning`. A rate meter's step now comes from the positive gaps only, so
-  duplicate stamps can no longer give a zero step and zero energy.
-- **Baseline fits screen implausible temperatures (#159).** A placeholder such as -237 for a
-  missing outdoor temperature became TOWT's first temperature breakpoint, or a change-point
-  model's coldest point. `fit_towt`, `models.fit_model` / `best_model`,
-  `degreeday.fit_mean_temp_degree_day` and the `intervalfit` frames now treat values outside the
-  sensor-health outdoor-air range (-40 to 140 °F) as missing. The count is reported as
-  `n_temp_screened` on the model and the frame, and in the savings caveats. `temp_bounds=` sets
-  another range.
-- **TOWT coverage no longer grades an unseen hour-of-week bin as unoccupied (#154).** An hour
-  in a bin the baseline never saw took the unoccupied mode's temperature cells and could pass as
-  supported. It is now unsupported whatever its temperature, counted in
-  `coverage["info"]["n_unseen_tow_bin"]` and caveated.
-- **A TOWT row without a temperature predicts NaN (#159).** `TOWTModel.predict` used to give it
-  its time-of-week level alone, a projection with no weather in it. `avoided_energy_savings`
-  excludes such rows, as it did any non-finite projection, and its caveat now says how many rows
-  had no finite projection.
-- With the site's zone, an energy-per-interval export that kept both readings of the repeated
-  hour under one stamp counted each reading twice on the daily path. Both readings now count
-  once each.
-- **CalTRACK Hourly survives a least-squares solve that does not converge (#166).** The
-  pseudo-inverse's SVD can fail to converge on a finite, full-rank design, and one failing month
-  segment aborted all twelve. The solve now falls back to `lstsq` and then to a QR solve (the
-  same coefficients on a well-conditioned design). A segment that still cannot be fitted is
-  `unfit`, with a `reason` and a caveat, and only its month predicts NaN.
-- **CalTRACK Hourly declines when no reporting hour can be predicted (#167).**
-  `caltrack_hourly_savings` returned a saving of 0 with only a caveat when every reporting hour
-  lacked a model or a temperature. It now declines (`savings.declined`, with a reason that counts
-  the causes), as the other savings functions do when nothing can be projected.
-- **The temperature screen also runs at prediction time (#168).** `TOWTModel.predict`,
-  `CalTRACKHourlyModel.predict`, the CalTRACK Daily and Billing predicts,
-  `ChangePointModel.predict` and `MeanTempDegreeDayModel.predict` extrapolated to a placeholder
-  such as -237 °F. A temperature outside the bounds the model was fitted with now predicts NaN,
-  counted as `n_temp_screened` in `return_counts`. The coverage check treats such a row as a row
-  without a driver, not an extrapolation, and the savings sums exclude and count it. A model
-  stores `temp_bounds` only when they are not the default range, so default and older stored
-  models are unchanged.
-- **A saving with nothing to sum is declined.** `avoided_energy_savings` returned a saving of 0
-  when no reporting row had both a finite baseline projection and actual energy (every
-  temperature missing or screened, for example). It now declines with a reason that counts the
-  rows without a projection and without energy, as CalTRACK Hourly does (#167).
-- **Daily frames count a duplicate timestamp once without a zone (#169).**
-  `daily_energy_vs_temp` without `timezone=` summed a repeated fall-back hour twice. Duplicate
-  stamps are now averaged into one hour, with the same `TimezoneWarning` and
-  `attrs["n_duplicate_stamps"]` as the hourly path (#158). The zone-aware path is unchanged.
-- **The CalTRACK duplicate-timestamp message says a zone is needed (#170).** Without
-  `timezone=` it said the duplicates fell outside a fall-back hour, which it cannot know. It now
-  says a timezone is needed to tell a fall-back hour from a real duplicate, and suggests
-  `timezone=`.
-- **Error messages print plain numbers (#173).** The TOWT unseen-bin error printed
-  `np.int32(9)`; it prints `9`. The SEP chaining period error prints dates, not `Timestamp(...)`.
-
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
   length on the site's clock).
@@ -197,8 +123,41 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   A stored `TOWTRMV2Model` rebuilds through `rebaseline.mv_model_from_dict`, and its predict
   counts a temperature outside its fitted bounds as `n_temp_screened` and a missing one as
   `n_no_temperature`, as the other predicts do (#168).
+- **Plant-rule context (#148).** `condenser_water_reset` reports
+  `cws_above_wb_plus_approach_median_f`, the median over the operating samples of how far the
+  condenser-water supply sits above the wet-bulb plus the tower's design approach, and takes a new
+  `design_approach_f` (default 7 °F, as in `cooling_tower_approach`), so a reset held up by a high
+  floor is visible: 7.5 °F on the `plant-chiller-staging` high-floor plant against 0.3 °F on the
+  well-staged one. `chiller_staging` reports `load_spread_pct` (the 10th to 90th percentile of the
+  running tons, as a share of their peak) and adds a caveat when it is 5 % or less: every run is
+  at about one output, so the load factor says nothing about part load. Both are information
+  only; no verdict changes.
+- **Pump and loop drift on hot-water loops (#152).** The new `hw_pump` drift family runs the
+  pump family's five detectors on a hot-water loop's roles (`hw_flow`, `hw_pump_speed`,
+  `hw_supply_temp` − `hw_return_temp`, `hw_diff_press`, `hw_diff_press_sp`), with the 0.104
+  size-relative gates and the same thresholds (`camber.rules.hw_pump_rules`). The detectors are
+  `hw_pump_flow_drift`, `hw_pump_head_drift`, `hw_loop_deltat_drift`, `hw_loop_dp_drift` and
+  `hw_pump_power_drift`. Each has its own baseline-store kind, so an equipment that carries both
+  loops keeps one baseline per loop. `diagnose_pump_drift` and the `plant` roll-up read either
+  loop. The detectors share their parameter docs with the chilled-water ones
+  (`param_docs.HW_PUMP_DRIFT_TWINS`, docs/THRESHOLDS.md). The `pump` family is unchanged. On
+  `lbnl-boiler` against its fault-free run, the PI-mistuning run is a loop ΔT `warn` (1.6 °F,
+  3.0σ) and the eight temperature-bias runs are loop ΔT `fault`s. The fouling and DP-bias runs
+  are `ok`. The pump flow and loop DP detectors are `ok` on every run (docs/PUMP-DRIFT.md,
+  "Hot-water loops").
 
 ### Changed
+- **The trust score checks the mixed-air order when a unit has no airflow stations (#151).** The
+  0.92 mixed-air flow balance needs both an outside-air and a supply airflow, which most AHUs do
+  not trend. Without them, `frame_sensor_health` now checks that the mixed air lies between
+  outdoor and return air (`mixing_consistency`), on fan-on samples only: the gate passed in, or
+  the frame's own fan signal. A unit with no fan signal is not checked. On a warning or fault the
+  mixed air is flagged `mixing_order` and capped at "suspect"; OAT and RAT are flagged and keep
+  their scores. `frame_checks` takes the fan gate as `gate=`. In triage, a unit whose RCx mixing
+  result fires too gets that one cause, not a second per flagged point. The cap stays above the
+  runner's trust bar, so no rule's gating or benchmark moves. The RCx golden report and the
+  workbook answers are unchanged: the B59 RTUs keep the balance, and `irish-ahu` has no fan
+  signal.
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily
   change-point baseline chosen by BIC, is now `daily_changepoint_savings`, returning
   `DailyNMECResult`. `caltrack_savings_hourly`, a pooled TOWT, is now `towt_savings_hourly`,
@@ -245,7 +204,6 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - **Registry `differences` texts paste verbatim (#174).** Instructions such as `best_model`'s
   "Report the kind it chose…" moved to docs/MANDV.md, "Naming and citations". The texts now only
   describe how CAMBER departs from the cited standard.
-
 - **`ModelFitError` says what the fit saw (#175).** Without the frame's counts it said "(no
   input rows)" even when points remained or rows were dropped before the call. It now states how
   many finite (temperature, energy) points every candidate saw, why the others were lost, and,
@@ -268,6 +226,18 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   the rows whose final prediction was clipped, 0 by construction since the local predictions are
   clipped first. The new `n_local_clipped` counts rows where any local prediction was clipped,
   which `n_clipped` counted before.
+- **A synthetic catalog entry now adds files instead of editing shared ones.** A generator can
+  live in its own module, `camber/datasets/_synthetic_<name>.py`, which registers itself with
+  `_synthetic.register`; `_synthetic` imports every such module. A catalog entry can live in a
+  file of its own, `camber/datasets/catalog.d/<NNN>-<id>.json`, loaded after `catalog.json` in
+  the order of its prefix. The three synthetic entries moved there, and the loaded catalog is
+  unchanged: the same entries in the same order. A docs figure can live in
+  `scripts/docs_figures.d/`. The catalog and synthetic tests derive their entry lists from
+  `catalog.d` and the generator registry, and check each entry against its own expectation file
+  in `tests/golden/synthetic/`. `mkdocs.yml`, the workbook instructor page and
+  `camber/references.py` reserve marked slots for the four synthetic entries planned for 0.105
+  (#144-#147). The dataset-host exemption of the site-neutrality guard covers `catalog.d`.
+  docs/DATASETS.md has a new section, "Adding a synthetic entry".
 
 ### Deprecated
 - `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 1.0: the
@@ -280,6 +250,94 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `daily_changepoint_savings`, `towt_savings_hourly`, `DailyNMECResult` and `TOWTHourlyResult`.
   An old result class is a subclass of its new one, so `isinstance` checks against either name
   hold.
+
+### Fixed
+- **Daily M&V frames drop partial days (#157).** `mandv.intervalfit.daily_energy_vs_temp` summed
+  whatever samples a day held, so a day missing hours counted as a whole day and biased a gappy
+  meter's baseline low. A day is now kept only when its samples cover at least `min_coverage`
+  of it (default 0.9): the samples present times the meter's modal interval, over the day's
+  hours. With the site's zone a daylight-saving day is judged against its own 23 or 25 hours.
+  The frame's `attrs["dropped_days"]` counts the days dropped. `daily_changepoint_savings`, the
+  non-routine detectors and a config's `mv` findings take `min_coverage` (config:
+  `mv[].min_coverage`) and report what was dropped. `min_coverage=0` keeps every day, as before.
+  The docstring no longer implies a rule that did not exist. The workbook answers move with it,
+  because the real datasets hold partial days. In `mv-baselines`, `b6400_ElImp` loses two
+  near-empty baseline days (R² 0.868 to 0.887). Its forecast saving goes from 5.8 % to 6.2 %, with
+  a band of 24,051 to 24,347, and its backcast from 5.1 % to 5.7 %. The closure chain goes from
+  -0.9 % to -0.4 %, and from -8.1 % to -7.5 % adjusted. `UVA_A` goes from R² 0.66 to 0.67 and a
+  saving of -0.1 % to -0.2 %, and `UVA_B`'s saving from 12.6 % to 12.7 %. In
+  `data-energy-charting`, `UVA_A`'s CV(RMSE) goes from 26.1 % to 26.0 %.
+- **The hourly fall-back hour is no longer counted twice (#158).** `hourly_energy_vs_temp`
+  summed duplicate timestamps, so an export that kept both readings of the repeated
+  daylight-saving hour gave that hour double energy. With the new `timezone=` (also on
+  `towt_savings_hourly` and `daily_changepoint_savings`), both real hours are kept on a tz-aware local
+  index. A lone stored sample in the repeated hour stands for both, as on the daily path. Without
+  a zone, duplicate stamps are averaged into one hour, counted in `attrs["n_duplicate_stamps"]`,
+  with a `TimezoneWarning`. A rate meter's step now comes from the positive gaps only, so
+  duplicate stamps can no longer give a zero step and zero energy.
+- **Baseline fits screen implausible temperatures (#159).** A placeholder such as -237 for a
+  missing outdoor temperature became TOWT's first temperature breakpoint, or a change-point
+  model's coldest point. `fit_towt`, `models.fit_model` / `best_model`,
+  `degreeday.fit_mean_temp_degree_day` and the `intervalfit` frames now treat values outside the
+  sensor-health outdoor-air range (-40 to 140 °F) as missing. The count is reported as
+  `n_temp_screened` on the model and the frame, and in the savings caveats. `temp_bounds=` sets
+  another range.
+- **TOWT coverage no longer grades an unseen hour-of-week bin as unoccupied (#154).** An hour
+  in a bin the baseline never saw took the unoccupied mode's temperature cells and could pass as
+  supported. It is now unsupported whatever its temperature, counted in
+  `coverage["info"]["n_unseen_tow_bin"]` and caveated.
+- **A TOWT row without a temperature predicts NaN (#159).** `TOWTModel.predict` used to give it
+  its time-of-week level alone, a projection with no weather in it. `avoided_energy_savings`
+  excludes such rows, as it did any non-finite projection, and its caveat now says how many rows
+  had no finite projection.
+- With the site's zone, an energy-per-interval export that kept both readings of the repeated
+  hour under one stamp counted each reading twice on the daily path. Both readings now count
+  once each.
+- **CalTRACK Hourly survives a least-squares solve that does not converge (#166).** The
+  pseudo-inverse's SVD can fail to converge on a finite, full-rank design, and one failing month
+  segment aborted all twelve. The solve now falls back to `lstsq` and then to a QR solve (the
+  same coefficients on a well-conditioned design). A segment that still cannot be fitted is
+  `unfit`, with a `reason` and a caveat, and only its month predicts NaN.
+- **CalTRACK Hourly declines when no reporting hour can be predicted (#167).**
+  `caltrack_hourly_savings` returned a saving of 0 with only a caveat when every reporting hour
+  lacked a model or a temperature. It now declines (`savings.declined`, with a reason that counts
+  the causes), as the other savings functions do when nothing can be projected.
+- **The temperature screen also runs at prediction time (#168).** `TOWTModel.predict`,
+  `CalTRACKHourlyModel.predict`, the CalTRACK Daily and Billing predicts,
+  `ChangePointModel.predict` and `MeanTempDegreeDayModel.predict` extrapolated to a placeholder
+  such as -237 °F. A temperature outside the bounds the model was fitted with now predicts NaN,
+  counted as `n_temp_screened` in `return_counts`. The coverage check treats such a row as a row
+  without a driver, not an extrapolation, and the savings sums exclude and count it. A model
+  stores `temp_bounds` only when they are not the default range, so default and older stored
+  models are unchanged.
+- **A saving with nothing to sum is declined.** `avoided_energy_savings` returned a saving of 0
+  when no reporting row had both a finite baseline projection and actual energy (every
+  temperature missing or screened, for example). It now declines with a reason that counts the
+  rows without a projection and without energy, as CalTRACK Hourly does (#167).
+- **Daily frames count a duplicate timestamp once without a zone (#169).**
+  `daily_energy_vs_temp` without `timezone=` summed a repeated fall-back hour twice. Duplicate
+  stamps are now averaged into one hour, with the same `TimezoneWarning` and
+  `attrs["n_duplicate_stamps"]` as the hourly path (#158). The zone-aware path is unchanged.
+- **The CalTRACK duplicate-timestamp message says a zone is needed (#170).** Without
+  `timezone=` it said the duplicates fell outside a fall-back hour, which it cannot know. It now
+  says a timezone is needed to tell a fall-back hour from a real duplicate, and suggests
+  `timezone=`.
+- **Error messages print plain numbers (#173).** The TOWT unseen-bin error printed
+  `np.int32(9)`; it prints `9`. The SEP chaining period error prints dates, not `Timestamp(...)`.
+- **`hw_pump_summer_lockout` weights its running shares by duty (#149).** As #143 did for
+  `boiler_summer_lockout`, a pump or boiler status resampled coarser than it was logged is read as
+  its duty (clipped to 0-1), so a pump running part of a warm hour is no longer read as off.
+  `pump_running_pct` and `summer_run_pct` weight each sample by the pump's duty, and
+  `boiler_off_pct` by the pump's duty times the share of the sample the boiler was off. The
+  evidence mask shades every warm sample the pump ran in at all. `n_running` and
+  `max_oat_running_f` still read the samples it ran for most of. A speed or flow stand-in has no
+  duty and keeps its running cut; its caveat now says so. Results on a 0/1 trend are unchanged,
+  and so are the `plant-lockout` answers.
+- **An `ok` loop ΔT finding names no fault (#153).** `loop_deltat_drift` said "loop ΔT
+  collapsed 0.0°F … low-ΔT syndrome" or "widened … starvation" on an `ok` Finding. It now says the
+  loop ΔT "holds near its baseline", with the signed shift and its σ. `warn` and `fault` keep the
+  direction and the cause. Only the text moves: in `tests/golden/pumpsim_fullsize.json` the 17 `ok`
+  `loop_deltat_drift` summaries change, and every severity, metric and caveat is unchanged.
 
 ## [0.104.0] — Unreleased
 

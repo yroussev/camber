@@ -256,11 +256,19 @@ def analyze_hw_pump_lockout(
 ) -> HWPumpLockoutResult | None:
     """Share of a hot-water pump's running hours at OAT above the warm-weather lockout.
 
-    ``df`` columns: ``PumpRun`` (0/1, the pump running; missing = no reading), ``OAT`` and,
-    optionally, ``BoilerRun`` (0/1, the boiler firing). The same semantics as the boiler's check
-    in :func:`analyze_hw_plant`: occupied samples only (the generic weekday schedule), "above"
-    means OAT strictly greater than the lockout, and without OAT the share is ``None`` (not
-    evaluated), never a confident 0 %. A pump that never runs scores an honest 0 %.
+    ``df`` columns: ``PumpRun`` (the pump running, 0/1 or a resampled duty 0..1; missing = no
+    reading), ``OAT`` and, optionally, ``BoilerRun`` (the boiler firing, 0/1 or a duty). The same
+    semantics as the boiler's check in :func:`analyze_hw_plant`: occupied samples only (the generic
+    weekday schedule), "above" means OAT strictly greater than the lockout, and without OAT the
+    share is ``None`` (not evaluated), never a confident 0 %. A pump that never runs scores an
+    honest 0 %.
+
+    0.105 (#149): as #143 did for the boiler, a resampled status is the bin's duty, so the running
+    shares weight each sample by it: ``pump_running_pct`` and ``summer_run_pct`` by the pump's
+    duty, ``boiler_off_pct`` by the pump's duty times the share of the sample the boiler was off.
+    A pump running a quarter of every warm hour is not read as never running. On a 0/1 trend
+    every share is the plain share of samples, as before. ``n_running`` and
+    ``max_oat_running_f`` still read the samples it ran for most of (duty above 0.5).
     """
     if "PumpRun" not in df.columns:
         return None
@@ -271,25 +279,29 @@ def analyze_hw_pump_lockout(
     n = len(work)
     if n == 0:
         return None
-    running = work["PumpRun"] > 0.5
+    duty = pd.to_numeric(work["PumpRun"], errors="coerce").clip(0.0, 1.0)
+    running = duty > 0.5
     n_run = int(running.sum())
     boiler_off = None
     if "OAT" not in work.columns:
         summer = None
-    elif n_run:
-        oat_run = work.loc[running, "OAT"].dropna()
+    elif bool((duty > 0).any()):
+        oat_run = work.loc[duty > 0, "OAT"].dropna()
+        w = duty.reindex(oat_run.index)
         warm = oat_run > summer_lockout_oat_f
-        summer = round(100.0 * float(warm.mean()), 2) if len(oat_run) else None
+        summer = round(100.0 * float((w * warm).sum() / w.sum()), 2) if len(oat_run) else None
         if "BoilerRun" in work.columns and bool(warm.any()):
-            fire = work.loc[warm[warm].index, "BoilerRun"].dropna()
+            fire = pd.to_numeric(work.loc[warm[warm].index, "BoilerRun"], errors="coerce").dropna()
             if len(fire):
-                boiler_off = round(100.0 * float((fire <= 0.5).mean()), 2)
+                pw = duty.reindex(fire.index)
+                off = pw * (1.0 - fire.clip(0.0, 1.0))
+                boiler_off = round(100.0 * float(off.sum() / pw.sum()), 2)
     else:
         summer = 0.0
     return HWPumpLockoutResult(
         equip=equip,
         n_considered=n,
-        pump_running_pct=round(100.0 * n_run / n, 2),
+        pump_running_pct=round(100.0 * float(duty.sum()) / n, 2),
         n_running=n_run,
         summer_run_pct=summer,
         lockout_oat_f=float(summer_lockout_oat_f),

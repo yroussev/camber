@@ -582,6 +582,9 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
     * (0.92, #16) a ``copied_signal`` or ``mixing_balance`` flag in ``trust`` -- a point carrying
       another point's data, or a mixed-air temperature failing the flow-weighted OA/RA balance
       (:func:`camber.sensorhealth.frame_checks`); unit-local, even on OAT;
+    * (0.105, #151) a ``mixing_order`` flag in ``trust`` -- the mixed air outside [OAT, RAT] on a
+      unit without airflow stations; unit-local like the two above. A unit whose ``mixing`` result
+      below is actionable too gets that one cause only, not a second one per flagged point;
     * a ``warn``/``fault`` mixing-consistency result in ``mixing`` (``{equip: ConsistencyResult}``)
       -- one of MAT / OAT / RAT on that unit is wrong, so all three are tainted *on that unit*.
 
@@ -617,6 +620,9 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
                     source=f,
                 )
             )
+    # 0.105 (#151): the trust score's mixed-air order flag and the RCx mixing result are the same
+    # check; where both fire, the mixing cause below stands for both
+    mixed = {e for e, res in (mixing or {}).items() if getattr(res, "severity", "") in _ACTIONABLE}
     for equip, per_role in sorted((trust or {}).items()):
         for role, t in per_role.items():
             slug = _slug(role)
@@ -643,6 +649,8 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
             # 0.92 (#16): a copied point, or a failing mixed-air flow balance, makes the
             # unit's findings on that point conditional -- on this unit only (both are checks of
             # this unit's own points, even when one of them is the site OAT)
+            if equip in mixed and "mixing_order" in flags and "copied_signal" not in flags:
+                continue
             cross = _cross_sensor_detail(slug, t, flags)
             if cross:
                 out.append(SensorCause("trust", equip, (slug,), cross))
@@ -661,7 +669,8 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
 
 
 def _cross_sensor_detail(slug: str, t, flags: list) -> str | None:
-    """0.92 (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag."""
+    """0.92 (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag (and,
+    since 0.105 (#151), a ``mixing_order`` one)."""
     checks = list(getattr(t, "frame_checks", []) or [])
     score = f"trust {getattr(t, 'trust', float('nan')):.2f}"
     if "copied_signal" in flags:
@@ -676,6 +685,15 @@ def _cross_sensor_detail(slug: str, t, flags: list) -> str | None:
         bias = c2.get("bias_f")
         b = f"MAT {bias:+.1f}F" if isinstance(bias, (int, float)) else "MAT off"
         return f"{slug}: mixed-air flow balance fails ({b} vs the OA/RA blend; {score})"
+    if "mixing_order" in flags:  # 0.105 (#151)
+        c3: dict = next((c for c in checks if c.get("check") == "mixing_temperature_order"), {})
+        frac = c3.get("violation_frac")
+        share = f"{100 * frac:.0f}% of fan-on samples" if isinstance(frac, (int, float)) else ""
+        return (
+            f"{slug}: mixed-air temperature outside [OAT, RAT]"
+            + (f" {share}" if share else "")
+            + f" ({score})"
+        )
     return None
 
 

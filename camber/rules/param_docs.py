@@ -43,6 +43,7 @@ __all__ = [
     "DRIFT_PARAM_DOCS",
     "EXEMPT",
     "FIXED",
+    "HW_PUMP_DRIFT_TWINS",
     "PARAM_DOCS",
     "ParamDoc",
     "RuleParam",
@@ -2245,6 +2246,18 @@ PARAM_DOCS["condenser_water_reset"] = {
         "derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a "
         "little: give elevation_ft near this threshold.",
     ),
+    # 0.105 (#148): the line the information-only cws_above_wb_plus_approach_median_f reads from
+    "design_approach_f": _P(
+        "°F",
+        "CAMBER judgment: cooling_tower_approach's default; a well-sized, clean tower achieves "
+        "~3-7 °F",
+        "Use the design approach from the tower selection (leaving water minus design wet-bulb), "
+        "the same value as cooling_tower_approach's design_approach_f.",
+        (2.0, 15.0),
+        "Information only: it sets the metric cws_above_wb_plus_approach_median_f (the median of "
+        "CW supply minus wet-bulb plus this approach over the operating samples), which shows a "
+        "reset held up by a high floor. It never changes the verdict, which reads the slope.",
+    ),
     # 0.98 (#92, 098-followups): the derived wet-bulb takes the site elevation
     **_SITE_ELEVATION,
 }
@@ -3186,11 +3199,32 @@ DRIFT_EXEMPT["pump_power_drift"] = {
     **_PUMP_IDENTITY,
     **{r: _ROLE for r in ("power_role", "flow_role", "status_role")},
 }
+
+#: 0.105 (#152): the hw_pump family's detectors -- the pump family's five on the hot-water roles,
+#: with the same parameters, defaults and documentation (hot-water name -> chilled-water name).
+HW_PUMP_DRIFT_TWINS = {
+    "hw_pump_flow_drift": "pump_flow_drift",
+    "hw_pump_head_drift": "pump_head_drift",
+    "hw_loop_deltat_drift": "loop_deltat_drift",
+    "hw_loop_dp_drift": "loop_dp_drift",
+    "hw_pump_power_drift": "pump_power_drift",
+}
+for _hw, _chw in HW_PUMP_DRIFT_TWINS.items():
+    DRIFT_PARAM_DOCS[_hw] = DRIFT_PARAM_DOCS[_chw]
+    DRIFT_EXEMPT[_hw] = DRIFT_EXEMPT[_chw]
+_PYTHON_ONLY_DRIFT = _PYTHON_ONLY_DRIFT | frozenset(HW_PUMP_DRIFT_TWINS)
 # ---- end 0104-pumpgates ----
 
 
 def _drift_factories() -> dict:
     from .coil_leak_rule import CoilLeakDrift
+    from .hw_pump_rules import (
+        HwLoopDeltaTDrift,
+        HwLoopDPDrift,
+        HwPumpFlowDrift,
+        HwPumpHeadDrift,
+        HwPumpPowerDrift,
+    )
     from .loop_deltat_rule import LoopDeltaTDrift
     from .loop_dp_rule import LoopDPDrift
     from .pump_flow_rule import PumpFlowDrift
@@ -3204,6 +3238,12 @@ def _drift_factories() -> dict:
         "pump_flow_drift": PumpFlowDrift,
         "pump_head_drift": PumpHeadDrift,
         "pump_power_drift": PumpPowerDrift,
+        # 0.105 (#152): the hw_pump family
+        "hw_loop_deltat_drift": HwLoopDeltaTDrift,
+        "hw_loop_dp_drift": HwLoopDPDrift,
+        "hw_pump_flow_drift": HwPumpFlowDrift,
+        "hw_pump_head_drift": HwPumpHeadDrift,
+        "hw_pump_power_drift": HwPumpPowerDrift,
     }
 
 

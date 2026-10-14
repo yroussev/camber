@@ -70,3 +70,25 @@ def test_the_check_catches_missing_oversized_uncaptioned_and_stale_images(tmp_pa
     monkeypatch.setattr(mod, "MAX_TOTAL", 100)
     assert "in total (cap" in "\n".join(mod.check())
     assert mod.main(["--check"]) == 1
+
+
+def test_per_entry_figure_modules_register_their_figures(tmp_path):
+    """0.105: a module in scripts/docs_figures.d registers its figures through register(df)."""
+    mod = _script()
+    # the synthetic entries' workbook figures come from their own modules
+    shipped = sorted(f[:-3] for f in os.listdir(mod.FIGURES_DIR) if f.endswith(".py"))
+    assert {"plant_lockout", "plant_boiler_cycling", "plant_chiller_staging"} <= set(shipped)
+    assert "workbook/plant-lockout.png" in mod.FIGURES
+    (tmp_path / "probe.py").write_text(
+        "def register(df):\n"
+        "    assert df.WIDE and callable(df._evidence_fig)\n"
+        "    @df.figure('workbook/probe.png')\n"
+        "    def _probe():\n"
+        "        return None\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "_private.py").write_text("raise RuntimeError('loaded')\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a module\n", encoding="utf-8")
+    assert mod.load_figure_modules(str(tmp_path)) == ["probe"]
+    assert "workbook/probe.png" in mod.FIGURES
+    assert mod.load_figure_modules(str(tmp_path / "missing")) == []

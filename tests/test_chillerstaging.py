@@ -79,3 +79,45 @@ def test_rule_missing_roles_reports_info():
     n = 24
     frame = pd.DataFrame({Role.CHW_SUPPLY_TEMP: np.full(n, 44.0)}, index=_idx(n))
     assert ChillerStaging().analyze("CH-1", frame).severity == "info"
+
+
+# --- 0.105 (#148): every run at one output ------------------------------------ #
+
+
+def _runs_at(tons, n=96 * 14):
+    """A 15-minute trend, power on/off in 4-hour blocks; each running sample carries the given
+    tons (gpm = 2 * tons at a 12 F deltaT)."""
+    on = (np.arange(n) // 16) % 2 == 0
+    return pd.DataFrame(
+        {
+            Role.POWER: np.where(on, 120.0, 0.0),
+            Role.CHW_SUPPLY_TEMP: np.full(n, 44.0),
+            Role.CHW_RETURN_TEMP: np.full(n, 56.0),
+            Role.CHW_FLOW: np.where(on, 2.0 * np.asarray(tons), 0.0),
+        },
+        index=pd.date_range("2025-07-07", periods=n, freq="15min"),
+    )
+
+
+def test_one_output_is_caveated_with_rounding_jitter():
+    n = 96 * 14
+    # always at its 150-ton minimum, read through a flow meter that rounds to +-1 %
+    jitter = 150.0 * (1.0 + 0.01 * np.sin(np.arange(n) * 1.7))
+    f = ChillerStaging().analyze("CH", _runs_at(jitter))
+    assert f.metrics["load_factor_median_pct"] > 97.0 and f.metrics["load_spread_pct"] <= 5.0
+    assert len(f.caveats) == 1 and "same output" in f.caveats[0]
+    plain = ChillerStaging().analyze("CH", _runs_at(np.full(n, 150.0)))
+    assert plain.metrics["load_spread_pct"] == 0.0 and "same output" in plain.caveats[0]
+
+
+def test_varied_output_is_not_caveated_and_the_verdict_is_unchanged():
+    n = 96 * 14
+    varied = 60.0 + 90.0 * (np.arange(n) % 96) / 95.0  # 60..150 tons
+    f = ChillerStaging().analyze("CH", _runs_at(varied))
+    assert f.metrics["load_spread_pct"] > 40.0 and f.caveats == []
+    same = ChillerStaging().analyze("CH", _runs_at(np.full(n, 150.0)))
+    assert same.severity == ChillerStaging().analyze("CH", _runs_at(varied)).severity == "ok"
+    # power alone: no tons, no spread, no caveat
+    power = ChillerStaging().analyze("CH", _runs_at(varied)[[Role.POWER]])
+    assert power.metrics["load_spread_pct"] != power.metrics["load_spread_pct"]  # NaN
+    assert power.caveats == []

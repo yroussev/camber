@@ -181,6 +181,22 @@ def _pump_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alar
     return [cls(store, **kw) for cls in classes]
 
 
+def _hw_pump_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
+    # 0.105 (#152): the same five detectors on a hot-water loop's roles, each with its own rule
+    # name and store kind (hw_*), so an equipment carrying both loops keeps two baselines
+    from .rules.hw_pump_rules import (
+        HwLoopDeltaTDrift,
+        HwLoopDPDrift,
+        HwPumpFlowDrift,
+        HwPumpHeadDrift,
+        HwPumpPowerDrift,
+    )
+
+    kw = {"site": site, "run_id": run_id, "freeze_if_missing": freeze_if_missing}
+    classes = (HwPumpFlowDrift, HwPumpHeadDrift, HwLoopDeltaTDrift, HwLoopDPDrift, HwPumpPowerDrift)
+    return [cls(store, **kw) for cls in classes]
+
+
 def _vav_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
     from .rules.vav_airflow_rule import VavAirflowDrift
     from .rules.vav_reheat_valve_rule import VavReheatValveDrift
@@ -255,6 +271,10 @@ DRIFT_FAMILIES: dict = {
         diagnose_evaporator_drift,
     ),
     "pump": DriftFamily("pump", "Pump / hydronic drift", _pump_rules, diagnose_pump_drift),
+    # 0.105 (#152)
+    "hw_pump": DriftFamily(
+        "hw_pump", "Hot-water pump / loop drift", _hw_pump_rules, diagnose_pump_drift
+    ),
     "vav": DriftFamily("vav", "VAV zone-terminal drift", _vav_rules, diagnose_vav_drift),
     # 0.92 (#13)
     "boiler": DriftFamily(
@@ -367,8 +387,8 @@ class DriftFamilyResult:
     ``diagnoses`` holds a per-equipment verdict for every equipment that produced at least one
     Finding, worst-first. ``unevaluated`` names the equipment that produced **none** -- they are
     deliberately *not* diagnosed, because a roll-up over zero Findings reads as "steady" and would
-    assert a negative nobody tested. ``plant`` is the cross-pump roll-up (``pump`` family with a
-    ``plant`` name), otherwise ``None``.
+    assert a negative nobody tested. ``plant`` is the cross-pump roll-up (``pump`` or ``hw_pump``
+    family with a ``plant`` name), otherwise ``None``.
     """
 
     equip_class: str
@@ -877,7 +897,7 @@ def run_drift(
             )
 
         plant = None
-        if fam_name == "pump" and entry.get("plant"):
+        if fam_name in ("pump", "hw_pump") and entry.get("plant"):
             plant = diagnose_pump_plant(diagnoses, plant=entry["plant"])
 
         out.families.append(

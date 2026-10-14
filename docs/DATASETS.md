@@ -6,9 +6,10 @@ into a Parquet store, and writes a config so `camber run`, `camber report` and `
 on it straight away. Labelled datasets can then be **scored**: how many of the known faults did the
 rules find, and how many false alarms did they raise?
 
-CAMBER redistributes none of the data. The catalog (`camber/datasets/catalog.json`, package data)
-records where each dataset is published, its licence and citation, and the size and SHA-256 of
-every file; `camber datasets fetch` downloads the files from the publisher onto your machine.
+CAMBER redistributes none of the data. The catalog (`camber/datasets/catalog.json` and the
+per-entry files in `camber/datasets/catalog.d/`, package data) records where each dataset is
+published, its licence and citation, and the size and SHA-256 of every file; `camber datasets
+fetch` downloads the files from the publisher onto your machine.
 A [synthetic entry](#synthetic-datasets) (0.103) is the one exception: CAMBER generates its data on
 your machine instead.
 
@@ -136,6 +137,10 @@ Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 
 ## The catalog
 
+<!-- Synthetic-entry rows (0.105): #144 goes right after the bts row, #146 after
+synthetic-hw-plant-lockout, #147 after synthetic-hw-plant-cycling and #145 after
+synthetic-chw-plant-staging (see "Adding a synthetic entry"). -->
+
 | id | what | kind | labelled | licence | default subset |
 |---|---|---|---|---|---|
 | `lbnl-sdahu` | single-duct AHU, 21 runs | simulated | yes | CC-BY-4.0 | 8 runs + a spliced onset run |
@@ -257,11 +262,57 @@ downloaded entry:
 
 The synthetic entries, each the dataset of one workbook exercise:
 
-| Entry | Exercise | Plants (`PLANT__<plant>`) | Run template |
+<!-- Rows (0.105): #144 goes right after the header's |---| line, #146 after
+synthetic-hw-plant-lockout, #147 after synthetic-hw-plant-cycling and #145 after
+synthetic-chw-plant-staging (see "Adding a synthetic entry"). -->
+
+| Entry | Exercise | Scenarios (equipment `<equip>__<scenario>`) | Run template |
 |---|---|---|---|
 | `synthetic-hw-plant-lockout` (0.103) | [`plant-lockout`](workbook/plant-lockout.md) | one hot-water plant (OAT, burner firing and gas input, pump status and speed, loop supply and return), hourly for eight weeks from early May with a warm spell: `locked_out`, `warm_spell`, `pump_left_on`, `low_lockout` | `boiler_summer_lockout`, `hw_pump_summer_lockout` at the default 65 °F lockout |
 | `synthetic-hw-plant-cycling` (0.104) | [`plant-boiler-cycling`](workbook/plant-boiler-cycling.md) | one hot-water plant (OAT, boiler firing, loop supply and return, pump speed, loop DP and its setpoint), every 15 minutes for three weeks of early spring: `well_tuned`, `short_cycling`, `marginal`, `low_delta_t` | `boiler_short_cycle`, `hw_plant_deltat`, `hw_pump_dp_reset` at 15 minutes |
 | `synthetic-chw-plant-staging` (0.104) | [`plant-chiller-staging`](workbook/plant-chiller-staging.md) | one chiller and its tower (OAT, wet-bulb, chiller power, chilled-water supply, return and flow, condenser water supply and return, tower fan speed), every 15 minutes for three summer weeks with a heat wave: `well_staged`, `short_cycling`, `left_on`, `fixed_cw`, `high_floor` | `chiller_staging`, `condenser_water_reset` at 15 minutes |
+
+### Adding a synthetic entry
+
+For contributors (0.105). A new synthetic entry adds files of its own and fills one reserved slot
+in each shared page, so entries built at the same time merge without conflicts.
+
+New files, named after the entry:
+
+- `camber/datasets/_synthetic_<name>.py`: the generator. It imports the shared helpers
+  (`_noise`, `_smooth`, `_cycle`, `_occupied`, `_staging_weather`) and `Generator` from
+  `camber.datasets._synthetic`, and calls `register("<name>", Generator(...))` at import time.
+  `_synthetic` imports every `_synthetic_*` module of the package, so there is no list to edit.
+  Use integer-hash noise (`_noise`) only, so every machine writes the same bytes.
+- `camber/datasets/catalog.d/<NNN>-<id>.json`: the catalog entry, one JSON object. It is loaded
+  after `catalog.json`, in the order of the three-digit prefix. Pick a prefix no other file uses.
+  The 0.105 entries hold 100 (#144), 300 (#146), 500 (#147) and 700 (#145), between the shipped
+  200, 400 and 600.
+- `camber/datasets/mappings/<name>.json` and `camber/datasets/configs/<id>.json` (and any
+  `configs/exercises/<exercise-id>.json`).
+- `tests/golden/synthetic/<id>.json`: what the generator writes (generator, seed, version, CSV
+  header, scenarios, rows per scenario, a size cap). `tests/test_datasets_synthetic.py` checks every
+  synthetic entry against its file.
+- The exercise: `docs/workbook/<exercise-id>.md` and `tests/workbook/exercises/<exercise_id>.py`.
+- Its figure: `scripts/docs_figures.d/<exercise_id>.py`, defining `register(df)` and decorating
+  the builder with `@df.figure("workbook/<exercise-id>.png")`, plus the rendered PNG.
+
+Slots to fill, each reserved by issue number (`slot #NNN`):
+
+- `mkdocs.yml`: the nav line, between `# BEGIN slot #NNN` and `# END slot #NNN`.
+- `docs/workbook/instructor.md`: the instructor block, between `<!-- BEGIN slot #NNN ... -->` and
+  `<!-- END slot #NNN ... -->`.
+- `docs/workbook/index.md`: one curriculum-map row. A comment inside a Markdown table would end
+  the table, so this slot is a position, not a marker pair: the comment under the area's
+  `BEGIN workbook-...` marker names the row the new row goes right after.
+- This page: one row in the catalog table and one in the synthetic table above, at the positions
+  their comments name. Then run `python scripts/datasets_issues_doc.py` to regenerate the
+  data-issues section; the entry's block lands in prefix order.
+- `camber/references.py` (an entry that needs new references or rule mappings): between its
+  `# BEGIN slot #NNN` and `# END slot #NNN` comments.
+
+The catalog, synthetic and workbook tests derive their lists of entries from `catalog.d/` and the
+generator registry, so no shared test list needs an edit.
 
 ## Manual downloads
 

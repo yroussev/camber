@@ -22,10 +22,11 @@ Generic ASHRAE / CTI standards citations are deliberately NOT matched -- those
 are legitimate engineering references.
 
 A rule may carry ``exempt_paths``: repository paths the TRACKED-FILE scans skip
-for that one rule. Only two kinds of rule are exempt, each in one file:
+for that one rule. Only two kinds of rule are exempt, each in one place:
 
-- the third-party dataset host and its DOI prefix, only in
-  ``camber/datasets/catalog.json`` -- the catalog must link the data as
+- the third-party dataset host and its DOI prefix, only in the dataset
+  catalog: ``camber/datasets/catalog.json`` and its per-entry files under
+  ``camber/datasets/catalog.d/`` -- the catalog must link the data as
   published;
 - the building-type label, only in the ENERGY STAR national median EUI
   reference (``camber/energy_factors/energy_star_us_median_eui_2024.json``),
@@ -46,8 +47,10 @@ from __future__ import annotations
 
 import base64
 
-# The one file the dataset-host rules exempt (see the module docstring).
+# The dataset catalog the dataset-host rules exempt (see the module docstring): the catalog file
+# and the directory of its per-entry files (0.105), which git pathspecs exclude as a whole.
 CATALOG_PATH = "camber/datasets/catalog.json"
+CATALOG_DIR = "camber/datasets/catalog.d"
 # The one file the building-type label rule exempts: the ENERGY STAR property-type table.
 EUI_REFERENCE_PATH = "camber/energy_factors/energy_star_us_median_eui_2024.json"
 
@@ -97,12 +100,12 @@ _ENCODED: list[tuple] = [
     (
         "Zmlnc2hhcmU=",
         "third-party dataset host (licence status unreliable)",
-        (CATALOG_PATH,),
+        (CATALOG_PATH, CATALOG_DIR),
     ),
     (
         "MTBcLjYwODQv",
         "third-party dataset DOI prefix",
-        (CATALOG_PATH,),
+        (CATALOG_PATH, CATALOG_DIR),
     ),
     (
         "KC9Vc2Vycy9bQS1aYS16MC05Ll8tXSsvfC9ob21lL1tBLVphLXowLTkuXy1dKy98L3ByaXZhdGUvKHRtcHx2YXIpL3xbQS1aYS16XTpcXFVzZXJzXFx8Y2xhdWRlLVswLTldezMsfSk=",

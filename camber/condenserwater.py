@@ -40,6 +40,11 @@ class CondenserWaterResetResult:
     wetbulb_source: str  # "measured" | "derived"
     coverage_start: str
     coverage_end: str
+    # 0.105 (#148): median of CW supply minus (wet-bulb + design approach) over the operating
+    # samples: how far the water sits above the coldest the tower could make it. A reset with a
+    # high floor can pass the slope test yet sit well above this line.
+    cws_above_wb_plus_approach_median_f: float = float("nan")
+    design_approach_f: float = 7.0
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -62,6 +67,7 @@ def analyze_cw_reset(
     min_fan_pct: float = 5.0,  # tower fan above this == operating (if available)
     elevation_ft: float | None = None,  # site elevation for a derived wet-bulb (None = sea level)
     pressure_psia: float | None = None,  # or a measured barometric pressure
+    design_approach_f: float = 7.0,  # tower design approach, as cooling_tower_approach (info only)
 ) -> CondenserWaterResetResult | None:
     """Regress CW supply temp on wet-bulb over operating hours to detect a reset.
 
@@ -74,6 +80,11 @@ def analyze_cw_reset(
     :func:`camber.coolingtower.stull_wetbulb_f`). At altitude a sea-level wet-bulb reads high, more
     so in dry air, which shifts the regression's x-axis and can move the slope a little. A measured
     ``WetBulb`` column ignores both.
+
+    ``cws_above_wb_plus_approach_median_f`` (0.105, #148) is information only: the median of
+    ``CWS_Temp - (wet-bulb + design_approach_f)`` over the same operating samples. Near 0 the tower
+    makes water as cold as its design approach allows; well above it, the setpoint (or a reset's
+    floor) holds it warmer. It never changes ``reset_present``.
     """
     if "CWS_Temp" not in df.columns:
         return None
@@ -106,6 +117,7 @@ def analyze_cw_reset(
 
     slope = _ols_slope(w._wb.values, w.CWS_Temp.values)
     reset_present = (not np.isnan(slope)) and slope >= reset_slope_flat
+    above = float((w.CWS_Temp - (w._wb + design_approach_f)).median())
 
     return CondenserWaterResetResult(
         equip=equip,
@@ -116,4 +128,6 @@ def analyze_cw_reset(
         wetbulb_source=wb_source,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        cws_above_wb_plus_approach_median_f=round(above, 1),
+        design_approach_f=float(design_approach_f),
     )

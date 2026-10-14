@@ -44,6 +44,10 @@ class ChillerStagingResult:
     low_load_pct: float  # % of running hrs below min_load_pct (NaN if no load data)
     coverage_start: str
     coverage_end: str
+    # 0.105 (#148): the 10th-to-90th percentile spread of the running tons, as % of the observed
+    # peak (NaN if no load data). Near 0 every run is at one output, so the load factor (read
+    # against that same output as its peak) says nothing about part load.
+    load_spread_pct: float = float("nan")
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -78,6 +82,7 @@ def analyze_chiller_staging(
 
     load_factor_median = float("nan")
     low_load = float("nan")
+    spread = float("nan")
     if {"CHWS_Temp", "CHWR_Temp", "CHW_Flow"} <= set(w.columns):
         run = w[running]
         tons = run.CHW_Flow * (run.CHWR_Temp - run.CHWS_Temp) / 24.0
@@ -87,6 +92,9 @@ def analyze_chiller_staging(
             lf = 100.0 * tons / peak if peak > 0 else tons * 0
             load_factor_median = round(float(lf.median()), 1)
             low_load = round(100.0 * float((lf < min_load_pct).mean()), 1)
+            if peak > 0:
+                p10, p90 = (float(q) for q in tons.quantile([0.1, 0.9]))
+                spread = round(100.0 * (p90 - p10) / peak, 1)
 
     return ChillerStagingResult(
         equip=equip,
@@ -97,6 +105,7 @@ def analyze_chiller_staging(
         low_load_pct=low_load,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        load_spread_pct=spread,
     )
 
 

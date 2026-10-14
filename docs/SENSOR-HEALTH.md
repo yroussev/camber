@@ -144,11 +144,27 @@ Since 0.92 (#16) two cross-sensor checks below feed trust as well:
   culprit, and the balance is screening-grade, so it never makes a point "untrusted" on its own.
   OAT and RAT are flagged with the same check but keep their scores: the balance cannot say which
   of the set is wrong.
+- `mixing_order` (0.105, #151) -- on a unit **without** both airflow stations (no `OA_AIRFLOW`
+  or no `AIRFLOW` in the frame, so the balance above cannot run), the simpler check stands in:
+  the mixed air must lie between outdoor and return air (`mixing_consistency`: MAT outside
+  [min(OAT, RAT) - 5 F, max(OAT, RAT) + 5 F] on at least 5 % of the samples). It reads **fan-on
+  samples only** -- with the fan off a mixed-air sensor reads a still plenum or a value the
+  controller parks. The gate is the one passed to `frame_sensor_health` (`gate=`), or else the
+  frame's own fan status, fan speed or supply airflow (`fan_on_mask`). A unit with **no fan
+  signal is not checked**: an ungated read would judge the idle hours as well, and a false
+  "suspect" makes every finding on the point conditional, so the check stays silent rather than
+  guess. On a `warn` or `fault` MAT is capped at "suspect" and OAT and RAT are flagged with the
+  same check (`"check": "mixing_temperature_order"`, with the violating share, the samples
+  checked and the gate used), keeping their scores, as for the balance.
 
-Both flags make the unit's findings on that point **conditional** in triage
+These flags make the unit's findings on that point **conditional** in triage
 (`camber.rules.triage.sensor_causes`), on that unit only -- even on OAT, since the check judged this
 unit's own points. The rule runner's trust gate resolves only a rule's own roles, so the flow balance
-applies there only when the rule loads both flows; the RCx report scores the whole frame.
+applies there only when the rule loads both flows; the RCx report scores the whole frame. The
+RCx report's own mixing-consistency table runs the same order check, and a unit where both fire
+gets one triage cause on MAT, OAT and RAT (the table's), not a second one per flagged point. The
+cap at "suspect" never takes a point below the runner's 0.5 trust bar, so `mixing_order` changes no
+rule's gating.
 
 On the open LBNL Building 59 data (catalog example `lbnl-b59`, 2018-2020, hourly): RTU01 and RTU02's
 MAT reads +4.7 F and +3.1 F against the balance and drop from "trusted" (0.96 / 0.95) to "suspect"
@@ -158,6 +174,11 @@ actionable issues from the per-unit rules on the four units, 3 become conditiona
 economizer high-limit finding (on the copied return air) and RTU01/RTU02's SAT-reset compliance
 (on OAT, which the failing balance also names). On 2020 alone the copy covers the whole window, so
 both points are flagged "undetermined".
+
+The B59 RTUs trend both flows, so they keep the balance and the order check does not run on them.
+The `irish-ahu` unit (MAT, OAT and RAT, no flow stations) has no fan signal, so it is not checked;
+read ungated its MAT would sit outside [OAT, RAT] on 3.9 % of the hourly samples, under the 5 %
+warning line, and keep its score either way.
 
 ### Operating modes, stray rows and clipped readings (0.98, #87; provisional)
 
