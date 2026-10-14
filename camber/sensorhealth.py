@@ -1128,7 +1128,7 @@ def _plant_off_throughout(plant_on, start, end) -> bool:
     return not bool(plant_on.loc[start:end].any())
 
 
-def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
+def frame_checks(frame: pd.DataFrame, health: dict, *, gate=None) -> dict:
     """Apply the frame-level trust checks to ``health`` (``{Role: SensorTrust}``) in place.
 
     Provisional (#58). Each check judges points against the others on the same equipment and marks
@@ -1147,6 +1147,13 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     Since 0.98 (#87) a point clipped at a round-number range limit (:func:`clipped_at_limit`) is
     flagged ``clipped``, with the details and the share of those samples with the fan off in
     ``SensorTrust.clipped``; the flag carries no trust penalty.
+
+    Since 0.105 (#151) a unit without the two airflow stations the balance needs gets the simpler
+    check instead: the mixed air must lie between outdoor and return air (``mixing_order``, from
+    :func:`mixing_consistency`), judged on fan-on samples only. ``gate`` (a boolean fan-on Series
+    on the frame's index) says which samples ran; without one the frame's own fan signal is read
+    (:func:`camber.schedules.fan_on_mask`), and a unit with no fan signal at all is not checked.
+    See :func:`_check_mixing_order`.
     """
     _check_fan_off_pressure(frame, health)
     _check_status_speed(frame, health)
@@ -1154,6 +1161,7 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     # 0.92 (#16): cross-sensor physics into trust
     _check_copied_signal(frame, health)
     _check_mixing_balance(frame, health)
+    _check_mixing_order(frame, health, gate=gate)  # 0.105 (#151): no airflow stations
     _check_clipped(frame, health)  # 0.98 (#87): flag only
     return health
 
@@ -1236,6 +1244,9 @@ def frame_sensor_health(
     :func:`camber.schedules.fan_on_mask` (ungated when the frame has none). The frame-level checks
     of :func:`frame_checks` are then applied.
 
+    The resolved ``gate`` also fan-gates the mixed-air order check of :func:`frame_checks`
+    (0.105, #151); with ``gate=None`` that check reads the frame's own fan signal.
+
     ``plant_gate`` (provisional, 0.92, #66): ``"auto"`` judges the plant roles
     (:data:`PLANT_GATED_ROLES`, and a chiller's power) on their equipment's running samples, with
     the gate read from the frame by :func:`plant_gates`; ``None`` (the default) leaves them
@@ -1273,7 +1284,7 @@ def frame_sensor_health(
         )
         for role in frame.columns
     }
-    return frame_checks(frame, health)
+    return frame_checks(frame, health, gate=gate)
 
 
 def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=None) -> set:
@@ -2175,6 +2186,58 @@ def _check_mixing_balance(frame: pd.DataFrame, health: dict) -> None:
     _mark(health, Role.MIXED_AIR_TEMP, "mixing_balance", dict(check), cap=_SUSPECT_CAP)
     for role in (Role.OAT, Role.RETURN_AIR_TEMP):
         _mark(health, role, "mixing_balance", dict(check))
+
+
+def _check_mixing_order(frame: pd.DataFrame, health: dict, *, gate=None) -> None:
+    """0.105 (#151): a mixed-air temperature outside [OAT, RAT] on a unit without flow stations.
+
+    Runs only when the frame lacks the OA or the supply airflow, so :func:`_check_mixing_balance`
+    keeps priority wherever it can run. Judged by :func:`mixing_consistency` (MAT outside
+    [min(OAT, RAT) - 5 F, max(OAT, RAT) + 5 F] on at least 5 % of the samples) on **fan-on samples
+    only**: with the fan off a mixed-air sensor reads the still plenum (or a value the controller
+    parks), which says nothing about the blend. ``gate`` is the caller's fan-on mask; without one
+    the frame's own fan signal is read (:func:`camber.schedules.fan_on_mask`), and a unit with no
+    fan signal is skipped -- an ungated read would score the idle hours too, and a false "suspect"
+    on a healthy sensor makes every finding on it conditional.
+
+    On a ``warn`` or ``fault`` the mixed-air temperature is flagged ``mixing_order`` and capped at
+    "suspect"; OAT and RAT are flagged with the same check and keep their scores, as for the
+    balance: the order cannot say which of the three is wrong.
+    """
+    if Role.OA_AIRFLOW in frame.columns and Role.AIRFLOW in frame.columns:
+        return  # the flow-weighted balance applies
+    if any(r not in frame.columns for r in _MIXING_TEMP_ROLES):
+        return
+    if not any(r in health for r in _MIXING_TEMP_ROLES):
+        return
+    if gate is not None:
+        on = (
+            gate.reindex(frame.index)
+            if isinstance(gate, pd.Series)
+            else pd.Series(np.asarray(gate), index=frame.index)
+        )
+        source = "caller-supplied fan gate"
+    else:
+        from .schedules import fan_on_mask
+
+        on, source = fan_on_mask(frame)
+        if on is None:
+            return  # no fan signal: not checked (see the docstring)
+    on = on.fillna(False).astype(bool).to_numpy()
+    res = mixing_consistency(frame[on])
+    if res.severity not in ("warn", "fault"):
+        return
+    check = {
+        "check": "mixing_temperature_order",
+        "severity": res.severity,
+        "violation_frac": res.violation_frac,
+        "n_checked": res.n_checked,
+        "gate": source,
+        "summary": res.summary,
+    }
+    _mark(health, Role.MIXED_AIR_TEMP, "mixing_order", dict(check), cap=_SUSPECT_CAP)
+    for role in (Role.OAT, Role.RETURN_AIR_TEMP):
+        _mark(health, role, "mixing_order", dict(check))
 
 
 # ==== begin 098-sensor-health (#87) ====

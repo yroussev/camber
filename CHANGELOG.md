@@ -199,6 +199,17 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `n_no_temperature`, as the other predicts do (#168).
 
 ### Changed
+- **The trust score checks the mixed-air order when a unit has no airflow stations (#151).** The
+  0.92 mixed-air flow balance needs both an outside-air and a supply airflow, which most AHUs do
+  not trend. Without them, `frame_sensor_health` now checks that the mixed air lies between
+  outdoor and return air (`mixing_consistency`), on fan-on samples only: the gate passed in, or
+  the frame's own fan signal. A unit with no fan signal is not checked. On a warning or fault the
+  mixed air is flagged `mixing_order` and capped at "suspect"; OAT and RAT are flagged and keep
+  their scores. `frame_checks` takes the fan gate as `gate=`. In triage, a unit whose RCx mixing
+  result fires too gets that one cause, not a second per flagged point. The cap stays above the
+  runner's trust bar, so no rule's gating or benchmark moves. The RCx golden report and the
+  workbook answers are unchanged: the B59 RTUs keep the balance, and `irish-ahu` has no fan
+  signal.
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily
   change-point baseline chosen by BIC, is now `daily_changepoint_savings`, returning
   `DailyNMECResult`. `caltrack_savings_hourly`, a pooled TOWT, is now `towt_savings_hourly`,

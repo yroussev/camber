@@ -705,6 +705,11 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   legends and titles show registry labels ("3P cooling", not "3PC"); `OptionDSavings.basis` of a
   claimed saving reads "Option D-style modeled savings (calibrated 1R1C grey box;
   pre-implementation estimate)". Metrics and serialised models keep the `kind` codes.
+- **Mixed-air order check in trust** (0.105; #151), additive and provisional: the trust flag
+  `mixing_order` and its `frame_checks` entry (`"check": "mixing_temperature_order"`), and the
+  keyword-only `gate=` of `sensorhealth.frame_checks`. **Behaviour change:** on a unit without
+  both airflow stations, a mixed-air temperature outside [OAT, RAT] on fan-on samples is capped
+  at "suspect" (see docs/SENSOR-HEALTH.md). The thresholds may be retuned in a minor release.
 
 ### The read API server: `camber.api.server`
 
