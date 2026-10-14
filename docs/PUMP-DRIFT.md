@@ -54,6 +54,10 @@ the real reason when it declines (`camber.chillerbaseline.unscoreable_reason`): 
 missing, a load gate no sample meets (with the observed median), a band no reading falls in (check
 units), too few samples, or too narrow a load range.
 
+**An `ok` loop ΔT names no fault.** Since 0.105 (#153) an `ok` `loop_deltat_drift` Finding says the
+ΔT "holds near its baseline" and gives the signed shift and its σ. Only `warn` and `fault` name a
+direction and a cause ("collapsed … low-ΔT syndrome", "widened … starvation").
+
 **Flow-at-matched-speed is the pump-wear signal.** A healthy VFD pump delivers a repeatable flow at a
 given speed; a deficit means the pump (or its suction) has degraded. It is **one-sided down** — only a
 deficit is a fault — so `ApproachDriftMonitor` gained a `direction="down"` mode for it (alongside the
@@ -116,6 +120,57 @@ camber drift freeze config.json      # establish the references (refuses to over
 camber drift run    config.json      # score current vs baseline, worst-first
 camber drift accept config.json --equip <EQ> --by <NAME> --reason "<what changed>"
 ```
+
+## Hot-water loops
+
+The `pump` family reads the chilled-water roles. Since 0.105 (#152) the `hw_pump` family runs the
+same five detectors on a hot-water loop (`camber.rules.hw_pump_rules`):
+
+| Detector | Rule name | Signal | Normalizer |
+|---|---|---|---|
+| `HwPumpFlowDrift` | `hw_pump_flow_drift` | `hw_flow` | `hw_pump_speed` (or `pump_status`); `hw_diff_press` / `hw_diff_press_sp` for the resistance caveat |
+| `HwPumpHeadDrift` | `hw_pump_head_drift` | `pump_head` | `hw_pump_speed` (or `pump_status`); `hw_flow` confound |
+| `HwLoopDeltaTDrift` | `hw_loop_deltat_drift` | supply − return (`hw_supply_temp` − `hw_return_temp`) | `hw_flow` |
+| `HwLoopDPDrift` | `hw_loop_dp_drift` | `hw_diff_press` | `hw_flow`; `hw_diff_press_sp` |
+| `HwPumpPowerDrift` | `hw_pump_power_drift` | `power` | `hw_flow` |
+
+A hot-water loop's warm side is its supply, so the ΔT is supply − return. A collapse is still
+low-ΔT syndrome and a widening is still starvation. The physics, the size-relative gates, the
+thresholds and the metric keys are the chilled-water detector's own. `diagnose_pump_drift` and
+the plant roll-up read either loop, and `"plant"` works on an `hw_pump` entry too:
+
+```json
+{"drift": {"families": [{"class": "HW_PLANT", "family": "hw_pump", "plant": "HW plant"}]}}
+```
+
+**Two loops on one equipment.** Each hot-water detector has its own rule name and its own
+baseline-store kind (`hw_pump_flow`, `hw_pump_head`, `hw_loop_deltat`, `hw_loop_dp`,
+`hw_pump_power`). An equipment that carries both loops, with `pump` and `hw_pump` entries on the
+same class, keeps one frozen baseline per loop. `pump_status`, `pump_head` and `power` have no
+loop of their own, so on such an equipment both families read the same point. Map each pump as
+its own equipment when each has its own status, head and power.
+
+A hot-water loop with no flow meter can still be scored on ΔT from Python:
+`HwLoopDeltaTDrift(store, load_role=Role.HW_PUMP_SPEED)` uses the pump speed as the affinity
+proxy, gated at the learned VFD floor.
+
+**On `lbnl-boiler`.** Run with the fault-free run as the declared reference, over all 17 runs.
+The dataset maps the lead pump's speed and status, boiler 1's flow, the loop supply and return
+temperatures and the loop DP and its setpoint. It has no pump head point, and the pump power
+point is not mapped.
+- **Pump speed gate:** the lead pump's learned VFD floor is 28.9 %, so its speed gate is 30.9 %.
+- **`hw_loop_deltat_drift`:** the PI-mistuning run is a `warn`, a ΔT collapse of 1.6 °F
+  (3.0σ). The eight temperature-bias runs are `fault`s of 3.6 °F (±2 °F bias) and 7.2 °F
+  (±4 °F bias), collapsing for a positive bias and widening for a negative one. The boiler
+  supply bias moves the loop supply it controls, and the loop sensor bias moves the measured ΔT.
+  The detector cannot tell a biased temperature sensor from a real change in ΔT. The three
+  fouling runs and the four DP-sensor-bias runs are `ok`.
+- **`hw_pump_flow_drift` and `hw_loop_dp_drift`:** `ok` on every run. The largest flow shift is
+  a −22 gpm deficit (−1.9σ) at the −20 DP-sensor bias.
+- **`hw_pump_head_drift`:** declines (no head point).
+
+None of these runs is a pump fault, and boiler fouling stays the job of `boiler_efficiency_drift`.
+The `lbnl-boiler` run template does not include `hw_pump`, so its workbook answers are unchanged.
 
 ## Pump size and constant-speed pumps
 

@@ -293,6 +293,11 @@ def test_config_validation(tmp_path, extra, msg):
 def test_every_tunable_parameter_is_documented():
     assert pd_docs.documented_drift_rules() == [
         "coil_leak_drift",
+        "hw_loop_deltat_drift",  # 0.105 (#152): the hw_pump family, the pump family's twins
+        "hw_loop_dp_drift",
+        "hw_pump_flow_drift",
+        "hw_pump_head_drift",
+        "hw_pump_power_drift",
         "loop_deltat_drift",  # 0.104 (#150): the pump family, as constructor arguments
         "loop_dp_drift",
         "pump_flow_drift",

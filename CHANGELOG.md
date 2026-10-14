@@ -87,6 +87,11 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `timezone=`.
 - **Error messages print plain numbers (#173).** The TOWT unseen-bin error printed
   `np.int32(9)`; it prints `9`. The SEP chaining period error prints dates, not `Timestamp(...)`.
+- **An `ok` loop ΔT finding names no fault (#153).** `loop_deltat_drift` said "loop ΔT
+  collapsed 0.0°F … low-ΔT syndrome" or "widened … starvation" on an `ok` Finding. It now says the
+  loop ΔT "holds near its baseline", with the signed shift and its σ. `warn` and `fault` keep the
+  direction and the cause. Only the text moves: in `tests/golden/pumpsim_fullsize.json` the 17 `ok`
+  `loop_deltat_drift` summaries change, and every severity, metric and caveat is unchanged.
 
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
@@ -197,6 +202,19 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   A stored `TOWTRMV2Model` rebuilds through `rebaseline.mv_model_from_dict`, and its predict
   counts a temperature outside its fitted bounds as `n_temp_screened` and a missing one as
   `n_no_temperature`, as the other predicts do (#168).
+- **Pump and loop drift on hot-water loops (#152).** The new `hw_pump` drift family runs the
+  pump family's five detectors on a hot-water loop's roles (`hw_flow`, `hw_pump_speed`,
+  `hw_supply_temp` − `hw_return_temp`, `hw_diff_press`, `hw_diff_press_sp`), with the 0.104
+  size-relative gates and the same thresholds (`camber.rules.hw_pump_rules`). The detectors are
+  `hw_pump_flow_drift`, `hw_pump_head_drift`, `hw_loop_deltat_drift`, `hw_loop_dp_drift` and
+  `hw_pump_power_drift`. Each has its own baseline-store kind, so an equipment that carries both
+  loops keeps one baseline per loop. `diagnose_pump_drift` and the `plant` roll-up read either
+  loop. The detectors share their parameter docs with the chilled-water ones
+  (`param_docs.HW_PUMP_DRIFT_TWINS`, docs/THRESHOLDS.md). The `pump` family is unchanged. On
+  `lbnl-boiler` against its fault-free run, the PI-mistuning run is a loop ΔT `warn` (1.6 °F,
+  3.0σ) and the eight temperature-bias runs are loop ΔT `fault`s. The fouling and DP-bias runs
+  are `ok`. The pump flow and loop DP detectors are `ok` on every run (docs/PUMP-DRIFT.md,
+  "Hot-water loops").
 
 ### Changed
 - **The CalTRACK look-alikes are renamed (#156).** `mandv.caltrack.caltrack_savings`, a daily

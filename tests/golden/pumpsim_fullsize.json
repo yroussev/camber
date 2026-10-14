@@ -73,7 +73,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -219,7 +219,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -365,7 +365,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -511,7 +511,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -657,7 +657,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -803,7 +803,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.1\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (+0.1\u00b0F, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -949,7 +949,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1095,7 +1095,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1241,7 +1241,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1387,7 +1387,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1533,7 +1533,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1679,7 +1679,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1827,7 +1827,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.1\u00b0F (0.1\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (+0.1\u00b0F, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1975,7 +1975,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -2423,7 +2423,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 1.2\u00b0F (2.4\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (-1.2\u00b0F, 2.4\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -2717,7 +2717,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T widened 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- underflow / starvation"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [
@@ -2866,7 +2866,7 @@
      },
      "rule": "loop_deltat_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop \u0394T collapsed 0.0\u00b0F (0.0\u03c3) vs frozen baseline at matched flow -- low-\u0394T syndrome (overpumping)"
+     "summary": "P_SIM: loop \u0394T holds near its baseline (0.0\u00b0F, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [

@@ -105,6 +105,12 @@ RULE_CATEGORY = {
     "pump_power_drift": "maintenance",
     "loop_deltat_drift": "maintenance",
     "loop_dp_drift": "maintenance",
+    # 0.105 (#152): the hw_pump family's detectors
+    "hw_pump_flow_drift": "maintenance",
+    "hw_pump_head_drift": "maintenance",
+    "hw_pump_power_drift": "maintenance",
+    "hw_loop_deltat_drift": "maintenance",
+    "hw_loop_dp_drift": "maintenance",
     "vav_airflow_drift": "maintenance",
     "vav_reheat_valve_drift": "maintenance",
     "boiler_efficiency_drift": "maintenance",  # 0.92 (#13)

@@ -176,11 +176,30 @@ def _drift_sections() -> list:
         return []
     python_only = getattr(pd, "_PYTHON_ONLY_DRIFT", frozenset())
     opt_in = [r for r in rules if r not in python_only]
-    pump = [r for r in rules if r in python_only]
+    twins = getattr(pd, "HW_PUMP_DRIFT_TWINS", {})
+    pump = [r for r in rules if r in python_only and r not in twins]
     out = [_DRIFT_INTRO] + _drift_tables(opt_in) if opt_in else []
     if pump:  # 0.104 (#150)
         out += [_PUMP_DRIFT_INTRO] + _drift_tables(pump)
+    if twins:  # 0.105 (#152)
+        out += [_HW_PUMP_DRIFT_INTRO] + _twin_lines(twins)
     return out
+
+
+_HW_PUMP_DRIFT_INTRO = """\
+### Hot-water pump and loop drift detectors
+
+The hot-water drift family (`"family": "hw_pump"`) builds the same five detectors on the
+hot-water roles (`hw_flow`, `hw_pump_speed`, `hw_supply_temp`, `hw_return_temp`, `hw_diff_press`,
+`hw_diff_press_sp`), under their own rule names and baseline-store kinds. Their parameters,
+defaults and calibration are the chilled-water detector's:
+"""
+
+
+def _twin_lines(twins: dict) -> list:
+    """One line per hot-water detector naming the detector whose table it shares."""
+    lines = [f"- `{hw}`: as [`{chw}`](#{chw})" for hw, chw in sorted(twins.items())]
+    return ["\n".join(lines) + "\n"]
 
 
 def _drift_tables(rules) -> list:

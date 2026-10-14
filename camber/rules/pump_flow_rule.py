@@ -100,6 +100,7 @@ class PumpFlowDrift:
     """
 
     name = "pump_flow_drift"
+    kind = _KIND  # the baseline-store model kind (0.105, #152: overridable per loop)
 
     def __init__(
         self,
@@ -172,12 +173,12 @@ class PumpFlowDrift:
         """The frozen flow~speed baseline, freezing an initial one from ``base_frame`` if none."""
         if gate is None:
             gate = G.speed_gate(base_frame.get(self.speed_role), self.min_speed)
-        frozen = self.store.model_for(self.site, equip, _KIND)
+        frozen = self.store.model_for(self.site, equip, self.kind)
         if frozen is not None:
             return frozen
         if not self.freeze_if_missing:
             caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
+                f"could not evaluate {self.kind}: no frozen baseline and freezing is disabled"
             )
             return None
         level = mode in ("constant", "status_only")
@@ -206,7 +207,8 @@ class PumpFlowDrift:
                 min_load_span=None if level else span,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
+                f"could not evaluate {self.kind}: the baseline period would not support a fit "
+                f"-- {why}"
             )
             return None
         idx = base_frame.index
@@ -214,7 +216,7 @@ class PumpFlowDrift:
             fit,
             site=self.site,
             equip=equip,
-            kind=_KIND,
+            kind=self.kind,
             frozen_at=self.run_id,
             period=(str(idx.min()), str(idx.max())),
             reason="initial baseline frozen from the supplied baseline period",
@@ -267,7 +269,7 @@ class PumpFlowDrift:
     # ------------------------------------------------------------------ pattern J evidence
     def drift_signature(self):
         """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
-        return _KIND, self.speed_role, self.flow_role
+        return self.kind, self.speed_role, self.flow_role
 
     def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         """The prepared frame :meth:`drift_signature`'s columns live on (flow at matched speed)."""
@@ -326,7 +328,7 @@ class PumpFlowDrift:
                 baseline=frozen,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: nothing scoreable in the current period -- {why}"
+                f"could not evaluate {self.kind}: nothing scoreable in the current period -- {why}"
             )
             return Finding(
                 rule=self.name,
@@ -339,7 +341,7 @@ class PumpFlowDrift:
 
         severity = self._severity(drift, caveats, floors)
         direction = "down" if drift.drift_f < 0 else "up"
-        rec = self.store.get(self.site, equip, _KIND)
+        rec = self.store.get(self.site, equip, self.kind)
         metrics = {
             "pump_flow_drift_gpm": drift.drift_f,
             "pump_flow_drift_sigma": drift.drift_sigma,

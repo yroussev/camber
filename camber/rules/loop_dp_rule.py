@@ -115,6 +115,7 @@ class LoopDPDrift:
     """
 
     name = "loop_dp_drift"
+    kind = _KIND  # the baseline-store model kind (0.105, #152: overridable per loop)
 
     def __init__(
         self,
@@ -183,12 +184,12 @@ class LoopDPDrift:
     def _frozen_baseline(
         self, equip, base_frame, caveats, rng=DP_PLAUSIBLE, gate=None, mode="variable"
     ):
-        frozen = self.store.model_for(self.site, equip, _KIND)
+        frozen = self.store.model_for(self.site, equip, self.kind)
         if frozen is not None:
             return frozen
         if not self.freeze_if_missing:
             caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
+                f"could not evaluate {self.kind}: no frozen baseline and freezing is disabled"
             )
             return None
         if gate is None:
@@ -221,7 +222,8 @@ class LoopDPDrift:
                 min_load_span=None if level else span,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
+                f"could not evaluate {self.kind}: the baseline period would not support a fit "
+                f"-- {why}"
             )
             return None
         idx = base_frame.index
@@ -229,7 +231,7 @@ class LoopDPDrift:
             fit,
             site=self.site,
             equip=equip,
-            kind=_KIND,
+            kind=self.kind,
             frozen_at=self.run_id,
             period=(str(idx.min()), str(idx.max())),
             reason="initial baseline frozen from the supplied baseline period",
@@ -255,7 +257,7 @@ class LoopDPDrift:
     # ------------------------------------------------------------------ pattern J evidence
     def drift_signature(self):
         """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
-        return _KIND, self.flow_role, self.dp_role
+        return self.kind, self.flow_role, self.dp_role
 
     def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         """The prepared frame the baseline is fitted on (loop DP at matched flow)."""
@@ -315,7 +317,7 @@ class LoopDPDrift:
                 baseline=frozen,
             )
             caveats.append(
-                f"could not evaluate {_KIND}: nothing scoreable in the current period -- {why}"
+                f"could not evaluate {self.kind}: nothing scoreable in the current period -- {why}"
             )
             return Finding(
                 rule=self.name,
@@ -328,7 +330,7 @@ class LoopDPDrift:
 
         severity = self._severity(drift.drift_f, drift.drift_sigma)
         direction = "up" if drift.drift_f >= 0 else "down"
-        rec = self.store.get(self.site, equip, _KIND)
+        rec = self.store.get(self.site, equip, self.kind)
         metrics = {
             "loop_dp_drift": drift.drift_f,
             "loop_dp_drift_sigma": drift.drift_sigma,
