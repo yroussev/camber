@@ -11,6 +11,10 @@
     {
       "class": "CHW_PLANT",
       "marker_role": "power"
+    },
+    {
+      "class": "CHW_PUMP",
+      "marker_role": "chw_pump_speed"
     }
   ],
   "rules": [

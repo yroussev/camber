@@ -767,6 +767,14 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Chiller-plant inventory Table 2 (CHL_STA / CT_STA: on-off status of a chiller / cooling tower) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: annotate** -- left as published and recorded in the provenance. Not mapped: rules that need a chiller or tower run status decline instead of reading the enable as running.
 
+#### The secondary pumps' status 1 is an enable, and their speed parks above zero while they are stopped
+
+- **Issue:** `secondary-pump-status-and-speed`
+- **Columns:** `CWL_SEC_PM_STA_1`, `CWL_SEC_PM_STA_2`, `CWL_SEC_PM_SPD_1`, `CWL_SEC_DP`
+- **Evidence:** CWL_SEC_PM_STA_1 is 1 in every row of all 24 runs, while pump 1 draws 0.5 kW or less in 32.8% of fault-free rows (172,379), with the loop flow at zero. CWL_SEC_PM_STA_2 does follow pump 2 (it draws 0.5 kW or less in all but 2 of the rows where STA_2 reads 0), but pump 1 runs alone in 22,728 fault-free rows (4.3%), which STA_2 reads as off. Pump 2 never runs without pump 1, and when both run their speeds and kW are identical. While pump 1 is stopped CWL_SEC_PM_SPD_1 reads 0.345 (fault-free; 0.315 and 0.386 in the +20% and -20% secondary pressure-bias runs) instead of zero, and the loop DP reads its 961 setpoint at zero flow: the speed is the stopped DP loop's parked output, not a VFD floor the pump idles at (running, pump 1's fault-free speed has a median of 0.92).
+- **Contradicts:** Chiller-plant Brick model LBNL_FDD_Data_Sets_chiller_plant.ttl (CWL_SEC_PM_STA_1 / _2 are the Pump_On_Off_Status and CWL_SEC_PM_SPD_1 / _2 the Speed_Status of Secondary_Chilled_Water_Loop_Pump_1 / _2) (LBNL FDD Data Sets, doi:10.25984/1881324)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Neither status point is mapped: SECPUMP's pump_status is derived from pump 1's kW (SECPUMP_ON, above 0.5 kW: on whenever either pump runs), so the status-gated pump drift rules read only running samples. The speed is mapped as published, so chw_pump_dp_reset, which reads speed without a status, counts the stopped hours as hours near the minimum on this plant.
+
 #### The chiller-fouling runs are not in the inventory
 
 - **Issue:** `chiller-fouling-runs-undocumented`
