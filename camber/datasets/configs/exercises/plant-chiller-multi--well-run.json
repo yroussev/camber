@@ -1,0 +1,26 @@
+{
+  "_comment": "Workbook exercise plant-chiller-multi, variant: chiller_staging_fleet on the well-run plant's two chillers only (CH1__well_run, CH2__well_run), at the trend's 15 minutes and the default redundancy ceiling of 0.9. Measured: ok, 4.9 % of the 283 two-chiller samples over-staged.",
+  "_dataset": "synthetic-chw-plant-multi",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-chw-plant-multi"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "CHILLER",
+      "marker_role": "power",
+      "equip": [
+        "CH1__well_run",
+        "CH2__well_run"
+      ]
+    }
+  ],
+  "rules": [
+    "chiller_staging_fleet"
+  ],
+  "report": {
+    "level": 2
+  }
+}

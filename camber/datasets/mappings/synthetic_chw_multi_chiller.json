@@ -1,0 +1,12 @@
+{
+  "_comment": "Synthetic two-chiller plant (generator chw_plant_multi, camber/datasets/_synthetic_chw_plant_multi.py; 0.105, #145) -> CAMBER Role mapping for one chiller; the run's vars fill {n} (1 or 2). Every column is CAMBER's own: CH{n}_STS is the chiller's run status (1 running, 0 off), CH{n}_KW its electric power in kW (0 when off), CH{n}_LWT / CH{n}_EWT its leaving and entering chilled water in F (an isolated chiller reads the loop's return), CH{n}_COND_APP / CH{n}_EVAP_APP the condenser and evaporator approaches its controller reports in F (blank while off), and CHWS_SP the plant's chilled-water supply setpoint in F, shared with the secondary loop. The scenario column selects one plant per ingest run and is not a point.",
+  "aliases": {
+    "CH{n}_STS": "compressor_status",
+    "CH{n}_KW": "power",
+    "CH{n}_LWT": "chw_supply_temp",
+    "CH{n}_EWT": "chw_return_temp",
+    "CH{n}_COND_APP": "cond_approach_temp",
+    "CH{n}_EVAP_APP": "evap_approach_temp",
+    "CHWS_SP": "chw_supply_temp_sp"
+  }
+}

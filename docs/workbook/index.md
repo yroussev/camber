@@ -109,6 +109,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-lockout`: a boiler and a pump left on in warm weather, and choosing the lockout](plant-lockout.md) | `synthetic-hw-plant-lockout` (synthetic) |
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-boiler-cycling`: boiler short-cycling, low hot-water delta-T, and how the trend interval hides cycles](plant-boiler-cycling.md) | `synthetic-hw-plant-cycling` (synthetic) |
 | [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chiller-staging`: a short-cycling chiller, a chiller left on, and condenser-water reset](plant-chiller-staging.md) | `synthetic-chw-plant-staging` (synthetic) |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chiller-multi`: two chillers over-staged, decoupler reverse mixing, a fouled condenser and two fouled towers](plant-chiller-multi.md) | `synthetic-chw-plant-multi` (synthetic) |
 | [Ch. 8][pnnl-retuning-ch8] | [`plant-sensor-vs-equipment`: sensor faults vs equipment faults](plant-sensor-vs-equipment.md) | `lbnl-chiller` |
 <!-- END workbook-plant (#82) -->
 

@@ -1,0 +1,26 @@
+{
+  "_comment": "Workbook exercise plant-chiller-multi, variant: chiller_staging_fleet on the over-staged plant's two chillers only (CH1__over_staged, CH2__over_staged), both running whenever the plant does, at the default redundancy ceiling of 0.9. Measured: warn, 44.2 % of the 780 two-chiller samples over-staged, against a capacity of 106.5 kW read from the chillers' own 95th-percentile power (neither ever runs near full load, so that reads low).",
+  "_dataset": "synthetic-chw-plant-multi",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-chw-plant-multi"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "CHILLER",
+      "marker_role": "power",
+      "equip": [
+        "CH1__over_staged",
+        "CH2__over_staged"
+      ]
+    }
+  ],
+  "rules": [
+    "chiller_staging_fleet"
+  ],
+  "report": {
+    "level": 2
+  }
+}

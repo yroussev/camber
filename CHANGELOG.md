@@ -99,6 +99,18 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   sentence of docs/MANDV.md, "Naming and citations". It names each component by its registry
   standard name and citation (`component_description`), then the combination rule. The short
   citation texts are `names.SHORT_CITATIONS`.
+- **A synthetic two-chiller plant and its workbook exercise (#145).** `synthetic-chw-plant-multi`
+  is a primary-secondary chilled-water plant: two chillers, a decoupler, a variable-flow secondary
+  loop and one cooling tower, every 15 minutes for three summer weeks, about 1.7 MB. Each of its
+  seven plants is four equipment, `CH1`, `CH2`, `SECLOOP` and `TOWER`. The plants are a well-run
+  one, chillers over-staged, decoupler reverse mixing from low delta-T coils, a fouled condenser,
+  a fouled tower pinned at full fan, a fouled tower that holds its setpoint by fan effort, and a
+  near miss. The exercise `plant-chiller-multi` runs `chiller_staging_fleet` (per plant, through
+  three equipment-filtered variants), `chw_supply_tracking`, `chiller_approach_fouling`,
+  `cooling_tower_approach` and the tower drift family against `TOWER__well_run`. It shows why
+  `cooling_tower_approach` sees a fouled tower only at full fan while fan effort sees a
+  controlled one. A synthetic entry's golden file may list its ingest `runs` and `equipment`
+  count when a plant is several equipment.
 - **TOWT (LBNL RMV2.0 variant) (#165).** New module `mandv.towt_rmv2`: `fit_towt_rmv2(...)` is
   an opt-in reimplementation of RMV2.0 1.1.0's `makeBaseline` (`R/towt_baseline.R`, commit
   979a963). It returns a `TOWTRMV2Model` with `predict`, `as_dict` and `from_dict`, and

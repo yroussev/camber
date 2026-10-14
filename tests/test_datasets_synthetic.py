@@ -206,7 +206,9 @@ def test_maintainer_scripts_skip_it():
 
 #: one expectation file per synthetic entry, ``tests/golden/synthetic/<id>.json``: its generator,
 #: seed and version, its CSV header, its scenario plants in order, the rows each plant has and a
-#: size cap. A new entry adds its own file; nothing here needs editing.
+#: size cap. A new entry adds its own file; nothing here needs editing. An entry whose scenario
+#: plants are several pieces of equipment each (0.105, #145) also lists its ingest ``runs`` and
+#: the ``equipment`` count; both default to one run and one equipment per scenario.
 _EXPECT_DIR = os.path.join(_ROOT, "tests", "golden", "synthetic")
 _SYNTHETIC_IDS = [e.id for e in ds.catalog(kind="synthetic")]
 
@@ -232,7 +234,7 @@ def test_each_synthetic_entry_is_deterministic_small_and_ingests(did, tmp_path):
     assert e.synthetic and e.licence == SYNTHETIC_LICENCE and e.access == "open"
     assert generator_spec(e) == {"name": gen, "seed": want["seed"], "version": want["version"]}
     assert [f["name"] for f in e.files] == list(GENERATORS[gen].files)
-    assert [r["id"] for r in e.ingest["runs"]] == plants
+    assert [r["id"] for r in e.ingest["runs"]] == want.get("runs", plants)
     name = GENERATORS[gen].files[0]
     a = generate_files(e, str(tmp_path / "a"))[name]
     b = generate_files(e, str(tmp_path / "b"))[name]
@@ -246,7 +248,7 @@ def test_each_synthetic_entry_is_deterministic_small_and_ingests(did, tmp_path):
     assert list(dict.fromkeys(raw["scenario"])) == plants
     assert (raw.groupby("scenario").size() == want["rows_per_scenario"]).all()
     got = ds.ingest(did, str(tmp_path / "store"), data_dir=str(tmp_path / "cache"))
-    assert got.facilities == [f"ds-{did}"] and got.equipment == len(plants)
+    assert got.facilities == [f"ds-{did}"] and got.equipment == want.get("equipment", len(plants))
 
 
 # --------------------------------------------------------- generator modules (0.105 scaffold)
