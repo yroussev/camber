@@ -5,6 +5,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -115,3 +116,45 @@ def test_rule_missing_roles_reports_info():
     n = 24
     frame = pd.DataFrame({Role.CW_SUPPLY_TEMP: np.full(n, 85.0)}, index=_idx(n))
     assert CondenserWaterReset().analyze("CWP", frame).severity == "info"
+
+
+# --- 0.105 (#148): how far CW supply sits above wet-bulb + approach ----------- #
+
+
+def test_cws_above_wetbulb_plus_approach_shows_a_high_floor():
+    n = 24 * 14
+    wb = _wetbulb_series(n)
+    full = pd.DataFrame({"CWS_Temp": wb + 7.0, "CWR_Temp": wb + 17.0, "WetBulb": wb}, _idx(n))
+    r = analyze_cw_reset(full, "CWP")
+    assert r.cws_above_wb_plus_approach_median_f == 0.0 and r.design_approach_f == 7.0
+    # a reset that tracks wet-bulb but never below 75 F: the slope still passes
+    floor = full.assign(CWS_Temp=np.maximum(wb + 7.0, 75.0), CWR_Temp=np.maximum(wb, 68.0) + 17)
+    hi = analyze_cw_reset(floor, "CWP")
+    assert hi.reset_present and hi.cws_above_wb_plus_approach_median_f == 2.0
+    # the design approach moves the line, never the verdict
+    loose = analyze_cw_reset(floor, "CWP", design_approach_f=10.0)
+    assert loose.reset_present == hi.reset_present
+    assert loose.cws_slope_per_wetbulb == hi.cws_slope_per_wetbulb
+    assert loose.cws_above_wb_plus_approach_median_f == pytest.approx(
+        hi.cws_above_wb_plus_approach_median_f - 3.0, abs=0.05
+    )
+
+
+def test_rule_reports_the_metric_and_takes_the_approach():
+    n = 24 * 14
+    wb = _wetbulb_series(n)
+    frame = pd.DataFrame(
+        {
+            Role.CW_SUPPLY_TEMP: np.full(n, 85.0),
+            Role.CW_RETURN_TEMP: np.full(n, 95.0),
+            Role.WETBULB_TEMP: wb,
+        },
+        index=_idx(n),
+    )
+    f = CondenserWaterReset().analyze("CWP", frame)
+    g = CondenserWaterReset(design_approach_f=5.0).analyze("CWP", frame)
+    assert f.severity == g.severity == "warn"
+    assert f.metrics["design_approach_f"] == 7.0 and g.metrics["design_approach_f"] == 5.0
+    want = round(float(np.median(85.0 - (wb + 7.0))), 1)
+    assert f.metrics["cws_above_wb_plus_approach_median_f"] == want
+    assert g.metrics["cws_above_wb_plus_approach_median_f"] == round(want + 2.0, 1)

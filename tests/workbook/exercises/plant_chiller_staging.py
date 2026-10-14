@@ -46,6 +46,18 @@ def _two_ways_to_fail(ctx) -> None:
     assert lo.metrics["starts_per_day"] < 1.0 and lo.metrics["runtime_pct"] == 100.0, lo.metrics
 
 
+def _one_output(ctx) -> None:
+    """0.105 (#148): PLANT__short_cycling's tons never move (load_spread_pct 0.0), so its finding
+    carries the one-output caveat; the plants that run at varied loads carry none."""
+    sc = ctx.finding(_STG, "PLANT__short_cycling")
+    assert sc is not None and sc.metrics["load_spread_pct"] == 0.0, sc and sc.metrics
+    assert any("same output" in c for c in sc.caveats), sc.caveats
+    for plant in ("well_staged", "left_on", "fixed_cw", "high_floor"):
+        f = ctx.finding(_STG, f"PLANT__{plant}")
+        assert f is not None and f.metrics["load_spread_pct"] > 40.0, (plant, f and f.metrics)
+        assert not any("same output" in c for c in f.caveats), (plant, f.caveats)
+
+
 def _medians(ctx) -> None:
     """The condenser water each plant runs at: the reset plants in the low 70s, the high-floor
     plant at 80.0 °F, the fixed plant at 85.0 °F."""
@@ -91,6 +103,9 @@ EXERCISE = Exercise(
         Metric(_STG, "PLANT__left_on", "load_factor_median_pct", 10.8, 0.05, quote="10.8%"),
         Metric(_STG, "PLANT__well_staged", "low_load_pct", 12.9, 0.05, quote="12.9%"),
         Check("two ways to fail the staging check", _two_ways_to_fail, quote="100%"),
+        Check(
+            "every short-cycling run at one output", _one_output, quote="`load_spread_pct` is 0.0"
+        ),
         # 2. condenser water: the fixed tower warns, the reset ones pass
         Finding(_CW, "PLANT__fixed_cw", severity=("warn",)),
         Finding(_CW, "PLANT__well_staged", severity=("ok",)),
@@ -102,6 +117,31 @@ EXERCISE = Exercise(
         Finding(_CW, "PLANT__high_floor", severity=("ok",)),
         Metric(_CW, "PLANT__high_floor", "cws_slope_per_wetbulb", 0.331, 0.0005, quote="0.33"),
         Check("the condenser water each plant runs at", _medians, quote="80.0 °F"),
+        # 0.105 (#148): how far above the wet-bulb plus the 7 °F design approach (info only)
+        Metric(
+            _CW,
+            "PLANT__high_floor",
+            "cws_above_wb_plus_approach_median_f",
+            7.5,
+            0.05,
+            quote="7.5 °F",
+        ),
+        Metric(
+            _CW,
+            "PLANT__well_staged",
+            "cws_above_wb_plus_approach_median_f",
+            0.3,
+            0.05,
+            quote="0.3 °F",
+        ),
+        Metric(
+            _CW,
+            "PLANT__fixed_cw",
+            "cws_above_wb_plus_approach_median_f",
+            12.5,
+            0.05,
+            quote="12.5 °F",
+        ),
         # 4. the label score
         Score(_STG, tpr=1.0, fpr=0.0, quote="TPR 100%"),
         Score(_CW, tpr=1.0, fpr=0.0),

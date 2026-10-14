@@ -87,6 +87,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `timezone=`.
 - **Error messages print plain numbers (#173).** The TOWT unseen-bin error printed
   `np.int32(9)`; it prints `9`. The SEP chaining period error prints dates, not `Timestamp(...)`.
+- **`hw_pump_summer_lockout` weights its running shares by duty (#149).** As #143 did for
+  `boiler_summer_lockout`, a pump or boiler status resampled coarser than it was logged is read as
+  its duty (clipped to 0-1), so a pump running part of a warm hour is no longer read as off.
+  `pump_running_pct` and `summer_run_pct` weight each sample by the pump's duty, and
+  `boiler_off_pct` by the pump's duty times the share of the sample the boiler was off. The
+  evidence mask shades every warm sample the pump ran in at all. `n_running` and
+  `max_oat_running_f` still read the samples it ran for most of. A speed or flow stand-in has no
+  duty and keeps its running cut; its caveat now says so. Results on a 0/1 trend are unchanged,
+  and so are the `plant-lockout` answers.
 
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
@@ -197,6 +206,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   A stored `TOWTRMV2Model` rebuilds through `rebaseline.mv_model_from_dict`, and its predict
   counts a temperature outside its fitted bounds as `n_temp_screened` and a missing one as
   `n_no_temperature`, as the other predicts do (#168).
+- **Plant-rule context (#148).** `condenser_water_reset` reports
+  `cws_above_wb_plus_approach_median_f`, the median over the operating samples of how far the
+  condenser-water supply sits above the wet-bulb plus the tower's design approach, and takes a new
+  `design_approach_f` (default 7 °F, as in `cooling_tower_approach`), so a reset held up by a high
+  floor is visible: 7.5 °F on the `plant-chiller-staging` high-floor plant against 0.3 °F on the
+  well-staged one. `chiller_staging` reports `load_spread_pct` (the 10th to 90th percentile of the
+  running tons, as a share of their peak) and adds a caveat when it is 5 % or less: every run is
+  at about one output, so the load factor says nothing about part load. Both are information
+  only; no verdict changes.
 
 ### Changed
 - **The trust score checks the mixed-air order when a unit has no airflow stations (#151).** The

@@ -28,6 +28,7 @@ from camber.rules.builtin import builtin_registry, make_rule  # noqa: E402
 from camber.rules.hwpump_lockout_rule import HWPumpSummerLockout, pump_run  # noqa: E402
 from camber.rules.param_docs import PARAM_DOCS, rule_params  # noqa: E402
 from camber.rules.triage import group_findings  # noqa: E402
+from camber.schedules import occupied_mask  # noqa: E402
 from camber.scorecard import RULE_CATEGORY  # noqa: E402
 from camber.soo import evaluate_soo  # noqa: E402
 from camber.soo_library import g36_plant_sequence  # noqa: E402
@@ -301,3 +302,70 @@ def test_rcx_overrides_count_an_inherited_lockout_as_site_configured():
         "hw_pump_summer_lockout": {"summer_lockout_oat_f": 58},
     }
     assert _rule_param_overrides({"rules": ["boiler_summer_lockout"]}) == {}
+
+
+# --------------------------------------------------------------------------- 0.105 (#149) duty
+
+
+def _quarter_hour_frame(days=14):
+    """A 15-minute trend: OAT 80 F on weekday afternoons (12:00-17:00), 55 F otherwise. In the
+    warm hours the pump runs the first 15 minutes of each hour, the boiler never; in the cool
+    hours both run all hour."""
+    idx = pd.date_range("2025-07-07", periods=days * 96, freq="15min")
+    warm = (idx.hour >= 12) & (idx.hour < 17)
+    oat = np.where(warm, 80.0, 55.0)
+    pump = np.where(warm, (idx.minute == 0).astype(float), 1.0)
+    boiler = np.where(warm, 0.0, 1.0)
+    return pd.DataFrame(
+        {Role.OAT: oat, Role.PUMP_STATUS: pump, Role.BOILER_STATUS: boiler}, index=idx
+    )
+
+
+def test_partly_on_warm_hour_counts_on_a_resampled_trend():
+    fine = _quarter_hour_frame()
+    hourly = fine.resample("1h").mean()  # the warm hours' pump status reads 0.25
+    rule = HWPumpSummerLockout()
+    a, b = rule.analyze("P", fine), rule.analyze("P", hourly)
+    # weighted by duty the hourly shares match the 15-minute ones; under the old > 0.5 cut the
+    # hourly pump never ran above the lockout (summer_run_pct 0, ok)
+    for k in ("summer_run_pct", "pump_running_pct", "boiler_off_pct"):
+        assert b.metrics[k] == pytest.approx(a.metrics[k], abs=0.01), k
+    assert b.metrics["summer_run_pct"] > 5.0 and b.severity == a.severity != "ok"
+    assert b.metrics["boiler_off_pct"] == 100.0
+    # n_running still counts the hours it ran for most of
+    assert b.metrics["n_running"] < len(hourly[occupied_mask(hourly.index)])
+    # the evidence mask shades the partly-on warm hours the share counts
+    mask = rule.violation_mask(hourly)
+    assert mask.any() and (hourly.loc[mask, Role.OAT] > 65).all()
+
+
+def test_part_firing_boiler_weights_the_boiler_off_share():
+    f = _frame(np.ones(N), np.full(N, 80.0), **{Role.BOILER_STATUS: np.full(N, 0.25)})
+    got = HWPumpSummerLockout().analyze("P", f)
+    assert got.metrics["boiler_off_pct"] == 75.0  # off three quarters of every warm hour
+
+
+def test_plain_zero_one_results_are_unchanged():
+    oat = _oat()
+    pump = ((oat > 60) | (np.arange(N) % 5 == 0)).astype(float)
+    boiler = (oat < 70).astype(float)
+    got = analyze_hw_pump_lockout(
+        pd.DataFrame({"PumpRun": pump, "OAT": oat, "BoilerRun": boiler}, index=_idx()), "P"
+    )
+    # the pre-#149 arithmetic: shares of 0/1 samples
+    occ = occupied_mask(_idx())
+    p, o, b = pump[occ], oat[occ], boiler[occ]
+    run = p > 0.5
+    warm = o[run] > SUMMER_LOCKOUT_OAT_F
+    assert got.pump_running_pct == round(100.0 * run.sum() / len(p), 2)
+    assert got.summer_run_pct == round(100.0 * float(warm.mean()), 2)
+    assert got.boiler_off_pct == round(100.0 * float((b[run][warm] <= 0.5).mean()), 2)
+    assert got.n_running == int(run.sum())
+
+
+def test_speed_stand_in_keeps_its_cut_and_says_it_has_no_duty():
+    oat = _oat()
+    f = pd.DataFrame({Role.OAT: oat, Role.HW_PUMP_SPEED: np.full(N, 3.0)}, index=_idx())
+    got = HWPumpSummerLockout().analyze("P", f)  # 3 % is below the 5 % running cut
+    assert got.metrics["pump_running_pct"] == 0.0 and got.severity == "ok"
+    assert any("has no duty" in c for c in got.caveats)

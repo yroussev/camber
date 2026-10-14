@@ -2245,6 +2245,18 @@ PARAM_DOCS["condenser_water_reset"] = {
         "derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a "
         "little: give elevation_ft near this threshold.",
     ),
+    # 0.105 (#148): the line the information-only cws_above_wb_plus_approach_median_f reads from
+    "design_approach_f": _P(
+        "°F",
+        "CAMBER judgment: cooling_tower_approach's default; a well-sized, clean tower achieves "
+        "~3-7 °F",
+        "Use the design approach from the tower selection (leaving water minus design wet-bulb), "
+        "the same value as cooling_tower_approach's design_approach_f.",
+        (2.0, 15.0),
+        "Information only: it sets the metric cws_above_wb_plus_approach_median_f (the median of "
+        "CW supply minus wet-bulb plus this approach over the operating samples), which shows a "
+        "reset held up by a high floor. It never changes the verdict, which reads the slope.",
+    ),
     # 0.98 (#92, 098-followups): the derived wet-bulb takes the site elevation
     **_SITE_ELEVATION,
 }

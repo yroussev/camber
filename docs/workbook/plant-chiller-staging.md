@@ -74,9 +74,9 @@ camber run stg05.json --out stg05_out
    weeks. Find the heat wave.
 2. **Run the exercise's config** (the commands above). For each plant, read `chiller_staging` in
    `stg_out/findings.json`: the severity, `starts_per_day`, `runtime_pct`,
-   `load_factor_median_pct` and `low_load_pct`.
+   `load_factor_median_pct`, `low_load_pct`, `load_spread_pct` and any caveat.
 3. **The condenser water.** Read `condenser_water_reset` for each plant: `cws_slope_per_wetbulb`,
-   `cws_median_f` and `reset_present`.
+   `cws_median_f`, `cws_above_wb_plus_approach_median_f` and `reset_present`.
 4. **Score.** Run `camber datasets score` and read the rates for the two rules.
 5. **Ask for more.** Run the `slope05` variant and note which verdicts change.
 
@@ -97,12 +97,19 @@ camber run stg05.json --out stg05_out
   divided by the days in the trend), `runtime_pct`, `load_factor_median_pct` (the median load
   while running, as a share of the chiller's own observed peak) and `low_load_pct` (the share of
   running samples below 40 % of that peak). It warns at 6 starts a day or 25 % of running time at
-  low load, and faults at 12 starts or 50 %.
+  low load, and faults at 12 starts or 50 %. `load_spread_pct` is the spread of the running load
+  (its 10th to 90th percentile) as a share of that peak. When it is 5 % or less, every run is at
+  about the same output, and the finding carries a caveat: the load factor is then measured
+  against that one output, so it says nothing about part load.
 - **Condenser water.** `condenser_water_reset` regresses the tower's leaving water on the
   measured wet-bulb over the samples the tower fan runs and reports the slope
   (`cws_slope_per_wetbulb`), the median (`cws_median_f`) and `reset_present`. A slope under
   `reset_slope_flat` (0.3 °F per °F by default) is a flat setpoint: a `warn`, an opportunity
-  rather than a broken part.
+  rather than a broken part. `cws_above_wb_plus_approach_median_f` is for information only: the
+  median of how far the condenser water sits above the wet-bulb plus the tower's design approach
+  (`design_approach_f`, 7 °F by default, as in `cooling_tower_approach`). Near 0 the tower makes
+  the coldest water its approach allows; well above it, a fixed setpoint or a reset's floor holds
+  the water warmer. It never changes the verdict.
 - **Score.** `camber datasets score` prints the true- and false-positive rates for the entry's two
   declared detectors.
 
