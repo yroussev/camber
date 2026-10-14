@@ -1,0 +1,41 @@
+{
+  "_comment": "Workbook exercise zone-g36-fleet, single-maximum reheat: AHU__reheat's six boxes, reheat_minimization_g36 and zones_heat_cool_census. Two boxes reheat at 80 % of their cooling maximum airflow: the per-box rule faults on both, the fleet census passes them (18.3 % of occupied hours).",
+  "_dataset": "synthetic-g36-vav-fleet",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-g36-vav-fleet"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "VAV1__reheat",
+        "VAV2__reheat",
+        "VAV3__reheat",
+        "VAV4__reheat",
+        "VAV5__reheat",
+        "VAV6__reheat"
+      ]
+    }
+  ],
+  "topology": {
+    "parents": {
+      "VAV1__reheat": "AHU__reheat",
+      "VAV2__reheat": "AHU__reheat",
+      "VAV3__reheat": "AHU__reheat",
+      "VAV4__reheat": "AHU__reheat",
+      "VAV5__reheat": "AHU__reheat",
+      "VAV6__reheat": "AHU__reheat"
+    }
+  },
+  "rules": [
+    "reheat_minimization_g36",
+    "zones_heat_cool_census"
+  ],
+  "report": {
+    "level": 2
+  }
+}

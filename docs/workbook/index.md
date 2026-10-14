@@ -94,6 +94,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | [`zone-reheat-saturated`: a zone below setpoint with its reheat maxed out](zone-reheat-saturated.md) | `lbnl-fpu`, `ornl-frp-vav` |
 | [Ch. 5][pnnl-retuning-ch5], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | [`zone-dcv`: is outdoor air following occupancy?](zone-dcv.md) | `finnish-dcv`, `b4b-windesheim`, `sdu-ou44` |
 | [Ch. 5][pnnl-retuning-ch5], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | [`zone-min-oa`: minimum outdoor air and 62.1 system ventilation](zone-min-oa.md) | `lbnl-b59` |
+| [Ch. 5][pnnl-retuning-ch5], [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | [`zone-g36-fleet`: a G36 VAV fleet: rogue zones, starved cohorts and resets](zone-g36-fleet.md) | `synthetic-g36-vav-fleet` |
 <!-- END workbook-zone (#81) -->
 
 <!-- BEGIN workbook-plant (#82) -->

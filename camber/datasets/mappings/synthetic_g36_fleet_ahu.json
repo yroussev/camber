@@ -1,0 +1,14 @@
+{
+  "_comment": "Synthetic G36 VAV fleet (generator g36_vav_fleet, camber/datasets/_synthetic_g36_vav_fleet.py; 0.105, #144) -> CAMBER Role mapping for one air handler. Every column is CAMBER's own: OAT the outdoor temperature in F, SF_STS the supply fan's run status (1 running), OCC the building's occupancy point (1 occupied), SAT and SAT_SP the supply-air temperature and its trim-and-respond setpoint in F, SAT_REQ the SAT reset requests the controller summed from its six boxes, DSP and DSP_SP the duct static pressure and its trim-and-respond setpoint in in. w.c., DSP_REQ the static-pressure reset requests. The scenario column selects one air handler per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy",
+    "SAT": "supply_air_temp",
+    "SAT_SP": "supply_air_temp_sp",
+    "SAT_REQ": "sat_reset_requests",
+    "DSP": "duct_static",
+    "DSP_SP": "duct_static_sp",
+    "DSP_REQ": "static_pressure_requests"
+  }
+}

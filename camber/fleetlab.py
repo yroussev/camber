@@ -19,7 +19,8 @@ mode) the harness checks by **attribution**, not just a fire/no-fire bit.
 :func:`generate_fleet` returns the labeled fleet; :func:`labeled_records` / :func:`targets` /
 :func:`attribution` / :func:`coverage` score the six fleet detectors with the same
 :func:`camber.eval.benchmark` method the LBNL / synthetic benchmarks use. Deterministic (fixed
-construction + seeded noise) so a committed baseline is stable. numpy/pandas + stdlib.
+construction + integer-hash noise from :mod:`camber._hashnoise`, the same on every machine) so a
+committed baseline is stable. numpy/pandas + stdlib.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from . import _hashnoise
 from .g36_reset import SAT_TR, STATIC_TR, TRParams, tr_simulate
 from .model.roles import Role
 from .model.topology import Topology
@@ -180,8 +182,9 @@ def _reset_frame(reset: str, agg: np.ndarray, idx, archetype: str, seed: int) ->
     sp_role = Role.SUPPLY_AIR_TEMP_SP if reset == "sat" else Role.DUCT_STATIC_SP
     req_role = Role.SAT_RESET_REQUESTS if reset == "sat" else Role.STATIC_PRESSURE_REQUESTS
     params: TRParams = SAT_TR if reset == "sat" else STATIC_TR
-    rng = np.random.default_rng(seed)
     jitter = 0.03 if reset == "sat" else 0.005
+    # uniform in [-jitter, jitter) from the integer hash, the same bytes on every machine (#144)
+    noise = jitter * 2.0 * (_hashnoise.noise(len(idx), seed, RESETS.index(reset)) - 0.5)
     expected = tr_simulate(agg, params)
     mid = 0.5 * (params.sp_max + params.sp_min)
     trim_end = params.sp_max if params.sp_trim > 0 else params.sp_min  # energy-saving end
@@ -190,15 +193,15 @@ def _reset_frame(reset: str, agg: np.ndarray, idx, archetype: str, seed: int) ->
     demand = eff > 0
 
     if archetype == "reset_stuck":
-        sp = np.full(len(idx), mid) + rng.normal(0, jitter, len(idx))
+        sp = np.full(len(idx), mid) + noise
     elif archetype == "reset_not_responding":  # under demand, parked at the trim (saving) end
-        sp = np.where(demand, trim_end, mid) + rng.normal(0, jitter, len(idx))
+        sp = np.where(demand, trim_end, mid) + noise
     elif archetype == "reset_not_trimming":  # while idle, parked at the demand end
-        sp = np.where(~demand, demand_end, mid) + rng.normal(0, jitter, len(idx))
+        sp = np.where(~demand, demand_end, mid) + noise
     elif archetype == "reset_diverges":  # moves the opposite way to the T&R command (mid-band)
-        sp = mid - 0.5 * (expected - mid) + rng.normal(0, jitter, len(idx))
+        sp = mid - 0.5 * (expected - mid) + noise
     else:  # healthy: track the request-implied T&R trajectory
-        sp = expected + rng.normal(0, jitter, len(idx))
+        sp = expected + noise
     return pd.DataFrame({sp_role: sp, req_role: agg}, index=idx)
 
 
