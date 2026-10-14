@@ -1,0 +1,43 @@
+{
+  "_comment": "Workbook exercise zone-g36-fleet, the near miss alone: AHU__near_miss's six boxes and the rogue-zone and cohort-starvation censuses. Its zone 1 carries a little extra load: it asks for colder air most often and holds the binding request most often, but under the census's 50 % bar.",
+  "_dataset": "synthetic-g36-vav-fleet",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-g36-vav-fleet"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "VAV1__near_miss",
+        "VAV2__near_miss",
+        "VAV3__near_miss",
+        "VAV4__near_miss",
+        "VAV5__near_miss",
+        "VAV6__near_miss"
+      ]
+    }
+  ],
+  "topology": {
+    "parents": {
+      "VAV1__near_miss": "AHU__near_miss",
+      "VAV2__near_miss": "AHU__near_miss",
+      "VAV3__near_miss": "AHU__near_miss",
+      "VAV4__near_miss": "AHU__near_miss",
+      "VAV5__near_miss": "AHU__near_miss",
+      "VAV6__near_miss": "AHU__near_miss"
+    }
+  },
+  "rules": [
+    "sat_rogue_zone_census",
+    "static_rogue_zone_census",
+    "sat_cohort_starvation",
+    "static_cohort_starvation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

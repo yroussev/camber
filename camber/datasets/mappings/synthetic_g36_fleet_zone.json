@@ -1,0 +1,14 @@
+{
+  "_comment": "Synthetic G36 VAV fleet (generator g36_vav_fleet, camber/datasets/_synthetic_g36_vav_fleet.py; 0.105, #144) -> CAMBER Role mapping for one single-duct reheat box; the run's vars fill {n} (1 to 6). Every column is CAMBER's own: ZN{n}_T the space temperature, ZN{n}_CLG_SP and ZN{n}_HTG_SP its active cooling and heating setpoints in F (set back to 80 and 62 with the fan off), ZN{n}_FLOW the box's airflow in cfm, ZN{n}_FLOW_MIN its minimum airflow setpoint in cfm (mapped to airflow_sp: reheat_minimization_g36 and zones_heat_cool_census read airflow_sp as the minimum, and the static-pressure census compares airflow with it), ZN{n}_DMPR the damper position in %, ZN{n}_RHT_VLV the reheat valve command in %. The air handler's SF_STS and OCC are mapped onto every box too, so the reset-request censuses count only cycles with the fan on and the building occupied. The scenario column selects one air handler per ingest run and is not a point.",
+  "aliases": {
+    "ZN{n}_T": "space_temp",
+    "ZN{n}_CLG_SP": "cool_sp",
+    "ZN{n}_HTG_SP": "heat_sp",
+    "ZN{n}_FLOW": "airflow",
+    "ZN{n}_FLOW_MIN": "airflow_sp",
+    "ZN{n}_DMPR": "damper",
+    "ZN{n}_RHT_VLV": "heat_valve",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy"
+  }
+}

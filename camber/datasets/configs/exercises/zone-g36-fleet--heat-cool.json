@@ -1,0 +1,41 @@
+{
+  "_comment": "Workbook exercise zone-g36-fleet, overlapping setpoints: AHU__heat_cool's six boxes, reheat_minimization_g36 and zones_heat_cool_census. Five boxes have their heating setpoint above their cooling setpoint: the reheat valve and the cooling airflow fight, and the census faults.",
+  "_dataset": "synthetic-g36-vav-fleet",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-g36-vav-fleet"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "VAV1__heat_cool",
+        "VAV2__heat_cool",
+        "VAV3__heat_cool",
+        "VAV4__heat_cool",
+        "VAV5__heat_cool",
+        "VAV6__heat_cool"
+      ]
+    }
+  ],
+  "topology": {
+    "parents": {
+      "VAV1__heat_cool": "AHU__heat_cool",
+      "VAV2__heat_cool": "AHU__heat_cool",
+      "VAV3__heat_cool": "AHU__heat_cool",
+      "VAV4__heat_cool": "AHU__heat_cool",
+      "VAV5__heat_cool": "AHU__heat_cool",
+      "VAV6__heat_cool": "AHU__heat_cool"
+    }
+  },
+  "rules": [
+    "reheat_minimization_g36",
+    "zones_heat_cool_census"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "_comment": "Workbook exercise zone-g36-fleet, the healthy fleet alone: AHU__healthy and its six boxes, every rule of the main run. Both resets are effective, the censuses and zones_heat_cool_census pass; cohort_space_temp, comparing six boxes whose mean temperatures sit within a fraction of a degree, flags the north zone.",
+  "_dataset": "synthetic-g36-vav-fleet",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-g36-vav-fleet"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "supply_air_temp_sp",
+      "equip": [
+        "AHU__healthy"
+      ]
+    },
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "VAV1__healthy",
+        "VAV2__healthy",
+        "VAV3__healthy",
+        "VAV4__healthy",
+        "VAV5__healthy",
+        "VAV6__healthy"
+      ]
+    }
+  ],
+  "topology": {
+    "parents": {
+      "VAV1__healthy": "AHU__healthy",
+      "VAV2__healthy": "AHU__healthy",
+      "VAV3__healthy": "AHU__healthy",
+      "VAV4__healthy": "AHU__healthy",
+      "VAV5__healthy": "AHU__healthy",
+      "VAV6__healthy": "AHU__healthy"
+    }
+  },
+  "rules": [
+    "sat_reset_effectiveness",
+    "static_reset_effectiveness",
+    "sat_rogue_zone_census",
+    "static_rogue_zone_census",
+    "sat_cohort_starvation",
+    "static_cohort_starvation",
+    {
+      "name": "cohort_airflow",
+      "params": {
+        "group_by_topology": true
+      }
+    },
+    "cohort_space_temp",
+    "reheat_minimization_g36",
+    "zones_heat_cool_census"
+  ],
+  "report": {
+    "level": 2
+  }
+}
