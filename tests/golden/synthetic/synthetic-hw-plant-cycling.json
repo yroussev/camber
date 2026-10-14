@@ -1,0 +1,25 @@
+{
+ "_comment": "0.104 (#137): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "hw_plant_cycling",
+ "seed": 137,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "BLR_FIRE",
+  "HWS_T",
+  "HWR_T",
+  "HWP_SPD",
+  "HW_DP",
+  "HW_DP_SP"
+ ],
+ "scenarios": [
+  "well_tuned",
+  "short_cycling",
+  "marginal",
+  "low_delta_t"
+ ],
+ "rows_per_scenario": 2016,
+ "max_bytes": 1000000
+}

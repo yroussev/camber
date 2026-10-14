@@ -34,12 +34,21 @@ or over the size cap, when a docs image has no alt text or no caption line, when
 figure or screenshot is missing or not referenced, when a file under ``docs/img/`` is not one
 this script makes (stale), or when the images together exceed the total cap.
 
+**Per-entry figure modules** (0.105). A figure may also live in a module of its own under
+``scripts/docs_figures.d/`` (the synthetic catalog entries' workbook figures do), so adding one
+edits no shared file. Each ``<name>.py`` there defines ``register(df)``, where ``df`` gives the
+names of this script (``df.figure``, ``df._evidence_fig``, ``df._synthetic_plant``, ``df.WIDE``,
+...), and registers its builders with ``@df.figure("<path under docs/img>")``. The modules are
+loaded in name order when this script is (so ``--check`` sees them too): they import matplotlib,
+pandas and CAMBER inside the builders only, never at module level.
+
 Dev tooling; not packaged.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import io
 import os
 import re
@@ -907,31 +916,6 @@ def _wb_boiler():
     return _evidence_fig("boiler_short_cycle", "BLR-1", frame, figsize=WIDE)
 
 
-@figure("workbook/plant-lockout.png")
-def _wb_lockout():
-    """The plant-lockout exercise's own synthetic plant (CAMBER's generator, not a download)."""
-    import io
-
-    import pandas as pd
-
-    from camber.datasets._synthetic import GENERATORS
-    from camber.model.roles import Role
-
-    text = GENERATORS["hw_plant_lockout"].build(133)["hw_plant_lockout.csv"]
-    raw = pd.read_csv(io.StringIO(text), parse_dates=["Timestamp"])
-    raw = raw[raw["scenario"] == "pump_left_on"].set_index("Timestamp")
-    raw = raw.loc["2025-05-19":"2025-06-08"]  # three weeks around the warm spell
-    frame = pd.DataFrame(
-        {
-            Role.OAT: raw["OAT"],
-            Role.PUMP_STATUS: raw["HWP_STS"].astype(float),
-            Role.HW_PUMP_SPEED: raw["HWP_SPD"],
-            Role.BOILER_STATUS: raw["BLR_FIRE"].astype(float),
-        }
-    )
-    return _evidence_fig("hw_pump_summer_lockout", "PLANT__pump_left_on", frame, figsize=WIDE)
-
-
 def _synthetic_plant(generator: str, seed: int, scenario: str):
     """One scenario plant of a synthetic catalog entry's generator, indexed by its timestamps."""
     import io
@@ -943,50 +927,6 @@ def _synthetic_plant(generator: str, seed: int, scenario: str):
     text = next(iter(GENERATORS[generator].build(seed).values()))
     raw = pd.read_csv(io.StringIO(text), parse_dates=["Timestamp"])
     return raw[raw["scenario"] == scenario].set_index("Timestamp")
-
-
-@figure("workbook/plant-boiler-cycling.png")
-def _wb_boiler_cycling():
-    """The plant-boiler-cycling exercise's own synthetic plant (#137): two days of firing."""
-    import pandas as pd
-
-    from camber.model.roles import Role
-
-    raw = _synthetic_plant("hw_plant_cycling", 137, "short_cycling").loc["2025-03-12":"2025-03-13"]
-    frame = pd.DataFrame({Role.BOILER_STATUS: raw["BLR_FIRE"].astype(float), Role.OAT: raw["OAT"]})
-    return _evidence_fig("boiler_short_cycle", "PLANT__short_cycling", frame, figsize=WIDE)
-
-
-@figure("workbook/plant-chiller-staging.png")
-def _wb_chiller_staging():
-    """The plant-chiller-staging exercise's own synthetic plant (#137): condenser water against
-    the wet-bulb, against a reset that follows the wet-bulb plus 5 to 9 °F."""
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    from camber.charts.diagnostic import DiagnosticTemplate, diagnostic_scatter
-    from camber.model.roles import Role
-
-    raw = _synthetic_plant("chw_plant_staging", 137, "fixed_cw").dropna(subset=["CWS_T"])
-    frame = raw.rename(columns={"WB": Role.WETBULB_TEMP, "CWS_T": Role.CW_SUPPLY_TEMP})
-
-    def expected(xv):
-        mid = np.clip(np.asarray(xv, float) + 7.0, 65.0, 85.0)
-        return mid - 2.0, mid + 2.0
-
-    template = DiagnosticTemplate(
-        "cw_reset",
-        Role.WETBULB_TEMP,
-        Role.CW_SUPPLY_TEMP,
-        expected,
-        "wet-bulb (°F)",
-        "condenser water supply (°F)",
-        "PNNL re-tuning ch. 8: reset with the wet-bulb",
-    )
-    fig, ax = plt.subplots(figsize=STD)
-    diagnostic_scatter(frame, template, ax=ax)
-    fig.tight_layout()
-    return fig
 
 
 @figure("workbook/plant-sensor-vs-equipment.png")
@@ -1447,6 +1387,44 @@ def _lab_walkthrough(tmp: str, out: dict) -> list:
         httpd.server_close()
         app.close()
     return names
+
+
+# --------------------------------------------------------------------------- per-entry modules
+
+#: the directory of per-entry figure modules (see the module docstring)
+FIGURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs_figures.d")
+
+
+class _Host:
+    """What a per-entry figure module's ``register(df)`` gets: this script's names, read live."""
+
+    def __getattr__(self, name):
+        try:
+            return globals()[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+def load_figure_modules(directory: str = FIGURES_DIR) -> list:
+    """Load every ``*.py`` module of ``directory`` (name order) and call its ``register(df)``;
+    the module names loaded."""
+    done = []
+    if not os.path.isdir(directory):
+        return done
+    for fn in sorted(os.listdir(directory)):
+        if not fn.endswith(".py") or fn.startswith("_"):
+            continue
+        spec = importlib.util.spec_from_file_location(
+            f"docs_figures_d_{fn[:-3]}", os.path.join(directory, fn)
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.register(_Host())
+        done.append(fn[:-3])
+    return done
+
+
+load_figure_modules()
 
 
 # --------------------------------------------------------------------------- --check

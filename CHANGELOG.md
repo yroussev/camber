@@ -268,6 +268,18 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   the rows whose final prediction was clipped, 0 by construction since the local predictions are
   clipped first. The new `n_local_clipped` counts rows where any local prediction was clipped,
   which `n_clipped` counted before.
+- **A synthetic catalog entry now adds files instead of editing shared ones.** A generator can
+  live in its own module, `camber/datasets/_synthetic_<name>.py`, which registers itself with
+  `_synthetic.register`; `_synthetic` imports every such module. A catalog entry can live in a
+  file of its own, `camber/datasets/catalog.d/<NNN>-<id>.json`, loaded after `catalog.json` in
+  the order of its prefix. The three synthetic entries moved there, and the loaded catalog is
+  unchanged: the same entries in the same order. A docs figure can live in
+  `scripts/docs_figures.d/`. The catalog and synthetic tests derive their entry lists from
+  `catalog.d` and the generator registry, and check each entry against its own expectation file
+  in `tests/golden/synthetic/`. `mkdocs.yml`, the workbook instructor page and
+  `camber/references.py` reserve marked slots for the four synthetic entries planned for 0.105
+  (#144-#147). The dataset-host exemption of the site-neutrality guard covers `catalog.d`.
+  docs/DATASETS.md has a new section, "Adding a synthetic entry".
 
 ### Deprecated
 - `mandv.degreeday.fit_degree_day` and `DegreeDayModel` (#163), since 0.105, removed in 1.0: the

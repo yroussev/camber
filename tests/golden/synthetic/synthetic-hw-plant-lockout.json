@@ -1,0 +1,25 @@
+{
+ "_comment": "0.103 (#133): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "hw_plant_lockout",
+ "seed": 133,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "BLR_FIRE",
+  "BLR_GAS_KW",
+  "HWP_STS",
+  "HWP_SPD",
+  "HWS_T",
+  "HWR_T"
+ ],
+ "scenarios": [
+  "locked_out",
+  "warm_spell",
+  "pump_left_on",
+  "low_lockout"
+ ],
+ "rows_per_scenario": 1344,
+ "max_bytes": 500000
+}

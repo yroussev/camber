@@ -19,8 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber import datasets  # noqa: E402
 from camber.datasets._catalog import (  # noqa: E402
+    CATALOG_DIR,
     LICENCES,
     DatasetEntry,
+    catalog_entry_files,
     is_pinned_url,
     is_research_only_licence,
     load_catalog_data,
@@ -58,47 +60,68 @@ def _entry(data, did):
 # --------------------------------------------------------------------------- the shipped catalog
 
 
+#: ``catalog.json``'s entries, in order. The per-entry files in ``catalog.d/`` follow them.
+_CATALOG_JSON_IDS = [
+    "lbnl-sdahu",
+    "lbnl-fcu",
+    "lbnl-ddahu",
+    "lbnl-fpu",
+    "lbnl-chiller",
+    "lbnl-boiler",
+    "bdg2",
+    # 0.89 intake A: DCV / CO2
+    "lbnl-b59",
+    "valladolid-uva",
+    "finnish-dcv",
+    "b4b-windesheim",
+    # 0.89 intake B: AHU and refrigerant side
+    "nuig-ahu101",
+    "irish-ahu",
+    "nist-heatpump-fdd",
+    "nist-ibal",
+    # 0.89 intake C: real buildings and refrigeration
+    "robod",
+    "sdu-ou44",
+    "ornl-frp-ops",
+    "ornl-supermarket-fdd",
+    # 0.89 intake D: multi-zone VAV and the research-only tier
+    "ornl-frp-vav",
+    "rbc-g36-ahu",
+    "at-30bldg-sensors",
+    # 0.92 intake: meter data
+    "cofactor-drammen",
+    # 0.96 (#75): Brick-labelled real buildings, the role-suggester evaluation set
+    "bts",
+]
+#: the per-entry files shipped when catalog.d arrived (0.105), in load order: the synthetic
+#: entries of 0.103 (#133) and 0.104 (#137). A new synthetic entry adds its own file (see
+#: docs/DATASETS.md, "Adding a synthetic entry"); nothing here needs editing for it.
+_FIRST_ENTRY_FILES = [
+    "200-synthetic-hw-plant-lockout.json",
+    "400-synthetic-hw-plant-cycling.json",
+    "600-synthetic-chw-plant-staging.json",
+]
+
+
+def _entry_file_ids() -> list:
+    """The ids of the per-entry files, in load order (``<NNN>-<id>.json``)."""
+    return [name[4:-5] for name in catalog_entry_files()]
+
+
 def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
     data = load_catalog_data()
     assert validate_catalog(data, deny_patterns=_guard_patterns()) == []
     ids = [e.id for e in load_entries()]
-    assert ids == [
-        "lbnl-sdahu",
-        "lbnl-fcu",
-        "lbnl-ddahu",
-        "lbnl-fpu",
-        "lbnl-chiller",
-        "lbnl-boiler",
-        "bdg2",
-        # 0.89 intake A: DCV / CO2
-        "lbnl-b59",
-        "valladolid-uva",
-        "finnish-dcv",
-        "b4b-windesheim",
-        # 0.89 intake B: AHU and refrigerant side
-        "nuig-ahu101",
-        "irish-ahu",
-        "nist-heatpump-fdd",
-        "nist-ibal",
-        # 0.89 intake C: real buildings and refrigeration
-        "robod",
-        "sdu-ou44",
-        "ornl-frp-ops",
-        "ornl-supermarket-fdd",
-        # 0.89 intake D: multi-zone VAV and the research-only tier
-        "ornl-frp-vav",
-        "rbc-g36-ahu",
-        "at-30bldg-sensors",
-        # 0.92 intake: meter data
-        "cofactor-drammen",
-        # 0.96 (#75): Brick-labelled real buildings, the role-suggester evaluation set
-        "bts",
-        # 0.103 (#133): generated locally by CAMBER (kind "synthetic")
-        "synthetic-hw-plant-lockout",
-        # 0.104 (#137): more synthetic lab cases
-        "synthetic-hw-plant-cycling",
-        "synthetic-chw-plant-staging",
-    ]
+    assert ids == _CATALOG_JSON_IDS + _entry_file_ids()
+    shipped = json.loads(package_text("catalog.json"))["datasets"]
+    assert [d["id"] for d in shipped] == _CATALOG_JSON_IDS
+    files = catalog_entry_files()
+    assert [f for f in files if f in _FIRST_ENTRY_FILES] == _FIRST_ENTRY_FILES
+    # every synthetic entry lives in a per-entry file, never in catalog.json
+    assert not any(d.get("kind") == "synthetic" for d in shipped)
+    for name in files:
+        d = json.loads(package_text(CATALOG_DIR, name))
+        assert d["kind"] == "synthetic", name
 
 
 def test_every_file_is_pinned_https_and_bdg2_is_share_alike():
@@ -188,7 +211,9 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 27
+    synthetic = _entry_file_ids()  # every per-entry file is a synthetic entry (checked above)
+    assert len(synthetic) >= 3
+    assert len(datasets.catalog()) == 24 + len(synthetic)
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
@@ -210,21 +235,26 @@ def test_catalog_filters_and_get():
         "nist-ibal",
         "ornl-supermarket-fdd",
     ]
-    assert [e.id for e in datasets.catalog(kind="synthetic")] == [
+    assert [e.id for e in datasets.catalog(kind="synthetic")] == synthetic
+    first = [f[4:-5] for f in _FIRST_ENTRY_FILES]
+    assert first == [
         "synthetic-hw-plant-lockout",
         "synthetic-hw-plant-cycling",
         "synthetic-chw-plant-staging",
     ]
+    assert [i for i in synthetic if i in first] == first
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
+    # every synthetic entry is labelled (its scenarios are its ground truth)
     assert len(datasets.catalog(labeled=False)) == 14
-    assert len(datasets.catalog(labeled=True)) == 13
+    assert len(datasets.catalog(labeled=True)) == 10 + len(synthetic)
     # the open tier: research-only entries (an NC/ND licence, or a stated access_reason) are out
     commercial = datasets.catalog(licence="commercial")
     assert [e.id for e in datasets.catalog() if e.research_only] == [
         "rbc-g36-ahu",  # CC BY, held research-only for its stated access_reason
         "at-30bldg-sensors",  # CC-BY-NC-SA
     ]
-    assert len(commercial) == 25 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 22 + len(synthetic)
+    assert all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):
@@ -236,6 +266,69 @@ def test_load_entries_raises_on_an_invalid_catalog():
     data["datasets"][0]["licence"] = "WTFPL"
     with pytest.raises(ValueError, match="invalid dataset catalog"):
         load_entries(data)
+
+
+# --------------------------------------------------------------- per-entry files (catalog.d, 0.105)
+
+
+def _fake_package(tmp_path, monkeypatch, files: dict, main=("a-one",)):
+    """A stand-in for the ``camber.datasets`` package: ``catalog.json`` holding ``main`` and
+    ``catalog.d/`` holding ``files`` (name -> text)."""
+    from camber.datasets import _catalog
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    doc = {"schema": 1, "datasets": [{"id": i} for i in main]}
+    (pkg / "catalog.json").write_text(json.dumps(doc), encoding="utf-8")
+    if files is not None:
+        (pkg / CATALOG_DIR).mkdir()
+        for name, text in files.items():
+            (pkg / CATALOG_DIR / name).write_text(text, encoding="utf-8")
+    monkeypatch.setattr(_catalog, "_files", lambda _name: pkg)
+
+
+def test_entry_files_follow_catalog_json_in_prefix_order(tmp_path, monkeypatch):
+    _fake_package(
+        tmp_path,
+        monkeypatch,
+        {
+            "300-c-three.json": json.dumps({"id": "c-three"}),
+            "100-z-one.json": json.dumps({"id": "z-one"}),
+            "200-b-two.json": json.dumps({"id": "b-two"}),
+            "README.txt": "not an entry",
+        },
+    )
+    assert catalog_entry_files() == ["100-z-one.json", "200-b-two.json", "300-c-three.json"]
+    ids = [d["id"] for d in load_catalog_data()["datasets"]]
+    assert ids == ["a-one", "z-one", "b-two", "c-three"]
+
+
+def test_no_entry_directory_means_catalog_json_alone(tmp_path, monkeypatch):
+    _fake_package(tmp_path, monkeypatch, None)
+    assert catalog_entry_files() == []
+    assert [d["id"] for d in load_catalog_data()["datasets"]] == ["a-one"]
+
+
+@pytest.mark.parametrize(
+    "files, needle",
+    [
+        ({"x-one.json": "{}"}, "named <NNN>-<id>.json"),
+        ({"10-one.json": "{}"}, "named <NNN>-<id>.json"),
+        ({"100-One.json": "{}"}, "named <NNN>-<id>.json"),
+        ({"100-one.json": "{}", "100-two.json": "{}"}, "prefix 100 is also used"),
+        ({"100-one.json": json.dumps({"id": "two"})}, "whose id is in its name"),
+        ({"100-one.json": json.dumps([{"id": "one"}])}, "whose id is in its name"),
+    ],
+)
+def test_a_badly_named_or_mismatched_entry_file_is_refused(tmp_path, monkeypatch, files, needle):
+    _fake_package(tmp_path, monkeypatch, files)
+    with pytest.raises(ValueError, match=re.escape(needle)):
+        load_catalog_data()
+
+
+def test_a_duplicate_id_across_catalog_json_and_an_entry_file_is_invalid(tmp_path, monkeypatch):
+    _fake_package(tmp_path, monkeypatch, {"100-a-one.json": json.dumps({"id": "a-one"})})
+    assert any("duplicate id" in e for e in validate_catalog(load_catalog_data()))
 
 
 # --------------------------------------------------------------------------- validator rules
@@ -371,9 +464,12 @@ def test_package_does_not_import_the_repo_guard():
         if fn.endswith(".py"):
             src = open(os.path.join(pkg, fn), encoding="utf-8").read()
             assert ".github" not in src and "site_neutrality" not in src
-    text = open(os.path.join(pkg, "catalog.json"), encoding="utf-8").read()
-    for rx in _guard_patterns():  # every rule that does not exempt the catalog
-        assert re.search(rx, text, re.IGNORECASE) is None, rx
+    paths = [os.path.join(pkg, "catalog.json")]
+    paths += [os.path.join(pkg, CATALOG_DIR, name) for name in catalog_entry_files()]
+    for path in paths:
+        text = open(path, encoding="utf-8").read()
+        for rx in _guard_patterns():  # every rule that does not exempt the catalog
+            assert re.search(rx, text, re.IGNORECASE) is None, (path, rx)
 
 
 # --------------------------------------------------------------------------- data issues

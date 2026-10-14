@@ -1,0 +1,28 @@
+{
+ "_comment": "0.104 (#137): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "chw_plant_staging",
+ "seed": 137,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "WB",
+  "CH_KW",
+  "CHWS_T",
+  "CHWR_T",
+  "CHW_GPM",
+  "CWS_T",
+  "CWR_T",
+  "CT_FAN"
+ ],
+ "scenarios": [
+  "well_staged",
+  "short_cycling",
+  "left_on",
+  "fixed_cw",
+  "high_floor"
+ ],
+ "rows_per_scenario": 2016,
+ "max_bytes": 1000000
+}

@@ -202,31 +202,35 @@ def test_maintainer_scripts_skip_it():
     assert json.dumps(data["datasets"][0]) == json.dumps(_entry_dict())  # nothing pinned
 
 
-# --------------------------------------------------------------- 0.104 (#137): more lab cases
+# ------------------------------------------- every synthetic entry (0.104 #137, 0.105 scaffold)
 
-#: entry -> (generator, its CSV header, the scenario plants in order)
-_MORE = {
-    "synthetic-hw-plant-cycling": (
-        "hw_plant_cycling",
-        ["Timestamp", "scenario", "OAT", "BLR_FIRE", "HWS_T", "HWR_T", "HWP_SPD", "HW_DP"]
-        + ["HW_DP_SP"],
-        ["well_tuned", "short_cycling", "marginal", "low_delta_t"],
-    ),
-    "synthetic-chw-plant-staging": (
-        "chw_plant_staging",
-        ["Timestamp", "scenario", "OAT", "WB", "CH_KW", "CHWS_T", "CHWR_T", "CHW_GPM", "CWS_T"]
-        + ["CWR_T", "CT_FAN"],
-        ["well_staged", "short_cycling", "left_on", "fixed_cw", "high_floor"],
-    ),
-}
+#: one expectation file per synthetic entry, ``tests/golden/synthetic/<id>.json``: its generator,
+#: seed and version, its CSV header, its scenario plants in order, the rows each plant has and a
+#: size cap. A new entry adds its own file; nothing here needs editing.
+_EXPECT_DIR = os.path.join(_ROOT, "tests", "golden", "synthetic")
+_SYNTHETIC_IDS = [e.id for e in ds.catalog(kind="synthetic")]
 
 
-@pytest.mark.parametrize("did", sorted(_MORE))
-def test_the_new_entries_are_synthetic_deterministic_small_and_ingest(did, tmp_path):
-    gen, header, plants = _MORE[did]
+def _expect(did: str) -> dict:
+    with open(os.path.join(_EXPECT_DIR, f"{did}.json"), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def test_every_synthetic_entry_has_an_expectation_file_and_its_own_generator():
+    assert len(_SYNTHETIC_IDS) >= 3
+    files = sorted(f[:-5] for f in os.listdir(_EXPECT_DIR) if f.endswith(".json"))
+    assert files == sorted(_SYNTHETIC_IDS)  # one per entry, and none for a missing entry
+    used = [generator_spec(ds.get(did))["name"] for did in _SYNTHETIC_IDS]
+    assert sorted(used) == sorted(GENERATORS)  # every generator is used, each by one entry
+
+
+@pytest.mark.parametrize("did", _SYNTHETIC_IDS)
+def test_each_synthetic_entry_is_deterministic_small_and_ingests(did, tmp_path):
+    want = _expect(did)
+    gen, plants = want["generator"], want["scenarios"]
     e = ds.get(did)
     assert e.synthetic and e.licence == SYNTHETIC_LICENCE and e.access == "open"
-    assert generator_spec(e) == {"name": gen, "seed": 137, "version": 1}
+    assert generator_spec(e) == {"name": gen, "seed": want["seed"], "version": want["version"]}
     assert [f["name"] for f in e.files] == list(GENERATORS[gen].files)
     assert [r["id"] for r in e.ingest["runs"]] == plants
     name = GENERATORS[gen].files[0]
@@ -234,12 +238,55 @@ def test_the_new_entries_are_synthetic_deterministic_small_and_ingest(did, tmp_p
     b = generate_files(e, str(tmp_path / "b"))[name]
     with open(a, "rb") as fa, open(b, "rb") as fb:
         assert fa.read() == fb.read()
-    assert os.path.getsize(a) < 1_000_000  # under about 1 MB (#137)
+    assert os.path.getsize(a) < want["max_bytes"]
     import pandas as pd
 
     raw = pd.read_csv(a)
-    assert list(raw.columns) == header
+    assert list(raw.columns) == want["header"]
     assert list(dict.fromkeys(raw["scenario"])) == plants
-    assert (raw.groupby("scenario").size() == 21 * 96).all()  # 21 days at 15 minutes
+    assert (raw.groupby("scenario").size() == want["rows_per_scenario"]).all()
     got = ds.ingest(did, str(tmp_path / "store"), data_dir=str(tmp_path / "cache"))
     assert got.facilities == [f"ds-{did}"] and got.equipment == len(plants)
+
+
+# --------------------------------------------------------- generator modules (0.105 scaffold)
+
+
+def test_register_refuses_a_taken_name_or_a_non_generator():
+    from camber.datasets._synthetic import Generator, register
+
+    gen = GENERATORS["hw_plant_lockout"]
+    with pytest.raises(ValueError, match="already registered"):
+        register("hw_plant_lockout", gen)
+    with pytest.raises(TypeError, match="must be a Generator"):
+        register("not_a_generator", {"version": 1})
+    assert "not_a_generator" not in GENERATORS
+    assert isinstance(gen, Generator)
+
+
+def test_a_generator_module_registers_itself_when_discovered(tmp_path, monkeypatch):
+    """A ``_synthetic_<name>.py`` module in the package is imported by discovery and registers
+    its generator; other modules are not imported."""
+    import camber.datasets as pkg
+    from camber.datasets import _synthetic
+
+    (tmp_path / "_synthetic_scaffold_probe.py").write_text(
+        "from ._synthetic import Generator, _noise, register\n"
+        "def _build(seed):\n"
+        "    return {'probe.csv': ','.join(f'{v:.3f}' for v in _noise(3, seed, 1)) + '\\n'}\n"
+        "register('scaffold_probe', Generator(version=1, files=('probe.csv',), build=_build))\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "_not_a_generator.py").write_text("raise RuntimeError('imported')\n")
+    monkeypatch.setattr(pkg, "__path__", [*pkg.__path__, str(tmp_path)])
+    name = "camber.datasets._synthetic_scaffold_probe"
+    try:
+        assert "_synthetic_scaffold_probe" in _synthetic._generator_modules()
+        _synthetic._discover()
+        assert GENERATORS["scaffold_probe"].files == ("probe.csv",)
+        text = GENERATORS["scaffold_probe"].build(7)["probe.csv"]
+        assert text == GENERATORS["scaffold_probe"].build(7)["probe.csv"]
+        _synthetic._discover()  # discovery again is a no-op (the module is imported once)
+    finally:
+        GENERATORS.pop("scaffold_probe", None)
+        sys.modules.pop(name, None)

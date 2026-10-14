@@ -14,7 +14,9 @@ HTTPS downloader into a temporary directory. ``--write`` saves the pinned values
 ``verified_on`` back into ``camber/datasets/catalog.json`` (then run the tests: the validator must
 still pass). Nothing is ever written to the catalog without ``--write``. Synthetic entries
 (``kind: "synthetic"``, 0.103) are skipped: CAMBER generates their files, so there is nothing to
-download or pin.
+download or pin. The tool reads and writes ``catalog.json`` only, never the per-entry files in
+``camber/datasets/catalog.d/`` (0.105); those hold only synthetic entries, which the catalog
+tests enforce.
 """
 
 from __future__ import annotations

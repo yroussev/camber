@@ -20,6 +20,21 @@ What differs from a downloaded entry:
 
 :func:`camber.datasets._catalog.validate_catalog` still validates the entry: a known generator,
 its file names, no download fields, the CAMBER licence and an open tier.
+
+**One module per generator** (0.105). The first three generators live here, with the shared
+helpers (:func:`_noise`, :func:`_smooth`, :func:`_cycle`, :func:`_occupied`,
+:func:`_staging_weather`). A new generator goes in its own module,
+``camber/datasets/_synthetic_<name>.py``, which imports what it needs from here and calls
+:func:`register` at import time::
+
+    from ._synthetic import Generator, _noise, register
+
+    def _build(seed: int) -> dict: ...
+
+    register("<name>", Generator(version=1, files=("<name>.csv",), build=_build, description=...))
+
+This module imports every ``_synthetic_*`` module of the package when it is first imported
+(:func:`_discover`, in name order), so adding a generator edits no shared file.
 """
 
 from __future__ import annotations
@@ -427,6 +442,44 @@ GENERATORS: dict = {
 }
 
 
+def register(name: str, gen: Generator) -> Generator:
+    """Add ``gen`` to :data:`GENERATORS` as ``name`` (``ValueError`` when the name is taken).
+
+    Called at import time by each ``camber/datasets/_synthetic_<name>.py`` module.
+    """
+    if not isinstance(gen, Generator):
+        raise TypeError(f"synthetic generator {name!r} must be a Generator")
+    if name in GENERATORS:
+        raise ValueError(f"synthetic generator {name!r} is already registered")
+    GENERATORS[name] = gen
+    return gen
+
+
+#: the module-name prefix of a generator module (``camber/datasets/_synthetic_<name>.py``)
+_MODULE_PREFIX = "_synthetic_"
+
+
+def _generator_modules() -> list:
+    """The package's generator modules (``_synthetic_*``), sorted by name."""
+    import pkgutil
+    import sys
+
+    pkg = sys.modules[__package__]
+    return sorted(
+        m.name
+        for m in pkgutil.iter_modules(pkg.__path__)
+        if m.name.startswith(_MODULE_PREFIX) and not m.ispkg
+    )
+
+
+def _discover() -> None:
+    """Import every generator module once, so each registers itself (in name order)."""
+    import importlib
+
+    for name in _generator_modules():
+        importlib.import_module(f"{__package__}.{name}")
+
+
 # --------------------------------------------------------------------------- fetch = generate
 
 
@@ -556,4 +609,8 @@ __all__ = [
     "ensure_generated",
     "generate_files",
     "generator_spec",
+    "register",
 ]
+
+# last, so a generator module can import anything defined above
+_discover()
