@@ -1,0 +1,23 @@
+{
+  "_comment": "Workbook exercise air-maintenance, the median lesson: filter_fouling on the second week of the run only (source start 2025-06-09). The rule judges the median over whatever window it is given; on the whole fortnight the loading filter's clean first week holds the median under the change-out pressure, on the last week it does not.",
+  "_dataset": "synthetic-ahu-maintenance",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-ahu-maintenance",
+    "start": "2025-06-09"
+  },
+  "resample": "5min",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "filter_diff_press"
+    }
+  ],
+  "rules": [
+    "filter_fouling"
+  ],
+  "report": {
+    "level": 2
+  }
+}

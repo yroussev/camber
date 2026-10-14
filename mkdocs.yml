@@ -68,6 +68,7 @@ nav:
       - "Air side: economizer and a stuck OA damper": workbook/air-economizer.md
       - "Air side: scheduling and setback": workbook/air-scheduling.md
       # BEGIN slot #146 (AHU maintenance)
+      - "Air side: dirty filters and a hunting valve": workbook/air-maintenance.md
       # END slot #146 (AHU maintenance)
       # END workbook-air (#80)
       #

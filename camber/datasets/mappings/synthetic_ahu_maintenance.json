@@ -1,0 +1,10 @@
+{
+  "_comment": "Synthetic air handler (generator ahu_maintenance, camber.datasets._synthetic_ahu_maintenance; 0.105, #146) -> CAMBER Role mapping. Every column is CAMBER's own: SF_STS is the supply fan's run status (1 = running), SAT the supply-air temperature in F, CLG_VLV the cooling valve command in %, FLT_DP the differential pressure across the filter bank in in. w.c., OAT the outdoor temperature in F. The scenario column selects one unit per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "SF_STS": "supply_fan_status",
+    "SAT": "supply_air_temp",
+    "CLG_VLV": "cool_valve",
+    "FLT_DP": "filter_diff_press"
+  }
+}

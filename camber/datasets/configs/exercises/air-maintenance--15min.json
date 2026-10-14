@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise air-maintenance, the resolution lesson (2): control_hunting on the same 5-minute data resampled to 15 minutes. A 15-minute trend can show at most 4 reversals an hour, below the 6 an hour warn threshold, so the rule declines (info) on every unit instead of calling any stable.",
+  "_dataset": "synthetic-ahu-maintenance",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-ahu-maintenance"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "filter_diff_press"
+    }
+  ],
+  "rules": [
+    "control_hunting"
+  ],
+  "report": {
+    "level": 2
+  }
+}

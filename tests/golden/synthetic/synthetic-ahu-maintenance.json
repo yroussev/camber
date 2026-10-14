@@ -1,0 +1,24 @@
+{
+ "_comment": "0.105 (#146): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "ahu_maintenance",
+ "seed": 146,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "SF_STS",
+  "SAT",
+  "CLG_VLV",
+  "FLT_DP"
+ ],
+ "scenarios": [
+  "healthy",
+  "loading",
+  "dirty",
+  "hunting",
+  "near_miss"
+ ],
+ "rows_per_scenario": 4032,
+ "max_bytes": 1000000
+}

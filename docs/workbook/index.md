@@ -80,6 +80,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Ch. 5][pnnl-retuning-ch5], [AHU Heating and Cooling Control][pnnl-guide-ahu-heat-cool] | [`air-heat-cool`: a leaking valve, and coils that fight](air-heat-cool.md) | `lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu` |
 | [Ch. 6][pnnl-retuning-ch6], [Air-Side Economizer Operation][pnnl-guide-economizer] | [`air-economizer`: a stuck outdoor-air damper and missed free cooling](air-economizer.md) | `lbnl-sdahu`, `irish-ahu` |
 | [Ch. 5][pnnl-retuning-ch5], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | [`air-scheduling`: 24/7 operation, night setback and after-hours fan energy](air-scheduling.md) | `ornl-frp-ops` |
+| [Ch. 5][pnnl-retuning-ch5], [Ch. 9][pnnl-retuning-ch9] | [`air-maintenance`: a dirty filter and a hunting valve](air-maintenance.md) | `synthetic-ahu-maintenance` |
 <!-- END workbook-air (#80) -->
 
 <!-- BEGIN workbook-zone (#81) -->
