@@ -14,6 +14,9 @@ evaluated* (an honest ``None`` plus a caveat) rather than implying one. As in th
 rides on the speed distribution; the reset result is reported alongside it. The flat-setpoint test
 (``dp_sp_flat_std``) is in the setpoint's own units.
 
+**Run status.** As in the CHW rule (0.105, #180), a mapped ``pump_status`` limits the rule to the
+samples the pump ran for more than half of; without one, running is speed above 5 % with a caveat.
+
 **Speed units.** A 0-1 fraction speed is rescaled to percent here as well as upstream
 (:data:`camber.units.PERCENT_ROLES` covers ``HW_PUMP_SPEED``, so :meth:`Registry.run
 <camber.rules.base.Registry.run>` already normalizes it); calling :meth:`analyze` directly on a raw
@@ -24,7 +27,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chwpump import _check_near_min, _floor_note, analyze_pump
+from ..chwpump import _check_near_min, _floor_note, _run_caveats, analyze_pump
 from ..model.roles import Role
 from ..units import normalize_percent
 from .base import Finding
@@ -32,6 +35,7 @@ from .base import Finding
 _ROLE_TO_COL = {
     Role.HW_PUMP_SPEED: "PumpSpeed",
     Role.HW_DIFF_PRESS_SP: "DiffPressSP",
+    Role.PUMP_STATUS: "PumpStatus",  # 0.105 (#180): judge running samples only
 }
 
 
@@ -41,7 +45,7 @@ class HWPumpDPReset:
 
     name = "hw_pump_dp_reset"
     roles_required = (Role.HW_PUMP_SPEED,)
-    roles_optional = (Role.HW_DIFF_PRESS_SP,)
+    roles_optional = (Role.HW_DIFF_PRESS_SP, Role.PUMP_STATUS)
 
     def __init__(self, *, near_min_pct: float | str = 25.0, floor_tol_pct: float = 1.0):
         # 0.98 (#86): fixed at 25 by default; "auto" opts in to the learned VFD floor
@@ -100,6 +104,8 @@ class HWPumpDPReset:
                 "median_dp_sp": res.median_dp_sp,
                 "dp_sp_reset_present": res.dp_sp_reset_present,
                 "n_running": res.n_running,
+                "run_source": res.run_source,
+                "n_stopped_speed_above_run": res.n_stopped_speed_above_run,
             },
             summary=(
                 f"{equip}: HW pump median speed {res.median_speed_pct:.0f}%, "
@@ -107,5 +113,5 @@ class HWPumpDPReset:
                 f"{res.pct_running_near_min:.0f}% near min (<= {res.near_min_band_pct:g}%"
                 f"{_floor_note(res)}); {reset_note}"
             ),
-            caveats=caveats,
+            caveats=caveats + _run_caveats(res),
         )

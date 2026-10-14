@@ -8,6 +8,11 @@ reset, wasting cube-law pump energy. Adapts
 learns it from a plateau in the running speeds (:func:`camber.chwpump.learn_vfd_floor`); a number
 fixes the band instead.
 
+A mapped run status (``pump_status``, 0.105, #180) decides which samples are running: only those
+the pump ran for more than half of are judged, so a speed point that holds its last value while
+the pump is stopped is not read as running at the floor. Without one, running is speed above 5 %
+and a caveat says a parked speed cannot be ruled out.
+
 Note: a plant with multiple parallel pumps exposes several speed points. The
 mapping resolves one representative pump-speed series to CHW_PUMP_SPEED;
 aggregating across all pumps is a follow-up.
@@ -17,13 +22,14 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chwpump import _check_near_min, _floor_note, analyze_chw_pump
+from ..chwpump import _check_near_min, _floor_note, _run_caveats, analyze_chw_pump
 from ..model.roles import Role
 from .base import Finding
 
 _ROLE_TO_COL = {
     Role.CHW_PUMP_SPEED: "PumpSpeed",
     Role.CHW_DIFF_PRESS_SP: "DiffPressSP",
+    Role.PUMP_STATUS: "PumpStatus",  # 0.105 (#180): judge running samples only
 }
 
 
@@ -32,7 +38,7 @@ class CHWPumpDPReset:
 
     name = "chw_pump_dp_reset"
     roles_required = (Role.CHW_PUMP_SPEED,)
-    roles_optional = (Role.CHW_DIFF_PRESS_SP,)
+    roles_optional = (Role.CHW_DIFF_PRESS_SP, Role.PUMP_STATUS)
 
     def __init__(self, *, near_min_pct: float | str = "auto", floor_tol_pct: float = 1.0):
         # 0.98 (#86): "auto" learns the VFD floor (camber.chwpump.learn_vfd_floor); a number
@@ -88,6 +94,8 @@ class CHWPumpDPReset:
                 "median_dp_sp": res.median_dp_sp,
                 "dp_sp_reset_present": res.dp_sp_reset_present,
                 "n_running": res.n_running,
+                "run_source": res.run_source,
+                "n_stopped_speed_above_run": res.n_stopped_speed_above_run,
             },
             summary=(
                 f"{equip}: pump median speed {res.median_speed_pct:.0f}%, "
@@ -95,5 +103,5 @@ class CHWPumpDPReset:
                 f"{res.pct_running_near_min:.0f}% near min (<= {res.near_min_band_pct:g}%"
                 f"{_floor_note(res)}); {reset_note}"
             ),
-            caveats=caveats,
+            caveats=caveats + _run_caveats(res),
         )

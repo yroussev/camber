@@ -373,6 +373,23 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   their speed holds its last value while they are stopped. In `plant-chw-reset-pumping` and
   `plant-sensor-vs-equipment` the `chw_pump_dp_reset` answers move from `PLANT__<run>` to
   `SECPUMP__<run>` with the same values.
+- **The pump DP-reset rules no longer count stopped hours as running (#180).**
+  `chw_pump_dp_reset` and `hw_pump_dp_reset` read "running" from speed above 5 %, so a speed
+  point that holds its last value while the pump is stopped read as a pump idling at its VFD
+  floor. On `lbnl-chiller` the secondary pump speed parks at the stopped DP loop's output (0.345)
+  for 2,869 of 8,759 fault-free hours (966 to 6,210 across the 24 runs). Both rules now take an
+  optional `pump_status` and judge only the samples the pump ran for more than half of (a
+  resampled status is a duty, as in #143). The speed distribution, the learned VFD floor and the
+  DP-setpoint check all read those samples only. New metrics `run_source` (`status` or `speed`)
+  and `n_stopped_speed_above_run` say what was used. Without a status the figures are unchanged,
+  with a caveat that a parked speed cannot be ruled out. On `lbnl-chiller`'s fault-free run the
+  pump has no floor plateau while it runs: near the minimum goes from 31.3 % to 0.0 %, the learned
+  34.5 % floor goes away (the band falls back to 25 %), the median goes from 84.9 % to 91.8 % and
+  near full from 38.0 % to 56.5 %. Severity moves on 10 of the 24 runs. `lbnl-boiler`'s hot-water
+  pump runs every hour, so nothing moves there. The data issue `secondary-pump-status-and-speed`
+  now records the parked speed and the DP reading its setpoint at zero flow. The workbook
+  answers for `plant-chw-reset-pumping` and `plant-sensor-vs-equipment` move and are pending
+  sign-off.
 
 ## [0.104.0] — Unreleased
 

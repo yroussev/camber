@@ -74,3 +74,71 @@ def test_rule_oversized_warns():
     f = rule.analyze("CHWP1", frame)
     assert f.severity == "warn"  # pinned at VFD minimum -> oversized
     assert f.metrics["pct_running_near_min"] > 95
+
+
+# ---- 0.105 (#180): a run status gates "running"; a parked speed is not read as the floor
+
+
+def _parked(n=24 * 21):
+    """A pump that stops every third hour while its speed point holds 34.5 % (a parked DP-loop
+    output), and modulates 40-95 % while it runs."""
+    rng = np.random.default_rng(1)
+    on = np.arange(n) % 3 != 0
+    run_spd = np.clip(70 + 20 * np.sin(np.arange(n) / 9) + rng.normal(0, 3, n), 40, 95)
+    spd = np.where(on, run_spd, 34.5)
+    return pd.DataFrame({"PumpSpeed": spd, "PumpStatus": on.astype(float)}, index=_idx(n))
+
+
+def test_status_excludes_parked_speed():
+    df = _parked()
+    without = analyze_chw_pump(df.drop(columns="PumpStatus"), "P", near_min_pct="auto")
+    with_st = analyze_chw_pump(df, "P", near_min_pct="auto")
+    # speed alone reads the stopped third as running at a 34.5 % floor
+    assert without.run_source == "speed" and without.n_stopped_speed_above_run is None
+    assert without.vfd_floor_pct == 34.5 and without.pct_running_near_min > 30
+    # the status says those hours were stopped: no floor plateau, nothing near the minimum
+    assert with_st.run_source == "status"
+    assert with_st.n_stopped_speed_above_run == len(df) // 3
+    assert with_st.n_running == len(df) - len(df) // 3
+    assert with_st.vfd_floor_pct is None and with_st.pct_running_near_min == 0.0
+    assert with_st.median_speed_pct > without.median_speed_pct
+
+
+def test_status_duty_above_half_is_running():
+    n = 24 * 21
+    duty = np.tile([1.0, 0.75, 0.5, 0.25, 0.0, np.nan], n // 6)
+    df = pd.DataFrame({"PumpSpeed": np.full(n, 60.0), "PumpStatus": duty}, index=_idx(n))
+    r = analyze_chw_pump(df, "P")
+    assert r.n_running == 2 * n // 6  # 1.0 and 0.75; 0.5, 0.25, 0 and missing are not
+    assert r.n_stopped_speed_above_run == 4 * n // 6
+
+
+def test_all_nan_status_falls_back_to_speed():
+    df = _parked().assign(PumpStatus=np.nan)
+    a = analyze_chw_pump(df, "P", near_min_pct="auto")
+    b = analyze_chw_pump(df.drop(columns="PumpStatus"), "P", near_min_pct="auto")
+    assert str(a.as_dict()) == str(b.as_dict()) and a.run_source == "speed"
+
+
+def test_status_limits_dp_setpoint_to_running_hours():
+    df = _parked()
+    on = df["PumpStatus"] > 0.5
+    df["DiffPressSP"] = np.where(on, 12.0, np.linspace(5, 20, len(df)))  # wanders only while off
+    assert analyze_chw_pump(df.drop(columns="PumpStatus"), "P").dp_sp_reset_present is True
+    assert analyze_chw_pump(df, "P").dp_sp_reset_present is False
+
+
+def test_rule_reads_pump_status_and_caveats():
+    df = _parked()
+    rule = CHWPumpDPReset()
+    assert Role.PUMP_STATUS in rule.roles_optional
+    frame = pd.DataFrame(
+        {Role.CHW_PUMP_SPEED: df["PumpSpeed"], Role.PUMP_STATUS: df["PumpStatus"]}, index=df.index
+    )
+    f = rule.analyze("P", frame)
+    assert f.metrics["run_source"] == "status"
+    assert f.metrics["n_stopped_speed_above_run"] == len(df) // 3
+    assert any("judged as stopped" in c for c in f.caveats)
+    g = rule.analyze("P", frame.drop(columns=Role.PUMP_STATUS))
+    assert g.metrics["run_source"] == "speed" and g.metrics["n_stopped_speed_above_run"] is None
+    assert any("no pump run status" in c for c in g.caveats)
