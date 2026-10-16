@@ -57,7 +57,7 @@ _DELTA_TEMP_ROLES = frozenset(
 _TEMP_ROLES = frozenset(r for r in Role if r.value.endswith("_temp") or r is Role.OAT)
 # volumetric-flow roles (cfm / gpm) and the units that contradict them
 _FLOW_ROLES = frozenset(
-    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.AIRFLOW_SP, Role.CHW_FLOW, Role.HW_FLOW}
+    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.AIRFLOW_SP, Role.CHW_FLOW, Role.HW_FLOW, Role.CW_FLOW}
 )
 _PERCENT_UNITS = frozenset({"%", "percent", "pct"})
 

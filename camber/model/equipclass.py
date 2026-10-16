@@ -16,13 +16,18 @@ Families: ``air_handler`` (AHU, RTU, DOAS, MAU), ``terminal`` (VAV, CAV, FCAV bo
 ``refrigeration``, and since 0.93 ``dx`` (split / packaged DX air conditioners and condensing
 units that are not heat pumps) and ``source_loop`` (a water-source / ground-source heat-pump
 loop).
+
+Since 0.106 (#183, #184) :func:`is_chw_loop` tells a chilled-water *loop* (``CHW_LOOP``,
+``SECLOOP``, ``CHILLED_WATER_LOOP``) from a chiller inside the ``chw_plant`` family: a loop
+carries the pumps' power, not a compressor's, so the chiller fleet leaves it out and the supply
+tracking rule gates it on its pumps.
 """
 
 from __future__ import annotations
 
 import re
 
-__all__ = ["EQUIP_FAMILIES", "equip_family", "family_matches"]
+__all__ = ["EQUIP_FAMILIES", "equip_family", "family_matches", "is_chw_loop"]
 
 #: family -> the normalised class spellings (upper case, letters and digits only) it covers.
 #: A family name itself (``"air_handler"`` -> ``AIRHANDLER``) is also accepted as a spelling.
@@ -51,6 +56,10 @@ EQUIP_FAMILIES: dict = {
         "CHILLERPLANT",
         "CHILLEDWATERPLANT",
         "CHILLEDWATER",
+        # 0.106 (#184): a chilled-water loop is named here explicitly (its CHW token already
+        # placed it in the family); :func:`is_chw_loop` tells it from a chiller
+        "CHWLOOP",
+        "CHILLEDWATERLOOP",
     ),
     "hw_plant": ("BOILER", "BOILERPLANT", "HWPLANT", "HOTWATERPLANT", "HW", "HWP", "HOTWATER"),
     "cooling_tower": ("COOLINGTOWER", "CT", "TOWER", "CONDENSERWATER", "CWPLANT", "CW"),
@@ -125,3 +134,28 @@ def family_matches(equip_class, wanted) -> bool | None:
         return None
     want = {equip_family(w) or str(w) for w in wanted}
     return fam in want
+
+
+#: Normalised class spellings that name a loop on their own (no ``CHW`` token), read as a
+#: chilled-water loop by :func:`is_chw_loop`.
+_LOOP_NAMES = ("SECLOOP", "PRILOOP", "SECONDARYLOOP", "PRIMARYLOOP", "DISTRIBUTIONLOOP")
+
+
+def is_chw_loop(equip_class) -> bool:
+    """Whether ``equip_class`` names a chilled-water loop rather than a chiller (0.106, #183).
+
+    True for a class in the ``chw_plant`` family whose name says loop (``"CHW_LOOP"``,
+    ``"ChilledWaterLoop"``, ``"CHW_SEC_LOOP"``), and for a bare primary / secondary loop name
+    (``"SECLOOP"``, ``"SECONDARY_LOOP"``). A loop's power point is its pumps', so it is not a
+    chiller: :class:`~camber.rules.chillerfleet_rule.ChillerStagingFleet` leaves it out of the
+    fleet and the chilled-water plant rules gate it on its pumps. An absent or other class is
+    ``False``.
+    """
+    if equip_class is None:
+        return False
+    norm = _norm(equip_class).rstrip("0123456789")
+    if not norm:
+        return False
+    if norm in _LOOP_NAMES:
+        return True
+    return "LOOP" in norm and equip_family(equip_class) == "chw_plant"

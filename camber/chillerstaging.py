@@ -111,18 +111,46 @@ def analyze_chiller_staging(
 
 @dataclass
 class ChillerFleetStagingResult:
-    """Plant-level staging: how often more chillers run than the load requires."""
+    """Plant-level staging: how often more chillers run than the load requires.
+
+    0.106 (#183): the counts are samples (``n_running_samples``, ``n_multi_samples``), with their
+    duration in hours beside them (``running_hours``, ``multi_hours``: samples times the trend's
+    interval); before 0.106 they were named ``n_running_hours`` / ``n_multi_hours`` but were sample
+    counts. ``capacity_source`` says where ``rep_capacity_kw`` came from: ``"declared"`` (every
+    chiller's capacity given), ``"observed_p95"`` (each chiller's own 95th-percentile power) or
+    ``"mixed"``.
+    """
 
     n_chillers: int
-    n_running_hours: int  # intervals with >= 1 chiller running
-    n_multi_hours: int  # intervals with >= 2 chillers running
-    pct_overstaged: float  # % of multi-chiller hours that could drop a chiller
-    median_running_count: float  # median number of chillers running (running hours)
+    n_running_samples: int  # samples with >= 1 chiller running
+    n_multi_samples: int  # samples with >= 2 chillers running
+    pct_overstaged: float  # % of multi-chiller samples that could drop a chiller
+    median_running_count: float  # median number of chillers running (running samples)
     rep_capacity_kw: float  # representative per-chiller capacity used
+    running_hours: float = 0.0  # n_running_samples x the sample interval, in hours
+    multi_hours: float = 0.0  # n_multi_samples x the sample interval, in hours
+    sample_interval_min: float = float("nan")  # the trend's median sample interval, minutes
+    capacity_source: str = "observed_p95"  # "declared" | "observed_p95" | "mixed"
 
     def as_dict(self):
         """Return the result as a plain dict."""
         return asdict(self)
+
+
+def _declared_capacity(capacity_kw, equip):
+    """The declared capacity (kW) for ``equip`` from a number or an ``{equip: kW}`` dict."""
+    if capacity_kw is None:
+        return None
+    if isinstance(capacity_kw, dict):
+        val = capacity_kw.get(equip)
+    else:
+        val = capacity_kw
+    if val is None:
+        return None
+    val = float(val)
+    if not val > 0:
+        raise ValueError(f"capacity_kw must be positive, got {val!r} for {equip!r}")
+    return val
 
 
 def analyze_chiller_staging_fleet(
@@ -130,17 +158,24 @@ def analyze_chiller_staging_fleet(
     *,
     min_power_kw: float = 2.0,  # power above this == chiller running
     redundancy_ceiling: float = 0.9,  # a single chiller can carry up to ceiling*capacity
+    capacity_kw=None,  # 0.106 (#183): declared per-chiller capacity, kW (number or {equip: kW})
 ) -> ChillerFleetStagingResult | None:
     """Detect over-staging across a set of chillers from their power trends.
 
     ``frames`` is ``{equip: df}`` with a ``Power`` (kW) column each. Power is the
-    staging load proxy (a chiller's draw scales with its cooling load); per-chiller
-    capacity is its observed peak power. At each interval, the plant is *over-staged*
-    when two or more chillers run but the total draw would fit in one fewer machine
-    (total <= (n_running - 1) * capacity * ceiling) -- a redundant chiller that should
-    be staged off (PNNL Re-tuning Ch.8 / ASHRAE chiller-plant staging).
+    staging load proxy (a chiller's draw scales with its cooling load). At each interval, the
+    plant is *over-staged* when two or more chillers run but the total draw would fit in one fewer
+    machine (total <= (n_running - 1) * capacity * ceiling) -- a redundant chiller that should be
+    staged off (PNNL Re-tuning Ch.8 / ASHRAE chiller-plant staging).
+
+    Per-chiller capacity is the declared full-load power when ``capacity_kw`` gives it (one number
+    for equal chillers, or ``{equip: kW}``; 0.106, #183), else the chiller's observed
+    95th-percentile running power. The observed figure is only as high as the chiller ever ran:
+    a plant that never loads a chiller near full (an over-staged one, by construction) reads a
+    low capacity and so under-states its over-staging. The representative capacity is the median
+    across the chillers.
     """
-    running_cols, load_cols, caps = {}, {}, []
+    running_cols, load_cols, caps, sources = {}, {}, [], set()
     for equip, df in frames.items():
         if df is None or "Power" not in df.columns:
             continue
@@ -152,7 +187,13 @@ def analyze_chiller_staging_fleet(
             continue
         running_cols[equip] = run
         load_cols[equip] = p.where(run, 0.0)
-        caps.append(float(p[run].quantile(0.95)))  # robust peak (capacity)
+        declared = _declared_capacity(capacity_kw, equip)
+        if declared is not None:
+            caps.append(declared)
+            sources.add("declared")
+        else:
+            caps.append(float(p[run].quantile(0.95)))  # robust observed peak
+            sources.add("observed_p95")
     if len(running_cols) < 2:
         return None
 
@@ -166,14 +207,25 @@ def analyze_chiller_staging_fleet(
     multi = n_running >= 2
     overstaged = multi & (total_load <= (n_running - 1) * cap_rep * redundancy_ceiling)
     n_multi = int(multi.sum())
+    n_any = int(any_run.sum())
+    step_min = float("nan")
+    if len(running.index) > 1:
+        diffs = pd.Series(running.index).diff().dropna()
+        if len(diffs):
+            step_min = float(diffs.median().total_seconds()) / 60.0
+    step_h = step_min / 60.0 if step_min == step_min else 0.0
 
     return ChillerFleetStagingResult(
         n_chillers=len(running_cols),
-        n_running_hours=int(any_run.sum()),
-        n_multi_hours=n_multi,
+        n_running_samples=n_any,
+        n_multi_samples=n_multi,
         pct_overstaged=round(100.0 * int(overstaged.sum()) / n_multi, 1) if n_multi else 0.0,
         median_running_count=round(float(n_running[any_run].median()), 1)
         if bool(any_run.any())
         else 0.0,
         rep_capacity_kw=round(cap_rep, 1),
+        running_hours=round(n_any * step_h, 1),
+        multi_hours=round(n_multi * step_h, 1),
+        sample_interval_min=round(step_min, 2) if step_min == step_min else step_min,
+        capacity_source=sources.pop() if len(sources) == 1 else "mixed",
     )

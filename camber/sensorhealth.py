@@ -100,6 +100,7 @@ PHYSICAL_BOUNDS: dict = {
     Role.AIRFLOW: (-1.0, 1e6),
     Role.OA_AIRFLOW: (-1.0, 1e6),
     Role.CHW_FLOW: (-1.0, 1e6),
+    Role.CW_FLOW: (-1.0, 1e6),  # 0.106 (#184)
     Role.POWER: (-1.0, 1e7),
     Role.DUCT_STATIC: (-1.0, 20.0),
     # packaged / DX status + stages (binary or small integer)
@@ -184,6 +185,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
+        Role.CW_FLOW,  # 0.106 (#184)
         Role.HW_FLOW,
         Role.PUMP_HEAD,
         Role.POWER,
@@ -206,6 +208,7 @@ _INTERMITTENT_ROLES: frozenset = (
             Role.ENERGY_RATE,  # BTU meter: near zero except during a heating/cooling event
             Role.HW_FLOW,
             Role.CHW_FLOW,
+            Role.CW_FLOW,  # 0.106 (#184)
             Role.AIRFLOW,
             Role.OA_AIRFLOW,
             Role.POWER,
@@ -501,6 +504,7 @@ STUCK_HOURS: dict = {
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,
+            Role.CW_FLOW,  # 0.106 (#184)
             Role.HW_FLOW,
             Role.PUMP_HEAD,
             Role.POWER,
@@ -516,6 +520,7 @@ _IDLE_ROLES: frozenset = frozenset(
         Role.AIRFLOW,
         Role.OA_AIRFLOW,
         Role.CHW_FLOW,
+        Role.CW_FLOW,  # 0.106 (#184)
         Role.HW_FLOW,
         Role.POWER,
         Role.DUCT_STATIC,
@@ -2261,7 +2266,7 @@ _CLIP_BOTH: frozenset = frozenset(
     }
 )
 _CLIP_HIGH: frozenset = frozenset(
-    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.CHW_FLOW, Role.HW_FLOW, Role.DUCT_STATIC}
+    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.CHW_FLOW, Role.HW_FLOW, Role.CW_FLOW, Role.DUCT_STATIC}
 )
 _CLIP_UNITS: dict = {
     Role.CO2: "ppm",
@@ -2270,6 +2275,7 @@ _CLIP_UNITS: dict = {
     Role.OA_AIRFLOW: "cfm",
     Role.CHW_FLOW: "gpm",
     Role.HW_FLOW: "gpm",
+    Role.CW_FLOW: "gpm",
     Role.DUCT_STATIC: "in. w.c.",
 }
 #: A sample sits "at" the limit within this share of the series' value span ...

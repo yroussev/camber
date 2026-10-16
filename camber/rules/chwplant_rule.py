@@ -8,6 +8,13 @@ interface, and both decide "running" from the chiller's run status or command
 (``compressor_status``) when it is mapped; only without one do they fall back to the supply
 temperature, and then they say so. OAT (the reset regressor) comes via the runner's ``shared``
 channel since it is building-level.
+
+**A chilled-water loop is gated on its pumps (0.106, #184).** A loop of its own (class
+``CHW_LOOP``, ``SECLOOP``: :func:`camber.model.equipclass.is_chw_loop`) has no compressor, and its
+``power`` point is its pumps'. On a loop "running" is the pumps' run status (``pump_status``, a
+duty above 0.5), else the loop flow (``chw_flow``) above :data:`LOOP_FLOW_RUN_FRAC` of its own
+95th percentile, else the pumps' power above a tenth of its 95th percentile (``run_source``
+``"pump_status"``, ``"flow"`` or ``"pump_power"``), and only then the supply temperature.
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..chwplant import analyze_chw_plant, analyze_chw_tracking, chiller_running, chw_tracking_mask
+from ..model.equipclass import is_chw_loop
 from ..model.roles import Role
 from .base import Finding
 
@@ -42,17 +50,82 @@ POWER_GATE_CAVEAT = (
 )
 
 
+#: A loop counts as running while its flow is above this fraction of its own 95th percentile
+#: (0.106, #184), the cut hw_pump_summer_lockout reads a hot-water loop's flow at. A stopped
+#: loop reads about zero; a variable-flow loop at light load stays well above it.
+LOOP_FLOW_RUN_FRAC = 0.05
+
+#: The run sources a chilled-water loop's gate can report (0.106, #184).
+LOOP_RUN_SOURCES = ("pump_status", "flow", "pump_power")
+
+LOOP_FLOW_GATE_CAVEAT = (
+    "chilled-water loop with no pump run status mapped: running hours read from the loop flow "
+    "above 5 % of its 95th percentile -- map the pumps' status (pump_status) for a firmer gate"
+)
+
+LOOP_POWER_GATE_CAVEAT = (
+    "chilled-water loop with no pump run status or loop flow mapped: running hours read from the "
+    "loop's power (its pumps') above a tenth of its 95th-percentile draw -- map the pumps' status "
+    "(pump_status) or the loop flow (chw_flow)"
+)
+
+LOOP_TEMPERATURE_GATE_CAVEAT = (
+    "chilled-water loop with no pump status, loop flow or pump power mapped: running hours "
+    "inferred from the supply temperature sitting in a chilled range (38-58F), which also counts "
+    "a stopped loop that stays cold -- map the pumps' status (pump_status)"
+)
+
+
+def _above_p95(s: pd.Series, frac: float):
+    """``s > frac * p95(s)`` (missing -> False), or ``None`` when ``s`` has no positive p95."""
+    s = pd.to_numeric(s, errors="coerce")
+    if not s.notna().any():
+        return None
+    p95 = float(s.quantile(0.95))
+    if not p95 > 0:
+        return None
+    return (s > frac * p95).fillna(False)
+
+
+def _loop_run_mask(frame: pd.DataFrame):
+    """``(running mask | None, source)`` for a chilled-water loop (0.106, #184): the pumps' run
+    status, else the loop flow, else the pumps' power, else ``(None, "temperature")``."""
+    if Role.PUMP_STATUS in frame.columns:
+        run = chiller_running(frame[Role.PUMP_STATUS], index=frame.index)  # duty > 0.5
+        if run is not None:
+            return run, "pump_status"
+    if Role.CHW_FLOW in frame.columns:
+        run = _above_p95(frame[Role.CHW_FLOW], LOOP_FLOW_RUN_FRAC)
+        if run is not None:
+            return run, "flow"
+    if Role.POWER in frame.columns:
+        from ..schedules import CHILLER_POWER_RUN_FRAC
+
+        run = _above_p95(frame[Role.POWER], CHILLER_POWER_RUN_FRAC)
+        if run is not None:
+            return run, "pump_power"
+    return None, "temperature"
+
+
+def _is_loop(frame: pd.DataFrame) -> bool:
+    return is_chw_loop(frame.attrs.get("camber_equip_class"))
+
+
 def _run_mask(frame: pd.DataFrame):
     """``(running mask | None, source)``: the chiller's status/command, else its power, else None.
 
     0.92 (#66): a chiller with no run status but a power point is gated on the power
     (:func:`camber.schedules.plant_run_mask`), source ``"power"``; only without either do the
-    rules fall back to the supply temperature.
+    rules fall back to the supply temperature. 0.106 (#184): a chilled-water loop's equipment
+    (:func:`camber.model.equipclass.is_chw_loop`) is gated on its pumps instead
+    (:func:`_loop_run_mask`); its power is never read as a chiller's.
     """
     if RUN_STATUS_ROLE in frame.columns:
         run = chiller_running(frame[RUN_STATUS_ROLE], index=frame.index)
         if run is not None:
             return run, "status"
+    if _is_loop(frame):
+        return _loop_run_mask(frame)
     if Role.POWER in frame.columns:
         from ..schedules import plant_run_mask
 
@@ -62,9 +135,13 @@ def _run_mask(frame: pd.DataFrame):
     return None, "temperature"
 
 
-def _gate_caveats(source: str) -> list:
+def _gate_caveats(source: str, *, loop: bool = False) -> list:
     if source == "temperature":
-        return [TEMPERATURE_GATE_CAVEAT]
+        return [LOOP_TEMPERATURE_GATE_CAVEAT if loop else TEMPERATURE_GATE_CAVEAT]
+    if source == "flow":
+        return [LOOP_FLOW_GATE_CAVEAT]
+    if source == "pump_power":
+        return [LOOP_POWER_GATE_CAVEAT]
     return [POWER_GATE_CAVEAT] if source == "power" else []
 
 
@@ -100,6 +177,7 @@ class CHWPlantReset:
         RUN_STATUS_ROLE,
         Role.POWER,  # 0.92 (#66): the run gate's fallback when no status is mapped
         Role.CHW_FLOW,  # 0.98 (#86): recognises a constant-primary-flow plant
+        Role.PUMP_STATUS,  # 0.106 (#184): a chilled-water loop's run gate
     )
 
     #: judged hours with a flow reading that ``flow_mode="auto"`` needs before deciding
@@ -224,9 +302,9 @@ class CHWPlantReset:
                 severity="info",
                 metrics={"n_running": 0, "run_source": source},
                 summary="insufficient data",
-                caveats=_gate_caveats(source),
+                caveats=_gate_caveats(source, loop=_is_loop(frame)),
             )
-        caveats = _gate_caveats(source)
+        caveats = _gate_caveats(source, loop=_is_loop(frame))
         # Low-deltaT sub-check: a NaN pct means no usable CHW return temp -> not evaluated
         # (must not count toward the fault). Reset sub-check: None means OAT was absent/thin
         # -> not evaluated (must not read as a confident "no reset").
@@ -309,9 +387,12 @@ class CHWSupplyTracking:
     Judged on running samples only, the first ``settle_intervals`` after each start left out as
     pull-down. Running comes from the chiller's status / command (``compressor_status``) when
     mapped; else (0.92, #66) from its ``power`` above a tenth of its own 95th-percentile draw,
-    with a caveat; else the plant is taken as running when CHWST sits in 38-58F, which is
-    caveated and never goes beyond ``warn``. A chiller that never ran in the window, or with fewer
-    than ``min_running`` judged samples, is ``info`` and not judged. Reports the share of running
+    with a caveat. A chilled-water loop's equipment (0.106, #184: class ``CHW_LOOP`` or
+    ``SECLOOP``) is gated on its pumps' ``pump_status``, else its ``chw_flow``, else its pumps'
+    ``power`` (``run_source`` ``pump_status`` / ``flow`` / ``pump_power``). Else the plant is
+    taken as running when CHWST sits in 38-58F, which is caveated and never goes beyond ``warn``.
+    A chiller that never ran in the window, or with fewer than ``min_running`` judged samples, is
+    ``info`` and not judged. Reports the share of running
     time with CHWST more than ``above_f`` above the trended setpoint, and the loop deltaT (overall
     and during those hours: a wide deltaT while short of setpoint points at load beyond capacity,
     a narrow one at flow or control). ``warn`` at ``warn_pct``, ``fault`` at ``fault_pct`` of
@@ -323,7 +404,13 @@ class CHWSupplyTracking:
 
     name = "chw_supply_tracking"
     roles_required = (Role.CHW_SUPPLY_TEMP, Role.CHW_SUPPLY_TEMP_SP)
-    roles_optional = (RUN_STATUS_ROLE, Role.CHW_RETURN_TEMP, Role.POWER)  # POWER: 0.92 (#66)
+    roles_optional = (
+        RUN_STATUS_ROLE,
+        Role.CHW_RETURN_TEMP,
+        Role.POWER,  # 0.92 (#66)
+        Role.PUMP_STATUS,  # 0.106 (#184): a chilled-water loop's run gate, then its flow
+        Role.CHW_FLOW,
+    )
 
     def __init__(
         self,
@@ -363,7 +450,7 @@ class CHWSupplyTracking:
             above_f=self.above_f,
             settle_intervals=self.settle_intervals,
         )
-        caveats = _gate_caveats(source)
+        caveats = _gate_caveats(source, loop=_is_loop(frame))
         if res is None or res.n_running < self.min_running:
             n = 0 if res is None else res.n_running
             return Finding(

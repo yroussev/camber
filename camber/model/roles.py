@@ -113,6 +113,10 @@ class Role(str, Enum):
     # 0.92 (#15): the condenser-water tower-bypass valve's command or position, % open to the
     # bypass (0 = all condenser water through the towers).
     CW_BYPASS_VALVE = "cw_bypass_valve"
+    # 0.106 (#184): condenser-water flow through the tower (gpm). With the tower's range it gives
+    # the heat rejected, so the tower drift rules match load correctly when chillers (and their
+    # condenser pumps) stage and the flow changes.
+    CW_FLOW = "cw_flow"
 
     # --- ambient (psychrometric) ---
     WETBULB_TEMP = "wetbulb_temp"  # outdoor wet-bulb temperature
@@ -275,6 +279,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",
     Role.COND_ENTERING_WATER_TEMP: "condenser water entering temp sensor chiller",
     Role.CW_BYPASS_VALVE: "condenser water bypass valve cmd",
+    Role.CW_FLOW: "condenser water flow sensor",
     Role.WETBULB_TEMP: "outside air wetBulb temp sensor",
     Role.OUTDOOR_RH: "outside air humidity sensor",
     Role.CO2: "zone air co2 sensor",
