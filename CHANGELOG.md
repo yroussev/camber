@@ -388,8 +388,18 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   near full from 38.0 % to 56.5 %. Severity moves on 10 of the 24 runs. `lbnl-boiler`'s hot-water
   pump runs every hour, so nothing moves there. The data issue `secondary-pump-status-and-speed`
   now records the parked speed and the DP reading its setpoint at zero flow. The workbook
-  answers for `plant-chw-reset-pumping` and `plant-sensor-vs-equipment` move and are pending
-  sign-off.
+  answers move with it, re-recorded on running hours. In `plant-chw-reset-pumping` the lesson
+  is no longer "the pump idles at its VFD floor": no floor is learned (`near_min_source`
+  `default`, 0.0 % near the minimum), the fault-free pump rides near full against the flat DP
+  setpoint (median 91.8 %, 56.5 % near full, still a warn), the chiller-bias run goes from a
+  warn at a 34.5 % median to `ok` at 70.3 % (8.7 % near full; its pumps are stopped for 6,210
+  hours), and the stuck-bypass pump goes from warn to fault; its check is now "no DP reset;
+  judged on running hours, no VFD floor is learned". In `plant-sensor-vs-equipment` the 2 °C-low
+  chiller-sensor run is near full in 92.2 % of its running hours (was 82.1 %), and the loop DP
+  biases read medians of 80.0 % (+20 %, was 74.4 %) and 100.0 % (-20 %, was 97.0 %, now a
+  fault). The workbook stand-in's secondary pumps now stop with the chiller, their speed parked
+  at 34.5 %, as the real data's do. The `near_min_pct` rationale in `docs/THRESHOLDS.md` no
+  longer calls 34.5 % the pump's floor.
 
 ## [0.104.0] — Unreleased
 

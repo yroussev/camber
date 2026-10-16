@@ -2054,8 +2054,9 @@ FIXED["chw_plant_reset"] = (
 PARAM_DOCS["chw_pump_dp_reset"] = {
     "near_min_pct": _P(
         '% speed, or "auto"',
-        "CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the "
-        "lbnl-chiller secondary pump, whose floor is 34.5 %",
+        "CAMBER judgment: learn the drive's own minimum (0.98, #86) rather than assume 25 %; on "
+        "lbnl-chiller the 34.5 % once learned was the speed parked while the pumps were stopped, "
+        "and judged on running hours (0.105, #180) no floor shows",
         _NEAR_MIN_PCT_CALIBRATE,
         ("auto", 10.0, 60.0),
         _NEAR_MIN_PCT_NOTE,

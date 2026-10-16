@@ -108,6 +108,9 @@ The exercise's config (`--exercise plant-sensor-vs-equipment`) runs four physica
   signature changes over time rather than being there from day one.
 - In this simulation the biased sensor is the one the controller holds at setpoint, so the biased
   reading itself looks normal and the effect appears elsewhere.
+- `chw_pump_dp_reset` judges only the hours the secondary pumps run (a `pump_status` the catalog
+  derives from pump 1's kW): their speed point holds its last value while they are stopped
+  ([#180](https://github.com/yroussev/camber/issues/180)).
 - `chiller_efficiency` computes tons from the leaving- and return-water temperatures. A bias on
   either one changes the computed load, not only the power.
 - The score's false-positive rate is a property of the rule and this dataset together; a real

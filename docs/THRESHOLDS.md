@@ -256,7 +256,7 @@ Fixed in code: warn when CHWST vs OAT is flat (|slope| < 0.05 °F/°F) or revers
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `near_min_pct` | `"auto"` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the lbnl-chiller secondary pump, whose floor is 34.5 % |
+| `near_min_pct` | `"auto"` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: learn the drive's own minimum (0.98, #86) rather than assume 25 %; on lbnl-chiller the 34.5 % once learned was the speed parked while the pumps were stopped, and judged on running hours (0.105, #180) no floor shows |
 | `floor_tol_pct` | `1.0` | % speed | 0.1 to 5.0 | CAMBER judgment: a VFD parked at its minimum reads within about a point of it |
 
 How to calibrate:

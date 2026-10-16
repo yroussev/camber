@@ -11,6 +11,11 @@ Real-data figures were recorded from::
 (CAMBER 0.97.0-dev, lbnl-chiller full subset, all 24 runs, 2026-09-29.)
 Since 0.105 (#164) the secondary pumps are their own equipment, so the chw_pump_dp_reset
 figures are read on SECPUMP__<run> instead of PLANT__<run>; the values did not change.
+Re-recorded for 0.105.0-dev on 2026-10-16 after #180: chw_pump_dp_reset judges only the hours the
+pumps run (pump_status, derived from pump 1's kW), not the speed parked while they are stopped.
+The 2 C-low chiller-sensor run spends 92.2 % of its running hours near full (was 82.1 %), and the
+loop DP biases read medians of 80.0 % (+20 %, was 74.4 %) and 100.0 % (-20 %, was 97.0 %, now a
+fault); the high-reading chiller-sensor runs no longer read as idling at a 34.5 % floor (ok).
 """  # noqa: E501
 
 from __future__ import annotations
@@ -106,11 +111,13 @@ EXERCISE = Exercise(
             "chw_pump_dp_reset",
             "SECPUMP__chiller_bias_m2",
             "pct_running_near_full",
-            82.1,
+            92.2,
             0.1,
             on=REAL,
-            quote="82.1%",
+            quote="92.2%",
         ),
+        # ... while the high-reading one lets the pump run slower: ok on its running hours (#180)
+        Finding("chw_pump_dp_reset", "SECPUMP__chiller_bias_2", severity=("ok",)),
         # 3. the tower sensor biases: CAMBER attributes them to a sensor offset itself
         Check("tower-sensor biases are attributed to a sensor offset", _tower_bias_is_an_offset),
         Metric(
@@ -138,19 +145,20 @@ EXERCISE = Exercise(
             "chw_pump_dp_reset",
             f"SECPUMP__{_SEC}_020",
             "median_speed_pct",
-            74.4,
+            80.0,
             0.05,
             on=REAL,
-            quote="74.4%",
+            quote="80.0%",
         ),
+        Finding("chw_pump_dp_reset", f"SECPUMP__{_SEC}_m020", severity=("fault",)),
         Metric(
             "chw_pump_dp_reset",
             f"SECPUMP__{_SEC}_m020",
             "median_speed_pct",
-            97.0,
+            100.0,
             0.05,
             on=REAL,
-            quote="97.0%",
+            quote="100.0%",
         ),
         # 5. the label score counts the chiller-sensor alarms as false positives
         Score("chiller_efficiency", fpr=0.154, tol=0.001, on=REAL, quote="FPR 15%"),

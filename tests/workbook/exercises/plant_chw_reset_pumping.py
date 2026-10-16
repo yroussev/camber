@@ -13,6 +13,11 @@ sign is checked, a constant-flow plant's delta-T is not judged, and the pump's V
 learned.)
 Since 0.105 (#164) the secondary pumps are their own equipment, so the chw_pump_dp_reset
 figures are read on SECPUMP__<run> instead of PLANT__<run>; the values did not change.
+Re-recorded for 0.105.0-dev on 2026-10-16 after #180: chw_pump_dp_reset judges only the hours the
+pumps run (pump_status, derived from pump 1's kW). The 34.5 % "VFD floor" was the speed point
+parked at the stopped DP loop's last output; on running hours the pump has no floor plateau
+(near_min_source: default), rides near full speed more (fault-free median 84.9 -> 91.8 %, near
+full 38.0 -> 56.5 %), and the chiller-bias run, which had read as idling at the floor, is ok.
 """  # noqa: E501
 
 from __future__ import annotations
@@ -49,18 +54,24 @@ def _constant_flow(ctx) -> None:
     assert any("constant primary flow" in c for c in f.caveats), f.caveats
 
 
-def _no_dp_reset_floor_learned(ctx) -> None:
-    """The DP setpoint is flat (no reset) on every run, and on the fault-free run the rule learns
-    the pump's VFD floor and counts the hours parked at it."""
+def _no_dp_reset_running_hours(ctx) -> None:
+    """The DP setpoint is flat (no reset) on every run, and the rule judges only the hours the
+    pumps run (pump_status): the speed parked while they are stopped is left out, and on the
+    fault-free run the running speeds show no floor plateau, so no VFD floor is learned and the
+    near-minimum band falls back to 25 % with no hours in it (0.105, #180)."""
     for f in ctx.findings():
         if f.rule != "chw_pump_dp_reset":
             continue
         assert f.metrics["dp_sp_reset_present"] is False, f"{f.equip}: DP reset found"
+        assert f.metrics["run_source"] == "status", f"{f.equip}: {f.metrics['run_source']}"
     f = ctx.finding("chw_pump_dp_reset", "SECPUMP__fault_free")
     assert f is not None, "no chw_pump_dp_reset finding on SECPUMP__fault_free"
-    assert f.metrics["near_min_source"] == "learned", f.metrics["near_min_source"]
-    assert f.metrics["near_min_band_pct"] > 25.0, f.metrics["near_min_band_pct"]
-    assert f.metrics["pct_running_near_min"] > 0.0, "no hours near the minimum"
+    assert f.metrics["n_stopped_speed_above_run"] > 0, "no parked speed while stopped"
+    assert f.metrics["near_min_source"] == "default", f.metrics["near_min_source"]
+    assert f.metrics["vfd_floor_pct"] is None, f.metrics["vfd_floor_pct"]
+    assert f.metrics["near_min_band_pct"] == 25.0, f.metrics["near_min_band_pct"]
+    assert f.metrics["pct_running_near_min"] == 0.0, f.metrics["pct_running_near_min"]
+    assert any("parked speed" in c for c in f.caveats), f.caveats
 
 
 def _bypass_reverse_reset(ctx) -> None:
@@ -134,63 +145,75 @@ EXERCISE = Exercise(
         ),
         # 3. the secondary pump rides the curve against a flat DP setpoint
         Finding("chw_pump_dp_reset", "SECPUMP__fault_free", severity=("warn",)),
-        Check("no DP reset; the VFD floor is learned", _no_dp_reset_floor_learned),
+        Check(
+            "no DP reset; judged on running hours, no VFD floor is learned",
+            _no_dp_reset_running_hours,
+        ),
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__fault_free",
             "pct_running_near_full",
-            38.0,
+            56.5,
             0.1,
             on=REAL,
-            quote="38.0%",
+            quote="56.5%",
         ),
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__fault_free",
             "median_speed_pct",
-            84.9,
+            91.8,
             0.1,
             on=REAL,
-            quote="84.9%",
+            quote="91.8%",
         ),
-        # 4. the VFD floor: learned from the speeds (0.98, #86), and where the pump idles the
-        # median is the floor itself
+        # 4. the VFD minimum: the speed point parks at the stopped DP loop's output (34.5 %) while
+        # the pumps are off; judged on running hours (0.105, #180) there is no floor plateau
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__fault_free",
-            "vfd_floor_pct",
-            34.5,
+            "n_stopped_speed_above_run",
+            2869,
+            0,
+            on=REAL,
+            quote="2,869",
+        ),
+        Metric(
+            "chw_pump_dp_reset",
+            "SECPUMP__fault_free",
+            "pct_running_near_min",
+            0.0,
             0.05,
-            on=REAL,
-            quote="34.5%",
+            quote="0.0%",
         ),
-        Metric(
-            "chw_pump_dp_reset",
-            "SECPUMP__fault_free",
-            "pct_running_near_min",
-            31.3,
-            0.1,
-            on=REAL,
-            quote="31.3%",
-        ),
+        # ... and the chiller-bias run, which read as idling at that "floor", runs slower but ok
+        Finding("chw_pump_dp_reset", "SECPUMP__chiller_bias_2", severity=("ok",)),
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__chiller_bias_2",
             "median_speed_pct",
-            34.5,
+            70.3,
             0.1,
             on=REAL,
-            quote="34.5%",
+            quote="70.3%",
         ),
-        Finding("chw_pump_dp_reset", "SECPUMP__chiller_bias_2", severity=("warn",)),
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__chiller_bias_2",
-            "pct_running_near_min",
-            68.6,
+            "pct_running_near_full",
+            8.7,
             0.1,
             on=REAL,
-            quote="68.6%",
+            quote="8.7%",
+        ),
+        Metric(
+            "chw_pump_dp_reset",
+            "SECPUMP__chiller_bias_2",
+            "n_stopped_speed_above_run",
+            6210,
+            0,
+            on=REAL,
+            quote="6,210",
         ),
         # 5. a stuck tower bypass: the plant loses its chilled water and the pump runs flat out
         Check("the bypassed plant cannot hold its CHWST", _bypass_cannot_hold_chwst),
@@ -223,7 +246,7 @@ EXERCISE = Exercise(
             on=REAL,
             quote="0.7 °F",
         ),
-        Finding("chw_pump_dp_reset", "SECPUMP__bypass_stuck_075", present=True),
+        Finding("chw_pump_dp_reset", "SECPUMP__bypass_stuck_075", severity=("fault",)),
         Metric(
             "chw_pump_dp_reset",
             "SECPUMP__bypass_stuck_075",
