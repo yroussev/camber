@@ -26,6 +26,9 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   and `fault_reachable` on `control_hunting`. Each rule has a `fan_gate` parameter (default on).
 - `filter_fouling`'s fault multiplier, 1.5 times the change-out pressure, is now the documented
   parameter `fault_factor` (#182).
+- `filter_fouling` links to PNNL Re-tuning chapter 9 (Building Walk Down). The chapter's
+  air-handler walk-down lists missing, dirty, plugged or collapsed filters among the things to
+  inspect. It gives no pressure threshold, so the change-out default is still CAMBER's own.
 
 ### Fixed
 - **`control_hunting` no longer reads an unreachable threshold as a pass (#182).** A trend can

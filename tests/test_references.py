@@ -97,6 +97,8 @@ def test_instance_named_rules_are_seen_and_mapped():
     assert R.reference_ids_for("static_rogue_zone_census")[0] == "pnnl-guide-static-pressure"
     for rule in ("condenser_bypass_leak", "chiller_staging_fleet", "boiler_efficiency_drift"):
         assert R.reference_ids_for(rule) == ["pnnl-retuning-ch8"], rule
+    # 0.106: the walk-down chapter's air-handler list names dirty filters
+    assert R.reference_ids_for("filter_fouling") == ["pnnl-retuning-ch9"]
     # deliberately unmapped (see the comment in RULE_REFERENCES)
     for rule in ("sat_reset_effectiveness", "static_reset_effectiveness", "g36_afdd"):
         assert R.reference_ids_for(rule) == [], rule
