@@ -73,7 +73,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
 | [`condenser_water_reset`](#condenser_water_reset) | 4 |  |
-| [`control_hunting`](#control_hunting) | 4 |  |
+| [`control_hunting`](#control_hunting) | 6 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
 | [`damper_census`](#damper_census) | 1 | yes |
 | [`dcv_system_verification`](#dcv_system_verification) | 25 (passed to `dcv_verification`) | yes |
@@ -81,7 +81,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`dx_indoor_airflow`](#dx_indoor_airflow) | 11 |  |
 | [`dx_refrigerant_charge`](#dx_refrigerant_charge) | 12 |  |
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
-| [`filter_fouling`](#filter_fouling) | 1 |  |
+| [`filter_fouling`](#filter_fouling) | 3 |  |
 | [`free_cooling_missed`](#free_cooling_missed) | 11 |  |
 | [`g36_afdd`](#g36_afdd) | 16 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
@@ -414,6 +414,8 @@ How to calibrate:
 | `fault_per_hr` | `12.0` | per hour (direction reversals) | 4.0 to 40.0 | CAMBER judgment |
 | `deadband` | `5.0` | % of stroke | 1.0 to 20.0 | CAMBER judgment: ignores slow, legitimate modulation |
 | `gap_factor` | `3.0` | - (multiple of the median sample interval) | 1.5 to 10.0 | CAMBER judgment |
+| `resolution_margin` | `1.25` | - (multiple of a threshold) | 1.0 to 2.0 | CAMBER judgment: n samples hold at most n - 2 reversals in n - 1 intervals, and an oscillation sampled near that limit aliases to fewer |
+| `fan_gate` | `true` | flag | `false`, `true` | CAMBER judgment: with the fan stopped the loop is not controlling, and its hours would dilute the rate |
 
 How to calibrate:
 
@@ -421,6 +423,8 @@ How to calibrate:
 - `fault_per_hr`: Set it well above warn_per_hr, at the reversal rate where the controlled variable visibly oscillates. *Note:* Must be at or above warn_per_hr; a trend too coarse to resolve it caps severity at warn.
 - `deadband`: Set it above the output's normal step size on a stable loop (the median absolute sample-to-sample move) so that small corrections are not counted as reversals.
 - `gap_factor`: Raise it for a change-of-value trend whose intervals vary widely; lower it when logger outages are short but real.
+- `resolution_margin`: Raise it if hunting loops on coarse trends read just under the warn threshold; 1.0 treats a ceiling equal to a threshold as reachable. *Note:* The trend's ceiling (3600 / median interval reversals/hr) must be at least this times warn_per_hr for the rule to judge, else it declines, and this times fault_per_hr for a fault, else severity is capped at warn.
+- `fan_gate`: Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a speed point that reads 0 while running) and every trended sample is a running sample. *Note:* The fan is read from supply-fan status, else speed, else airflow (on a terminal unit, its own airflow); a unit with none of them is judged ungated and the finding says so (the fan_gate metric).
 
 ## cooling_tower_approach
 
@@ -623,10 +627,14 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `change_dp_inwc` | `1.0` | in. w.c. | 0.3 to 2.0 | CAMBER judgment: a common MERV-13 final-pressure-drop alarm (filter and fan dependent) |
+| `fault_factor` | `1.5` | - (multiple of change_dp_inwc) | 1.1 to 3.0 | CAMBER judgment: well past change-out, where the fan is losing airflow or energy |
+| `fan_gate` | `true` | flag | `false`, `true` | CAMBER judgment: with the fan stopped there is no flow through the filter and its transmitter reads about zero |
 
 How to calibrate:
 
-- `change_dp_inwc`: Use the filter maker's recommended final resistance for the installed filter, or the differential pressure at which the site changes filters; filter_dp_median_inwc of a freshly changed filter gives the clean baseline. *Note:* Warn when the median is at or above it; fault at 1.5 times it (fixed in code).
+- `change_dp_inwc`: Use the filter maker's recommended final resistance for the installed filter, or the differential pressure at which the site changes filters; filter_dp_median_inwc of a freshly changed filter gives the clean baseline. *Note:* Warn when the fan-on median is at or above it; fault at fault_factor times it.
+- `fault_factor`: Set it so fault_factor x change_dp_inwc is the pressure drop the supply fan can no longer overcome at design airflow (from the fan curve and the system's other losses), or the filter maker's maximum. *Note:* Fault when the fan-on median is at or above fault_factor x change_dp_inwc; 1.0 makes every warn a fault.
+- `fan_gate`: Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a speed point that reads 0 while running) and every trended sample is a running sample. *Note:* The fan is read from supply-fan status, else speed, else airflow; a unit with none of them is judged ungated and the finding says so (the fan_gate metric).
 
 ## free_cooling_missed
 

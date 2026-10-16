@@ -653,7 +653,27 @@ PARAM_DOCS["filter_fouling"] = {
         "differential pressure at which the site changes filters; filter_dp_median_inwc of a "
         "freshly changed filter gives the clean baseline.",
         (0.3, 2.0),
-        "Warn when the median is at or above it; fault at 1.5 times it (fixed in code).",
+        "Warn when the fan-on median is at or above it; fault at fault_factor times it.",
+    ),
+    "fault_factor": _P(
+        "- (multiple of change_dp_inwc)",
+        "CAMBER judgment: well past change-out, where the fan is losing airflow or energy",
+        "Set it so fault_factor x change_dp_inwc is the pressure drop the supply fan can no longer "
+        "overcome at design airflow (from the fan curve and the system's other losses), or the "
+        "filter maker's maximum.",
+        (1.1, 3.0),
+        "Fault when the fan-on median is at or above fault_factor x change_dp_inwc; 1.0 makes "
+        "every warn a fault.",
+    ),
+    "fan_gate": _P(
+        "flag",
+        "CAMBER judgment: with the fan stopped there is no flow through the filter and its "
+        "transmitter reads about zero",
+        "Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a "
+        "speed point that reads 0 while running) and every trended sample is a running sample.",
+        (False, True),
+        "The fan is read from supply-fan status, else speed, else airflow; a unit with none of "
+        "them is judged ungated and the finding says so (the fan_gate metric).",
     ),
 }
 
@@ -703,6 +723,28 @@ PARAM_DOCS["control_hunting"] = {
         "Raise it for a change-of-value trend whose intervals vary widely; lower it when logger "
         "outages are short but real.",
         (1.5, 10.0),
+    ),
+    "resolution_margin": _P(
+        "- (multiple of a threshold)",
+        "CAMBER judgment: n samples hold at most n - 2 reversals in n - 1 intervals, and an "
+        "oscillation sampled near that limit aliases to fewer",
+        "Raise it if hunting loops on coarse trends read just under the warn threshold; 1.0 "
+        "treats a ceiling equal to a threshold as reachable.",
+        (1.0, 2.0),
+        "The trend's ceiling (3600 / median interval reversals/hr) must be at least this times "
+        "warn_per_hr for the rule to judge, else it declines, and this times fault_per_hr for a "
+        "fault, else severity is capped at warn.",
+    ),
+    "fan_gate": _P(
+        "flag",
+        "CAMBER judgment: with the fan stopped the loop is not controlling, and its hours would "
+        "dilute the rate",
+        "Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a "
+        "speed point that reads 0 while running) and every trended sample is a running sample.",
+        (False, True),
+        "The fan is read from supply-fan status, else speed, else airflow (on a terminal unit, "
+        "its own airflow); a unit with none of them is judged ungated and the finding says so "
+        "(the fan_gate metric).",
     ),
 }
 
