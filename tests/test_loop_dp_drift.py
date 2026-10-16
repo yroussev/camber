@@ -145,3 +145,41 @@ def test_the_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("L_1", worse, worse)
     assert store.get("SITE", "L_1", "loop_dp").coefficients == coeffs
     assert f.severity == "fault"
+
+
+# --------------------------------------------------------------------------- ok wording (#187)
+
+
+def test_an_ok_drift_short_of_the_floors_names_no_cause():
+    """A DP move under the floors keeps its sign in the text but names no cause (0.106, #187)."""
+    for offset, sign in ((-3.0, "-"), (3.0, "+")):
+        rule = _rule(BaselineStore(), warn=20.0, fault=40.0)
+        f = rule.analyze_periods("L_1", *_base_and({"dp_offset": offset}))
+        assert f.severity == "ok"
+        assert f.summary.startswith(f"L_1: loop DP holds near its baseline ({sign}3.")
+        for word in ("bypass", "stuck-open", "resistance", "valve authority", "rose", "fell"):
+            assert word not in f.summary
+
+
+def test_a_steady_loop_names_no_cause():
+    f = _rule(BaselineStore()).analyze_periods("L_1", *_base_and({}))
+    assert f.severity == "ok" and "holds near its baseline" in f.summary
+    assert "bypass" not in f.summary and "resistance" not in f.summary
+
+
+def test_a_reset_driven_ok_says_the_reset_explains_it():
+    base, cur = _base_and({"dp_offset": 4.0, "sp_offset": 4.0}, base_kw={"sp_offset": 0.0})
+    f = _rule(BaselineStore()).analyze_periods("L_1", base, cur)
+    assert f.severity == "ok" and f.metrics["loop_dp_setpoint_driven"] is True
+    assert f.summary.startswith("L_1: loop DP rose 4.")
+    assert f.summary.endswith("-- explained by the DP setpoint reset")
+    assert "resistance" not in f.summary
+
+
+def test_warn_and_fault_keep_the_cause():
+    up = _rule(BaselineStore()).analyze_periods("L_1", *_base_and({"dp_offset": 8.0}))
+    down = _rule(BaselineStore()).analyze_periods("L_1", *_base_and({"dp_offset": -8.0}))
+    assert up.severity in ("warn", "fault") and up.summary.endswith(
+        "-- rising system resistance / valve authority"
+    )
+    assert down.severity in ("warn", "fault") and down.summary.endswith("-- bypass / stuck-open")

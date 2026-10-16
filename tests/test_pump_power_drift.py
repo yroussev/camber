@@ -112,3 +112,17 @@ def test_a_declined_power_signal_is_ignored():
     )
     assert d.locus == "distribution"
     assert any("power_or_flow_not_mapped" in c for c in d.caveats)
+
+
+def test_an_ok_excess_short_of_the_floors_is_worded_neutrally():
+    """An upward move under the floors names no excess (0.106, #187)."""
+    rule = _rule(BaselineStore(), warn_kw=100.0, fault_kw=200.0)
+    f = rule.analyze_periods("P_1", *_base_and({"excess_kw": 3.0}))
+    assert f.severity == "ok" and f.metrics["pump_power_drift_direction"] == "up"
+    assert f.summary.startswith("P_1: pump power holds near its baseline (+")
+    assert "excess" not in f.summary
+
+
+def test_a_flagged_excess_keeps_the_word():
+    f = _rule(BaselineStore()).analyze_periods("P_1", *_base_and({"excess_kw": 8.0}))
+    assert f.severity in ("warn", "fault") and "pump power excess" in f.summary

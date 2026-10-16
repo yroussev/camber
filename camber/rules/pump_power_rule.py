@@ -354,7 +354,13 @@ class PumpPowerDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "up":
+        if direction == "up" and severity == "ok":
+            # 0.106 (#187): an ok finding names no excess -- that belongs to warn and fault
+            headline = (
+                f"{equip}: pump power holds near its baseline ({G.signed(drift.drift_f, 1)} kW, "
+                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            )
+        elif direction == "up":
             headline = (
                 f"{equip}: pump power excess {drift.drift_f:+.1f} kW "
                 f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched flow"

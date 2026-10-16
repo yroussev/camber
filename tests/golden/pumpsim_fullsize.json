@@ -26,7 +26,7 @@
      },
      "rule": "pump_flow_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump flow holds near its baseline (0 gpm, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -98,7 +98,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -196,7 +196,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.1 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.1 psi, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -244,7 +244,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -390,7 +390,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -413,7 +413,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.0\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -464,7 +464,7 @@
      },
      "rule": "pump_flow_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump flow deficit -1 gpm (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump flow holds near its baseline (-1 gpm, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -488,7 +488,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.2 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -536,7 +536,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -682,7 +682,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.1 (0.2\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (-0.1, 0.2\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -705,7 +705,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.0\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -828,7 +828,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -851,7 +851,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.0\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -974,7 +974,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -997,7 +997,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.1\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -1120,7 +1120,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1218,7 +1218,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.1 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.1 psi, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -1266,7 +1266,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1340,7 +1340,7 @@
      },
      "rule": "pump_flow_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump flow holds near its baseline (0 gpm, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -1364,7 +1364,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.2 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -1412,7 +1412,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1558,7 +1558,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1704,7 +1704,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.1 (0.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (+0.1, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -1727,7 +1727,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.1\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -1804,7 +1804,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.3 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.3 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -1875,7 +1875,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.0\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.0\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -1952,7 +1952,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.0 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (0.0 psi, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -2100,7 +2100,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.2 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.2 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -2148,7 +2148,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP fell 0.1 (0.1\u03c3) vs frozen baseline at matched flow -- bypass / stuck-open"
+     "summary": "P_SIM: loop DP holds near its baseline (-0.1, 0.1\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -2248,7 +2248,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.3 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.3 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [
@@ -2300,7 +2300,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 0.0 (0.0\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (0.0, 0.0\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [
@@ -2325,7 +2325,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.1\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -2448,7 +2448,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 2.0 (3.9\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP holds near its baseline (+2.0, 3.9\u03c3 vs frozen baseline at matched flow)"
     },
     {
      "caveats": [],
@@ -2471,7 +2471,7 @@
      },
      "rule": "pump_power_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump power excess +0.0 kW (0.1\u03c3) vs frozen baseline at matched flow"
+     "summary": "P_SIM: pump power holds near its baseline (0.0 kW, 0.1\u03c3 vs frozen baseline at matched flow)"
     }
    ],
    "frames": {
@@ -2524,7 +2524,7 @@
      },
      "rule": "pump_flow_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump flow deficit -0 gpm (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump flow holds near its baseline (0 gpm, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -2694,7 +2694,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.1 psi (-0.1\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (-0.1 psi, 0.1\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -2745,7 +2745,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 3.0 (6.3\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP rose 3.0 (6.3\u03c3) vs frozen baseline at matched flow -- explained by the DP setpoint reset"
     },
     {
      "caveats": [],
@@ -2843,7 +2843,7 @@
      },
      "rule": "pump_head_drift",
      "severity": "ok",
-     "summary": "P_SIM: pump head deficit -0.0 psi (-0.0\u03c3) vs frozen baseline at matched speed"
+     "summary": "P_SIM: pump head holds near its baseline (0.0 psi, 0.0\u03c3 vs frozen baseline at matched speed)"
     },
     {
      "caveats": [],
@@ -2894,7 +2894,7 @@
      },
      "rule": "loop_dp_drift",
      "severity": "ok",
-     "summary": "P_SIM: loop DP rose 6.0 (12.1\u03c3) vs frozen baseline at matched flow -- rising system resistance / valve authority"
+     "summary": "P_SIM: loop DP rose 6.0 (12.1\u03c3) vs frozen baseline at matched flow -- explained by the DP setpoint reset"
     },
     {
      "caveats": [],

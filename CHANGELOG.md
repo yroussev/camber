@@ -12,6 +12,27 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.106.0] — Unreleased
+
+### Fixed
+- **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
+  summary with a cause, "rising system resistance / valve authority" or "bypass / stuck-open",
+  even on an `ok` Finding. `pump_flow_drift` and `pump_head_drift` called a sub-floor fall a
+  "deficit", and `pump_power_drift` called a sub-floor rise an "excess". An `ok` finding now says
+  the signal "holds near its baseline", with the signed shift and its σ. An `ok` loop DP move that
+  the DP setpoint reset explains keeps its size and says so. `warn` and `fault` wording is
+  unchanged, and the `hw_*` twins follow. Only the text moves: in
+  `tests/golden/pumpsim_fullsize.json` 39 `ok` summaries change (17 loop DP, 10 pump head, 8 pump
+  power, 4 pump flow), and every severity, metric and caveat is unchanged. `diagnose_pump_drift`
+  already named causes only for `warn` and `fault`.
+- **The drift reference declines only the detectors it could run (#188).** With a declared
+  `reference: {"equip": ...}`, the reference equipment declined as `is_reference` for every
+  detector in the family, including those it has no inputs for. It now gets the same inputs check
+  as every other unit: it declines as `is_reference` only where it has the detector's inputs, and
+  is skipped otherwise. The units that can run such a detector still decline as
+  `reference_missing_inputs`. The `camber datasets score` counts for `lbnl-chiller` and
+  `lbnl-boiler` are unchanged.
+
 ## [0.105.0] — Unreleased
 
 ### Added

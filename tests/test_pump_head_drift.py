@@ -163,3 +163,17 @@ def test_the_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("P_1", worse, worse)
     assert store.get("SITE", "P_1", "pump_head").coefficients == coeffs
     assert f.severity == "fault"
+
+
+def test_an_ok_deficit_short_of_the_floors_is_worded_neutrally():
+    """A downward move under the floors names no deficit (0.106, #187)."""
+    rule = _rule(BaselineStore(), warn_psi=100.0, fault_psi=200.0)
+    f = rule.analyze_periods("P_1", *_base_and({"deficit_psi": -6.0}))
+    assert f.severity == "ok" and f.metrics["pump_head_drift_direction"] == "down"
+    assert f.summary.startswith("P_1: pump head holds near its baseline (-")
+    assert "deficit" not in f.summary
+
+
+def test_a_flagged_deficit_keeps_the_word():
+    f = _rule(BaselineStore()).analyze_periods("P_1", *_base_and({"deficit_psi": -12.0}))
+    assert f.severity in ("warn", "fault") and "pump head deficit" in f.summary

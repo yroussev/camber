@@ -355,3 +355,40 @@ def test_config_path_matches_plant_detectors_on_the_lbnl_boiler(tmp_path):
     )
     fired = sorted(r for r, v in runs.items() if v["severity"] in ("warn", "fault"))
     assert fired == [f"BoilerPlant_boiler_foul_0{s}.csv" for s in ("65", "80", "95")]
+
+
+def test_reference_declines_only_detectors_it_could_run(tmp_path):
+    """0.106 (#188): ``is_reference`` only for detectors the reference has the inputs for.
+
+    In the hw_pump family the reference has the loop ΔT inputs but no pump speed, so it declines
+    ``hw_loop_deltat_drift`` as the yardstick and is skipped for the speed-based flow and head
+    detectors (the units that can run them decline ``reference_missing_inputs``). Detectors nobody
+    has inputs for (DP, power) emit nothing for anyone, the reference included.
+    """
+
+    def with_speed(frame):
+        return frame.assign(**{Role.HW_PUMP_SPEED: 80.0})
+
+    root = _store(
+        str(tmp_path / "store"),
+        {
+            "PLANT__fault_free": _boiler(),
+            "PLANT__healthy": with_speed(_boiler(seed=1)),
+            "PLANT__fouled": with_speed(_boiler(eff=0.68, seed=2)),
+        },
+    )
+    fam = {"class": "HW_PLANT", "family": "hw_pump", "reference": {"equip": "PLANT__fault_free"}}
+    res = run_config(_config(root, [fam]), base_dir=str(tmp_path))
+    ref = [f for f in res.findings if f.equip == "PLANT__fault_free"]
+    assert [(f.rule, f.metrics["reason"]) for f in ref] == [
+        ("hw_loop_deltat_drift", "is_reference")
+    ]
+    for rule in ("hw_pump_flow_drift", "hw_pump_head_drift"):
+        got = _by_equip(res.findings, rule)
+        assert set(got) == {"PLANT__healthy", "PLANT__fouled"}
+        assert {f.metrics["reason"] for f in got.values()} == {"reference_missing_inputs"}
+    for rule in ("hw_loop_dp_drift", "hw_pump_power_drift"):
+        assert _by_equip(res.findings, rule) == {}
+    dt = _by_equip(res.findings, "hw_loop_deltat_drift")
+    assert {f.severity for f in dt.values()} == {"info", "ok"}
+    assert dt["PLANT__fault_free"].metrics["reason"] == "is_reference"
