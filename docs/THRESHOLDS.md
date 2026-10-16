@@ -67,8 +67,8 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
 | [`co2_ventilation`](#co2_ventilation) | 3 | yes |
 | [`co2_ventilation_system`](#co2_ventilation_system) | 3 (passed to `co2_ventilation`) |  |
-| [`cohort_airflow`](#cohort_airflow) | 6 |  |
-| [`cohort_space_temp`](#cohort_space_temp) | 6 |  |
+| [`cohort_airflow`](#cohort_airflow) | 8 |  |
+| [`cohort_space_temp`](#cohort_space_temp) | 8 |  |
 | [`compressor_short_cycle`](#compressor_short_cycle) | 2 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
@@ -97,7 +97,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`overcooling_min_flow`](#overcooling_min_flow) | 3 |  |
 | [`overcooling_severity`](#overcooling_severity) | 10 |  |
 | [`reheat_capacity_shortfall`](#reheat_capacity_shortfall) | 10 |  |
-| [`reheat_minimization_g36`](#reheat_minimization_g36) | 2 | yes |
+| [`reheat_minimization_g36`](#reheat_minimization_g36) | 7 | yes |
 | [`reheat_penalty`](#reheat_penalty) | 5 |  |
 | [`sat_cohort_starvation`](#sat_cohort_starvation) | 4 |  |
 | [`sat_reset_effectiveness`](#sat_reset_effectiveness) | 7 |  |
@@ -112,7 +112,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`supply_air_reset`](#supply_air_reset) | 1 |  |
 | [`supply_air_reset_compliance`](#supply_air_reset_compliance) | 10 |  |
 | [`unmet_setpoint_hours`](#unmet_setpoint_hours) | 5 |  |
-| [`zones_heat_cool_census`](#zones_heat_cool_census) | 3 |  |
+| [`zones_heat_cool_census`](#zones_heat_cool_census) | 3 | yes |
 
 ## actuator_stuck
 
@@ -314,6 +314,8 @@ Its parameters are passed through to [`co2_ventilation`](#co2_ventilation); set 
 | `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
 | `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
 | `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
+| `min_abs_dev` | `null` | the role's units (°F for space temperature, cfm for airflow) | 0.0 to 10.0 | CAMBER judgment (0.106, #186): in a tight cohort a MAD of hundredths of a degree makes a real but small exposure difference (a north zone 0.8 °F cooler) look like a 10-sigma outlier; 1 °F is about the smallest space-temperature difference worth a visit |
+| `max_spread` | `null` | fraction of the cohort median (robust spread, 1.4826 x MAD / \|median\|) | 0.05 to 2.0 | CAMBER judgment (0.106, #186): measured on the synthetic G36 fleet, boxes behind one air handler spread 0.13-0.26 in mean airflow and the 48 boxes of eight air handlers 0.34 |
 
 How to calibrate:
 
@@ -323,6 +325,8 @@ How to calibrate:
 - `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
 - `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
 - `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+- `min_abs_dev`: Set it to the smallest difference from the cohort median you would act on. *Note:* None (default) = the role's own floor: 1 °F for cohort_space_temp, none (0) for cohort_airflow. Applies to the raw summary only, not with normalise.
+- `max_spread`: Read cohort_spread on a cohort you trust; set this above it. Over it, 'no outlier' reads info, not ok. *Note:* None (default) = the role's own: 0.3 for cohort_airflow, no limit for cohort_space_temp. Applies to the raw summary only, not with normalise.
 
 Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
@@ -336,6 +340,8 @@ Not thresholds: `reference` (structured input: {equip: reference_equip} for norm
 | `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
 | `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
 | `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
+| `min_abs_dev` | `null` | the role's units (°F for space temperature, cfm for airflow) | 0.0 to 10.0 | CAMBER judgment (0.106, #186): in a tight cohort a MAD of hundredths of a degree makes a real but small exposure difference (a north zone 0.8 °F cooler) look like a 10-sigma outlier; 1 °F is about the smallest space-temperature difference worth a visit |
+| `max_spread` | `null` | fraction of the cohort median (robust spread, 1.4826 x MAD / \|median\|) | 0.05 to 2.0 | CAMBER judgment (0.106, #186): measured on the synthetic G36 fleet, boxes behind one air handler spread 0.13-0.26 in mean airflow and the 48 boxes of eight air handlers 0.34 |
 
 How to calibrate:
 
@@ -345,6 +351,8 @@ How to calibrate:
 - `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
 - `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
 - `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+- `min_abs_dev`: Set it to the smallest difference from the cohort median you would act on. *Note:* None (default) = the role's own floor: 1 °F for cohort_space_temp, none (0) for cohort_airflow. Applies to the raw summary only, not with normalise.
+- `max_spread`: Read cohort_spread on a cohort you trust; set this above it. Over it, 'no outlier' reads info, not ok. *Note:* None (default) = the role's own: 0.3 for cohort_airflow, no limit for cohort_space_temp. Applies to the raw summary only, not with normalise.
 
 Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
@@ -968,13 +976,23 @@ How to calibrate:
 |---|---|---|---|---|
 | `valve_thr` | `5.0` | % valve open | 1.0 to 20.0 | CAMBER judgment: the dual-max logic follows ASHRAE Guideline 36 §5.6.5; this value is not from G36 |
 | `flow_margin` | `1.2` | - (multiple of the airflow setpoint) | 1.05 to 2.0 | CAMBER judgment: 20 % headroom over the minimum-flow setpoint before airflow counts as above minimum |
+| `dual_max_valve` | `90.0` | % valve open | 50.0 to 100.0 | CAMBER judgment (0.106, #186): in ASHRAE Guideline 36 §5.6.5's dual-maximum sequence the airflow rises above the minimum only once the heating loop passes 50 %, with the discharge air at its maximum and the reheat valve near fully open; this value is not from G36 |
+| `dual_max_dat_rise` | `15.0` | °F (discharge minus space temperature) | 5.0 to 40.0 | CAMBER judgment (0.106, #186): G36's dual-maximum sequence raises the discharge air to its maximum, typically about 20 °F above the space, before it raises the airflow; 15 °F leaves room for sensor offsets |
+| `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
 
 How to calibrate:
 
 - `valve_thr`: Set it just above the valve command a closed valve reads in trends (leak-by or offset readings of a few percent), so that only real reheat counts. *Note:* The warn and fault levels (15 % and 40 % of reheating hours above minimum flow) are fixed in code.
-- `flow_margin`: On healthy boxes at minimum flow, take the 95th percentile of airflow / airflow setpoint; set the margin just above it so sensor noise and tracking error do not count as violations.
+- `flow_margin`: On healthy boxes at minimum flow, take the 95th percentile of airflow / airflow setpoint; set the margin just above it so sensor noise and tracking error do not count as violations. *Note:* The minimum is airflow_min_sp when mapped, else airflow_sp read as the minimum, else (airflow_sp moving like an active setpoint) the 5th percentile of airflow_sp (0.106, #186).
+- `dual_max_valve`: On a box known to run dual maximum, read the valve command in the hours its airflow rises above the minimum while heating; set this just below their low end. *Note:* Used only when the zone heating loop (zone_heat_loop) is not trended; with it, the high heating loop is the loop above 50 %.
+- `dual_max_dat_rise`: On a box known to run dual maximum, read the discharge-minus-space difference in the hours its airflow rises above the minimum while heating; set this just below it. *Note:* Used only without zone_heat_loop and when the box's discharge temperature (supply_air_temp at a terminal) and space temperature are both trended.
+- `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
 
-Fixed in code: warn when >= 15 % and fault when >= 40 % of reheating hours run above minimum flow (camber/rules/reheat_min_rule.py)
+Fixed in code: warn when >= 15 % and fault when >= 40 % of reheating hours run above minimum flow outside the high heating loop; the zone heating loop counts as high above 50 % (G36 §5.6.5); a minimum inferred from an active airflow_sp caps the rating at warn; an airflow_sp counts as active when its 90th percentile is >= 1.5 x its 10th and the airflow tracks it within 10 % (median) (camber/rules/reheat_min_rule.py, camber/rules/_minflow.py)
 
 ## reheat_penalty
 
@@ -1253,6 +1271,8 @@ How to calibrate:
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
+
+Fixed in code: a zone heats when its reheat valve is > 5 % open and cools when it does not heat and its airflow is > 1.1 x its minimum (else its space at or above its cooling setpoint); fault when >= 75 % and warn when >= 25 % of occupied hours have a zone heating while another cools (camber/zones.py, camber/rules/zones_rule.py)
 
 ## Opt-in drift detectors
 

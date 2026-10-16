@@ -12,6 +12,30 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.106.0] — Unreleased
+
+### Added
+- The roles `airflow_min_sp` (a VAV box's minimum airflow setpoint), `zone_heat_loop` and
+  `zone_cool_loop` (a zone's heating and cooling loop outputs, %) (#186).
+
+### Changed
+- **G36 zone-fleet rules (#186).** `airflow_sp` is the box's active airflow setpoint; the
+  reheat-at-minimum rules (`reheat_minimization_g36`, `zones_heat_cool_census`, `reheat_penalty`,
+  `overcooling_min_flow`) read `airflow_min_sp` when it is mapped. With only `airflow_sp` they
+  read it as the minimum as before, unless it swings with load while the airflow tracks it: then
+  the G36 rules infer the minimum and say so. `zones_heat_cool_census` now rates the occupied
+  hours with one zone heating while another cools (`pct_hours_mixed`), not one box heating
+  above its minimum. `reheat_minimization_g36` no longer counts G36's high heating loop (the
+  heating loop above 50 %, else the valve at 90 % or more or the discharge 15 °F or more above
+  the space) as a violation, and reads a trended occupancy point. Reset effectiveness judges
+  "not responding" and "not trimming" only on the cycles where the request-implied trajectory
+  had left that end, and lists every failure mode (`failure_modes`). The static rogue census
+  lists a rogue that is short of cooling under `overloaded_zones`, not `rogues`. The SAT
+  censuses count tier-1 requests from `zone_cool_loop`. The cohort-starvation summary names every
+  starved air handler. `cohort_space_temp` needs a 1 °F difference from the median
+  (`min_abs_dev`). `cohort_airflow` reads `info` when its cohort spreads past 0.3 (`max_spread`)
+  and nothing stands out. See docs/TR-RESET.md and docs/CAPABILITIES.md.
+
 ## [0.105.0] — Unreleased
 
 ### Added

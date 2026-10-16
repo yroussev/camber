@@ -72,6 +72,9 @@ class CohortStarvation:
         self.roles_required = roles
         # gate request cycles on the system being on (a free-floating building isn't demanding)
         self.roles_optional: tuple[Role, ...] = _GATES
+        if reset == "sat":
+            # 0.106 (#186): the zone cooling loop adds G36's tier-1 SAT request (loop > 95 %)
+            self.roles_optional = _GATES + (Role.ZONE_COOL_LOOP,)
         self._label = label
         self.groups = groups
         self.wants_topology = True
@@ -84,7 +87,11 @@ class CohortStarvation:
 
     def _cols(self) -> dict:
         if self.reset == "sat":
-            return {"temp_col": Role.SPACE_TEMP, "cool_sp_col": Role.COOL_SP}
+            return {
+                "temp_col": Role.SPACE_TEMP,
+                "cool_sp_col": Role.COOL_SP,
+                "cool_loop_col": Role.ZONE_COOL_LOOP,  # 0.106 (#186): SAT tier-1 requests
+            }
         return {
             "flow_col": Role.AIRFLOW,
             "flow_sp_col": Role.AIRFLOW_SP,
@@ -146,15 +153,22 @@ class CohortStarvation:
         }
 
         if res.starved_groups:
-            worst = res.worst_group
-            det = res.starved_detail.get(worst, {})
-            n_z = det.get("n_zones", 0)
-            frac = res.worst_group_frac or 0.0
-            grp_txt = "the fleet" if worst == "<fleet>" else worst
+            # 0.106 (#186): name every starved cohort, worst first (not only the worst)
+            ranked = sorted(
+                res.starved_groups, key=lambda g: (-res.group_sustained_frac.get(g, 0.0), g)
+            )
+            parts = []
+            for g in ranked:
+                det = res.starved_detail.get(g, {})
+                grp_txt = "the fleet" if g == "<fleet>" else g
+                parts.append(
+                    f"{grp_txt} ({det.get('n_zones', 0)} zones on "
+                    f"{det.get('sustained_frac', 0.0):.0%} of active cycles)"
+                )
             summary = (
-                f"fleet: {grp_txt}'s zone cohort is starved -- {n_z} zones simultaneously request "
-                f"the {self._label} reset on {frac:.0%} of active cycles "
-                f"({len(res.starved_groups)} cohort(s)). {_UPSTREAM[self.reset]}"
+                f"fleet: {len(ranked)} zone cohort(s) starved, their zones simultaneously "
+                f"requesting the {self._label} reset -- {'; '.join(parts)}. "
+                f"{_UPSTREAM[self.reset]}"
             )
             return Finding(
                 rule=self.name,

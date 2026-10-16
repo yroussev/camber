@@ -20,7 +20,7 @@ limit is OAT > 75F -- the value used elsewhere in this tool.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -235,6 +235,13 @@ class ResetEffectivenessResult:
     are idle (wasting energy). ``diverges`` is the setpoint moving the wrong way vs the T&R command
     on most cycles. ``mean_abs_error_sp`` is informational only (a coarser trend cadence than the
     controller inflates it), so the verdict rests on the cadence-robust modes above.
+
+    0.106 (#186): the not-responding and not-trimming shares are taken over the cycles on which
+    the request-implied T&R trajectory itself had left that end of the band (``n_demand_judged`` /
+    ``n_idle_judged``): a correct but slow reset under modest demand sits at the trim end exactly
+    as long as its requests keep it there, and is no longer called unresponsive. ``reason`` is the
+    first failure mode (stuck, not responding, not trimming, diverges); ``failure_modes`` lists
+    every one that holds.
     """
 
     equip: str
@@ -254,6 +261,9 @@ class ResetEffectivenessResult:
     reason: str
     coverage_start: str
     coverage_end: str
+    failure_modes: list = field(default_factory=list)  # 0.106 (#186): every mode that holds
+    n_demand_judged: int = 0  # demand cycles on which T&R had left the trim end
+    n_idle_judged: int = 0  # idle cycles on which T&R had left the demand end
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -307,22 +317,28 @@ def reset_effectiveness(
     # stuck: setpoint barely moves while the request pattern would have moved it
     stuck = actual_range <= flat_frac * band and expected_range >= expected_move_frac * band
 
-    # not responding: under net demand, the setpoint sits at the trim (energy-saving) end
-    hi = eff > 0
+    # not responding: under net demand, the setpoint sits at the trim (energy-saving) end -- judged
+    # only on the demand cycles where the T&R trajectory the requests imply had itself left that
+    # end (0.106, #186): modest demand keeps a correct, slow reset at the trim end too
+    tol = pinned_frac * band
+    hi = (eff > 0) & (np.abs(expected - trim_end) > tol)
+    n_demand_judged = int(hi.sum())
     pct_unresponsive: float | None = None
     not_responding: bool | None = None
-    if int(hi.sum()) >= min_mode_cycles:
-        at_trim = np.abs(actual[hi] - trim_end) <= pinned_frac * band
+    if n_demand_judged >= min_mode_cycles:
+        at_trim = np.abs(actual[hi] - trim_end) <= tol
         unresp = round(100.0 * float(at_trim.mean()), 1)
         pct_unresponsive = unresp
         not_responding = unresp >= 100.0 * mode_frac
 
-    # not trimming: while idle, the setpoint sits at the demand end (wasting energy)
-    idle = eff <= 0
+    # not trimming: while idle, the setpoint sits at the demand end (wasting energy) -- judged on
+    # the idle cycles where the T&R trajectory had trimmed away from that end
+    idle = (eff <= 0) & (np.abs(expected - demand_end) > tol)
+    n_idle_judged = int(idle.sum())
     pct_untrimmed: float | None = None
     not_trimming: bool | None = None
-    if int(idle.sum()) >= min_mode_cycles:
-        at_demand = np.abs(actual[idle] - demand_end) <= pinned_frac * band
+    if n_idle_judged >= min_mode_cycles:
+        at_demand = np.abs(actual[idle] - demand_end) <= tol
         untrim = round(100.0 * float(at_demand.mean()), 1)
         pct_untrimmed = untrim
         not_trimming = untrim >= 100.0 * mode_frac
@@ -337,17 +353,18 @@ def reset_effectiveness(
         pct_wrong = 0.0
     diverges = pct_wrong >= 100.0 * wrong_dir_frac
 
-    effective = not (stuck or not_responding is True or not_trimming is True or diverges)
-    if stuck:
-        reason = "stuck"
-    elif not_responding is True:
-        reason = "not_responding"
-    elif not_trimming is True:
-        reason = "not_trimming"
-    elif diverges:
-        reason = "diverges"
-    else:
-        reason = "effective"
+    modes = [
+        name
+        for name, hit in (
+            ("stuck", stuck),
+            ("not_responding", not_responding is True),
+            ("not_trimming", not_trimming is True),
+            ("diverges", diverges),
+        )
+        if hit
+    ]
+    effective = not modes
+    reason = modes[0] if modes else "effective"
 
     return ResetEffectivenessResult(
         equip=equip,
@@ -367,6 +384,9 @@ def reset_effectiveness(
         reason=reason,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        failure_modes=modes,
+        n_demand_judged=n_demand_judged,
+        n_idle_judged=n_idle_judged,
     )
 
 
@@ -415,16 +435,23 @@ def _group_of(groups, zone: str) -> str:
     return str(groups.get(zone, "<ungrouped>"))
 
 
-def _sat_requests_series(frame, temp_col, cool_sp_col, *, hi_f, mid_f):
-    """Vectorized cooling SAT-reset requests for one zone (G36 §5.14.8.1, tiers 3/2/0).
+def _sat_requests_series(frame, temp_col, cool_sp_col, *, hi_f, mid_f, cool_loop_col=None):
+    """Vectorized cooling SAT-reset requests for one zone (G36 §5.14.8.1, tiers 3/2/1/0).
 
-    The scalar's tier-1 (cooling-loop > 95%) is omitted -- there is no per-zone cooling-loop role --
-    so a marginal caller below +``mid_f`` is under-counted by at most one request; it cannot
-    manufacture a rogue (dominance rests on the +``mid_f`` / +``hi_f`` tiers).
+    Tier 1 (the zone's cooling loop > 95 %) needs the cooling loop: with ``cool_loop_col`` in the
+    frame (0.106, #186: ``zone_cool_loop``) it is evaluated; without it a marginal caller below
+    +``mid_f`` is under-counted by at most one request, which cannot manufacture a rogue
+    (dominance rests on the +``mid_f`` / +``hi_f`` tiers). A missing loop sample reads as no
+    tier-1 request.
     """
     w = frame[[temp_col, cool_sp_col]].dropna()
     over = (w[temp_col] - w[cool_sp_col]).to_numpy(dtype=float)
-    req = np.where(over >= hi_f, 3.0, np.where(over >= mid_f, 2.0, 0.0))
+    tier1 = np.zeros(len(w), dtype=bool)
+    if cool_loop_col is not None and cool_loop_col in frame.columns:
+        loop = pd.to_numeric(frame[cool_loop_col], errors="coerce")
+        loop = loop[~loop.index.duplicated(keep="last")].reindex(w.index)
+        tier1 = (loop > 95.0).to_numpy(dtype=bool)
+    req = np.where(over >= hi_f, 3.0, np.where(over >= mid_f, 2.0, np.where(tier1, 1.0, 0.0)))
     return pd.Series(req, index=w.index)
 
 
@@ -477,6 +504,8 @@ def _build_request_series(
     gate_cols=(),
     gated_zones=None,
     gated_out=None,
+    cool_loop_col=None,
+    looped_zones=None,
 ):
     """Per-zone reset-request series for a fleet -> ``(series, unevaluable, starts, ends)``.
 
@@ -490,6 +519,9 @@ def _build_request_series(
     reads as every zone requesting at once. Zones that carried at least one gate column are
     appended to ``gated_zones`` (a list) when given, and zones the gate left with too few rows to
     ``gated_out``.
+
+    ``cool_loop_col`` (0.106, #186): a zone carrying it gets SAT tier-1 requests (cooling loop
+    > 95 %) and is appended to ``looped_zones`` when given.
     """
     series: dict = {}
     unevaluable: list = []
@@ -501,10 +533,24 @@ def _build_request_series(
         if reset == "sat":
             have = temp_col in frame.columns and cool_sp_col in frame.columns
             s = (
-                _sat_requests_series(frame, temp_col, cool_sp_col, hi_f=hi_f, mid_f=mid_f)
+                _sat_requests_series(
+                    frame,
+                    temp_col,
+                    cool_sp_col,
+                    hi_f=hi_f,
+                    mid_f=mid_f,
+                    cool_loop_col=cool_loop_col,
+                )
                 if have
                 else None
             )
+            if (
+                have
+                and looped_zones is not None
+                and cool_loop_col is not None
+                and cool_loop_col in frame.columns
+            ):
+                looped_zones.append(zone)
         else:
             have = all(c in frame.columns for c in (flow_col, flow_sp_col, damper_col))
             s = (
@@ -554,6 +600,7 @@ def rogue_zone_census(
     mid_f: float = 3.0,
     fan_thr: float = 95.0,
     gate_cols=(),
+    cool_loop_col=None,
 ) -> RogueZoneCensusResult | None:
     """Find the zone(s) monopolizing a G36 reset across a fleet of terminal zones.
 
@@ -567,6 +614,8 @@ def rogue_zone_census(
     empty fleet; otherwise a :class:`RogueZoneCensusResult` (possibly with no rogues, only caveats).
     ``gate_cols`` (e.g. supply-fan status / occupancy columns) restrict each zone's request cycles
     to those where the system is on; with no zone carrying one, a caveat says so.
+    ``cool_loop_col`` (0.106, #186) adds the SAT tier-1 request (zone cooling loop > 95 %) on the
+    zones that carry it.
     Screening / opportunity-grade thresholds (provisional-untuned).
     """
     if reset not in ("sat", "static"):
@@ -576,6 +625,7 @@ def rogue_zone_census(
 
     gated: list = []
     gated_out: list = []
+    looped: list = []
     series, unevaluable, starts, ends = _build_request_series(
         frames,
         reset=reset,
@@ -591,6 +641,8 @@ def rogue_zone_census(
         gate_cols=gate_cols,
         gated_zones=gated,
         gated_out=gated_out,
+        cool_loop_col=cool_loop_col,
+        looped_zones=looped,
     )
 
     zone_rate: dict = {}
@@ -648,10 +700,12 @@ def rogue_zone_census(
     if series and not gated:
         caveats.append(UNGATED_CAVEAT)
     _note_gated_out(caveats, gated_out)
-    if reset == "sat":
+    unlooped = [z for z in series if z not in looped]
+    if reset == "sat" and unlooped:
         caveats.append(
-            "SAT request tier-1 (zone cooling-loop > 95%) not evaluated -- no per-zone "
-            "cooling-loop signal; census may under-count marginal callers"
+            f"SAT request tier-1 (zone cooling-loop > 95%) not evaluated on {len(unlooped)} of "
+            f"{len(series)} zone(s) -- no zone_cool_loop trended; census may under-count marginal "
+            "callers"
         )
     if total_requests <= 0 and series:
         caveats.append(
@@ -743,6 +797,7 @@ def cohort_starvation(
     mid_f: float = 3.0,
     fan_thr: float = 95.0,
     gate_cols=(),
+    cool_loop_col=None,
 ) -> CohortStarvationResult | None:
     """Find air handlers whose whole zone cohort is demand-starved at once (an upstream fault).
 
@@ -755,7 +810,8 @@ def cohort_starvation(
     and ``group_sustained_frac >= sustained_frac``. This is the opposite shape to
     :func:`rogue_zone_census` (a lone dominant zone never reaches ``cohort_frac``; a starved cohort
     shares requests too evenly to be a rogue). Returns ``None`` only for an empty fleet.
-    ``gate_cols`` gate request cycles on the system being on, as in :func:`rogue_zone_census`.
+    ``gate_cols`` gate request cycles on the system being on, and ``cool_loop_col`` adds the SAT
+    tier-1 request, as in :func:`rogue_zone_census`.
     Screening / opportunity-grade thresholds (provisional-untuned).
     """
     if reset not in ("sat", "static"):
@@ -765,6 +821,7 @@ def cohort_starvation(
 
     gated: list = []
     gated_out: list = []
+    looped: list = []
     series, unevaluable, starts, ends = _build_request_series(
         frames,
         reset=reset,
@@ -780,6 +837,8 @@ def cohort_starvation(
         gate_cols=gate_cols,
         gated_zones=gated,
         gated_out=gated_out,
+        cool_loop_col=cool_loop_col,
+        looped_zones=looped,
     )
 
     groups_map: dict = {}

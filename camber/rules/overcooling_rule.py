@@ -44,6 +44,7 @@ class OvercoolingMinFlow:
     roles_optional = (
         Role.AIRFLOW,
         Role.AIRFLOW_SP,
+        Role.AIRFLOW_MIN_SP,  # 0.106 (#186): read as the minimum in place of airflow_sp
         Role.DAMPER,
         Role.HEAT_VALVE,
         Role.HEAT_VALVE_POSITION,  # 0.98 (#85): read in place of the demand when mapped
@@ -86,9 +87,10 @@ class OvercoolingMinFlow:
                 summary="insufficient data",
             )
         if not res.minflow_evaluable or res.overcool_at_minflow_pct is None:
-            missing = [
-                r.value for r in (Role.AIRFLOW, Role.AIRFLOW_SP) if r not in frame.columns
-            ] or ["airflow/airflow-setpoint overlap"]
+            missing = [r.value for r in (Role.AIRFLOW,) if r not in frame.columns]
+            if Role.AIRFLOW_SP not in frame.columns and Role.AIRFLOW_MIN_SP not in frame.columns:
+                missing.append(f"{Role.AIRFLOW_MIN_SP.value} or {Role.AIRFLOW_SP.value}")
+            missing = missing or ["airflow/airflow-setpoint overlap"]
             return Finding(
                 rule=self.name,
                 equip=equip,

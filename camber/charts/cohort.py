@@ -74,15 +74,24 @@ def cohort_deviation(
     summary: str = "mean",
     min_cohort: int = 3,
     tail: str = "both",
+    min_abs_dev: float = 0.0,
 ) -> CohortResult:
     """Robust z-score of each unit's role summary vs the cohort; flag ``|z| >= k`` as outliers.
 
     ``tail`` (0.98, #85) picks which side flags: ``"both"`` (default), ``"low"`` (``z <= -k``) or
-    ``"high"`` (``z >= k``).
+    ``"high"`` (``z >= k``). ``min_abs_dev`` (0.106, #186): an outlier must also sit at least this
+    far from the cohort median, in the summary's own units (0 = no floor), so a tight cohort's
+    tiny MAD does not turn a real but small difference into a large z.
     """
     vals = cohort_summary(frames, role, summary=summary).dropna()
     return cohort_deviation_from_values(
-        vals, role, k=k, summary=summary, min_cohort=min_cohort, tail=tail
+        vals,
+        role,
+        k=k,
+        summary=summary,
+        min_cohort=min_cohort,
+        tail=tail,
+        min_abs_dev=min_abs_dev,
     )
 
 
@@ -94,6 +103,7 @@ def cohort_deviation_from_values(
     summary: str = "mean",
     min_cohort: int = 3,
     tail: str = "both",
+    min_abs_dev: float = 0.0,
 ) -> CohortResult:
     """:func:`cohort_deviation` on per-unit values already reduced (and perhaps normalised).
 
@@ -121,6 +131,8 @@ def cohort_deviation_from_values(
         outliers = [e for e, zz in z.items() if zz >= k]
     else:
         outliers = [e for e, zz in z.items() if abs(zz) >= k]
+    if min_abs_dev > 0:
+        outliers = [e for e in outliers if abs(float(vals[e]) - med) >= min_abs_dev]
     return CohortResult(
         rname,
         summary,

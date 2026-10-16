@@ -11,7 +11,15 @@ Per-zone state each interval:
   - heating  = reheat (HW) valve open above threshold
   - cooling  = airflow above its minimum setpoint (box pulling cooling air) OR,
                if no flow setpoint, space temp at/above cooling setpoint
-A zone can be counted in BOTH (the reheat penalty) -- we track that explicitly.
+A zone can be counted in BOTH (heating with its airflow above the minimum) -- we track that
+explicitly as ``n_both``.
+
+0.106 (#186): what the census is named for is **different** zones heating and cooling at once
+(central overcooling re-warmed locally), not one box heating above its minimum airflow (that is
+:class:`camber.rules.reheat_min_rule.ReheatMinimization`'s footprint, and in G36's dual-maximum
+sequence it is by design at high heating demand). ``n_cooling_only`` counts the zones cooling
+without heating, and ``mixed`` marks the intervals where at least one zone heats while at least
+one *other* zone cools.
 """
 
 from __future__ import annotations
@@ -75,6 +83,9 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
     out["n_heating"] = H.sum(axis=1)
     out["n_cooling"] = C.sum(axis=1)
     out["n_both"] = (H & C).sum(axis=1)
+    # 0.106 (#186): different zones heating and cooling at once
+    out["n_cooling_only"] = (C & ~H).sum(axis=1)
+    out["mixed"] = (out["n_heating"] > 0) & (out["n_cooling_only"] > 0)
     out.attrs["cooling_unevaluable"] = cooling_unevaluable
     return out
 

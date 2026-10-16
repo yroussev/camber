@@ -339,6 +339,7 @@ _AIR_ROLES = frozenset(
         Role.SPACE_TEMP,
         Role.AIRFLOW,
         Role.AIRFLOW_SP,
+        Role.AIRFLOW_MIN_SP,  # 0.106 (#186)
         Role.OA_AIRFLOW,
         Role.DUCT_STATIC,
         Role.DUCT_STATIC_SP,

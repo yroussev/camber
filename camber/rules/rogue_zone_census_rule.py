@@ -27,12 +27,23 @@ serves. The grouping is resolved in this order
    pooled building-wide with a loud confound caveat (a zone flagged here may simply serve a hotter
    loop -- a screening signal only).
 
+**An overloaded zone is not a static rogue (0.106, #186).** A zone that cannot be cooled -- an
+equipment room no box can keep up with -- sits at its cooling maximum with its damper wide open,
+so it asks for more duct static as well as for colder air. When the zones trend their space
+temperature and cooling setpoint, the static census checks each rogue's static-request cycles: a
+zone at least 3 °F above its cooling setpoint on half of them or more is short of *cooling*, the
+SAT census's rogue, not a starved inlet. It is listed in ``overloaded_zones`` (with
+``overloaded_share``) instead of ``rogues``, and the finding still warns, since it does drag the
+duct static up.
+
 Thresholds are screening / opportunity-grade.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+import pandas as pd
 
 from ..g36_reset import rogue_zone_census
 from ..model.roles import Role
@@ -44,6 +55,12 @@ from .base import Finding
 _GATES: tuple[Role, ...] = (Role.SUPPLY_FAN_STATUS, Role.OCCUPANCY)
 
 # reset key -> (roles_required, human label)
+# 0.106 (#186): a static rogue >= _OVERLOAD_F above its cooling setpoint on >= _OVERLOAD_SHARE of
+# its static-request cycles (damper > _FAN_THR) is overloaded (short of cooling), not starved
+_FAN_THR = 95.0
+_OVERLOAD_F = 3.0  # G36's 2-request SAT tier
+_OVERLOAD_SHARE = 0.5
+
 _RESETS: dict[str, tuple[tuple[Role, ...], str]] = {
     "sat": ((Role.SPACE_TEMP, Role.COOL_SP), "supply-air-temp"),
     "static": ((Role.AIRFLOW, Role.AIRFLOW_SP, Role.DAMPER), "duct-static"),
@@ -82,7 +99,13 @@ class RogueZoneCensus:
         self.roles_required = roles
         # gate request cycles on the system being on (a free-floating building isn't demanding)
         self.roles_optional: tuple[Role, ...] = _GATES
+        if reset == "sat":
+            # 0.106 (#186): the zone cooling loop adds G36's tier-1 SAT request (loop > 95 %)
+            self.roles_optional = _GATES + (Role.ZONE_COOL_LOOP,)
         self._label = label
+        if reset == "static":
+            # 0.106 (#186): tell a zone short of cooling (overloaded) from a starved inlet
+            self.roles_optional = _GATES + (Role.SPACE_TEMP, Role.COOL_SP)
         self.groups = groups
         self.wants_topology = True  # run_fleet auto-builds a naming grouping when none is supplied
         self._kwargs: dict[str, Any] = {
@@ -95,12 +118,36 @@ class RogueZoneCensus:
 
     def _cols(self) -> dict:
         if self.reset == "sat":
-            return {"temp_col": Role.SPACE_TEMP, "cool_sp_col": Role.COOL_SP}
+            return {
+                "temp_col": Role.SPACE_TEMP,
+                "cool_sp_col": Role.COOL_SP,
+                "cool_loop_col": Role.ZONE_COOL_LOOP,  # 0.106 (#186): SAT tier-1 requests
+            }
         return {
             "flow_col": Role.AIRFLOW,
             "flow_sp_col": Role.AIRFLOW_SP,
             "damper_col": Role.DAMPER,
         }
+
+    def _overloaded(self, frames: dict, zones) -> dict:
+        """``{zone: share}`` of each static rogue's static-request cycles (damper > 95 %, system
+        on) on which it sat >= 3 °F above its cooling setpoint; zones without the temperatures
+        or with too few such cycles are left out."""
+        out: dict = {}
+        for z in zones:
+            f = frames.get(z)
+            if f is None or any(
+                r not in f.columns for r in (Role.SPACE_TEMP, Role.COOL_SP, Role.DAMPER)
+            ):
+                continue
+            on = pd.to_numeric(f[Role.DAMPER], errors="coerce") > _FAN_THR
+            for gate in _GATES:
+                if gate in f.columns:
+                    on &= pd.to_numeric(f[gate], errors="coerce") > 0.5
+            over = (f[Role.SPACE_TEMP] - f[Role.COOL_SP])[on].dropna()
+            if len(over) >= self._kwargs["min_active_cycles"]:
+                out[z] = round(float((over >= _OVERLOAD_F).mean()), 3)
+        return out
 
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run the rogue-zone census across the fleet's zone role-frames; one aggregate Finding.
@@ -140,6 +187,26 @@ class RogueZoneCensus:
             )
 
         caveats = list(res.caveats) + grouping_caveats
+        rogues, rogue_by_group, worst = res.rogues, res.rogue_by_group, res.worst_zone
+        overloaded: dict = {}
+        if self.reset == "static" and res.rogues:
+            shares = self._overloaded(frames, res.rogues)
+            overloaded = {z: v for z, v in shares.items() if v >= _OVERLOAD_SHARE}
+            if overloaded:
+                rogues = [z for z in res.rogues if z not in overloaded]
+                rogue_by_group = {
+                    g: kept
+                    for g, zs in res.rogue_by_group.items()
+                    if (kept := [z for z in zs if z not in overloaded])
+                }
+                worst = (
+                    max(
+                        rogues,
+                        key=lambda z: (res.zone_binding_frac[z], res.zone_request_share[z]),
+                    )
+                    if rogues
+                    else None
+                )
 
         metrics = {
             "reset": res.reset,
@@ -149,24 +216,35 @@ class RogueZoneCensus:
             "n_zones_evaluated": res.n_zones_evaluated,
             "n_groups": res.n_groups,
             "total_requests": res.total_requests,
-            "rogues": res.rogues,
-            "rogue_by_group": res.rogue_by_group,
-            "worst_zone": res.worst_zone,
-            "worst_zone_share": res.worst_zone_share,
+            "rogues": rogues,
+            "rogue_by_group": rogue_by_group,
+            "worst_zone": worst,
+            "worst_zone_share": res.zone_request_share.get(worst) if worst else None,
             "zone_request_share": res.zone_request_share,
             "zone_binding_frac": res.zone_binding_frac,
             "unevaluable_zones": res.unevaluable_zones,
         }
+        if self.reset == "static":
+            metrics["overloaded_zones"] = sorted(overloaded)
+            metrics["overloaded_share"] = overloaded
 
-        if res.rogues:
-            worst = res.worst_zone
-            binding = res.zone_binding_frac.get(worst, 0.0)
-            share = res.worst_zone_share or 0.0
-            summary = (
-                f"fleet: zone {worst} monopolizes the {self._label} reset -- holds the binding "
-                f"request {binding:.0%} of active cycles and {share:.0%} of total requests "
-                f"({len(res.rogues)} rogue zone(s): {', '.join(res.rogues)})"
-            )
+        if rogues or overloaded:
+            if rogues:
+                binding = res.zone_binding_frac.get(worst, 0.0)
+                share = res.zone_request_share.get(worst, 0.0)
+                summary = (
+                    f"fleet: zone {worst} monopolizes the {self._label} reset -- holds the "
+                    f"binding request {binding:.0%} of active cycles and {share:.0%} of total "
+                    f"requests ({len(rogues)} rogue zone(s): {', '.join(rogues)})"
+                )
+            else:
+                summary = f"fleet: no starved inlet drags the {self._label} reset"
+            if overloaded:
+                summary += (
+                    f"; {', '.join(sorted(overloaded))} also drag(s) it because short of cooling "
+                    f"(>= {_OVERLOAD_F:g} °F above the cooling setpoint on most of its static "
+                    "requests): an overloaded zone, the SAT census's rogue -- fix its load first"
+                )
             return Finding(
                 rule=self.name,
                 equip="<fleet>",

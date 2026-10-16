@@ -139,6 +139,13 @@ error (`mean_abs_error_sp`) is **informational only** — a coarser trend cadenc
 inflates it, so the verdict rests on the cadence-robust mode detectors above, not the raw error.
 Thresholds are screening / opportunity-grade (provisional-untuned).
 
+Since 0.106 (#186) "not responding" and "not trimming" are judged only on the cycles where the
+trajectory the requests imply had itself left that end of the band (`n_demand_judged`,
+`n_idle_judged`). Under modest demand a correct Trim-and-Respond creeps off its trim end slowly,
+and it is no longer called unresponsive for doing what its requests ask. `reason` is the first
+failure mode and `failure_modes` lists every one that holds (a reset that is both stuck and not
+responding says so).
+
 ## Rogue-zone census — which zone is dragging the reset?
 
 The two rules above look at the reset *setpoint*; this one looks at the *demand side* that drives it.
@@ -188,6 +195,17 @@ The grouping and its provenance are recorded in the finding's metrics (`grouped`
 to `info` — when zones were unevaluable or no zone generated any request (the reset is not
 demand-bound, so nothing can be dragging it). Thresholds are screening / opportunity-grade
 (provisional-untuned).
+
+**Overloaded is not starved (0.106, #186).** A zone no box can cool sits at its cooling maximum
+with its damper wide open, so it asks for more duct static as well as for colder air. When the
+zones trend their space temperature and cooling setpoint, the static census checks each rogue's
+static-request cycles: a zone at least 3 °F above its cooling setpoint on half of them or more is
+listed in `overloaded_zones` (its share in `overloaded_share`) instead of `rogues`. The finding
+still warns (the zone does hold the duct static up), and points at the SAT census's rogue.
+
+**Tier-1 SAT requests (0.106, #186).** G36's lowest SAT request tier is a zone cooling loop above
+95 %. The SAT censuses count it on the zones that trend their cooling loop (`zone_cool_loop`); on
+the others the caveat says how many zones it was not evaluated on.
 
 ## Cohort starvation — the common-mode twin
 

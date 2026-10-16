@@ -91,7 +91,7 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   metric). Per-rule flags (e.g. `threshold`, `min_oa_pct`, `occupied_only`, `tol_F`).
   - *Occupancy.* The schedule-based rules (`night_weekend_setback`, `overcooling_min_flow`,
     `overcooling_severity`, `reheat_penalty`, `zones_heat_cool_census`, `outdoor_air_fraction`,
-    the DCV rules) take a
+    `reheat_minimization_g36` since 0.106, the DCV rules) take a
     trended `OCCUPANCY` point as the truth — it *replaces* the schedule — and otherwise use
     `start_hour` / `end_hour` / `occupied_days` (default Mon–Fri 07–18, a generic office
     assumption; `camber.schedules.effective_occupied_mask`). Since 0.98 `damper_census` reads
@@ -130,6 +130,18 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     deep), so a few deep cold hours a year grade `info`; `share_pct` applies the same gate to the
     overcooling tiers (off by default).
     `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
+  - *Minimum vs active airflow setpoint* (0.106, #186). `airflow_sp` is the box's **active**
+    airflow setpoint (what the static-pressure census and the cohort rules read); its
+    **minimum** has its own role, `airflow_min_sp`, which `reheat_minimization_g36`,
+    `zones_heat_cool_census`, `reheat_penalty` and `overcooling_min_flow` prefer. With only
+    `airflow_sp` mapped they read it as the minimum, as before, unless it swings with load while
+    the airflow tracks it: then `reheat_minimization_g36` and the census infer the minimum (its
+    5th percentile), say so, and the per-box rule rates no higher than warn.
+    `reheat_minimization_g36` does not count G36's high heating loop (the zone heating loop,
+    `zone_heat_loop`, above 50 %; without it the valve at ≥ 90 % or the discharge ≥ 15 °F above
+    the space) as a violation: a dual-maximum box raises its airflow there by design.
+    `zones_heat_cool_census` rates the share of occupied hours with one zone heating while
+    *another* cools (`pct_hours_mixed`); one box heating above its minimum is the per-box rule's.
   - *Held setback* (0.93, #43). A unit scheduled off at night still cycles on to hold its
     zones at the setback temperature, so `night_weekend_setback` no longer reads runtime alone:
     when the runtime test fails, a fan that *cycles* (mean duty below `max_hold_duty_pct`, 90 %,
@@ -201,7 +213,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   `normalise` (`"design_max"`: by design airflow; `"reference"`: by each unit's declared
   known-good twin or period), `summary="variability"` and `tail` (`"low"` / `"high"`). Size
   normalisation alone cannot isolate a stuck box: on `ornl-frp-vav` only the box's own fault-free
-  reference, or its damper's variability on the low tail, separated it.
+  reference, or its damper's variability on the low tail, separated it. Since 0.106 (#186)
+  `min_abs_dev` (1 °F for `cohort_space_temp`) keeps a tight cohort from flagging a small real
+  difference, and a `cohort_airflow` cohort whose spread passes `max_spread` (0.3: box sizes or
+  loads differ) reads `info`, not `ok`, when nothing stands out.
 - **Economizer / free cooling** — `economizer_high_limit` (excess OA above the high limit — not
   locked out; judged on measured OA/supply airflow when trended, else the MAT/RAT balance, else the
   damper; samples still below return air are left to a differential changeover; with no configured
@@ -248,7 +263,11 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   reheat opportunity), `sat`/`static_reset_effectiveness` (does the reset setpoint actually trim and
   respond to its zone requests, or is it stuck / not-responding / not-trimming / diverging?), and
   `sat`/`static_rogue_zone_census` (fleet rules finding the one zone monopolizing the requests and
-  dragging the whole reset). Screening / opportunity-grade.
+  dragging the whole reset). Screening / opportunity-grade. Since 0.106 (#186) a slow but correct
+  reset under modest demand is not called unresponsive, the finding lists every failure mode, the
+  static census lists a zone that is short of cooling as `overloaded_zones` rather than a rogue,
+  the SAT censuses count G36's tier-1 request when a zone trends `zone_cool_loop`, and the
+  cohort-starvation summary names every starved air handler.
 - **G36 §5.16.14 engine** — `fdd_g36.run_g36_afdd` scores AHU fault conditions **FC1–FC15** with
   operating-state gating (an interval with a missing valve command is *unclassified* — no FC is
   scored there — rather than read as free cooling; unsorted/duplicate timestamps are sorted and

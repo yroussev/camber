@@ -153,9 +153,15 @@ def _reheat_valve_role(frame: pd.DataFrame) -> tuple:
 def _with_valve(frame: pd.DataFrame, cols: dict, valve_role) -> pd.DataFrame:
     """``frame`` renamed to the legacy columns, with ``HWValve`` read from ``valve_role`` (the
     column as trended, as before 0.98) and the position column dropped."""
-    legacy = frame.drop(columns=[Role.HEAT_VALVE_POSITION], errors="ignore").rename(columns=cols)
+    legacy = frame.drop(
+        columns=[Role.HEAT_VALVE_POSITION, Role.AIRFLOW_MIN_SP], errors="ignore"
+    ).rename(columns=cols)
     if valve_role is Role.HEAT_VALVE_POSITION:
         legacy["HWValve"] = frame[Role.HEAT_VALVE_POSITION]
+    # 0.106 (#186): ActFlowSP is read as the box's MINIMUM airflow; the minimum airflow setpoint
+    # takes its place when it is mapped (airflow_sp may be the active setpoint)
+    if Role.AIRFLOW_MIN_SP in frame.columns:
+        legacy["ActFlowSP"] = frame[Role.AIRFLOW_MIN_SP]
     return legacy
 
 
@@ -237,6 +243,7 @@ class ReheatPenalty:
         Role.COOL_SP,
         Role.AIRFLOW,
         Role.AIRFLOW_SP,
+        Role.AIRFLOW_MIN_SP,  # 0.106 (#186): read as the minimum in place of airflow_sp
         Role.DAMPER,
         Role.WARMUP,
         Role.COOLDOWN,
