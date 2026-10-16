@@ -55,9 +55,6 @@ POWER_GATE_CAVEAT = (
 #: loop reads about zero; a variable-flow loop at light load stays well above it.
 LOOP_FLOW_RUN_FRAC = 0.05
 
-#: The run sources a chilled-water loop's gate can report (0.106, #184).
-LOOP_RUN_SOURCES = ("pump_status", "flow", "pump_power")
-
 LOOP_FLOW_GATE_CAVEAT = (
     "chilled-water loop with no pump run status mapped: running hours read from the loop flow "
     "above 5 % of its 95th percentile -- map the pumps' status (pump_status) for a firmer gate"

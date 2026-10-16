@@ -1547,7 +1547,8 @@
   "camber.model.equipclass": [
     "EQUIP_FAMILIES",
     "equip_family",
-    "family_matches"
+    "family_matches",
+    "is_chw_loop"
   ],
   "camber.model.mapping": [
     "MappingProvider"
@@ -1918,7 +1919,9 @@
     "rule_names"
   ],
   "camber.rules.chiller_approach_rule": [
-    "ChillerApproachFouling"
+    "ChillerApproachFouling",
+    "NO_GATE_CAVEAT",
+    "POWER_GATE_CAVEAT"
   ],
   "camber.rules.chiller_cw_range_rule": [
     "CW_RANGE_FAULT_F",
@@ -1984,6 +1987,10 @@
   "camber.rules.chwplant_rule": [
     "CHWPlantReset",
     "CHWSupplyTracking",
+    "LOOP_FLOW_GATE_CAVEAT",
+    "LOOP_FLOW_RUN_FRAC",
+    "LOOP_POWER_GATE_CAVEAT",
+    "LOOP_TEMPERATURE_GATE_CAVEAT",
     "POWER_GATE_CAVEAT",
     "RUN_STATUS_ROLE",
     "TEMPERATURE_GATE_CAVEAT"
