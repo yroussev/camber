@@ -67,10 +67,12 @@ def test_compressor_short_cycle_warn_tier():
 
 def test_compressor_stage_warn_tier():
     idx = _days2_hourly()
-    # 4 pulses -> 8 level changes over 2 days -> 4 changes/day
-    frame = pd.DataFrame({Role.COMPRESSOR_STAGE: _pulses(idx, 4)}, index=idx)
+    # 4 stage-2 pulses on a running stage 1 -> 8 stage changes over 2 days -> 4 changes/day
+    # (0.106, #185: changes count only while running, so the stage never drops to 0 here)
+    frame = pd.DataFrame({Role.COMPRESSOR_STAGE: 1.0 + _pulses(idx, 4)}, index=idx)
     f = CompressorStaging(max_changes_per_day=3.0).analyze("DX-1", frame)
     assert f.severity == "warn"
+    assert f.caveats and "floor" in f.caveats[0]  # an hourly trend: the count is a floor
 
 
 def test_heatpump_defrost_warn_tier():

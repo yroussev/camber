@@ -56,9 +56,17 @@ requires a reversing-valve command; `DOAS` requires outdoor-air flow.
   the ceiling declines to `info` when the resampled status shows the compressor on for part of an
   interval (see [TIME-HANDLING.md](TIME-HANDLING.md#resampling-a-run-status)).
 - **`compressor_staging`** — unstable multi-stage DX (excess stage changes/day). Flag:
-  `max_changes_per_day`.
+  `max_changes_per_day`. Since 0.106 only changes while the compressor runs count: a start or a
+  stop (to or from stage 0) is `compressor_short_cycle`'s to judge.
 - **`heatpump_defrost`** — excess heat-pump defrost / reversing-valve cycling (iced coil or faulty
-  defrost termination). Flag: `max_reversals_per_day`.
+  defrost termination). Flag: `max_reversals_per_day`. On a resampled valve, a bin part-way
+  between heating and cooling counts the fewest changes it allows (two for a defrost inside a
+  heating spell).
+
+Both rules take `max_interval_min` (default 5 minutes, since 0.106): a defrost or a short stage
+averages away in a coarser bin, so the count is a floor. A count at or above the limit keeps its
+verdict with a caveat; below it, samples part-way between two states decline the verdict to
+`info` ("cannot confirm on a 15-minute trend").
 - **`filter_fouling`** — air filter at/above its change-out differential pressure (wasted fan energy,
   starved airflow). Flag: `change_dp_inwc` (default ~1.0 inH2O).
 - **`chiller_approach_fouling`** — condenser/evaporator **approach-temperature** degradation (tube
@@ -150,15 +158,23 @@ and reversing valve take precedence. Three rules follow, all on the `heat_pump` 
   or heating one above its cooling setpoint (changeover, thermostat location, setpoints).
 - **`hp_capacity_shortfall`**: the room outside its band. When the unit was already working in the
   right mode, the verdict is **capacity** (unit size, airflow, source-loop temperature,
-  refrigerant). When the unit was idle, the verdict is **control** (thermostat, setpoint,
-  schedule). This is the heat-pump counterpart of the VAV "zone below setpoint with reheat
-  saturated" rule, which is for terminal boxes only.
+  refrigerant). When the unit was idle or running the other way, the verdict is **control**
+  (thermostat, setpoint, schedule, a stuck changeover), and the summary gives the split. This is
+  the heat-pump counterpart of the VAV "zone below setpoint with reheat saturated" rule, which is
+  for terminal boxes only. When `hp_room_imbalance` runs in the same config and finds a unit's
+  room fighting, a capacity or mixed verdict on that unit becomes `room_fight` (the severity
+  stands, `verdict_alone` keeps the old verdict): the cause is the fight, not the unit's size.
 - **`hp_room_imbalance`** (fleet): two or more units serving one room that fight (one heats while
   another cools), split the work very unevenly, or whose zone sensors disagree. Rooms come from the
   rule's `rooms={room: [units]}` or from a topology whose parent of each unit is its room.
 
 Setpoints are the mapped `heat_sp` / `cool_sp`. Otherwise a stated default band of 68-76 °F applies,
 with a caveat.
+
+**Defrost (0.106).** With the mode read from the compressor and the reversing valve, a cooling run
+of at most `max_defrost_min` (15 minutes) with heating on both sides is an air-source unit's
+defrost, and all three rules count it as heating. `hp_mode_vs_need` reports the occupied defrost
+time as `defrost_hours`; `heatpump_defrost` judges how often a unit defrosts.
 
 **Source loop.** `source_loop_deltat` (class family `source_loop`: `GEO_LOOP`, `GROUND_LOOP`, ...)
 reads a heat-pump loop through the new generic roles `source_loop_supply_temp`,

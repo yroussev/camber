@@ -2339,7 +2339,21 @@ PARAM_DOCS["compressor_staging"] = {
         "ceiling above its busiest day; the controller's stage-up / stage-down delays bound what "
         "a stable sequence can do.",
         (8.0, 96.0),
-        "Warn at the ceiling, fault at twice it.",
+        "Warn at the ceiling, fault at twice it. Only changes while the compressor runs count "
+        "(0.106): a start or stop (to or from stage 0) is compressor_short_cycle's.",
+    ),
+    "max_interval_min": _P(  # 0.106 (#185)
+        "minutes",
+        "CAMBER judgment: a stage held for less than the trend interval averages away in a "
+        "resampled mean; stage-up and stage-down delays are typically a few minutes",
+        "Keep it at or below the controller's shortest stage delay. Better than raising it: run "
+        "the rule at the stored interval (resample at or below this) so the count can see the "
+        "changes.",
+        (1.0, 15.0),
+        "Coarser than this, a count at or above max_changes_per_day stands with a caveat that it "
+        "is a floor. Below the limit, when samples sit between two stages (a resampled mean that "
+        "is not a whole number), the verdict declines to info instead of ok; with none, ok "
+        "stands with the caveat.",
     ),
 }
 
@@ -2353,6 +2367,19 @@ PARAM_DOCS["heatpump_defrost"] = {
         "Each defrost counts two transitions (into cooling and back), so allow for that.",
         (12.0, 96.0),
         "Warn at the ceiling, fault at twice it. Heating/cooling changeovers count too.",
+    ),
+    "max_interval_min": _P(  # 0.106 (#185)
+        "minutes",
+        "CAMBER judgment: a defrost lasts a few minutes (typically 2-10), so a coarser bin "
+        "averages it away",
+        "Keep it at or below the unit's shortest defrost. Better than raising it: run the rule "
+        "at the stored interval (resample at or below this) so the count can see the defrosts.",
+        (1.0, 15.0),
+        "On a resampled valve a bin part-way between heating and cooling counts the fewest "
+        "changes it allows (two for a defrost inside a heating spell). Coarser than this, a "
+        "count at or above max_reversals_per_day stands with a caveat that it is a floor; below "
+        "it, part-way samples decline the verdict to info instead of ok; with none, ok stands "
+        "with the caveat.",
     ),
 }
 
@@ -2587,6 +2614,15 @@ _HP_BASE = {
         "the unit cools and above the fan-only difference.",
         (5.0, 20.0),
         "Ignored when compressor status and the reversing-valve command are both mapped.",
+    ),
+    "max_defrost_min": _P(  # 0.106 (#185)
+        "minutes (one reversed run with the compressor on)",
+        "CAMBER judgment: a defrost ends on a coil temperature or a 10-14 minute timer",
+        "Set it a little above the unit's defrost termination time from its manual or the "
+        "longest defrost in a known-good cold spell. 0 turns the defrost reading off.",
+        (0.0, 30.0),
+        "Only with compressor status and the reversing-valve command both mapped: a cooling run "
+        "this short with heating on both sides is a defrost and counts as heating.",
     ),
 }
 

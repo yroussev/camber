@@ -2143,6 +2143,7 @@
     "HPCapacityShortfall",
     "HPModeVsNeed",
     "HPRoomImbalance",
+    "MAX_DEFROST_MIN",
     "infer_hp_mode"
   ],
   "camber.rules.heatpump_rule": [

@@ -23,6 +23,18 @@ lives here; that one is for VAV boxes only. Setpoints are the mapped ``heat_sp``
 when present, else a stated default comfort band (68-76 degF) with a caveat. Occupied hours come
 from the ``occupancy`` role, else the weekday daytime default (:func:`camber.resolve.occupied`).
 Thresholds are screening-grade (provisional, 0.93).
+
+**Defrost is heating (0.106, #185).** With the mode read from the compressor and the reversing
+valve, an air-source unit's defrost reverses the valve with the compressor running, which read as
+cooling: a unit that only defrosted was "cooling a room already below its heating setpoint". A
+cooling run no longer than ``max_defrost_min`` with heating on both sides is now a defrost and
+counts as heating in all three rules. ``heatpump_defrost`` judges how often a unit defrosts.
+
+**Units that fight (0.106, #185).** Each unit of a pair fighting in one room sees its own sensor
+out of band while it works, which ``hp_capacity_shortfall`` alone reads as a capacity shortfall.
+When ``hp_room_imbalance`` runs in the same config and finds the room's units fighting, the
+capacity finding of each unit in that room names the fight as the cause instead
+(:func:`_defer_capacity_to_room_fight`).
 """
 
 from __future__ import annotations
@@ -40,6 +52,7 @@ __all__ = [
     "DEFAULT_HEAT_SP_F",
     "DEFAULT_COOL_SP_F",
     "BAND_TOL_F",
+    "MAX_DEFROST_MIN",
     "infer_hp_mode",
     "HPModeVsNeed",
     "HPCapacityShortfall",
@@ -54,6 +67,9 @@ COOL_DROP_F = 10.0
 DEFAULT_HEAT_SP_F = 68.0
 DEFAULT_COOL_SP_F = 76.0
 BAND_TOL_F = 1.0  # the zone must be this far past a setpoint to count as outside the band
+#: A cooling run (mode from the compressor and the valve) no longer than this, with heating on both
+#: sides, is a defrost (0.106, #185). Defrosts end on a coil temperature or a 10-14 minute timer.
+MAX_DEFROST_MIN = 15.0
 
 
 def infer_hp_mode(
@@ -87,6 +103,34 @@ def infer_hp_mode(
         fan = pd.to_numeric(frame[Role.SUPPLY_FAN_STATUS], errors="coerce")
         mode = mode.where(~(fan < 0.5), 0.0)
     return mode
+
+
+def _status_mode(frame: pd.DataFrame) -> bool:
+    """Whether :func:`infer_hp_mode` reads the mode from the compressor and the valve."""
+    return Role.COMPRESSOR_STATUS in frame.columns and Role.REVERSING_VALVE_CMD in frame.columns
+
+
+def _defrost_mask(frame: pd.DataFrame, mode: pd.Series, max_defrost_min: float) -> pd.Series:
+    """The samples of ``mode`` that are a defrost, not cooling (0.106, #185).
+
+    Only with the mode read from the compressor and the reversing valve (a discharge-air mode
+    does not see the valve): a run of cooling samples lasting at most ``max_defrost_min`` with a
+    heating sample on each side. A run at the trend's start or end, or next to an off or unknown
+    sample, stays cooling.
+    """
+    out = np.zeros(len(mode), dtype=bool)
+    if not _status_mode(frame) or max_defrost_min <= 0 or len(mode) < 3:
+        return pd.Series(out, index=mode.index)
+    step_min = _step_hours(frame.index) * 60.0
+    m = mode.to_numpy(dtype=float)
+    cool = m == -1.0
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], cool.astype(np.int8), [0]))))
+    for start, stop in zip(edges[::2], edges[1::2]):  # each cooling run is m[start:stop]
+        if start == 0 or stop >= len(m):
+            continue
+        if (stop - start) * step_min <= max_defrost_min + 1e-9 and m[start - 1] == m[stop] == 1.0:
+            out[start:stop] = True
+    return pd.Series(out, index=mode.index)
 
 
 def _band(frame: pd.DataFrame, heat_sp_f: float, cool_sp_f: float, caveats: list):
@@ -147,22 +191,30 @@ class _HPBase:
         band_tol_f: float = BAND_TOL_F,
         heat_rise_f: float = HEAT_RISE_F,
         cool_drop_f: float = COOL_DROP_F,
+        max_defrost_min: float = MAX_DEFROST_MIN,
     ):
         self.heat_sp_f = heat_sp_f
         self.cool_sp_f = cool_sp_f
         self.band_tol_f = band_tol_f
         self.heat_rise_f = heat_rise_f
         self.cool_drop_f = cool_drop_f
+        self.max_defrost_min = max_defrost_min  # 0.106 (#185)
+
+    def _mode(self, frame: pd.DataFrame) -> tuple:
+        """``(mode, defrost)``: the operating mode with defrosts counted as heating (#185)."""
+        mode = infer_hp_mode(frame, heat_rise_f=self.heat_rise_f, cool_drop_f=self.cool_drop_f)
+        defrost = _defrost_mask(frame, mode, self.max_defrost_min)
+        return mode.where(~defrost, 1.0), defrost
 
     def _prep(self, frame: pd.DataFrame, caveats: list):
-        mode = infer_hp_mode(frame, heat_rise_f=self.heat_rise_f, cool_drop_f=self.cool_drop_f)
+        mode, defrost = self._mode(frame)
         zat = pd.to_numeric(frame[Role.SPACE_TEMP], errors="coerce")
         hsp, csp = _band(frame, self.heat_sp_f, self.cool_sp_f, caveats)
         occ = _occupied(frame, caveats)
         valid = occ & mode.notna() & zat.notna()
         cold = zat < hsp - self.band_tol_f
         hot = zat > csp + self.band_tol_f
-        return mode, zat, cold, hot, valid
+        return mode, defrost, cold, hot, valid
 
     def _coil_unit(self, frame: pd.DataFrame) -> str | None:
         """Why ``frame`` reads as a coil unit rather than a heat pump, or ``None``.
@@ -223,7 +275,7 @@ class HPModeVsNeed(_HPBase):
         if coil:
             return self._declined(equip, coil)
         caveats: list = []
-        mode, _zat, cold, hot, valid = self._prep(frame, caveats)
+        mode, defrost, cold, hot, valid = self._prep(frame, caveats)
         if int(valid.sum()) == 0:
             return self._declined(equip, "no occupied samples with a mode and a zone temperature")
         h = _step_hours(frame.index)
@@ -245,10 +297,10 @@ class HPModeVsNeed(_HPBase):
             "heating_while_warm_hours": round(float(heat_hot.sum()) * h, 2),
             "wrong_mode_pct_of_running": round(pct, 2),
             "occupied_running_hours": round(n_run * h, 2),
-            "mode_source": "status"
-            if Role.REVERSING_VALVE_CMD in frame.columns and Role.COMPRESSOR_STATUS in frame.columns
-            else "discharge_vs_zone",
+            "mode_source": "status" if _status_mode(frame) else "discharge_vs_zone",
         }
+        if _status_mode(frame):  # 0.106 (#185): defrost samples, counted as heating
+            metrics["defrost_hours"] = round(float((valid & defrost).sum()) * h, 2)
         if severity == "ok":
             summary = f"{equip}: the mode matches the room's need ({wrong_h:.1f} h against it)"
         else:
@@ -297,10 +349,12 @@ class HPCapacityShortfall(_HPBase):
         out = valid & outside
         n_out = int(out.sum())
         working = int((out & (mode == want)).sum())
+        opposite = int((out & (mode == -want)).sum())  # 0.106 (#185)
         return {
             "outside_pct": 100.0 * n_out / n_valid if n_valid else 0.0,
             "outside_hours": n_out * h,
             "working_pct": 100.0 * working / n_out if n_out else None,
+            "opposite_pct": 100.0 * opposite / n_out if n_out else None,
         }
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
@@ -309,7 +363,7 @@ class HPCapacityShortfall(_HPBase):
         if coil:
             return self._declined(equip, coil)
         caveats: list = []
-        mode, _zat, cold, hot, valid = self._prep(frame, caveats)
+        mode, _defrost, cold, hot, valid = self._prep(frame, caveats)
         if int(valid.sum()) == 0:
             return self._declined(equip, "no occupied samples with a mode and a zone temperature")
         h = _step_hours(frame.index)
@@ -350,6 +404,16 @@ class HPCapacityShortfall(_HPBase):
                 "setpoint, schedule), not capacity",
                 "mixed": "with the unit sometimes working, sometimes idle",
             }[verdict]
+            # 0.106 (#185): a unit running the other way is not idle; say how it spent the time
+            opp = s["opposite_pct"] or 0.0
+            if verdict == "control" and opp > 0:
+                other = "cooling" if side_name == "heating" else "heating"
+                wp = s["working_pct"] or 0.0
+                what = (
+                    f"while the unit was {side_name} only {wp:.0f}% of that time, {other} "
+                    f"{opp:.0f}% and idle {100.0 - wp - opp:.0f}% -- a control problem (a stuck "
+                    "reversing valve or changeover, the thermostat, the setpoints), not capacity"
+                )
             summary = (
                 f"{equip}: {s['outside_pct']:.0f}% of occupied time {band} "
                 f"({s['outside_hours']:.0f} h) {what}"
@@ -421,9 +485,7 @@ class HPRoomImbalance(_HPBase):
             for e in eqs:
                 fr = frames[e]
                 tmp: list = []
-                modes[e] = infer_hp_mode(
-                    fr, heat_rise_f=self.heat_rise_f, cool_drop_f=self.cool_drop_f
-                )
+                modes[e] = self._mode(fr)[0]  # 0.106 (#185): defrosts count as heating
                 zats[e] = pd.to_numeric(fr[Role.SPACE_TEMP], errors="coerce")
                 occs[e] = _occupied(fr, tmp)
                 for c in tmp:
@@ -455,6 +517,7 @@ class HPRoomImbalance(_HPBase):
                 "units": eqs,
                 "n_samples": n,
                 "fight_pct": round(float(fight), 2),
+                "fights": bool(fight >= self.warn_fight_pct),  # 0.106 (#185)
                 "active_pct": {e: round(v, 1) for e, v in duty.items()},
                 "active_spread_pct": round(spread, 1),
                 "zone_sensor_spread_f": round(zs, 2),
@@ -475,3 +538,60 @@ class HPRoomImbalance(_HPBase):
                 f"{r['zone_sensor_spread_f']:.1f}°F"
             )
         return Finding(self.name, "fleet", worst, metrics, summary, caveats=caveats)
+
+
+#: The capacity verdicts that two units fighting in one room produce on their own (0.106, #185).
+_FIGHT_VERDICTS = ("capacity", "mixed")
+
+
+def _defer_capacity_to_room_fight(findings: list) -> int:
+    """Defer the cause of a fighting room's capacity findings to ``hp_room_imbalance`` (#185).
+
+    Each unit of a fighting pair sees its own sensor out of band while it works, which
+    ``hp_capacity_shortfall`` reads as a capacity shortfall: the cause is the fight (often a
+    sensor in the wrong place), which only the fleet rule can see. For every room the
+    ``hp_room_imbalance`` finding in ``findings`` marks as fighting, a ``warn`` or ``fault``
+    capacity finding of a unit in that room with a ``capacity`` or ``mixed`` verdict gets
+    ``verdict`` ``room_fight`` (the former one kept as ``verdict_alone``), ``deferred_to`` and
+    ``room``, and a summary and caveat that name the fight. Its severity stands: the room is out
+    of band, so the unit still has a problem, just not a capacity one. A ``control`` verdict
+    stands too. Edits ``findings`` in place; returns how many were deferred.
+    """
+    rooms: dict = {}
+    for f in findings:
+        if f.rule == HPRoomImbalance.name and f.equip == "fleet":
+            rooms = (f.metrics or {}).get("rooms") or {}
+    fighting = {
+        unit: (room, r) for room, r in rooms.items() if r.get("fights") for unit in r["units"]
+    }
+    n = 0
+    for f in findings:
+        if f.rule != HPCapacityShortfall.name or f.equip not in fighting:
+            continue
+        m = f.metrics or {}
+        if f.severity not in ("warn", "fault") or m.get("verdict") not in _FIGHT_VERDICTS:
+            continue
+        room, r = fighting[f.equip]
+        f.metrics = {
+            **m,
+            "verdict": "room_fight",
+            "verdict_alone": m.get("verdict"),
+            "deferred_to": HPRoomImbalance.name,
+            "room": room,
+        }
+        side = m.get("side")
+        band = "below its heating band" if side == "heating" else "above its cooling band"
+        f.summary = (
+            f"{f.equip}: {m.get(f'{side}_outside_pct', 0.0):.0f}% of occupied time {band} while "
+            f"it works, but the units in {room} fight ({r['fight_pct']:.1f}% of the co-occupied "
+            f"time; see {HPRoomImbalance.name}) -- the fight, not capacity: check where each "
+            "unit's zone sensor sits"
+        )
+        f.caveats = [
+            *(f.caveats or []),
+            f"cause deferred to {HPRoomImbalance.name}: another unit in {room} runs the other way "
+            "while this one works, so this unit alone would read as short of capacity "
+            f"(verdict_alone {m.get('verdict')}); do not size the unit up from this finding",
+        ]
+        n += 1
+    return n

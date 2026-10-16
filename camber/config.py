@@ -2507,6 +2507,11 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         if f is not None:
             findings.append(f)
         ran.append(vent_rule.name)
+    # 0.106 (#185): a unit whose room fights defers its capacity finding to the room's
+    if "hp_capacity_shortfall" in ran and "hp_room_imbalance" in ran:
+        from .rules.heatpump_ops_rule import _defer_capacity_to_room_fight
+
+        _defer_capacity_to_room_fight(findings)
 
     # Optional SOO conformance: per equipment class, a packaged library sequence or a
     # JSON clause spec is evaluated over each matched equipment's role-frame, and the
