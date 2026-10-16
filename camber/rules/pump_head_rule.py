@@ -381,7 +381,13 @@ class PumpHeadDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "down":
+        if direction == "down" and severity == "ok":
+            # 0.106 (#187): an ok finding names no deficit -- that belongs to warn and fault
+            headline = (
+                f"{equip}: pump head holds near its baseline ({G.signed(drift.drift_f, 1)} psi, "
+                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched speed)"
+            )
+        elif direction == "down":
             headline = (
                 f"{equip}: pump head deficit {drift.drift_f:+.1f} psi "
                 f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched speed"

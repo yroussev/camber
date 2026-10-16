@@ -429,20 +429,35 @@ class LoopDPDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        cause = (
-            "rising system resistance / valve authority"
-            if direction == "up"
-            else "bypass / stuck-open"
-        )
         arrow = "rose" if direction == "up" else "fell"
+        if severity == "ok" and setpoint_driven:
+            # 0.106 (#187): an ok finding names no fault; a reset-driven move says so
+            summary = (
+                f"{equip}: loop DP {arrow} {abs(drift.drift_f):.1f} "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched flow -- "
+                "explained by the DP setpoint reset"
+            )
+        elif severity == "ok":
+            # 0.106 (#187): an ok finding names no fault -- the cause belongs to warn and fault
+            summary = (
+                f"{equip}: loop DP holds near its baseline ({G.signed(drift.drift_f, 1)}, "
+                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            )
+        else:
+            cause = (
+                "rising system resistance / valve authority"
+                if direction == "up"
+                else "bypass / stuck-open"
+            )
+            summary = (
+                f"{equip}: loop DP {arrow} {abs(drift.drift_f):.1f} "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched flow -- {cause}"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: loop DP {arrow} {abs(drift.drift_f):.1f} "
-                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched flow -- {cause}"
-            ),
+            summary=summary,
             caveats=caveats,
         )

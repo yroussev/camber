@@ -44,7 +44,8 @@ baseline on the reference in a scratch in-memory store that is **never saved** -
 re-read from the data on every run, so nothing is minted and nothing can quietly move. Every such
 Finding carries ``baseline_source`` (``"reference:<equip>"`` or ``"period:<start>..<end>"``) and a
 caveat saying what it was compared with; the reference equipment itself declines with
-``reason="is_reference"`` (it is the yardstick, not a scored unit).
+``reason="is_reference"`` (it is the yardstick, not a scored unit) for each detector it has the
+inputs for.
 
 **Freezing is a verb, not a setting.** Every drift rule defaults ``freeze_if_missing=True`` and
 writes the reference inline, so a scheduled run would quietly mint baselines from whatever window
@@ -536,7 +537,8 @@ def _run_one_reference(
     ``current`` exactly as :meth:`~camber.rules.base.Registry.run_periods` would, then handed to
     ``rule.analyze_periods(equip, reference_frame, current_frame)``. ``rule`` must hold a scratch
     store with freezing on: it fits each target's baseline from the reference frame there. The
-    reference equipment itself declines (``reason="is_reference"``), and a reference that cannot
+    reference equipment itself declines (``reason="is_reference"``) for each detector it has the
+    inputs for, and is skipped like any other unit for the rest; a reference that cannot
     serve (missing inputs, untrusted, empty window) declines every target with the reason, rather
     than leaving them silently unscored.
     """
@@ -561,7 +563,8 @@ def _run_one_reference(
     )
     problem = None  # (reason, why) when the reference cannot serve this detector
     ref_slice = None
-    if ref_frame is None or _cannot_run(rule, ref_frame):
+    ref_runnable = ref_frame is not None and not _cannot_run(rule, ref_frame)
+    if not ref_runnable:
         problem = ("reference_missing_inputs", f"the reference {name} lacks this detector's inputs")
     else:
         bad = (
@@ -582,6 +585,10 @@ def _run_one_reference(
     out: list = []
     for ref in refs:
         if ref.equip == name:
+            if not ref_runnable:
+                # 0.106 (#188): a detector the reference has no inputs for is skipped, as for
+                # any other unit -- it is not withheld because the unit is the yardstick
+                continue
             out.append(
                 _ref_decline(
                     rule,
