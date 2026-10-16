@@ -13,6 +13,14 @@ cube of speed, the speed *distribution* tells the story two ways:
 
 Operates on one pump-speed series; loop-agnostic, so the same function serves CHW and
 HW pumps (see the ``analyze_pump`` alias).
+
+**Running comes from the run status when there is one (0.105, #180).** A speed point does not
+always fall to zero when the pump stops: on the ``lbnl-chiller`` plant the secondary pump's speed
+holds the DP loop's last output (0.345) through every stopped hour, which reads as a pump idling at
+its VFD floor. With a ``PumpStatus`` column only the samples the pump ran for most of (status duty
+above 0.5, the #143 duty semantics: a resampled status is the share of the bin it was on) are
+judged, and the VFD floor is learned from those samples. Without one, running is speed above
+``run_thr`` as before, and the rule wrappers say a parked speed cannot be ruled out.
 """
 
 from __future__ import annotations
@@ -77,6 +85,10 @@ class CHWPumpResult:
     near_min_band_pct: float = 25.0  # the band actually used: speed <= this is "near min"
     near_min_source: str = "fixed"  # "fixed" | "learned" (VFD floor found) | "default" (not found)
     vfd_floor_pct: float | None = None  # the learned VFD floor (None when not learned)
+    # 0.105 (#180): what "running" was read from, and (with a status) how many samples the speed
+    # alone would have counted as running while the status says the pump was stopped
+    run_source: str = "speed"  # "status" (PumpStatus duty > 0.5 and speed > run_thr) | "speed"
+    n_stopped_speed_above_run: int | None = None  # None without a status
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -95,7 +107,17 @@ def analyze_chw_pump(
     floor_tol_pct: float = 1.0,  # "auto": a speed within this of the learned floor is at it
 ) -> CHWPumpResult | None:
     """Diagnose pump speed distribution / DP reset. ``df`` has 'PumpSpeed' (and optional
-    'DiffPressSP'). Speeds are %; running = speed > run_thr.
+    'DiffPressSP' and 'PumpStatus'). Speeds are %; running = speed > run_thr, and, when
+    'PumpStatus' has any reading, also status > 0.5 (0.105, #180).
+
+    ``PumpStatus`` is a 0/1 run status or, on a resampled trend, its duty (0..1, the share of the
+    bin the pump ran). A sample counts as running when the duty is above 0.5 -- the pump ran for
+    most of it -- as :func:`camber.schedules.fan_on_mask` and the ``n_running`` of
+    :func:`camber.plant.analyze_hw_pump_lockout` read a duty; a missing status reading counts as
+    not running. The speed distribution, the learned VFD floor and the DP-setpoint reset are then
+    read over those samples only, so a speed point that parks at its last value while the pump is
+    stopped is not read as running at the floor. Without a status every sample above ``run_thr``
+    counts, exactly as before 0.105.
 
     Thresholds are OUR judgment / PNNL Ch.8: near_full_pct=90 (a VFD pinned >=90% is
     effectively full speed, no cube-law benefit); near_min_pct=25 (pinned this low
@@ -113,6 +135,16 @@ def analyze_chw_pump(
     if occupied_only:
         work = work[occupied_mask(work.index)]
     spd = work["PumpSpeed"].dropna()
+    run_source, n_parked, on = "speed", None, None
+    if "PumpStatus" in work.columns:
+        status = pd.to_numeric(work["PumpStatus"], errors="coerce")
+        if status.notna().any():
+            # 0.105 (#180): duty > 0.5 is running (#143); a missing reading is not
+            on = (status > 0.5).fillna(False)
+            stopped = ~on.reindex(spd.index, fill_value=False)
+            n_parked = int((spd[stopped] > run_thr).sum())
+            spd = spd[~stopped]
+            run_source = "status"
     running = spd[spd > run_thr]
     n = len(running)
     if n == 0:
@@ -136,6 +168,8 @@ def analyze_chw_pump(
     # CANNOT evaluate reset -- report None, never a confident "flat / no reset" (False).
     if "DiffPressSP" in work.columns:
         sp = work["DiffPressSP"].dropna()
+        if on is not None:  # 0.105 (#180): the setpoint the pump ran against, not a stopped one
+            sp = sp[on.reindex(sp.index, fill_value=False)]
         sp = sp[sp > 0]
         if len(sp) >= 10:
             dp_std = float(sp.std())
@@ -159,6 +193,8 @@ def analyze_chw_pump(
         near_min_band_pct=round(float(band), 1),
         near_min_source=band_source,
         vfd_floor_pct=floor,
+        run_source=run_source,
+        n_stopped_speed_above_run=n_parked,
     )
 
 
@@ -174,6 +210,26 @@ def _check_near_min(near_min_pct):
     if isinstance(near_min_pct, bool) or not isinstance(near_min_pct, (int, float)):
         raise ValueError(f"near_min_pct must be a number or 'auto', not {near_min_pct!r}")
     return float(near_min_pct)
+
+
+#: the caveat a pump rule carries when running is read from speed alone (0.105, #180)
+_NO_STATUS_CAVEAT = (
+    "no pump run status (pump_status) mapped: running is read from speed > 5 %, so hours a "
+    "stopped pump's speed point holds its last value (some drives and simulations park it at "
+    "the loop's last output) cannot be ruled out and would count as running near the minimum"
+)
+
+
+def _run_caveats(res: CHWPumpResult) -> list:
+    """The caveat(s) on how running was read (0.105, #180)."""
+    if res.run_source == "speed":
+        return [_NO_STATUS_CAVEAT]
+    if res.n_stopped_speed_above_run:
+        return [
+            f"{res.n_stopped_speed_above_run} samples read a speed above 5 % while the run status "
+            "says the pump was stopped (a parked speed point); judged as stopped"
+        ]
+    return []
 
 
 def _floor_note(res: CHWPumpResult) -> str:

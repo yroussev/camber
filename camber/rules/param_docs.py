@@ -1996,8 +1996,11 @@ PARAM_DOCS["hw_pump_dp_reset"] = {
 FIXED["hw_pump_dp_reset"] = (
     "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
     "warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running "
-    "means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts "
-    "as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)"
+    "means speed > 5 % and, when a pump_status is mapped (0.105, #180), status duty > 0.5 (the "
+    "speed distribution, learned floor and DP setpoint are then read over those samples only; "
+    "without one a caveat says a parked speed cannot be ruled out); a DP setpoint with a "
+    "standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code "
+    "(camber/rules/hwpump_rule.py, camber/chwpump.py)"
 )
 
 PARAM_DOCS["chw_plant_reset"] = {
@@ -2051,8 +2054,9 @@ FIXED["chw_plant_reset"] = (
 PARAM_DOCS["chw_pump_dp_reset"] = {
     "near_min_pct": _P(
         '% speed, or "auto"',
-        "CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the "
-        "lbnl-chiller secondary pump, whose floor is 34.5 %",
+        "CAMBER judgment: learn the drive's own minimum (0.98, #86) rather than assume 25 %; on "
+        "lbnl-chiller the 34.5 % once learned was the speed parked while the pumps were stopped, "
+        "and judged on running hours (0.105, #180) no floor shows",
         _NEAR_MIN_PCT_CALIBRATE,
         ("auto", 10.0, 60.0),
         _NEAR_MIN_PCT_NOTE,
@@ -2063,9 +2067,12 @@ PARAM_DOCS["chw_pump_dp_reset"] = {
 FIXED["chw_pump_dp_reset"] = (
     "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
     "warn at >= 30 % near full, or near minimum (at or below the near_min_pct band) for >= 50 %; "
-    "running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own "
-    "units) counts as flat (no reset, reported but not in severity); fixed in code "
-    "(camber/rules/chwpump_rule.py, camber/chwpump.py)"
+    "running means speed > 5 % and, when a pump_status is mapped (0.105, #180), status duty "
+    "> 0.5 (the speed distribution, learned floor and DP setpoint are then read over those "
+    "samples only; without one a caveat says a parked speed cannot be ruled out); a DP "
+    "setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset, "
+    "reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, "
+    "camber/chwpump.py)"
 )
 
 # ---- end 098-plant-chw ----

@@ -1071,8 +1071,8 @@ CAMBER 0.98.0-dev), with the commands on the [exercise page](plant-cooling-tower
 
 ### `plant-chw-reset-pumping`: Chilled-water reset and pumping
 
-Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the commands on the
-[exercise page](plant-chw-reset-pumping.md#setup).
+Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev (the pumping figures
+0.105.0-dev), with the commands on the [exercise page](plant-chw-reset-pumping.md#setup).
 
 **Answer key**
 
@@ -1090,19 +1090,31 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
    supply setpoint in mild weather), not a broken component. On a variable-flow plant the same
    figures would count, against `design_deltaT_min_f` (8 °F unless set from the loop's design).
 3. *DP reset and pumping.* No: the DP setpoint is flat (`dp_sp_reset_present` false, the same value
-   all year). The secondary pump (`SECPUMP__fault_free`) runs at a median 84.9% and at 90 % or more
-   in 38.0% of its hours: a **warn** for riding the curve.
-4. *VFD minimum.* The pump's floor is 34.5%: the rule learns it from the speeds
-   (`vfd_floor_pct`, `near_min_source: learned`) and counts 31.3% of the fault-free run's hours
-   at or near it (the band is the floor plus a point, 35.5 %). The pump also runs all year, with
-   no cooling load in winter. On the chiller-bias run the pump idles at its floor (a median of
-   34.5%) for 68.6% of its hours, a **warn** for sitting at the minimum.
+   all year). Judged on the hours it runs (`run_source: status`, 5,890 of the year's 8,759), the
+   secondary pump (`SECPUMP__fault_free`) runs at a median 91.8% and at 90 % or more in 56.5% of
+   its hours: a **warn** for riding the curve against a flat DP setpoint, close to the 60 % fault
+   line.
+4. *VFD minimum.* There is no floor to see in the running speeds: `vfd_floor_pct` is null,
+   `near_min_source` is `default` (the 25 % band) and 0.0% of the running hours are near the
+   minimum. The 34.5 % that stands out in the speed trend is not a floor: it is the speed point
+   holding the stopped DP loop's last output while the pumps are off, in 2,869 of the fault-free
+   run's hours (`n_stopped_speed_above_run`; the caveat says they were judged as stopped). Until
+   0.105 the rule read running from speed alone, so it learned 34.5 % as the floor and counted
+   those stopped hours as a pump idling there
+   ([#180](https://github.com/yroussev/camber/issues/180)).
+   The run where the pump runs slowest is the chiller-bias one (`SECPUMP__chiller_bias_2`): the
+   pumps are stopped, speed parked, for 6,210 hours, which is why it used to read as a median of
+   34.5 % and a warn for sitting at the minimum. On the 2,549 hours they run, the median is 70.3%
+   with 8.7% near full: **ok**. Its chiller sensor reads 2 °C high, so the real chilled water is
+   colder than it reads and the air handlers need less of it (the
+   [sensor exercise](plant-sensor-vs-equipment.md) takes this up).
 5. *Stuck bypass.* The plant cannot make chilled water: the supply median is 65.0 °F and the delta-T
    0.7 °F, and the pump runs at a median 100%. The supply warms as the weather warms, a slope of
    +0.76 °F per °F, the reverse of a reset: `chw_plant_reset` is a **warn** with
    `chwst_reset_direction: reverse` (its low delta-T is not judged on this constant-flow plant).
-   That warn and `chw_pump_dp_reset` on `SECPUMP__bypass_stuck_075` (a warn) are both symptoms; the
-   cause is the tower bypass, which only `condenser_bypass_leak` names
+   That warn and `chw_pump_dp_reset` on `SECPUMP__bypass_stuck_075` (a **fault**: 95.5 % of its
+   running hours at 90 % or more) are both symptoms; the cause is the tower bypass, which only
+   `condenser_bypass_leak` names
    ([`plant-cooling-tower`](plant-cooling-tower.md)).
 
 **Discussion points**
@@ -1112,8 +1124,9 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
   what the rule does instead.
 - Why does a flat DP setpoint cost energy? Pump power goes roughly with the cube of speed, so the
   hours near full speed dominate the bill.
-- A plant whose pump idles at a floor all winter is a scheduling question: can the loop be shut
-  down, or the floor lowered?
+- A speed point that holds its last value while the pump is stopped looks just like a pump
+  idling at its floor. What tells running from stopped here (a status, the pumps' kW, the loop
+  flow), and what should a rule do on a plant that has none of them?
 - The stuck bypass shows how one fault fans out into symptoms on every loop. Ask which finding
   a technician should act on first.
 
@@ -1126,6 +1139,7 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
 - Reading the bypassed plant's positive slope as a working reset: it is the plant losing its
   chilled water in hot weather.
 - Blaming the pump for the bypassed plant: it runs flat out because the chilled water is warm.
+- Reading the 34.5 % plateau in the speed trend as the VFD minimum: the pumps are stopped then.
 
 <!-- END plant-chw-reset-pumping -->
 
@@ -1618,8 +1632,8 @@ chiller 1.
 
 ### `plant-sensor-vs-equipment`: Plant sensor faults vs equipment faults
 
-Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](plant-sensor-vs-equipment.md#setup).
+Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev (the pump figures
+0.105.0-dev), with the commands on the [exercise page](plant-sensor-vs-equipment.md#setup).
 
 **Answer key**
 
@@ -1631,10 +1645,13 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
    A kW/ton better than the healthy machine's is itself a clue.
 2. *Where the low-reading sensor also shows.* In the secondary pumps: `chw_pump_dp_reset` is a
    **fault** on the 2 °C-low run (`SECPUMP__chiller_bias_m2`), with the pump at 90 % or more in
-   82.1% of its hours (a median of 100 %). The real chilled water is warmer, so the air handlers'
-   valves open wider and the pump works harder to hold the loop DP. The high-reading runs do the
-   opposite: the pump idles at its 34.5 % VFD floor for most of its hours, a warn for sitting at the
-   minimum (0.98 learns the floor; before, the rule's 25 % band missed it).
+   92.2% of its running hours (a median of 100 %). The real chilled water is warmer, so the air
+   handlers' valves open wider and the pump works harder to hold the loop DP. The high-reading
+   runs go the other way: the real water is colder, and on the hours the pumps run their median
+   speed is lower (74.8 % at 1 °C high, 70.3 % at 2 °C high), with `chw_pump_dp_reset` `ok`. Until
+   0.105 these runs read as a pump idling at a 34.5 % VFD floor, a warn; that was the speed point
+   parked while the pumps were stopped, which the rule now leaves out
+   ([#180](https://github.com/yroussev/camber/issues/180)).
 3. *Tower sensor vs bypass.* `condenser_bypass_leak` reports both ±2 °C tower-sensor biases as
    `info` with `attribution: sensor_offset`: the water entering the chillers reads -3.1 °F and
    +3.6 °F from the tower's leaving water, and the difference stays the same at every load.
@@ -1643,8 +1660,9 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
    tower's leaving water is impossible for mixing, which settles the -3.1 °F case.) The ±1 °C
    biases stay under the rule's 2 °F threshold (`ok`).
 4. *The loop DP sensor.* Not in the DP reading, which the controller holds at setpoint. It shows
-   in the pump speed: a sensor reading 20 % high lets the pump slow to a median 74.4% (`ok`), one
-   reading 20 % low drives it to 97.0% (a warn), against 84.9 % healthy.
+   in the pump speed: a sensor reading 20 % high lets the pump slow to a median 80.0% (`ok`), one
+   reading 20 % low drives it to 100.0% (a **fault**, 76.5 % of its running hours near full),
+   against 91.8 % healthy.
 5. *Score.* `chiller_efficiency` scores FPR 15% (the 1 °C- and 2 °C-high chiller-sensor runs,
    2 of 13 negatives); `cooling_tower_approach` scores FPR 0%. The labels are right to count
    these as false alarms: the chiller is healthy, and a technician sent to it would find nothing

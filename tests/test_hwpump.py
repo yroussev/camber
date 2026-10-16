@@ -49,3 +49,20 @@ def test_missing_roles_info():
     n = 24
     frame = pd.DataFrame({Role.HW_SUPPLY_TEMP: np.full(n, 140.0)}, index=_idx(n))
     assert HWPumpDPReset().analyze("HWP-1", frame).severity == "info"
+
+
+def test_status_gates_running_0105():
+    # 0.105 (#180): a stopped pump whose speed parks at 30 % is not read as running at it
+    n = 24 * 21
+    on = np.arange(n) % 2 == 0
+    spd = np.where(on, 100.0, 30.0)
+    frame = pd.DataFrame(
+        {Role.HW_PUMP_SPEED: spd, Role.PUMP_STATUS: on.astype(float)}, index=_idx(n)
+    )
+    f = HWPumpDPReset().analyze("HWP-1", frame)
+    assert Role.PUMP_STATUS in HWPumpDPReset.roles_optional
+    assert f.metrics["run_source"] == "status" and f.metrics["n_running"] == n // 2
+    assert f.metrics["pct_running_near_full"] == 100.0 and f.severity == "fault"
+    g = HWPumpDPReset().analyze("HWP-1", frame.drop(columns=Role.PUMP_STATUS))
+    assert g.metrics["pct_running_near_full"] == 50.0
+    assert any("no pump run status" in c for c in g.caveats)

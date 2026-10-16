@@ -7,7 +7,7 @@ pumps beside it as ``SECPUMP__<run id>``, class ``CHW_PUMP``, since 0.105) or ``
 of hourly data per run with the same ids, classes and roles, and encode the *behaviour* each
 exercise teaches -- not the real data's figures. The only published parameters reused are the ones
 the configs also use: the 1.44 kW/ton and 8.1 F ceilings the lbnl-chiller template calibrates, the
-plant's constant DP setpoints and its 34.5 % secondary pump floor.
+plant's constant DP setpoints and the 34.5 % its secondary pump speed parks at while stopped.
 
 The shared weather: four weeks warming from spring to summer (daily mean dry-bulb 50 -> 85 F,
 +/- 8 F a day), the wet-bulb a few degrees below it; the building's cooling load follows the
@@ -29,7 +29,7 @@ TOWER_A0_F = 8.3  # the clean tower's approach at full fan and design heat
 TOWER_SP_OFFSET_F = 8.0  # tower leaving-water setpoint: wet-bulb + 8 F ...
 TOWER_FLOOR_F = 60.0  # ... never below 60 F
 HEAT_DESIGN_TONS = 120.0  # condenser heat at design (the chiller's load plus its compressor)
-PUMP_FLOOR = 0.345  # the secondary pump's VFD minimum (0-1)
+PUMP_FLOOR = 0.345  # the secondary pump speed: its lowest, and where it parks while stopped (0-1)
 CHW_DP_SP = 960.96  # the secondary loop's constant DP setpoint
 HW_DP_SP = 480.52  # the hot-water loop's constant DP setpoint (inH2O)
 
@@ -83,9 +83,13 @@ def chiller_plant(idx: pd.DatetimeIndex, fault: dict) -> pd.DataFrame:
       condenser return around the tower, so the chillers see warmer water (entering = leaving +
       fraction x range), lose capacity (12 tons) and run at about 3 kW/ton; the chilled water
       they cannot cool rises above setpoint and the secondary pump runs flat out;
-    - the secondary pump speed rises from its 34.5 % floor with load, around a flat DP setpoint;
-      a DP sensor reading ``dp_bias`` high makes the pump slow down (it thinks the loop is
-      satisfied) and one reading low speeds it up, while the DP reading itself stays at setpoint.
+    - the secondary pumps run with the chiller (``pump_status``) and their speed rises with load
+      from about 53 % to full, around a flat DP setpoint: no floor plateau while they run; while
+      they are stopped the speed point parks at 34.5 %, the stopped DP loop's last output, as the
+      real data's does (0.105, #180); a DP sensor reading ``dp_bias`` high makes the pump slow
+      down (it thinks the loop is satisfied) and one reading low speeds it up, while the DP
+      reading itself stays at setpoint; a chiller sensor reading high (colder real water) lets the
+      coils take less flow, so the pump runs slower.
     """
     oat, wb, occ = _weather(idx)
     load = np.clip(np.where(occ, 3.0, 1.0) * (oat - 55.0), 0.0, 120.0)
@@ -122,13 +126,16 @@ def chiller_plant(idx: pd.DatetimeIndex, fault: dict) -> pd.DataFrame:
     cwr = cws_true + cw_range
     cond_in = cws_true + bypass * cw_range
 
-    # the secondary pump: its floor at no load, full speed near peak
+    # the secondary pumps run with the chiller, rising with load to full speed near peak; while
+    # they are stopped the speed point parks at the DP loop's last output, the floor (0.105, #180)
     dp_bias = float(fault.get("dp_bias", 0.0))
     speed = PUMP_FLOOR + (1.0 - PUMP_FLOOR) * np.clip(load / 30.0, 0.0, 1.0) ** 0.7
     speed = speed * np.sqrt(1.0 - dp_bias)
+    if chw_bias > 0:  # colder real water: the coils need less flow
+        speed = speed * (1.0 - 0.05 * chw_bias)
     if bypass or chw_bias < 0:
         speed = np.where(run, 1.0, speed)
-    speed = np.clip(speed, PUMP_FLOOR, 1.0)
+    speed = np.where(run, np.clip(speed, PUMP_FLOOR, 1.0), PUMP_FLOOR)
 
     return pd.DataFrame(
         {
@@ -146,26 +153,28 @@ def chiller_plant(idx: pd.DatetimeIndex, fault: dict) -> pd.DataFrame:
             Role.CHW_PUMP_SPEED: speed,
             Role.CHW_DIFF_PRESS: np.full(len(idx), CHW_DP_SP),
             Role.CHW_DIFF_PRESS_SP: np.full(len(idx), CHW_DP_SP),
+            Role.PUMP_STATUS: run.astype(float),
         },
         index=idx,
     )
 
 
 #: the roles the lbnl-chiller ingest puts on the secondary pumps' own equipment (0.105, #164)
-SECPUMP_ROLES = (Role.CHW_PUMP_SPEED, Role.CHW_DIFF_PRESS, Role.CHW_DIFF_PRESS_SP)
+SECPUMP_ROLES = (Role.CHW_PUMP_SPEED, Role.CHW_DIFF_PRESS, Role.CHW_DIFF_PRESS_SP, Role.PUMP_STATUS)
 SECPUMP_DESIGN_GPM = 840.0  # the secondary loop's flow at full speed
 SECPUMP_DESIGN_KW = 103.4  # the two pumps' kW at full speed
 
 
 def secondary_pumps(plant: pd.DataFrame) -> pd.DataFrame:
-    """One ``SECPUMP__<run>`` frame: the speed and loop DP of :func:`chiller_plant`, plus the
-    loop flow (proportional to speed), the pumps' kW (its cube) and a running status, as the
-    real ingest gives the secondary pumps their own equipment."""
-    speed = plant[Role.CHW_PUMP_SPEED]
+    """One ``SECPUMP__<run>`` frame: the speed, loop DP and running status of
+    :func:`chiller_plant`, plus the loop flow (proportional to speed) and the pumps' kW (its
+    cube), both zero while the pumps are stopped, as the real ingest gives the secondary pumps
+    their own equipment (whose status is derived from pump 1's kW)."""
+    on = plant[Role.PUMP_STATUS]
+    speed = plant[Role.CHW_PUMP_SPEED] * on
     out = plant[list(SECPUMP_ROLES)].copy()
     out[Role.CHW_FLOW] = SECPUMP_DESIGN_GPM * speed
     out[Role.POWER] = SECPUMP_DESIGN_KW * speed**3
-    out[Role.PUMP_STATUS] = 1.0
     return out
 
 

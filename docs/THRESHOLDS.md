@@ -256,7 +256,7 @@ Fixed in code: warn when CHWST vs OAT is flat (|slope| < 0.05 °F/°F) or revers
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `near_min_pct` | `"auto"` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the lbnl-chiller secondary pump, whose floor is 34.5 % |
+| `near_min_pct` | `"auto"` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: learn the drive's own minimum (0.98, #86) rather than assume 25 %; on lbnl-chiller the 34.5 % once learned was the speed parked while the pumps were stopped, and judged on running hours (0.105, #180) no floor shows |
 | `floor_tol_pct` | `1.0` | % speed | 0.1 to 5.0 | CAMBER judgment: a VFD parked at its minimum reads within about a point of it |
 
 How to calibrate:
@@ -264,7 +264,7 @@ How to calibrate:
 - `near_min_pct`: Read the drive's minimum speed from the VFD parameters (or the sequence of operations) and set this a point or two above it; or plot a histogram of the running speed and find the pile-up at the bottom. "auto" learns it: the 2nd percentile of the running speed counts as the floor when >= 10 % of running samples sit within floor_tol_pct of it and the 90th percentile is >= 20 points above it (else the band falls back to 25 %). *Note:* The band used is max(25, learned floor + floor_tol_pct) under "auto", else the number given. Severity is fixed in code: warn when >= 50 % of running time is at or below the band. The metrics vfd_floor_pct, near_min_band_pct and near_min_source say what was used.
 - `floor_tol_pct`: Look at the spread of the speed readings while the pump sits at its minimum (trend resolution and rounding); set this just wider than that spread. *Note:* Used only when near_min_pct is "auto".
 
-Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below the near_min_pct band) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset, reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, camber/chwpump.py)
+Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below the near_min_pct band) for >= 50 %; running means speed > 5 % and, when a pump_status is mapped (0.105, #180), status duty > 0.5 (the speed distribution, learned floor and DP setpoint are then read over those samples only; without one a caveat says a parked speed cannot be ruled out); a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset, reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, camber/chwpump.py)
 
 ## chw_supply_tracking
 
@@ -814,7 +814,7 @@ How to calibrate:
 - `near_min_pct`: Read the drive's minimum speed from the VFD parameters (or the sequence of operations) and set this a point or two above it; or plot a histogram of the running speed and find the pile-up at the bottom. "auto" learns it: the 2nd percentile of the running speed counts as the floor when >= 10 % of running samples sit within floor_tol_pct of it and the 90th percentile is >= 20 points above it (else the band falls back to 25 %). *Note:* The band used is max(25, learned floor + floor_tol_pct) under "auto", else the number given. Severity is fixed in code: warn when >= 50 % of running time is at or below the band. The metrics vfd_floor_pct, near_min_band_pct and near_min_source say what was used.
 - `floor_tol_pct`: Look at the spread of the speed readings while the pump sits at its minimum (trend resolution and rounding); set this just wider than that spread. *Note:* Used only when near_min_pct is "auto".
 
-Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)
+Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running means speed > 5 % and, when a pump_status is mapped (0.105, #180), status duty > 0.5 (the speed distribution, learned floor and DP setpoint are then read over those samples only; without one a caveat says a parked speed cannot be ruled out); a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)
 
 ## hw_pump_summer_lockout
 
