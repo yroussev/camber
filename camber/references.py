@@ -511,6 +511,10 @@ RULE_REFERENCES: dict = {
     "leaking_valve": ("pnnl-guide-ahu-heat-cool", _CH5),
     "control_hunting": (_CH5,),
     # BEGIN slot #146 (AHU maintenance): rule mappings
+    # the walk-down chapter's air-handler inspection list names "missing, dirty, plugged or
+    # collapsed filters"; it gives no pressure threshold (the rule's change-out pressure is
+    # CAMBER's default), so the link backs what to inspect, not the number (0.106)
+    "filter_fouling": ("pnnl-retuning-ch9",),
     # END slot #146
     # scheduling
     "night_weekend_setback": ("pnnl-guide-occupancy-scheduling", _CH5),
@@ -535,7 +539,6 @@ RULE_REFERENCES: dict = {
     "sat_cohort_starvation": (_CH5, _CH7),
     "static_cohort_starvation": ("pnnl-guide-static-pressure", _CH5, _CH7),
     # Left unmapped (no guide or chapter clearly covers them):
-    # - filter_fouling;
     # - the G36 reset-effectiveness rules (sat_/static_reset_effectiveness, trim-and-respond, a
     #   G36 sequence the guides predate) and g36_afdd (cites Guideline 36 itself);
     # - the DX rules other than compressor_short_cycle and compressor_staging (the course covers
@@ -597,7 +600,8 @@ MV_REFERENCES: tuple = (
 
 
 #: The walk-down chapter: every item of the RCx report's "Verify on site" checklist links to it
-#: (0.98, #88; :mod:`camber.walkdown`). A process chapter, so it is not in RULE_REFERENCES.
+#: (0.98, #88; :mod:`camber.walkdown`). A process chapter: in RULE_REFERENCES only for
+#: filter_fouling, whose fault its air-handler inspection list names (0.106).
 WALKDOWN_REFERENCES: tuple = ("pnnl-retuning-ch9",)
 
 

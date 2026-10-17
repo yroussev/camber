@@ -14,6 +14,22 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 ## [0.106.0] — Unreleased
 
+### Changed
+- **`filter_fouling` and `control_hunting` judge fan-on samples (#181).** Both read the fan
+  from supply-fan status, else speed, else airflow (`schedules.fan_on_mask`), as the other
+  air-side rules do. `filter_fouling` takes its median over fan-on readings only: over every
+  sample, a unit running under half the day could never warn however dirty its filter, because
+  the transmitter reads about zero with the fan off. `control_hunting` counts only steps between
+  two fan-on samples, so fan-off hours no longer dilute the reversal rate. A unit that trends no
+  fan signal is judged ungated, with a caveat. New metrics: `fan_gate` on both,
+  `n_judged`, `n_masked_fan_off` and `fault_dp_inwc` on `filter_fouling`, and `fan_on_hours`
+  and `fault_reachable` on `control_hunting`. Each rule has a `fan_gate` parameter (default on).
+- `filter_fouling`'s fault multiplier, 1.5 times the change-out pressure, is now the documented
+  parameter `fault_factor` (#182).
+- `filter_fouling` links to PNNL Re-tuning chapter 9 (Building Walk Down). The chapter's
+  air-handler walk-down lists missing, dirty, plugged or collapsed filters among the things to
+  inspect. It gives no pressure threshold, so the change-out default is still CAMBER's own.
+
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
   summary with a cause, "rising system resistance / valve authority" or "bypass / stuck-open",
@@ -32,6 +48,16 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   is skipped otherwise. The units that can run such a detector still decline as
   `reference_missing_inputs`. The `camber datasets score` counts for `lbnl-chiller` and
   `lbnl-boiler` are unchanged.
+- **`control_hunting` no longer reads an unreachable threshold as a pass (#182).** A trend can
+  show at most about one reversal per sample, and in practice a little less. A threshold now
+  counts as reachable only when that ceiling is at least `resolution_margin` times it (new
+  parameter, default 1.25). At 10-minute data the ceiling equals the 6/hr warn threshold, so
+  the rule now declines (info) instead of returning an `ok` it could not have failed. At
+  5-minute data the ceiling equals the 12/hr fault threshold, so severity is capped at warn,
+  with a caveat. The caveat now fits the verdict: "severity capped at warn" on a warning, and
+  "only warn-level hunting was testable" on an `ok`.
+- `filter_fouling`'s summary said "% of hours" above the change-out pressure; the figure is a
+  share of samples (fan-on samples when gated), and it now says so.
 
 ## [0.105.0] — Unreleased
 

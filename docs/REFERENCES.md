@@ -49,10 +49,10 @@ The `pnnl-trending-requirements` guide lists the points to trend before re-tunin
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 6: Economizer Operations: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch6_economizer.pdf) | PNNL-SA-85063 | `outdoor_air_fraction`, `economizer_high_limit`, `free_cooling_missed` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 7: Terminal Units in Air Distribution System: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch7_terminal_units.pdf) | PNNL-SA-85063 | `damper_census`, `reheat_penalty`, `reheat_minimization_g36`, `overcooling_min_flow`, `overcooling_severity`, `unmet_setpoint_hours`, `airflow_tracking`, `zones_heat_cool_census`, `reheat_capacity_shortfall`, `actuator_stuck`, `cohort_airflow`, `cohort_space_temp`, `sat_rogue_zone_census`, `static_rogue_zone_census`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 8: Central Utility Plant: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch8_central_plant.pdf) | PNNL-SA-85063 | `chw_plant_reset`, `chw_pump_dp_reset`, `chw_supply_tracking`, `chiller_efficiency`, `chiller_staging`, `condenser_water_reset`, `cooling_tower_approach`, `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`, `cooling_tower_fan_effort_drift`, `hw_plant_deltat`, `hw_pump_dp_reset`, `boiler_short_cycle`, `boiler_summer_lockout`, `hw_pump_summer_lockout`, `boiler_efficiency_drift` | 2026-09-29 |
-| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 9: Building Walk Down](https://www.pnnl.gov/sites/default/files/media/file/ch9_building_walkdown.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
+| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 9: Building Walk Down](https://www.pnnl.gov/sites/default/files/media/file/ch9_building_walkdown.pdf) | PNNL-SA-85063 | `filter_fouling` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 10: Re-Tuning Building Controls and Systems](https://www.pnnl.gov/sites/default/files/media/file/ch10_retuning_building.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 
-Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them. Chapter 9 (Building Walk Down) is linked instead from the RCx report's **Verify on site** section (0.98): every walk-down item carries it (`camber.references.WALKDOWN_REFERENCES`), and the report's Further reading list adds it when that section is present.
+Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them, with one exception: chapter 9's air-handler walk-down lists "missing, dirty, plugged or collapsed filters" among the things to inspect, so `filter_fouling` links to it (0.106). The chapter gives no pressure threshold; the rule's 1.0 in. w.c. change-out default is CAMBER's own. Chapter 9 (Building Walk Down) is also linked from the RCx report's **Verify on site** section (0.98): every walk-down item carries it (`camber.references.WALKDOWN_REFERENCES`), and the report's Further reading list adds it when that section is present.
 
 ## Small/Medium-Sized Commercial Building Re-tuning
 
@@ -140,7 +140,6 @@ These rules have no Re-tuning guide or chapter that clearly covers them, so they
 - the G36 reset-effectiveness rules (`sat_reset_effectiveness`, `static_reset_effectiveness`),
   which check a trim-and-respond sequence the guides predate;
 - the G36 fault conditions (`g36_afdd`), which cite ASHRAE Guideline 36 itself;
-- `filter_fouling`;
 - the DX rules other than `compressor_short_cycle` and `compressor_staging` (the course covers
   built-up air handlers and central plants; the heat-pump rules link to the
   [heat-pump guides](#heat-pumps));

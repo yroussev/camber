@@ -5,7 +5,7 @@
  "teaches": [
   "a dirty filter and a hunting control loop, which no open dataset shows",
   "why a run's median filter pressure can pass a filter that is due for a change",
-  "why a hunting loop needs a trend sampled every few minutes: at 15 minutes it cannot be seen, and a pass at 10 minutes proves little"
+  "why a hunting loop needs a trend sampled every few minutes: at 10 or 15 minutes it cannot be seen, and the rule says so rather than pass it"
  ],
  "publisher": "CAMBER (generated locally by the user's copy)",
  "citation": "CAMBER synthetic dataset synthetic-ahu-maintenance, generator ahu_maintenance (camber.datasets._synthetic_ahu_maintenance), seed 146. Generated data, not measurements from any building.",

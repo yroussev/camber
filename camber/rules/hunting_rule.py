@@ -16,10 +16,19 @@ Three things the rate has to get right, each of which bit on real trend data:
   only counted between increments that are both inside one contiguous run. A trend with a
   three-month logger outage no longer reads as three months of stable control.
 * **Resolution.** A trend sampled every ``dt`` minutes can show at most one reversal per sample,
-  i.e. ``60 / dt`` per hour (4/hr at 15-min data). When that ceiling sits below the warn
-  threshold the rule cannot tell a hunting loop from a stable one, so it **declines** (``info`` +
-  caveat, ``None`` rate) rather than reporting "stable"; when only the fault threshold is out of
-  reach the verdict is capped at ``warn`` and caveated.
+  i.e. ``60 / dt`` per hour (4/hr at 15-min data), and in practice a little less: ``n`` samples
+  hold at most ``n - 2`` reversals in ``n - 1`` intervals, and a real oscillation sampled near
+  that limit aliases to fewer. So a threshold counts as reachable only when the ceiling exceeds it
+  by ``resolution_margin`` (default 1.25: at 10-min data the 6/hr ceiling *is* the warn threshold,
+  which no trend can realistically show). When the warn threshold is out of reach the rule cannot
+  tell a hunting loop from a stable one, so it **declines** (``info`` + caveat, ``None`` rate)
+  rather than reporting "stable"; when only the fault threshold is out of reach the verdict is
+  capped at ``warn`` and caveated (0.106, #182).
+* **Fan-off time is not control time (0.106, #181).** With the fan stopped the loop is not
+  controlling, and an hour of a shut valve would dilute the rate. Only steps between two fan-on
+  samples count (fan status, else fan speed, else airflow -- :func:`camber.schedules.fan_on_mask`),
+  so fan-off stretches are neither observed time nor reversals; a unit that trends no fan signal
+  is judged ungated and the finding says so (``fan_gate`` metric and a caveat).
 """
 
 from __future__ import annotations
@@ -28,18 +37,21 @@ import numpy as np
 import pandas as pd
 
 from ..model.roles import Role
+from ..schedules import FAN_GATE_NONE, fan_on_mask
 from ..units import normalize_percent
 from .base import Finding
 
 _MODULATING = (Role.HEAT_VALVE, Role.COOL_VALVE, Role.DAMPER, Role.OA_DAMPER)
 
 
-def _contiguous(s: pd.Series, gap_factor: float):
+def _contiguous(s: pd.Series, gap_factor: float, gate=None):
     """Sorted, de-duplicated series + a per-step "same run" mask + the observed hours.
 
     A step (sample ``i-1`` -> ``i``) is *contiguous* when it is no longer than ``gap_factor`` x the
-    median positive sample spacing; longer steps are data gaps. Observed hours = the summed length
-    of the contiguous steps.
+    median positive sample spacing; longer steps are data gaps. With a ``gate`` (a boolean Series,
+    e.g. fan-on) a step also needs both of its samples inside the gate: a step out of it breaks the
+    run like a gap. Observed hours = the summed length of the contiguous steps. The median spacing
+    is the trend's own, gate or not.
     """
     s = s[~s.index.duplicated(keep="last")].sort_index()
     idx = pd.DatetimeIndex(s.index)
@@ -49,22 +61,29 @@ def _contiguous(s: pd.Series, gap_factor: float):
         return s, np.zeros(0, dtype=bool), 0.0, None
     median = float(np.median(pos))
     ok = (steps > 0) & (steps <= gap_factor * median)
+    if gate is not None:
+        g = pd.Series(gate)
+        g = g[~g.index.duplicated(keep="last")]
+        on = g.reindex(s.index).fillna(False).astype(bool).to_numpy()
+        ok &= on[1:] & on[:-1]
     return s, ok, float(steps[ok].sum()) / 3600.0, median
 
 
-def reversals_per_hour(signal, deadband: float, *, gap_factor: float = 3.0):
+def reversals_per_hour(signal, deadband: float, *, gap_factor: float = 3.0, gate=None):
     """Direction reversals per *observed* hour of a modulating signal, ignoring moves within
     ``deadband`` (in the signal's own units).
 
     Returns ``(rate_per_hour, n_reversals)``. A reversal is a sign change between consecutive
     significant (> deadband) increments within one contiguous run of samples -- the signature of a
     loop that can't hold a position. Steps longer than ``gap_factor`` x the median interval are
-    data gaps: they break the run and their duration is not counted as observed (calm) time.
+    data gaps: they break the run and their duration is not counted as observed (calm) time. With
+    a ``gate`` (boolean Series on the signal's index, e.g. fan-on) only steps between two gated
+    samples count, so the time outside it is neither observed time nor reversals.
     """
     s = pd.Series(signal).dropna()
     if len(s) < 3:
         return 0.0, 0
-    s, ok, hours, _ = _contiguous(s, gap_factor)
+    s, ok, hours, _ = _contiguous(s, gap_factor, gate)
     if len(s) < 3:
         return 0.0, 0
     d = np.diff(s.to_numpy(dtype=float))
@@ -98,7 +117,12 @@ class ControlHunting:
 
     name = "control_hunting"
     roles_required = ()
-    roles_optional = _MODULATING
+    roles_optional = _MODULATING + (
+        # fan-on gate: status, else speed, else airflow (see camber.schedules.fan_on_mask)
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.AIRFLOW,
+    )
 
     def __init__(
         self,
@@ -107,20 +131,38 @@ class ControlHunting:
         fault_per_hr: float = 12.0,
         deadband: float = 5.0,
         gap_factor: float = 3.0,
+        resolution_margin: float = 1.25,
+        fan_gate: bool = True,
     ):
+        if resolution_margin < 1.0:
+            raise ValueError("resolution_margin must be at least 1")
         self.warn_per_hr = warn_per_hr
         self.fault_per_hr = fault_per_hr
         self.deadband = deadband
         self.gap_factor = gap_factor
+        self.resolution_margin = resolution_margin
+        self.fan_gate = fan_gate
+
+    def _gate(self, frame: pd.DataFrame):
+        """``(fan-on mask | None, label)``; ``(None, "off")`` when gating is disabled."""
+        if not self.fan_gate:
+            return None, "off"
+        return fan_on_mask(frame)
+
+    def _reachable(self, ceiling, threshold: float) -> bool:
+        """Whether a trend whose ceiling is ``ceiling``/hr can realistically show ``threshold``."""
+        return ceiling is not None and ceiling >= self.resolution_margin * threshold
 
     def _signals(self, frame):
         return [r for r in _MODULATING if r in frame.columns and frame[r].notna().sum() >= 3]
 
-    def _worst(self, frame):
+    def _worst(self, frame, gate=None):
         worst_role, worst_rate, worst_rev, rates, ceilings = None, 0.0, 0, {}, {}
         for role in self._signals(frame):
             sig = normalize_percent(frame[role])
-            rate, rev = reversals_per_hour(sig, self.deadband, gap_factor=self.gap_factor)
+            rate, rev = reversals_per_hour(
+                sig, self.deadband, gap_factor=self.gap_factor, gate=gate
+            )
             key = getattr(role, "value", str(role))
             rates[key] = round(rate, 2)
             ceilings[key] = max_resolvable_per_hour(sig, gap_factor=self.gap_factor)
@@ -137,10 +179,14 @@ class ControlHunting:
                 severity="info",
                 summary=f"{equip}: no modulating output present",
             )
-        role, rate, rev, rates, ceilings = self._worst(frame)
+        gate, fan_src = self._gate(frame)
+        role, rate, rev, rates, ceilings = self._worst(frame, gate)
         rn = getattr(role, "value", str(role)) if role is not None else ""
         known = [c for c in ceilings.values() if c is not None]
         ceiling = min(known) if known else None
+        missing = [r.value for r in _MODULATING if r not in frame.columns]
+        if fan_src == FAN_GATE_NONE:
+            missing.append(Role.SUPPLY_FAN_STATUS.value)
         metrics = {
             "worst_signal": rn,
             "reversals_per_hr": round(rate, 2),
@@ -148,22 +194,40 @@ class ControlHunting:
             "per_signal_rate": rates,
             "deadband": self.deadband,
             "max_resolvable_per_hr": None if ceiling is None else round(ceiling, 2),
+            "fan_gate": fan_src,
+            "_missing_optional": missing,
         }
+        if gate is not None:
+            on = gate.reindex(frame.index).fillna(False).astype(bool)
+            metrics["fan_on_hours"] = round(self._fan_on_hours(frame, on), 2)
         caveats: list = []
-        if ceiling is None or ceiling < self.warn_per_hr:
-            # The sampling can't show a rate as high as the warn threshold: "stable" would be an
-            # untested negative. Decline, but say how close to the ceiling the signal ran.
+        if fan_src == FAN_GATE_NONE:
+            caveats.append(
+                "not fan-gated (no fan signal trended): fan-off hours, when the loop is not "
+                "controlling, count as calm time and dilute the rate -- map SUPPLY_FAN_STATUS"
+            )
+        margin = self.resolution_margin
+        if not self._reachable(ceiling, self.warn_per_hr):
+            # The sampling can't realistically show a rate as high as the warn threshold:
+            # "stable" would be an untested negative. Decline, but say how close to the ceiling
+            # the signal ran.
             share = rate / ceiling if ceiling else None
             metrics["reversals_per_hr"] = None
             metrics["per_signal_rate"] = {k: None for k in rates}
             metrics["reversal_share_of_max"] = None if share is None else round(share, 2)
             dt_min = None if ceiling is None else 60.0 / ceiling
+            if ceiling is None or ceiling < self.warn_per_hr:
+                where = f"below the {self.warn_per_hr:g}/hr warn threshold"
+            else:
+                where = (
+                    f"too close to the {self.warn_per_hr:g}/hr warn threshold to show it (a "
+                    f"threshold needs a ceiling {margin:g}x above it)"
+                )
             caveats.append(
                 "hunting not evaluated: the trend's sampling "
                 + (f"(~{dt_min:.0f}-min) " if dt_min is not None else "")
-                + f"can show at most {0 if ceiling is None else ceiling:.1f} reversals/hr, below "
-                f"the {self.warn_per_hr:g}/hr warn threshold -- a hunting loop is aliased away; "
-                "re-trend at 1-5 min to judge"
+                + f"can show at most {0 if ceiling is None else ceiling:.1f} reversals/hr, {where}"
+                " -- a hunting loop is aliased away; re-trend at 1-5 min to judge"
                 + (
                     f" (observed reversals on {share:.0%} of the resolvable maximum)"
                     if share is not None
@@ -178,12 +242,36 @@ class ControlHunting:
                 summary=f"{equip}: hunting not evaluated (sampling too coarse to resolve it)",
                 caveats=caveats,
             )
-        sev = "fault" if rate >= self.fault_per_hr else "warn" if rate >= self.warn_per_hr else "ok"
-        if ceiling < self.fault_per_hr:
-            caveats.append(
-                f"sampling can show at most {ceiling:.1f} reversals/hr, below the "
-                f"{self.fault_per_hr:g}/hr fault threshold: severity capped at warn"
+        if gate is not None and metrics["fan_on_hours"] == 0:
+            metrics["reversals_per_hr"] = None
+            metrics["per_signal_rate"] = {k: None for k in rates}
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics=metrics,
+                summary=f"{equip}: hunting not evaluated (the fan never ran)",
+                caveats=caveats,
             )
+        sev = "fault" if rate >= self.fault_per_hr else "warn" if rate >= self.warn_per_hr else "ok"
+        fault_reachable = self._reachable(ceiling, self.fault_per_hr)
+        if not fault_reachable and ceiling is not None:  # ceiling is known: warn was reachable
+            sev = "warn" if sev == "fault" else sev
+            thr = f"the {self.fault_per_hr:g}/hr fault threshold"
+            where = (
+                f"below {thr}"
+                if ceiling < self.fault_per_hr
+                else f"too close to {thr} to show it (a threshold needs a ceiling {margin:g}x "
+                "above it)"
+            )
+            reach = f"sampling can show at most {ceiling:.1f} reversals/hr, {where}"
+            if sev == "warn":
+                caveats.append(f"{reach}: severity capped at warn")
+            else:
+                caveats.append(
+                    f"{reach}: only warn-level hunting ({self.warn_per_hr:g}/hr) was testable"
+                )
+        metrics["fault_reachable"] = fault_reachable
         return Finding(
             rule=self.name,
             equip=equip,
@@ -197,11 +285,21 @@ class ControlHunting:
             caveats=caveats,
         )
 
+    def _fan_on_hours(self, frame: pd.DataFrame, on: pd.Series) -> float:
+        """Fan-on observed hours on the modulating signals' sampling (steps between two fan-on
+        samples, gaps excluded) -- the denominator the rate is judged over."""
+        sigs = self._signals(frame)
+        if not sigs:
+            return 0.0
+        idx = frame[sigs].dropna(how="all").index
+        _, _, hours, _ = _contiguous(pd.Series(0.0, index=idx), self.gap_factor, on)
+        return hours
+
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: the worst-hunting signal's trend (the oscillation is the evidence)."""
         from ..charts.evidence import Evidence
 
-        role = self._worst(frame)[0] if self._signals(frame) else None
+        role = self._worst(frame, self._gate(frame)[0])[0] if self._signals(frame) else None
         if role is None:
             return None
         return Evidence(

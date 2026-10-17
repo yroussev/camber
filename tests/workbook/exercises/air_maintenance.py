@@ -14,7 +14,9 @@ recorded from::
         --findings ahu_out/findings.json
 
 plus the ``air-maintenance--lastweek``, ``air-maintenance--10min`` and ``air-maintenance--15min``
-variants (CAMBER 0.105.0-dev, 2026-10-13).
+variants (CAMBER 0.105.0-dev, 2026-10-13). Re-recorded for 0.106.0-dev on 2026-10-16 after
+#181/#182: both rules now judge fan-on samples only, and control_hunting declines at 10 minutes
+(its 6-an-hour ceiling is the warn threshold itself, too close to it to judge).
 """
 
 from __future__ import annotations
@@ -37,33 +39,39 @@ def standin(store) -> None:
 
 
 def _fan_off_counts(ctx) -> None:
-    """Both rules read every sample of the run. The unit runs 16 hours a day, so a third of the
-    filter readings are the transmitter's zero with the fan off, and the hunting valve's rate
-    while the fan runs is half as high again as its rate over the run."""
+    """Both rules judge only the samples with the fan running. The unit runs 16 hours a day, so a
+    third of the filter readings (the transmitter's zero with the fan off) are set aside; judged
+    over every sample, the loading filter's median would fall to the lowest quarter of its running
+    samples."""
     from camber.model.roles import Role
-    from camber.rules.hunting_rule import reversals_per_hour
+    from camber.rules.filter_rule import FilterFouling
     from camber.store import ParquetStore
 
     f = ctx.finding(_FILTER, "AHU__dirty")
-    assert f is not None and f.metrics["pct_over_threshold"] == 66.7, f
+    assert f is not None and f.metrics["fan_gate"] == "fan status", f
+    assert f.metrics["n_masked_fan_off"] == 1344, f.metrics
+    assert f.metrics["pct_over_threshold"] == 100.0, f.metrics
     store = ParquetStore(ctx.store)
-    frame = store.read_role_frame(facility_id="ds-synthetic-ahu-maintenance", equip="AHU__hunting")
+    fid = "ds-synthetic-ahu-maintenance"
+    frame = store.read_role_frame(facility_id=fid, equip="AHU__hunting")
     running = frame[frame[Role.SUPPLY_FAN_STATUS] >= 0.5]
     assert round(len(running) / len(frame), 3) == 0.667, len(running) / len(frame)
-    on_rate, _ = reversals_per_hour(running[Role.COOL_VALVE], 5.0)
-    assert round(on_rate, 1) == 10.8, on_rate
+    loading = store.read_role_frame(facility_id=fid, equip="AHU__loading")
+    ungated = FilterFouling(fan_gate=False).analyze("AHU__loading", loading)
+    assert ungated.metrics["filter_dp_median_inwc"] == 0.70, ungated.metrics
 
 
-def _ten_minutes_proves_little(ctx) -> None:
-    """At 10 minutes the rule still judges (its ceiling, 6 an hour, is not below the warn
-    threshold), caveats the cap at warn, and passes the hunting unit: the mean of two 5-minute
-    samples averages its 11-minute cycle away."""
+def _ten_minutes_declines(ctx) -> None:
+    """At 10 minutes the trend can show at most 6 reversals an hour, the warn threshold itself and
+    too close to it to judge: every unit reads info with no rate, and the caveat says why."""
     cfg = ctx.config("10min")
     assert cfg["resample"] == "10min", cfg["resample"]
-    f = ctx.finding(_HUNT, "AHU__hunting", "10min")
-    assert f is not None and f.severity == "ok", f
-    assert f.metrics["max_resolvable_per_hr"] == 6.0, f.metrics
-    assert any("capped at warn" in c for c in f.caveats), f.caveats
+    for unit in _UNITS:
+        f = ctx.finding(_HUNT, f"AHU__{unit}", "10min")
+        assert f is not None and f.severity == "info", (unit, f)
+        assert f.metrics["reversals_per_hr"] is None, (unit, f.metrics)
+        assert f.metrics["max_resolvable_per_hr"] == 6.0, (unit, f.metrics)
+        assert any("too close to" in c for c in f.caveats), (unit, f.caveats)
 
 
 def _fifteen_minutes_declines(ctx) -> None:
@@ -114,12 +122,12 @@ EXERCISE = Exercise(
         Finding(_FILTER, "AHU__healthy", severity=("ok",)),
         Finding(_FILTER, "AHU__hunting", severity=("ok",)),
         Finding(_FILTER, "AHU__near_miss", severity=("ok",)),
-        Metric(_FILTER, "AHU__dirty", "filter_dp_median_inwc", 1.67, 0.005, quote="1.67"),
-        Metric(_FILTER, "AHU__loading", "filter_dp_median_inwc", 0.70, 0.005, quote="0.70"),
-        Metric(_FILTER, "AHU__loading", "pct_over_threshold", 29.8, 0.05, quote="29.8%"),
-        Metric(_FILTER, "AHU__loading", "filter_dp_p95_inwc", 1.484, 0.0005, quote="1.48"),
-        Metric(_FILTER, "AHU__healthy", "filter_dp_median_inwc", 0.43, 0.005, quote="0.43"),
-        Check("the fan-off hours count", _fan_off_counts, quote="66.7%"),
+        Metric(_FILTER, "AHU__dirty", "filter_dp_median_inwc", 1.72, 0.005, quote="1.72"),
+        Metric(_FILTER, "AHU__loading", "filter_dp_median_inwc", 0.95, 0.005, quote="0.95"),
+        Metric(_FILTER, "AHU__loading", "pct_over_threshold", 44.6, 0.05, quote="44.6%"),
+        Metric(_FILTER, "AHU__loading", "filter_dp_p95_inwc", 1.54, 0.0005, quote="1.54"),
+        Metric(_FILTER, "AHU__healthy", "filter_dp_median_inwc", 0.45, 0.005, quote="0.45"),
+        Check("the fan-off samples are set aside", _fan_off_counts, quote="1,344"),
         # 2. the last week: the loading filter warns
         Finding(_FILTER, "AHU__loading", severity=("warn",), run="lastweek"),
         Finding(_FILTER, "AHU__dirty", severity=("fault",), run="lastweek"),
@@ -128,13 +136,13 @@ EXERCISE = Exercise(
             _FILTER,
             "AHU__loading",
             "filter_dp_median_inwc",
-            1.09,
+            1.26,
             0.005,
             run="lastweek",
-            quote="1.09",
+            quote="1.26",
         ),
         Metric(
-            _FILTER, "AHU__loading", "pct_over_threshold", 59.5, 0.05, run="lastweek", quote="59.5%"
+            _FILTER, "AHU__loading", "pct_over_threshold", 89.3, 0.05, run="lastweek", quote="89.3%"
         ),
         # 3. hunting at 5 minutes: one warns, the near miss passes
         Finding(_HUNT, "AHU__hunting", severity=("warn",)),
@@ -142,28 +150,45 @@ EXERCISE = Exercise(
         Finding(_HUNT, "AHU__healthy", severity=("ok",)),
         Finding(_HUNT, "AHU__loading", severity=("ok",)),
         Finding(_HUNT, "AHU__dirty", severity=("ok",)),
-        Metric(_HUNT, "AHU__hunting", "reversals_per_hr", 7.24, 0.005, quote="7.24"),
-        Metric(_HUNT, "AHU__hunting", "reversals", 2431, 0, quote="2,431"),
-        Metric(_HUNT, "AHU__near_miss", "reversals_per_hr", 3.65, 0.005, quote="3.65"),
-        Metric(_HUNT, "AHU__healthy", "reversals_per_hr", 0.08, 0.005, quote="0.08"),
+        Metric(_HUNT, "AHU__hunting", "reversals_per_hr", 10.79, 0.005, quote="10.79"),
+        Metric(_HUNT, "AHU__hunting", "reversals", 2404, 0, quote="2,404"),
+        Metric(_HUNT, "AHU__near_miss", "reversals_per_hr", 5.39, 0.005, quote="5.39"),
+        Metric(_HUNT, "AHU__healthy", "reversals_per_hr", 0.0, 0.005, quote="0.00"),
         Metric(_HUNT, "AHU__hunting", "max_resolvable_per_hr", 12.0, 0.0, quote="12"),
         # 4. the label score
         Score(_FILTER, tpr=0.5, fpr=0.0, quote="50%"),
         Score(_HUNT, tpr=1.0, fpr=0.0),
         Score(_FILTER, tpr=1.0, fpr=0.0, run="lastweek"),
-        # 5. coarser trends: 10 minutes passes the hunting unit, 15 minutes declines
-        Check("10 minutes proves little", _ten_minutes_proves_little, quote="capped at warn"),
-        Metric(_HUNT, "AHU__near_miss", "reversals_per_hr", 2.75, 0.005, run="10min", quote="2.75"),
+        # 5. coarser trends: 10 minutes and 15 minutes both decline
+        Check("10 minutes declines", _ten_minutes_declines, quote="too close to"),
+        Metric(
+            _HUNT,
+            "AHU__near_miss",
+            "reversal_share_of_max",
+            0.68,
+            0.005,
+            run="10min",
+            quote="68%",
+        ),
+        Metric(
+            _HUNT,
+            "AHU__hunting",
+            "reversal_share_of_max",
+            0.0,
+            0.005,
+            run="10min",
+            quote="0%",
+        ),
         Score(_HUNT, tpr=0.0, fpr=0.0, run="10min"),
         Check("15 minutes declines", _fifteen_minutes_declines, quote="4 reversals"),
         Metric(
             _HUNT,
             "AHU__hunting",
             "reversal_share_of_max",
-            0.44,
+            0.65,
             0.005,
             run="15min",
-            quote="44%",
+            quote="65%",
         ),
     ),
     standin=standin,
