@@ -459,6 +459,22 @@ def _ledger_window(ledger, baseline_start, reporting_end) -> list:
     return [a for a in ledger or () if (lo is None or _day(a.start) >= lo) and _day(a.start) <= hi]
 
 
+def _reporting_of(entry: dict, rec, daily: pd.DataFrame, as_of=None) -> list | None:
+    """The reporting days the triggers of ``rec`` are assessed over (0.107, #225): from the entry's
+    ``reporting_period`` start (never before the day after the version's window) to its end, as
+    ``camber mv run`` passes them, so report, propose and rebaseline date a trigger such as T4 at
+    the reporting start as the run does. ``None`` (the day after the window onward) when the entry
+    declares no reporting period or none of it is seen yet."""
+    rp = entry.get("reporting_period")
+    if not rp:
+        return None
+    r0 = max(_day(rp[0]), _day(rec.period_end) + pd.Timedelta(days=1))
+    seen = _day(as_of) if as_of is not None else (_day(daily.index.max()) if len(daily) else None)
+    if seen is None or r0 > seen:
+        return None
+    return [r0, _day(rp[1])]
+
+
 def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
     """Triggers of one version, over its reporting days (read-only)."""
     from .mandv.rebaseline import assess_triggers
@@ -492,6 +508,7 @@ def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
         next_version_start=None if nxt is None else nxt.period_start,
         intermediate_period=inter,
         extrapolation=_extrapolation(entry),
+        reporting=_reporting_of(entry, rec, daily, as_of),
     )
     return trig, pol, events, statics
 
@@ -976,6 +993,7 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
                     else None
                 ),
                 extrapolation=_extrapolation(ms.entry),
+                reporting=_reporting_of(ms.entry, rec, daily, as_of),  # 0.107 (#225)
             )
             row["rebaseline"] = prop.as_dict()
             sub = _window(ms.daily, [rec.period_start, rec.period_end])

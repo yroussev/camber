@@ -259,3 +259,19 @@ def test_211_fleet_median_is_a_true_median():
     r2 = build_fleet_report([{"site": "A", "eui": 50.0, "findings": []},
                              {"site": "B", "eui": 100.0, "findings": []}])  # fmt: skip
     assert r2.peer_median_eui == 75.0
+
+
+def test_225_t4_is_dated_at_the_reporting_start_on_every_path(v1):
+    c, base = _cfg(v1, extrapolation=dict(_SEVERE))
+    start = c["mv"][0]["reporting_period"][0]
+    run = [f for f in run_mv_config(c, base_dir=base) if f.rule == "mv_trigger"]
+    run_t4 = sorted(f.metrics["key"] for f in run if f.metrics["key"].startswith("T4"))
+    (m,) = chained_report(c, base_dir=base)["meters"]
+    rep_t4 = sorted(t.key for t in m.triggers if t.id == "T4")
+    doc = propose(c, base_dir=base)
+    prop_t4 = sorted(
+        t["key"] for t in doc["meters"][0]["rebaseline"]["triggers"] if t["id"] == "T4"
+    )
+    assert run_t4 == rep_t4 == prop_t4 == [f"T4:{start}"]
+    # the report declines the saving from the reporting start, as the run does
+    assert m.segments[0].get("declined", "").startswith("unresolved trigger T4")
