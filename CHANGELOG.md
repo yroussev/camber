@@ -129,7 +129,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   every `python` fence in README.md and docs/ (the workbook included; not docs/dev/ or
   docs/proposals/), each page's fences in order in one fresh interpreter, offline and in a
   temporary folder. A fence that cannot run on its own (a fragment, or one that needs a dataset,
-  a store, a file, an optional extra or the network) carries `<!-- fence: skip (reason) -->` on
+  a store, a file, an optional extra or the network) carries a `fence: skip (reason)` HTML comment on
   the line above it, which renders on neither GitHub nor the docs site.
 - **The CLI reference is checked against the parser (#224).** `tests/test_cli_reference.py`
   fails when docs/CLI.md does not name a command or an option the parser accepts. docs/CLI.md
