@@ -488,7 +488,8 @@ camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 
 **Workspace stores** (0.107, #212). When `--store` belongs to a portfolio workspace, `ingest` and
 `remove --purge-store` follow the facility lifecycle, as `camber lab` does. `ingest` needs
-`--reason`, and it refuses a facility that is not `provisioning` or `active`. `remove
+`--reason`, and it refuses a facility that is not `provisioning` or `active`, and a forced (or
+changed) re-ingest that would replace the data of a facility under a legal hold. `remove
 --purge-store` needs `--reason` and `--yes` (or `--confirm ID`). It refuses, before anything is
 deleted, while a facility of the dataset is under a legal hold or not `provisioning` /
 `active`. Both are audited (`datasets.ingest`, `datasets.remove`, `datasets.purge`). A plain store

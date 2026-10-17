@@ -348,6 +348,8 @@ class LabApp:
             elif not _licence.acknowledged(self.data_dir, e):
                 raise LabError(403, _refusal(e, "ingest"))
         self._preflight(entries, subset, download=False, ingest=True)
+        if force:
+            self._refuse_held_replace(entries)
         self._check_room()
         params = {"ids": [e.id for e in entries], "subset": subset or "default", "force": force}
 
@@ -389,6 +391,8 @@ class LabApp:
         if e.research_only and not accept and not _licence.acknowledged(self.data_dir, e):
             raise LabError(403, _refusal(e, "ingest"))
         self._preflight(entries, subset, download=True, ingest=True)
+        if force:
+            self._refuse_held_replace(entries)
         self._check_room()
         params = {
             "ids": [e.id],
@@ -492,6 +496,22 @@ class LabApp:
                 purge_store=purge_store,
             )
         return res
+
+    def _refuse_held_replace(self, entries) -> None:
+        """409 for a forced re-ingest that would replace a held facility's data (0.107): a legal
+        hold means nothing held is deleted, on every path. The ingest itself checks again under
+        the lock, so a changed (unforced) re-ingest of a held facility fails its job the same
+        way (:func:`camber.datasets._lifecycle.replace_blockers`)."""
+        if self.portfolio is None:
+            return
+        from ..datasets import _lifecycle
+
+        known = self.portfolio.registry.all()
+        for e in entries:
+            mine = _lifecycle.dataset_facilities(known, e.id, base=e.ingest.get("facility"))
+            why = _lifecycle.replace_blockers(self.portfolio, self.store.root, mine, by="the lab")
+            if why:
+                raise LabError(409, "; ".join(why))
 
     def _purge_blockers(self, entry) -> list:
         """Why the lab may not purge ``entry``'s facilities from a workspace (``[]``: it may).

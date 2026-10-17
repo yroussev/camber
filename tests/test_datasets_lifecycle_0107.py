@@ -109,6 +109,29 @@ def test_a_held_facility_is_never_purged_from_the_cli(cat, capsys):
     assert recs["datasets.purge"]["facility_id"] == FID
 
 
+def test_a_held_facility_refuses_a_forced_re_ingest_on_every_path(cat, capsys):
+    """A legal hold means nothing held is deleted: replacing the partition is refused."""
+    entry, cache, tmp = cat
+    pf, store = _ws(tmp)
+    _ingest.ingest_dataset(entry, store, data_dir=cache, reason="setup")
+    n = _rows(store)
+    pf.hold(FID, reason="litigation")
+    argv = ("datasets", "ingest", "test-ahu", "--dir", cache, "--store", store, "--reason", "r")
+    assert _cli(*argv, "--force") == 1
+    err = capsys.readouterr().err
+    assert "under a legal hold" in err and "nothing was ingested" in err
+    with pytest.raises(LifecycleError, match="legal hold"):
+        _ingest.ingest_dataset(entry, store, data_dir=cache, reason="r", force=True)
+    # a changed ingest (here: corrections off) would replace it too
+    with pytest.raises(LifecycleError, match="legal hold"):
+        _ingest.ingest_dataset(entry, store, data_dir=cache, reason="r", corrections=False)
+    assert _rows(store) == n and not os.listdir(os.path.join(store, "_staging"))
+    assert _cli(*argv) == 0  # unchanged: skipped, nothing deleted
+    assert "skipped" in capsys.readouterr().out
+    pf.release_hold(FID, reason="settled")
+    assert _cli(*argv, "--force") == 0
+
+
 @pytest.mark.parametrize("state", ["suspended", "offboarding", "archived"])
 def test_a_facility_outside_provisioning_active_refuses_ingest_and_purge(cat, state, capsys):
     entry, cache, tmp = cat

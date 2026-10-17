@@ -12,6 +12,8 @@ those facilities follow the 0.95 lifecycle, and these checks are the one place i
   produces) never deletes a facility under a legal hold, nor one that has left ``provisioning`` /
   ``active``: its data is removed by ``camber facility offboard|archive|purge``, never by a
   catalog shortcut. :func:`purge_blockers` says why a purge is refused.
+- **replace** never deletes a held facility's data: a forced (or changed) re-ingest into a
+  facility under a legal hold that already has a partition is refused (:func:`replace_blockers`).
 - every such write is **audited** in the workspace with a ``reason`` (:func:`require_reason`,
   :func:`audit_ingest`, :func:`audit_remove`).
 
@@ -111,6 +113,29 @@ def purge_blockers(pf, dataset_id: str, *, fids=None, by: str = "CAMBER") -> lis
             out.append(
                 f"{fid} is {state}: its lifecycle owns its data (`camber facility "
                 f"resume|restore`, or `offboard|archive|purge`), so {by} does not purge it"
+            )
+    return out
+
+
+def replace_blockers(pf, store_root, fids, *, by: str = "CAMBER") -> list:
+    """Why an ingest may not replace the data of the facilities ``fids`` in workspace ``pf``
+    (``[]``: it may; always ``[]`` outside a workspace). 0.107: a legal hold means nothing held is
+    deleted, and replacing a held facility's partition (a forced or changed re-ingest) deletes the
+    rows it holds -- so it is refused, by every writer. A held facility with no partition yet is
+    not blocked: there is nothing to delete."""
+    if pf is None:
+        return []
+    try:
+        holds = pf.legal_holds()
+    except Exception as exc:  # noqa: BLE001 - an unreadable portfolio blocks a replacement
+        return [f"the workspace portfolio could not be read ({type(exc).__name__})"]
+    out = []
+    for fid in sorted(set(fids)):
+        if fid in holds and os.path.isdir(os.path.join(store_root, f"facility_id={fid}")):
+            out.append(
+                f"{fid} is under a legal hold: {by} does not replace its data (a re-ingest "
+                "deletes the rows it holds) until the hold is released (`camber retention "
+                "release`)"
             )
     return out
 
