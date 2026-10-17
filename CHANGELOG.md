@@ -246,6 +246,12 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The fleet report's median EUI is a true median (#211).** With an even number of buildings it
   took the upper of the two middle values, so every "vs median" percentage was off. EUIs of 40,
   60, 80 and 200 now give a median of 70, not 80.
+- **`mv run`, `mv report` and `mv propose` date the T4 extrapolation trigger alike (#225).** The
+  run dated T4 at the reporting start, while the report, propose and rebaseline dated it the day
+  after the baseline ended. These paths now assess the triggers over the entry's
+  `reporting_period`, as the run does, so T4 falls on the reporting start everywhere. The
+  rebaseline settle days count from that date. Entries without a `reporting_period` are
+  unchanged.
 
 
 ## [0.106.0] — 2026-10-17
