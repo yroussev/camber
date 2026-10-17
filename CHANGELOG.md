@@ -13,6 +13,41 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.107.0] — Unreleased
+
+### Added
+- **The edge landing recognises a month re-sent in different bytes (#142).** `camber edge land`
+  computes a row digest of every Parquet object before it stores it: a sha256 over the decoded
+  rows, with normalized types, in the store's canonical sort order, so row order, column order,
+  row groups, compression, timestamp unit, string type and schema metadata do not change it
+  (`camber.edge.row_digest`). When a part in the object's store partition, or another object of
+  the same run, already holds those rows, the object is a `duplicate`: it goes to quarantine with
+  the name of the matching part, and `edge quarantine release` refuses it. Each partition keeps
+  its parts' digests in `_edge_rows.json`, a cache checked against each part's size and
+  modification time; parts with no entry are digested on first use. A month whose rows changed
+  lands as before.
+- **Presigned uploads can be staged in an inbox (#142).** `route_key(portfolio, key, inbox=True)`
+  signs an accepted upload into the bucket's `_inbox/` prefix instead of the store's layout, so
+  `camber edge land` checks it before anything reaches the store. docs/EDGE-DEPLOY.md describes
+  the arrangement and the upgrade order.
+- The edge config's `part_layout` (`canonical` or `legacy`; `CAMBER_EDGE_PART_LAYOUT`) and two
+  manifest fields, `part_layout` and `rows_sha256`, for audit.
+
+### Changed
+- **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
+  (rows sorted, fixed writer options, no pandas metadata) and still named by the sha256 of its
+  bytes, so the same rows give the same key and `camber store verify` counts edge parts as
+  canonical. NDJSON output is unchanged.
+- **Compatibility.** Parts that already landed are untouched: they still read the same, still
+  pass the hash check, and `store normalize` still leaves non-canonical edge parts alone. The
+  landing digests them on first use, so the first canonical re-send of a month an older forwarder
+  sent is recognised as a duplicate. Older forwarders keep working: their parts land and are
+  recorded as before. Upgrade the cloud landing first, and route presigned uploads through the
+  inbox: a pre-0.107 landing accepts canonical parts but would store each re-sent month twice. A
+  forwarder that must keep sending to an older landing can set `part_layout: legacy`. Batches
+  already in a spool keep their bytes and key. Uploads signed straight into the store's layout
+  get no row check.
+
 ## [0.106.0] — 2026-10-17
 
 **0.106: rule fixes found while building the synthetic lab cases, for air-side maintenance, chiller plants, heat pumps and G36 zone fleets, and drift findings whose wording matches their verdict (#181–#190).** **Breaking (#183):** `chiller_staging_fleet`'s `n_running_hours` and `n_multi_hours` were sample counts and are renamed `n_running_samples` and `n_multi_samples`, with no aliases; the hours are new metrics beside them. **Scoring change (#184):** `camber datasets score` now scores each rule only on the equipment it applies to, so per-rule false-positive rates move on mixed-equipment entries; the overall confusion is unchanged. `filter_fouling` and `control_hunting` judge fan-on samples, and an unreachable hunting threshold no longer reads as a pass (#181, #182). `chiller_staging_fleet` counts only chillers and takes a declared `capacity_kw` (#183). A new `cw_flow` role lets tower drift match on heat rejected; chilled-water loops are gated on their pumps, and approach checks read running samples only (#184). Heat-pump rules handle coarse trends, no longer read a defrost as the wrong mode, and count stage changes only while running (#185). The G36 zone-fleet rules read `airflow_min_sp`, stop counting G36's high heating loop as a violation, and rate mixed heating and cooling by hours (#186). An `ok` drift finding now says the signal holds near its baseline instead of naming a fault, the drift reference declines only the detectors it could run, and the tower-approach and head-pressure detectors say which way the signal moved (#187–#190). The two synthetic entries publish the new points (generator version 2); the `air-maintenance`, `plant-chiller-multi`, `plant-heat-pump` and `zone-g36-fleet` workbook answers are re-recorded.

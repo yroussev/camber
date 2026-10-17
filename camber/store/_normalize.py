@@ -14,9 +14,10 @@ part would make the next rollup of that month count its rows twice), and a part'
 ``_next_seq``. Left alone, each with a reason in the report:
 
 - parts that are already canonical;
-- **edge parts** (``part-<sha16>.parquet``): the name is the sha256 of the bytes. ``camber edge
-  land`` checks it (``hash_mismatch``), and a forwarder re-sending the same batch lands on the same
-  key, so the store holds it once. Rewriting the bytes would break both; see docs/EDGE-DEPLOY.md;
+- **edge parts** (``part-<sha16>.parquet``) that are not canonical (forwarders before 0.107; since
+  0.107 they write canonical parts): the name is the sha256 of the bytes. ``camber edge land``
+  checks it (``hash_mismatch``), and a forwarder re-sending the same batch lands on the same key,
+  so the store holds it once. Rewriting the bytes would break both; see docs/EDGE-DEPLOY.md;
 - **year-only parts** (pre-0.95, directly under ``year=Y/``): ``camber store migrate-partitions``
   rewrites them canonically and records their sha256 for the edge landing's duplicate check;
 - unreadable parts;

@@ -6,7 +6,8 @@ per :mod:`docs/SECURITY`), turns each raw ``<equip>_<measure>`` token into a ven
 :func:`camber.ingest.quality.assess` (report-only -- it never mutates the data), melts to the
 store's long shape with :func:`camber.store.role_frame_to_long`, serializes one Parquet part per
 ``year=/month=`` partition (0.95; one per ``year=`` before) directly into the
-:class:`~camber.store.ParquetStore` Hive layout, enqueues it on the
+:class:`~camber.store.ParquetStore` Hive layout -- in the store's canonical part layout since
+0.107 (#142), so the same rows give the same bytes and key -- enqueues it on the
 durable :class:`~camber.edge.spool.Spool`, and drains the spool through the one-way ``Sink``.
 
 Nothing here listens, binds, or writes to the BAS -- it only reads the source and pushes data out.
@@ -29,7 +30,8 @@ import pyarrow.parquet as pq
 
 from ..ingest.quality import assess
 from ..store.facilities import require_facility_id
-from ..store.parquet_store import role_frame_to_long
+from ..store.parquet_store import _canonical_table, _write_part, role_frame_to_long
+from .row_digest import rows_digest
 
 _LOG = logging.getLogger("camber.edge")
 
@@ -37,6 +39,10 @@ _SCHEMA_VERSION = 1
 _LONG_COLS = ["ts", "equip", "equip_class", "role", "value"]
 _CONTENT_TYPE = {"parquet": "application/vnd.apache.parquet", "ndjson": "application/x-ndjson"}
 _EXT = {"parquet": "parquet", "ndjson": "ndjson"}
+# 0.107 (#142): "canonical" writes the store's 0.103 part layout; "legacy" the pre-0.107 bytes
+# (pyarrow's default writer, pandas metadata, the batch's row order) for a cloud landing that
+# predates the row-digest check.
+PART_LAYOUTS = ("canonical", "legacy")
 
 
 def _default_equip_of(token: str) -> str:
@@ -77,10 +83,13 @@ class Forwarder:
         resample: str = "1h",
         quality: bool = True,
         wire_format: str = "parquet",
+        part_layout: str = "canonical",
         clock: Callable[[], datetime] | None = None,
     ):
         if wire_format not in _CONTENT_TYPE:
             raise ValueError(f"wire_format must be 'parquet' or 'ndjson', got {wire_format!r}")
+        if part_layout not in PART_LAYOUTS:
+            raise ValueError(f"part_layout must be 'canonical' or 'legacy', got {part_layout!r}")
         require_facility_id(facility_id)
         self.source = source
         self.sink = sink
@@ -92,17 +101,27 @@ class Forwarder:
         self.resample = resample
         self.quality = quality
         self.wire_format = wire_format
+        self.part_layout = part_layout
         self._clock = clock or (lambda: datetime.now(timezone.utc))
 
     # ------------------------------------------------------------------ serialize
-    def _serialize(self, part: pd.DataFrame) -> bytes:
+    def _serialize(self, part: pd.DataFrame) -> tuple:
+        """``(bytes, rows digest or None)`` of one partition's rows in the wire format.
+
+        Parquet parts are in the store's canonical layout (0.107, #142; ``part_layout="legacy"``
+        keeps the pre-0.107 bytes). NDJSON is unchanged: it is not a store format."""
         if self.wire_format == "ndjson":
             out = part.copy()
             out["ts"] = out["ts"].astype(str)
-            return out.to_json(orient="records", lines=True).encode("utf-8")
+            return out.to_json(orient="records", lines=True).encode("utf-8"), None
         buf = io.BytesIO()
-        pq.write_table(pa.Table.from_pandas(part, preserve_index=False), buf)
-        return buf.getvalue()
+        if self.part_layout == "canonical":
+            table = _canonical_table(part)
+            _write_part(table, buf)
+        else:
+            table = pa.Table.from_pandas(part, preserve_index=False)
+            pq.write_table(table, buf)
+        return buf.getvalue(), rows_digest(table)
 
     def _role_wide(self, frame: pd.DataFrame):
         """Group source columns into per-equip role-wide frames; return (by_equip, unmapped)."""
@@ -175,7 +194,7 @@ class Forwarder:
             # year-only keys older forwarders wrote)
             for (year, month), grp in long.groupby(["_year", "_month"]):
                 part = grp[_LONG_COLS].reset_index(drop=True)
-                data = self._serialize(part)
+                data, rows_sha = self._serialize(part)
                 sha = hashlib.sha256(data).hexdigest()
                 key = (
                     f"facility_id={self.facility_id}/year={int(year)}/month={int(month)}/"
@@ -192,6 +211,9 @@ class Forwarder:
                     "quality": quality_summary,
                     "content_sha256": sha,
                     "wire_format": self.wire_format,
+                    # 0.107 (#142): audit only -- the landing computes its own digest
+                    "part_layout": self.part_layout if self.wire_format == "parquet" else None,
+                    "rows_sha256": rows_sha,
                     "schema_version": _SCHEMA_VERSION,
                     "built_at": self._clock().isoformat(),
                 }

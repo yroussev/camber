@@ -62,34 +62,56 @@ layout** so the cloud reads it with the existing `ParquetStore.read_long` / `rea
   and `camber store migrate-partitions` converts them. If an older forwarder re-sends a year-only
   part after its year was migrated, the landing recognises it (same name and sha256 as recorded by
   the migration) and quarantines it as a `duplicate` instead of storing its rows twice.
-- **Edge parts are content-addressed, not canonicalised.** Since 0.103 the store writes its own
-  parts in a canonical, byte-reproducible layout (see
-  [SCALE.md](SCALE.md#reproducible-part-files)). The forwarder does not: its part keeps the
-  batch's row order and pyarrow's default writer metadata, so its name follows those bytes. The
-  same batch re-sent by the same forwarder still lands the same key, and the store reads both
-  kinds of part the same way. `camber store verify` counts them as `edge` parts, and `camber store
-  normalize` leaves them as they are. This is deliberate (0.104, #136):
-  - **Why the forwarder does not canonicalise.** The key is the sha256 of the bytes, and the
-    forwarder keeps no record of what it already sent: every poll re-reads the source's window, and
-    a month it sent before lands on the same key again, overwriting itself. Canonical bytes would
-    give every such batch a new key after the upgrade, so each month a source still returns would
-    land a second time under a second name, with the same rows. Reads would return those rows twice
-    (a wide read averages them away, but counts do not), and a retention rollup would count them
-    twice in `n` for good. Batches already in the spool are not affected either way: they keep the
-    bytes and key they were enqueued with.
-  - **Why the store keeps the names and the bytes.** `camber edge land` checks that an object's
-    sha256 starts with the `<sha16>` in its name (`hash_mismatch`), and `edge quarantine release`
-    compares bytes with the store's copy. Rewriting a landed part in place would break that check;
-    renaming it would bring the duplicate problem above back, since a re-sent batch would land on
-    the old name.
-  - **What would make it safe.** The cloud side would have to recognise the same rows arriving
-    under a second name: a digest of the rows, independent of the bytes, recorded for each stored
-    part and checked before a new one is stored. Presigned uploads go straight to the bucket
-    without passing through CAMBER, so that check has nowhere to run yet. Until it does, edge parts
-    stay content-addressed. Upgrading pandas or pyarrow on the edge device can also change these
-    bytes, and with them the keys of re-sent batches, so plan those upgrades with the same care.
+- **Edge parts are canonical and content-addressed** (0.107, #142). The forwarder writes each
+  part in the store's canonical layout (see [SCALE.md](SCALE.md#reproducible-part-files)): rows
+  sorted, fixed writer options, no pandas metadata. The same rows give the same bytes, so a month
+  re-sent unchanged lands on the same key and overwrites itself. `camber store verify` counts these
+  parts as canonical `edge` parts. Forwarders before 0.107 wrote the batch's row order with
+  pyarrow's default writer and pandas metadata; those parts still land and read the same, and
+  `camber store normalize` leaves them as they are (their name is the sha256 of their bytes).
+- **Duplicate rows in new bytes are caught at landing** (0.107, #142). Bytes can change while the
+  rows do not: the upgrade from a pre-0.107 forwarder to canonical parts, or a pandas or pyarrow
+  upgrade on the edge device (the Parquet footer names the writer's version). The month then
+  arrives under a second key. `camber edge land` therefore checks every Parquet object's **row
+  digest** before it stores it:
+  - The digest is a sha256 over the decoded rows, not the bytes: the five long columns with
+    normalized types (timestamps in nanoseconds, values as float64, labels as UTF-8), sorted in
+    the store's canonical order (`ts, equip, role, equip_class, value`). Column order, row order,
+    row groups, compression, encodings, timestamp unit, string type and schema metadata do not
+    change it. Any changed, dropped or extra row does.
+  - The landing compares it with the parts already in the object's store partition. Each
+    partition directory keeps the digests of its parts in `_edge_rows.json`, written when a part
+    lands. That file is only a cache: an entry counts while its part's size and modification time
+    are unchanged. Parts with no entry (landed before 0.107, or written straight into the store)
+    are digested on first use and recorded.
+  - An object whose rows a stored part (or another object in the same run) already holds is a
+    `duplicate`: it goes to quarantine with the name of the matching part, and `release` refuses
+    it. A month whose rows changed has a new digest and lands as before.
+  - An object with no digest (unreadable, or not exactly the five long columns) falls back to the
+    byte checks of earlier versions. NDJSON objects are not a store format and stay in the inbox,
+    as before.
+- **Presigned uploads go through an inbox.** A presigned PUT writes straight into the bucket, so
+  CAMBER cannot check a part before it is stored there. The smallest sound arrangement is to stop
+  edge PUTs from writing into the store's layout at all: the broker signs accepted uploads into
+  the bucket's `_inbox/` prefix with `camber.edge.landing.route_key(portfolio, key, inbox=True)`,
+  and `camber edge land <bucket>/_inbox --apply --reason R` (on the mounted or synced bucket, from
+  cron) moves them into the store after the facility, hash and row checks. The leading underscore
+  keeps readers and `camber edge reconcile --keys` from seeing staged objects. With a static URL
+  template, put `_inbox/` in the template's path; with an SDK sink, set its `prefix` to `_inbox`.
+  Nothing changes on the edge: its keys and its PUT are the same. Sites that keep signing straight
+  into the store keep the pre-0.107 behaviour (no row check) and should plan forwarder, pandas and
+  pyarrow upgrades with care.
+- **Upgrade order.** Upgrade the cloud landing to 0.107 first, and route presigned uploads through
+  the inbox, then upgrade the forwarders. A pre-0.107 landing accepts canonical parts (their names
+  still match their bytes) but cannot recognise a re-sent month in new bytes, so each month an
+  upgraded forwarder re-sends would be stored twice. A forwarder that must send to an older
+  landing can keep the pre-0.107 bytes with `"part_layout": "legacy"` (or
+  `CAMBER_EDGE_PART_LAYOUT=legacy`). Batches already in the spool keep the bytes and key they were
+  enqueued with.
 - **Per-batch manifest** (sink metadata): facility, window, rows, roles, equips, quality summary,
-  full `content_sha256`, `schema_version` — for cloud-side reconciliation and audit.
+  full `content_sha256`, `schema_version`, and since 0.107 `part_layout` and `rows_sha256` (the
+  row digest) — for cloud-side reconciliation and audit. The landing computes its own digest and
+  never trusts the manifest's.
 - **NDJSON** (`wire_format="ndjson"`) is a documented compatibility fallback for endpoints that can't
   accept Parquet PUTs; Parquet is the default (zero cloud transform).
 
@@ -111,6 +133,7 @@ construction.
 | **Secrets from environment only** | `load_config` rejects secret-shaped keys / presigned URLs in the file | `test_edge_config.py::test_rejects_secret_key_in_file` |
 | **Bounded egress allowlist (one host)** | every resolved URL host must equal the configured host | `test_edge_sink.py::test_presigned_host_allowlist_blocks_redirect` |
 | **Tamper-evidence + idempotent landing** | `content_sha256` in the key + `x-camber-content-sha256` header | `test_edge_forwarder.py::test_manifest_carries_audit_fields` |
+| **A re-sent month never lands twice** (0.107) | the landing compares a byte-independent row digest with the partition's stored parts | `test_edge_row_digest.py` |
 | **Never lose data offline** | durable spool: atomic enqueue, retry/backoff, backfill after reboot, bounded-disk eviction with a WARNING | `test_edge_spool.py` |
 | **Per-batch audit log** | a structured `camber.edge` log record per PUT (host, key, bytes, sha256, status) | `test_edge_sink.py` / operator captures logs |
 | **Loss-free journal compaction** (0.95) | the compacted journal is read back and compared with the queue before an atomic swap | `test_edge_compact.py` |
@@ -193,6 +216,9 @@ and pushes, then exits — nothing stays resident and nothing listens.
 - **Live protocol sources** (`sql`/`haystack`/`bacnet`/`opcua`/`modbus`/`mqtt`) need a client /
   connection the deployer owns — inject it via `build_forwarder(cfg, source=…)`. File sources
   (`csv_wide`/`csv_long`/`csv_perpoint`) build from config directly.
+- **`part_layout`** (0.107): `canonical` (the default) or `legacy`, the pre-0.107 bytes for a
+  cloud landing that has no row check yet (see §2, upgrade order). `CAMBER_EDGE_PART_LAYOUT`
+  overrides it.
 - **SDK sinks** (`edge-s3` / `edge-azure` / `edge-gcs`) are for sites that mandate direct scoped
   credentials instead of presigned URLs; the default presigned path needs **no cloud SDK and no
   stored keys**.
@@ -247,7 +273,7 @@ are quarantined too. An archived facility's hot data is already gone, and its st
 | `unregistered` | store data with no registry entry (a pre-portfolio store; reads as active) | reported only |
 | `inactive` | a facility that does not accept data | quarantined if it landed after the state change |
 | `quarantined` | under the bucket's `_quarantine/` prefix (key listings) | - |
-| `duplicate` | a year-only part the store already migrated to month partitions (re-sent by an older forwarder) | quarantined |
+| `duplicate` | a year-only part the store already migrated to month partitions (re-sent by an older forwarder); `edge land` also uses it for rows a stored part already holds (§2) | quarantined |
 
 It reads the workspace store (the default), a local landing directory (`--landing`, e.g. an inbox
 or a mounted bucket) or a key listing exported from the cloud (`--keys`: the JSON of
@@ -267,17 +293,20 @@ Uploads never enter the store for a facility that does not accept data:
 - **A landing inbox:** `camber edge land <inbox> --apply --reason R` moves accepted objects into
   the store and the rest into `<workspace>/quarantine/<key>`, beside a `<key>.quarantine.json`
   record (category, facility state, reason, sha256, bytes, times). An object whose content sha256
-  does not start with the `part-<sha16>` in its name is quarantined too (`hash_mismatch`).
+  does not start with the `part-<sha16>` in its name is quarantined too (`hash_mismatch`), and so
+  is one whose rows the store already holds in other bytes (`duplicate`, see §2).
   Orphaned and NDJSON objects stay in the inbox and are reported.
-- **A presigned-URL broker:** call `camber.edge.landing.route_key(portfolio, key)` before signing
-  a URL. It returns the key itself, or `_quarantine/<key>` for a facility that does not accept
-  data. The leading underscore keeps pyarrow / Hive discovery from reading it as data.
+- **A presigned-URL broker:** call `camber.edge.landing.route_key(portfolio, key, inbox=True)`
+  before signing a URL. It returns `_inbox/<key>` for a facility that accepts data (land it with
+  `camber edge land`, §2), or `_quarantine/<key>` for one that does not. Without `inbox=True` it
+  returns the key itself, which skips the row check. The leading underscore keeps pyarrow / Hive
+  discovery from reading either prefix as data.
 
 `camber edge quarantine list` shows each object with its status: `held`, or `incomplete` (a
 record whose object is missing, left by an interrupted run), or `unrecorded`. `release` moves
 objects into the store once the facility accepts data again (resume or restore it first). It
-refuses a hash mismatch, a `duplicate` of already-migrated rows, or a store key that already
-holds different content. `discard` deletes
+refuses a hash mismatch, a `duplicate` (of already-migrated rows, or of rows a stored part
+holds), or a store key that already holds different content. `discard` deletes
 objects: it needs `--yes` or `--confirm <facility_id>`, and a legal hold refuses it. Every change
 is audited per facility with a `begin` and a `done` record. Records are written before objects
 move, and objects are moved before their source is removed, so re-running any interrupted command

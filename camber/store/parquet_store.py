@@ -46,6 +46,7 @@ import threading
 from collections import OrderedDict
 from contextlib import nullcontext as _nullcontext
 from dataclasses import dataclass
+from typing import BinaryIO
 
 import pandas as pd
 import pyarrow as pa
@@ -181,8 +182,9 @@ def _canonical_table(df: pd.DataFrame) -> pa.Table:
     return _canonicalize(pa.Table.from_pandas(df, preserve_index=False))
 
 
-def _write_part(table: pa.Table, path: str) -> None:
-    """Write one canonical part file with the store's fixed writer options."""
+def _write_part(table: pa.Table, path: str | BinaryIO) -> None:
+    """Write one canonical part file (or buffer: the edge forwarder's parts, 0.107) with the
+    store's fixed writer options."""
     import pyarrow.parquet as pq
 
     pq.write_table(table, path, row_group_size=_ROWS_PER_GROUP, **_PARQUET_OPTIONS)
