@@ -34,6 +34,7 @@ flowchart LR
 | **I** Data-quality dashboard | `camber.charts.quality_dashboard` | points × {coverage, score, flatline, outliers} heatmap |
 
 ### A — readiness ribbon
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.readiness import readiness_ribbon
 
@@ -48,6 +49,7 @@ Flags = `max_bins` (time resolution), `title`, `max_xticks`. `presence_matrix(df
 raw `(matrix, bin_starts, coverage)` if you want the numbers.
 
 ### B — fault-annotated multi-trend
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.multitrend import fault_multitrend
 
@@ -63,6 +65,7 @@ each True run is shaded once. Flags: `normalize` (overlay disparate units 0–1)
 `shade_alpha`, `title`. `mask_to_spans(mask)` is the reusable mask→intervals helper.
 
 ### E — load carpet
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.carpet import load_carpet
 
@@ -78,6 +81,7 @@ building was left on read at a glance. Flags: `agg`, `cmap`, `label`, `title`, `
 `carpet_matrix(series)` returns the raw `(matrix, hours, dates)`.
 
 ### I — data-quality dashboard
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.quality_dashboard import quality_dashboard
 
@@ -102,6 +106,7 @@ Beyond the MVP slice, 0.3 builds the pattern catalog toward **rules as a chart e
 rule renders its own evidence. First renderer: pattern **D**.
 
 ### D — OAT cloud-shape scatter
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.oat_scatter import oat_scatter, classify_shape, brush_back
 
@@ -125,6 +130,7 @@ Flags: `changepoint` (`"auto"`/a kind/`False`), `classify`, `by` (colour by seas
 `energy_signature` plot to any point (airflow, valve %, ΔT), not just energy.
 
 ### G — templated subsystem diagnostic scatters
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.diagnostic import diagnostic_scatter, TEMPLATES
 
@@ -150,6 +156,7 @@ encodes one the equipment **earned** — a frozen [drift baseline](CHILLER-DRIFT
 ± *k* residual sigmas — so the comparison the drift detectors actually make (residuals against the
 frozen line at matched load) becomes visible instead of staying inside the rule:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.diagnostic import diagnostic_scatter, fitted_band
 from camber.store.modelstore import BaselineStore
@@ -205,6 +212,7 @@ a scatter with no band would invite the reader to judge it by eye, which is the 
 baseline exists to make. From the CLI: `camber drift report … --charts`.
 
 The dashboard wires it automatically — pass `rules=`:
+<!-- fence: skip (fragment) -->
 ```python
 html = build_dashboard(df, findings=findings, rules=registry)  # evidence=True by default
 ```
@@ -219,6 +227,7 @@ embeds each finding's evidence beneath the findings table (per-equipment frames,
 renders the right trend for each unit).
 
 ### C — peer/cohort comparison + cohort-deviation rule
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.cohort import cohort_small_multiples, cohort_deviation
 
@@ -238,6 +247,7 @@ unit runs unlike its peers", a signal no per-unit absolute-bound rule can see. F
 `min_cohort`, `rank`, `ncols`, `max_units`.
 
 ### H — M&V baseline, savings & uncertainty
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.savings import savings_chart
 
@@ -273,6 +283,7 @@ In every state the reporting points outside the baseline support are rug-marked 
 x-axis ("outside baseline range").
 
 ### F — load profiles & load-duration curves
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.loadprofile_chart import load_profile_chart, load_duration_chart
 
@@ -315,6 +326,7 @@ air-distribution page.
 
 The two M&V primitives from 0.1 draw what [MANDV.md](MANDV.md) computes:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.charts.cusum_chart import cusum_plot
 from camber.charts.energy_signature import energy_signature
@@ -341,6 +353,7 @@ band, and `chained_cusum_plot` draws one CUSUM across a chain of baseline versio
 self-contained HTML page** — matplotlib figures inlined as base64 PNG, no web framework, no
 external assets.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.report import build_dashboard
 
@@ -373,6 +386,7 @@ open("dashboard.html", "w").write(html)
 | `data_sources` | `None` | provenance dicts: the "Data source & licence" block first in the body (NC banner for research-only data) |
 
 ### Interactive linking (brush → select)
+<!-- fence: skip (fragment) -->
 ```python
 html = build_dashboard(df, interactive=True)  # link_x defaults to an OAT-like column
 ```

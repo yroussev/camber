@@ -19,6 +19,7 @@ flowchart LR
 ```
 *Findings map to categories, penalise from 100 by severity, then roll up to one overall grade.*
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.scorecard import build_scorecard
 

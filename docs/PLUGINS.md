@@ -64,6 +64,7 @@ recorded in `errors` rather than breaking the others.
 
 For a local/quick extension, register objects directly:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.plugins import PluginRegistry, apply_rules
 from camber.rules.base import Registry

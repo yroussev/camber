@@ -53,6 +53,7 @@ schedule.
 
 ## Calibration — grid τ, OLS the rest, gate on G14
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.rc_model import calibrate
 
@@ -71,6 +72,7 @@ accepts a calibration only when all three hold, CV(RMSE) ≤ 30 %, |NMBE| ≤ 0.
 
 ## Modeled savings — as-found vs as-corrected
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.rc_model import option_d_savings
 

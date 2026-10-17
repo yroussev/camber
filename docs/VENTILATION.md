@@ -37,6 +37,7 @@ Voz = Vbz / Ez               (corrected for air-distribution effectiveness)
 come from `OA_RATES_62_1` (62.1 Table 6.1, a public-standard subset) via `oa_rates_for(space_type)`,
 or you pass them explicitly.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.ventilation import assess_62_1
 
@@ -172,6 +173,7 @@ zone areas and populations with measured OA.
 
 ## DCV verification
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.ventilation import assess_dcv, economizer_active_mask
 
@@ -375,6 +377,7 @@ Sub-checks, each `None` when it cannot be evaluated:
   it's instantiated explicitly (not auto-registered). It judges one zone; for an air handler
   serving several zones use `ventilation_system_62_1`:
 
+  <!-- fence: skip (fragment) -->
   ```python
   from camber.rules.ventilation_rule import VentilationRateProcedure
 

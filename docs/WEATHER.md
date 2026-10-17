@@ -46,6 +46,7 @@ are frozen values with `.as_dict()`.
 NASA POWER is a lat/lon *point* query, so to fetch weather "for an address" you geocode it first, via
 [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) — also **free and keyless**:
 
+<!-- fence: skip (needs the network) -->
 ```python
 from camber.weather_source import geocode, oat_reference_for
 
@@ -122,6 +123,7 @@ Jan-01), so no hour is duplicated or dropped.
 repeated fetches don't re-hit the API — and, combined with year-chunking, a re-run only downloads the
 years missing from disk:
 
+<!-- fence: skip (needs the network) -->
 ```python
 from camber.weather_source import fetch_nasa_power, nasa_power_transport, cached_transport
 
@@ -141,6 +143,7 @@ near the site, `camber.weather_source` also fetches **NOAA's Integrated Surface 
 also keyless. `oat_reference_isd` finds the nearest station covering your window and returns the same
 °F `oat_f` Series:
 
+<!-- fence: skip (needs the network) -->
 ```python
 from camber.weather_source import oat_reference_isd, isd_nearest_station
 

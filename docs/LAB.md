@@ -230,6 +230,7 @@ The trend viewer is the live view of the store that `camber serve` also offers (
 - **Reading the store from Python.** To work with a span's numbers rather than look at them, read
   the store directly, for example:
 
+  <!-- fence: skip (needs a store) -->
   ```python
   from camber.store import ParquetStore
 
@@ -644,7 +645,7 @@ The job shows the error in red. The ones you may meet:
 | *portfolio is locked by …* | In a workspace, another command holds the lock. Wait for it to finish, then try again. |
 | *dataset cache … is locked by …* or *store … is locked by …* | Another lab or `camber datasets` command is writing the same cache or store. It waited 30 seconds; try again when the other job finishes. |
 | *the dataset cache … is read-only for this user* | The cache is shared read-only and the dataset is not fully in it. Ask whoever maintains it to fetch the dataset, or use a cache you can write (`--dir`). |
-| *not enough disk space: …* | The selection does not fit; see [Fetch & ingest is greyed out](#fetch--ingest-is-greyed-out). |
+| *not enough disk space: …* | The selection does not fit; see [Fetch & ingest is greyed out](#fetch-ingest-is-greyed-out). |
 | *… is suspended: its lifecycle owns its data …* or *… is under a legal hold …* (when removing) | In a workspace, the purge is refused; see [Cleaning up](#cleaning-up). The cache can still be removed. |
 | *… is not a folder*, *dir must be an absolute path …*, *… links outside it* | **From a folder…** needs the full path of a folder you can read that holds the files themselves. |
 | *facility … is suspended: the lab ingests only into provisioning or active facilities* | In a workspace, `camber facility resume` (or `restore`) it first. |

@@ -17,6 +17,7 @@ flowchart LR
 ```
 *Three layers fuse per finding, then rank into one prioritized punch list.*
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.actionplan import build_action_plan, action_plan_html
 from camber.fault_economics import EnergyPrice, EquipmentLoad

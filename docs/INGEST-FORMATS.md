@@ -67,6 +67,7 @@ docs; every field overridable):
 | `tracer` | Trane Tracer — ISO-ish |
 | `desigo` | Siemens Desigo (European) — semicolon, decimal comma, `DD.MM.YYYY`, day-first |
 
+<!-- fence: skip (needs a file) -->
 ```python
 from camber.io import load_csv
 

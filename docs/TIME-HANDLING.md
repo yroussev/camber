@@ -19,6 +19,7 @@ flowchart LR
 
 *Duplicate/gap DST artifacts are collapsed on ingest; timezone is attached only when hour-accurate energy needs it.*
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.timegrid import interval_hours, regularize, localize, dst_anomalies
 
@@ -66,6 +67,7 @@ US Central site a fan that ran 07:00-16:00 appeared to run 12:00-21:00.
 
 Pass the site's IANA zone to the parser, a loader or an adapter, or set it once in a config:
 
+<!-- fence: skip (needs a file) -->
 ```python
 from camber.io import load_csv
 

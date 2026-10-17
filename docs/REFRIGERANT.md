@@ -14,6 +14,7 @@ set. `camber.refrigerant` converts the first into the second:
 | condenser approach | `T_sat(P_discharge) - T_condenser_leaving_water` | dew |
 | evaporator approach | `T_chw_leaving - T_sat(P_suction)` | dew |
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber import refrigerant as R
 

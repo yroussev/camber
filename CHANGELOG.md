@@ -98,6 +98,25 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   `to_dict()` issues gain `zone_chains`. The `synthetic-g36-vav-fleet` template declares its
   topology, but its rules form no chain: the one air handler whose resets fail has no box
   symptom among the template's rules.
+- **The docs' Python examples run in the test suite (#219).** `tests/test_docs_fences.py` runs
+  every `python` fence in README.md and docs/ (the workbook included; not docs/dev/ or
+  docs/proposals/), each page's fences in order in one fresh interpreter, offline and in a
+  temporary folder. A fence that cannot run on its own (a fragment, or one that needs a dataset,
+  a store, a file, an optional extra or the network) carries `<!-- fence: skip (reason) -->` on
+  the line above it, which renders on neither GitHub nor the docs site.
+- **The CLI reference is checked against the parser (#224).** `tests/test_cli_reference.py`
+  fails when docs/CLI.md does not name a command or an option the parser accepts. docs/CLI.md
+  now documents `camber bacnet-discover`, `mv freeze --allow-short` (the only way past the
+  baseline-length rule) and every flag the reference was missing, including `--run-id`,
+  `--no-strict`, the `charts` options, `--quiet`, `--store` / `--equip` on `mv`, and the 0.107
+  `datasets ingest|remove --reason` and `remove --yes|--confirm`.
+- **The provisional-surfaces ledger covers 0.105 to 0.107 (#223).** docs/API-STABILITY.md lists
+  the TOWT and RMV2.0 additions, `ModelFitError`, the 0.106 rule parameters, metrics, `cw_flow`
+  and `is_chw_loop`, and the 0.107 surfaces, and notes the #183 metric rename.
+- `tests/test_references.py` checks that every PNNL guide or chapter a rule parameter's basis
+  cites is in that rule's `RULE_REFERENCES` entry, and that the references page lists every
+  `MV_REFERENCES` id (#222). `tests/test_docs_counts.py` computes the role counts that
+  docs/ONTOLOGY.md states (#220).
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
@@ -209,8 +228,28 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   - `resample` must be a pandas frequency.
 
   An unknown rule name lists close matches and every valid rule.
+- **More rules link their PNNL reading (#222).** Rules whose threshold bases cite a PNNL guide
+  or chapter now map to it, so reports give them *Learn more* links: the pump family's ten drift
+  detectors (`pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift`,
+  `pump_power_drift` and their `hw_` twins) link chapter 8, and the loop delta-T pair also the
+  plant guide whose heading asks whether the loop delta-T is low; `coil_leak_drift` links
+  chapter 5's leaking-valve checks; `economizer_damper_drift` links chapters 6 and 5; and
+  `outdoor_air_fraction` and `economizer_high_limit` add chapter 5, whose outdoor-air fraction
+  their bases cite. The pump detectors' `min_speed` basis cites chapter 8 only: the plant guides'
+  pressure headings ask about resetting the setpoint, which those detectors do not judge. In the
+  RCx report the economizer issue gains a chapter 5 link.
+- The docs build fails on a link to a heading that does not exist (`validation: anchors` in
+  mkdocs.yml, so `mkdocs build --strict` catches it) (#220).
 
 ### Fixed
+- The IPMVP Option A example in docs/MANDV.md called `option_a_savings` with keywords it does
+  not take; it now passes the measured values by position (#219).
+- docs/ONTOLOGY.md, docs/CAPABILITIES.md and docs/workbook/index.md stated role and exercise
+  counts from earlier releases; the role counts are current and tested, and the rest no longer
+  give a number. docs/LAB.md's link to "Fetch & ingest is greyed out" pointed at a GitHub-style
+  anchor, and docs/API-STABILITY.md still named the 0.9.x series (#220).
+- docs/REFERENCES.md's M&V table lacked the LBNL RMV2.0 row (`lbnl-rmv2`) (#222).
+- docs/DATASETS.md listed `--lock-timeout` on fewer commands than accept it (#224).
 - **A crash during an ingest's partition swap no longer empties the facility (#213).** The swap
   (also used by the open-fdd ingest) now uses the store's crash-recoverable replace
   (`camber.store._swap`). A crash at any point leaves the old or the new partition once recovered.

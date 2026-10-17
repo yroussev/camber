@@ -33,6 +33,7 @@ stateDiagram-v2
 
 ## Folding runs
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.faultlifecycle import FaultLifecycle
 
@@ -75,6 +76,7 @@ in-memory `rules.triage.FaultRegister` had the same flaw and is scoped the same 
 
 ## Workflow
 
+<!-- fence: skip (fragment) -->
 ```python
 fp = res["new"][0]
 lc.assign(fp, "alice")
@@ -89,6 +91,7 @@ excluded from open work).
 
 ## SLA & aging
 
+<!-- fence: skip (fragment) -->
 ```python
 lc.aging("2026-06-14T12:00")  # {fingerprint: hours_open} for open faults
 lc.overdue(

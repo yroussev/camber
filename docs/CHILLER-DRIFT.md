@@ -310,6 +310,7 @@ cc = cause_confusion(make_cases(), min_severity=3)
 print(cc.accuracy, cc.corroboration_accuracy, cc.as_dict()["matrix"])
 ```
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.driftvalidation import LabeledCase, evaluate, sweep
 from camber.rules.chiller_superheat_rule import ChillerSuperheatDrift

@@ -73,6 +73,7 @@ The config runs two rules on each rooftop unit at one-minute resolution:
 5. **After-hours energy.** Average each unit's supply-fan power (`power`, kW) by hour of day
    and add up the hours from 22:00 to 07:00: the fan's energy in an average night. In Python:
 
+   <!-- fence: skip (needs a store) -->
    ```python
    from camber.loadprofile import daily_profile
    from camber.store import ParquetStore
