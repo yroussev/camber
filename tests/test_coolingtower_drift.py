@@ -119,6 +119,26 @@ def test_it_is_one_sided_a_narrowing_is_not_a_fault():
     assert f.metrics["tower_approach_drift_f"] < -3.0  # it did move, just not the fault direction
 
 
+def test_a_narrowing_says_narrowed_not_widened():
+    """#190: the verb follows the sign; a fall never reads "widened -0.4°F"."""
+    f = _rule(BaselineStore()).analyze_periods("CT_1", *_base_and({"approach_off": -4.0}))
+    assert f.severity == "ok"
+    assert "widened" not in f.summary
+    assert "approach narrowed " in f.summary
+    assert "(a narrower approach is not a fault)" in f.summary
+    assert "narrowed -" not in f.summary  # the verb carries the sign; the number is a magnitude
+
+
+def test_an_ok_widening_holds_near_its_baseline():
+    """#190: a widening short of the floors is ok, so it names no fault (#187/#189 wording)."""
+    f = _rule(BaselineStore()).analyze_periods("CT_1", *_base_and({"approach_off": 0.6}))
+    assert f.severity == "ok"
+    assert f.metrics["tower_approach_drift_f"] > 0.0
+    assert "widened" not in f.summary
+    assert f.summary.startswith("CT_1: cooling-tower approach holds near its baseline (+")
+    assert f.summary.endswith("σ vs frozen baseline at matched load)")
+
+
 def test_a_steady_tower_does_not_flag():
     f = _rule(BaselineStore()).analyze_periods("CT_1", *_base_and({}))
     assert f.severity == "ok"

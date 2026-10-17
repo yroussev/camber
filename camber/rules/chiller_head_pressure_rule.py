@@ -52,6 +52,7 @@ from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from ..sensorhealth import PHYSICAL_BOUNDS
 from . import _chillerfit
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -372,14 +373,25 @@ class ChillerHeadPressureDrift:
         # add a temporal claim that rests on the weaker, untuned parameters -- label both.
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "up":
+        if severity == "ok" and (direction == "up" or round(drift.drift_f, 1) == 0.0):
+            # 0.106 (#190): an ok rise names no fault -- the climb belongs to warn and fault
+            headline = holds_near_baseline(
+                equip,
+                "head pressure",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit=" psi",
+                matched=_chillerfit.matched(frozen),
+            )
+        elif direction == "up":
             headline = (
                 f"{equip}: head pressure climbed {drift.drift_f:+.1f} psi "
                 f"({drift.drift_sigma:.1f}σ) vs frozen baseline at {_chillerfit.matched(frozen)}"
             )
         else:
             headline = (
-                f"{equip}: head pressure {drift.drift_f:+.1f} psi vs frozen baseline at "
+                f"{equip}: head pressure fell {abs(drift.drift_f):.1f} psi vs frozen baseline at "
                 f"{_chillerfit.matched(frozen)} (a fall is not a high-side fault)"
             )
         return Finding(

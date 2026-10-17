@@ -140,6 +140,32 @@ def test_it_is_one_sided_a_falling_head_pressure_does_not_flag():
     assert f.metrics["head_pressure_sustained_alarm"] is False
 
 
+def test_a_fall_says_fell():
+    """#190: the verb follows the sign; a fall reads "fell", never "climbed"."""
+    f = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_psi": -10.0}))
+    assert f.severity == "ok"
+    assert "climbed" not in f.summary
+    assert "head pressure fell " in f.summary
+    assert "fell -" not in f.summary  # the verb carries the sign; the number is a magnitude
+    assert "(a fall is not a high-side fault)" in f.summary
+
+
+def test_an_ok_rise_holds_near_its_baseline():
+    """#190: a rise short of the sigma floor is ok, so it says no "climbed" (#187/#189 wording)."""
+    f = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_psi": 3.0}))
+    assert f.severity == "ok"
+    assert f.metrics["head_pressure_drift_psi"] > 2.0
+    assert "climbed" not in f.summary
+    assert f.summary.startswith("CH_1: head pressure holds near its baseline (+")
+    assert " psi, " in f.summary
+
+
+def test_a_faulted_rise_still_says_climbed():
+    f = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_psi": 10.0}))
+    assert f.severity == "fault"
+    assert "head pressure climbed +" in f.summary
+
+
 def test_a_steady_chiller_does_not_flag():
     f = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({}))
     assert f.severity == "ok"
