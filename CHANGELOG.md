@@ -180,6 +180,12 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   Every ingest swap now passes the registry's write guard, so no ingest, in a workspace or not,
   writes into an archived facility. Plain stores need no reason or confirmation, as before.
   `camber lab` behaves as before.
+- **Behaviour change: a legal hold blocks a forced re-ingest, on every path (#212).** A hold
+  means nothing held is deleted, and a re-ingest replaces the facility's partition. So
+  `camber datasets ingest --force` (or a changed re-ingest) into a held facility that has data
+  is refused with `LifecycleError` and changes nothing: exit 1 in the CLI, 409 in `camber lab`
+  (which allowed it before), and the API raises. An unchanged re-ingest is still skipped, and
+  release the hold (`camber retention release`) to re-ingest. There is no override.
 - **`camber store verify` reports interrupted ingests (#213).** It lists leftover swap and
   staging directories, and registered facilities with no part files in a state that should have
   some. A facility whose data is stranded outside its partition fails verify even without

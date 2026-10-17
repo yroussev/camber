@@ -52,8 +52,8 @@ directories of ingests whose process is gone. ``camber store verify`` flags any 
 **Lifecycle** (0.107, #212). Every swap passes the registry's write guard
 (:meth:`~camber.store.FacilityRegistry._guard_write`: no tombstoned id, no case-variant, nothing
 into an archived facility). Inside a portfolio workspace an ingest also follows
-:mod:`._lifecycle`: it writes only into ``provisioning`` / ``active`` facilities, never drops a
-held one, needs a ``reason`` and is audited (``datasets.ingest``).
+:mod:`._lifecycle`: it writes only into ``provisioning`` / ``active`` facilities, never replaces
+or drops a held one's data, needs a ``reason`` and is audited (``datasets.ingest``).
 
 Provenance (licence, citation, sha256s, content hash, labels, ...) is recorded on each facility's
 registry entry under the single namespaced key ``"dataset"`` (:data:`META_KEY`).
@@ -1078,9 +1078,10 @@ def ingest_dataset(
 
     0.107 (#212): inside a portfolio workspace the ingest follows the facility lifecycle
     (:mod:`._lifecycle`): ``reason`` is required, a facility that is not ``provisioning`` /
-    ``active`` is refused (:class:`~camber.portfolio.LifecycleError`), and so is dropping a
-    held facility; each ingested facility gets one ``<audit_as>.ingest`` audit line
-    (``audit_as=None``: the caller audits, as ``camber lab`` does).
+    ``active`` is refused (:class:`~camber.portfolio.LifecycleError`), and so is replacing a
+    held facility's data (a forced or changed re-ingest) or dropping a held facility; each
+    ingested facility gets one ``<audit_as>.ingest`` audit line (``audit_as=None``: the caller
+    audits, as ``camber lab`` does).
     """
     from . import _lifecycle
 
@@ -1126,17 +1127,20 @@ def ingest_dataset(
         return res
 
 
-def _lifecycle_gate(pf, st, entry, fids, *, drop=()) -> None:
-    """Refuse (``LifecycleError``) an ingest writing ``fids`` / dropping ``drop`` in workspace
-    ``pf`` against the facility lifecycle (see :mod:`._lifecycle`); a no-op outside one."""
+def _lifecycle_gate(pf, st, entry, fids, *, drop=(), replace=()) -> None:
+    """Refuse (``LifecycleError``) an ingest writing ``fids`` / replacing the data of
+    ``replace`` / dropping ``drop`` in workspace ``pf`` against the facility lifecycle (see
+    :mod:`._lifecycle`); a no-op outside one."""
     if pf is None:
         return
     from ..portfolio import LifecycleError
     from . import _lifecycle
 
+    by = "`camber datasets ingest`"
     known = FacilityRegistry(st.root).all()
-    why = _lifecycle.ingest_blockers(known, fids, by="`camber datasets ingest`")
-    why += _lifecycle.purge_blockers(pf, entry.id, fids=drop, by="`camber datasets ingest`")
+    why = _lifecycle.ingest_blockers(known, fids, by=by)
+    why += _lifecycle.replace_blockers(pf, st.root, replace, by=by)
+    why += _lifecycle.purge_blockers(pf, entry.id, fids=drop, by=by)
     if why:
         raise LifecycleError("; ".join(why) + "; nothing was ingested")
 
@@ -1175,6 +1179,8 @@ def _ingest_locked(
         result.facilities = sorted(existing)
         result.notes.append("already ingested with identical inputs (use force to re-ingest)")
         return result
+    mine = _lifecycle.dataset_facilities(known, entry.id, base=entry.ingest.get("facility"))
+    _lifecycle_gate(pf, st, entry, (), replace=mine)  # a held partition is never replaced
     staging = _staging_root(st)
     scratch = _EXTRACT_SCRATCH.set(staging + ".extract")
     try:
@@ -1185,7 +1191,7 @@ def _ingest_locked(
         base["corrections"] = "applied" if corrections else "skipped (published data as-is)"
         stale = sorted(fid for fid in existing if fid not in facs)
         # every check before the first swap, so a refusal leaves the store as it was
-        _lifecycle_gate(pf, st, entry, facs, drop=stale)
+        _lifecycle_gate(pf, st, entry, facs, drop=stale, replace=facs)
         reg = FacilityRegistry(st.root)
         for fid in facs:
             if not _reclaimable(reg, fid, entry.id):

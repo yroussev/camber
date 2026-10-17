@@ -648,5 +648,6 @@ The job shows the error in red. The ones you may meet:
 | *… is suspended: its lifecycle owns its data …* or *… is under a legal hold …* (when removing) | In a workspace, the purge is refused; see [Cleaning up](#cleaning-up). The cache can still be removed. |
 | *… is not a folder*, *dir must be an absolute path …*, *… links outside it* | **From a folder…** needs the full path of a folder you can read that holds the files themselves. |
 | *facility … is suspended: the lab ingests only into provisioning or active facilities* | In a workspace, `camber facility resume` (or `restore`) it first. |
+| *… is under a legal hold: the lab does not replace its data …* (force re-ingest) | Re-ingesting replaces the facility's data, and a hold keeps everything (0.107). Release the hold (`camber retention release`) first; an unforced ingest of unchanged data is still allowed. |
 | *report for … failed: …* (in the report's tab) | The report could not be built from the store; the message says why. |
 | *lost contact with the lab server* (at the top of the page) | The lab stopped. Start it again and reload the page. |

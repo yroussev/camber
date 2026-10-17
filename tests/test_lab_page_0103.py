@@ -354,6 +354,27 @@ def test_workspace_purge_respects_the_lifecycle(tmp_path):
         app.close()
 
 
+def test_a_held_facility_refuses_a_forced_re_ingest(tmp_path):
+    """0.107: a legal hold means nothing held is deleted, so a forced re-ingest -- which replaces
+    the partition -- is refused (409), as in the CLI; an unforced, unchanged one is a no-op."""
+    pf = Portfolio.init(str(tmp_path / "ws"))
+    app = _ingested(tmp_path, workspace=pf.root)
+    try:
+        pf.hold("ds-test-ahu", reason="test hold")
+        status, out, _ = post(app, "/lab/jobs/ingest", {"ids": ["test-ahu"], "force": True})
+        assert status == 409 and "under a legal hold: the lab does not replace" in out["error"]
+        status, out, _ = post(app, "/lab/jobs/ingest", {"ids": ["test-ahu"]})
+        assert status == 202
+        view = _wait(app, out["job"]["id"])
+        assert view["state"] == "done" and view["result"][0]["ingest"]["skipped"] is True
+        assert "ds-test-ahu" in app.store.facilities()
+        pf.release_hold("ds-test-ahu", reason="test")
+        status, out, _ = post(app, "/lab/jobs/ingest", {"ids": ["test-ahu"], "force": True})
+        assert status == 202 and _wait(app, out["job"]["id"])["state"] == "done"
+    finally:
+        app.close()
+
+
 # --------------------------------------------------------------------------- from a folder
 
 
