@@ -444,7 +444,7 @@ def test_mv_section_lists_baselines_and_declines(run, captured):
     rep = build_rcx_report(run, options=RcxOptions(sections=("mv", "appendix")))
     mv = next(s for s in rep.sections if s["id"] == "mv")
     rows = next(b for b in mv["blocks"] if b["kind"] == "table")["rows"]
-    assert rows[0][:5] == ["DemoMeter", "ok", "3PC", "0.91", "12.0%"]
+    assert rows[0][:5] == ["DemoMeter", "ok", "3P cooling", "0.91", "12.0%"]
     assert rows[1][1] == "declined"
     appx = next(s for s in rep.sections if s["id"] == "appendix-a")
     decl = next(b for b in appx["blocks"] if b["kind"] == "table")

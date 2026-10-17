@@ -424,7 +424,7 @@ def test_versioned_billing_baselines(tmp_path, capsys):
     store = tmp_path / "store.json"
 
     rc, out = _mv(["mv", "freeze", path, "--reason", "initial", "--by", "ana", "--apply"], capsys)
-    assert rc == 0 and "Elec/mv_bills: froze v1" in out and "DD-HC" in out
+    assert rc == 0 and "Elec/mv_bills: froze v1" in out and "Degree-day heating and cooling" in out
     doc = json.load(open(store))
     prov = doc["mv_baselines"][0]["provenance"]
     bill = prov["billing"]

@@ -14,6 +14,15 @@ import pandas as pd
 from ..mandv.cusum import cusum as _cusum
 
 
+def _ylabel(units: str | None) -> str:
+    """The y-axis label: the meter's unit when known, else unit-free (0.107, #210)."""
+    return f"Cumulative {units}" if units else "Cumulative energy"
+
+
+def _unit(units: str | None) -> str:
+    return f" {units}" if units else ""
+
+
 def cusum_plot(
     baseline_projected: pd.Series,
     actual: pd.Series,
@@ -21,7 +30,7 @@ def cusum_plot(
     limit: float | None = None,
     ax=None,
     title: str | None = None,
-    units: str = "kWh",
+    units: str | None = None,
 ):
     """Draw the CUSUM trajectory (with optional ±``limit`` control band). Returns the Axes."""
     import matplotlib.pyplot as plt
@@ -60,10 +69,12 @@ def cusum_plot(
         )
 
     total = float(s.iloc[-1])
-    ax.set_ylabel(f"Cumulative {units}")
+    ax.set_ylabel(_ylabel(units))
     ax.set_xlabel("Time")
     verdict = "savings" if total > 0 else "waste"
-    ax.set_title(title or f"CUSUM — net {verdict} {total:,.0f} {units} over {len(s)} intervals")
+    ax.set_title(
+        title or f"CUSUM — net {verdict} {total:,.0f}{_unit(units)} over {len(s)} intervals"
+    )
     ax.legend(loc="upper left", fontsize=8)
     return ax
 
@@ -78,7 +89,7 @@ def chained_cusum_plot(
     gaps=(),
     ax=None,
     title: str | None = None,
-    units: str = "kWh",
+    units: str | None = None,
 ):
     """A CUSUM chained across baseline versions: one segment per version, rebaseline markers.
 
@@ -132,12 +143,13 @@ def chained_cusum_plot(
             color="#444444",
         )
     ax.axhline(0, color="#444444", lw=0.8)
-    ax.set_ylabel(f"Cumulative {units}")
+    ax.set_ylabel(_ylabel(units))
     ax.set_xlabel("Time")
     verdict = "savings" if carry > 0 else "waste"
     ax.set_title(
         title
-        or f"Chained CUSUM -- net {verdict} {carry:,.0f} {units} across {len(order)} version(s)"
+        or f"Chained CUSUM -- net {verdict} {carry:,.0f}{_unit(units)} across {len(order)} "
+        "version(s)"
     )
     handles, labels = ax.get_legend_handles_labels()
     uniq = dict(zip(labels, handles))

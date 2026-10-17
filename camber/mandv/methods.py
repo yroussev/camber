@@ -484,10 +484,13 @@ def standard_conditions_savings(
     see :func:`select_method`.
     """
     from ._design import fit_record, projection_variance
-    from .normalized import normalized_savings
+    from .normalized import _finite_projection_rows, normalized_savings
 
     _check_kernel(kernel)
-    S = np.asarray(standard_drivers, dtype=float)
+    # 0.107 (#208): rows either model cannot project are left out (and counted by
+    # normalized_savings's caveat); the variance terms and the range check use the same rows
+    S_given = np.asarray(standard_drivers, dtype=float)
+    S, _n_given, _n_out = _finite_projection_rows(baseline_model, reporting_model, S_given)
     nb: int
     pb: int
     nr: int
@@ -510,7 +513,7 @@ def standard_conditions_savings(
     ns = normalized_savings(
         baseline_model,
         reporting_model,
-        S,
+        S_given,
         baseline_cv_rmse=cvb,
         n_baseline=nb,
         reporting_cv_rmse=cvr,
@@ -537,8 +540,12 @@ def standard_conditions_savings(
         terms = {"v_param_baseline": vb, "v_param_reporting": vr, "var_ln_senpi": var_ln}
     elif kernel == "g14":
         caveats.append("no SEnPI band with kernel='g14' for standard conditions; use 'exact'")
-    rv_b, rng_b = _range(baseline_model, S)
-    rv_r, rng_r = _range(reporting_model, S)
+    if len(S):
+        rv_b, rng_b = _range(baseline_model, S)
+        rv_r, rng_r = _range(reporting_model, S)
+    else:
+        rv_b = rv_r = None
+        rng_b = rng_r = {"valid": None, "caveats": []}
     caveats += [f"baseline model: {c}" for c in rng_b.get("caveats") or []]
     caveats += [f"reporting model: {c}" for c in rng_r.get("caveats") or []]
     tier = _worst(

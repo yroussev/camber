@@ -86,6 +86,39 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
   rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
   the default, and only a configured one is priced.
+- **`camber mv report`, `mv propose` and `mv rebaseline` apply the entry's extrapolation policy
+  (#205).** They graded coverage with the default policy and ignored an `mv` entry's
+  `extrapolation` block, which `mv run` applies. A strict policy could decline the saving in
+  `mv run` while `mv report` showed it as `in_range`. All four paths now build the policy from the
+  entry and reach the same verdict. Only configs that set `extrapolation` change.
+- **`mv run` and `mv report` use the same ledger date window (#206).** The report kept only
+  ledger entries dated inside the reported rows. A non-routine adjustment recorded with
+  `camber mv adjust` and dated between the baseline end and the reporting start, or inside the
+  baseline period, restated the saving in `mv run` but was skipped in `mv report` with no
+  caveat. Both paths now keep the entries dated from the baseline start to the reporting end.
+- **The M&V report's "Reported segments" table matches results by version (#207).** It paired
+  segments with results by position, so a segment declined for "no data" showed the next
+  version's savings, and that version had no row of its own. The declined segment now says
+  "no data", and each version shows its own savings.
+- **Normalized and standard-conditions savings skip normal-year periods with no finite projection
+  (#208).** One NaN or implausible temperature in the normal-year set turned every figure of
+  `normalized_savings` and `standard_conditions_savings` into NaN, with no caveat and no
+  decline. A period that either model cannot project is now left out, counted
+  (`NormalizedSavings.n_excluded`) and named in a caveat, as `avoided_energy_savings` has done
+  since 0.105. With no period left the saving is declined. Clean data is unchanged.
+- **More text shows the M&V registry's model labels (#209).** The versioned-store
+  `mv_baseline` summary, the RCx report's M&V table, the freeze and rebaseline plan text and
+  `camber mv list` now say "3P cooling" or "2P (5P fallback)" rather than "3PC" or "5P", as the
+  rest of the output has since 0.105. The metrics, the plan's `model` field and the `mv list`
+  JSON keep the codes; the plan rows gain `model_label`.
+- **The chained CUSUM chart takes its unit from the meter (#210).** Without a `units` block it
+  labelled every meter "Cumulative kWh", including a gas billing meter in therms. The unit now
+  comes from the unit system, else the meter's bills, else the energy its trended rate
+  integrates to (`MeterChain.meter_unit`). When none is known the axis reads "Cumulative energy".
+  `cusum_plot` and `chained_cusum_plot` default to that unit-free label.
+- **The fleet report's median EUI is a true median (#211).** With an even number of buildings it
+  took the upper of the two middle values, so every "vs median" percentage was off. EUIs of 40,
+  60, 80 and 200 now give a median of 70, not 80.
 
 
 ## [0.106.0] — 2026-10-17

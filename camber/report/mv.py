@@ -43,6 +43,15 @@ def _table(head, rows) -> str:
     return "<table border='1' cellpadding='5' cellspacing='0'>" + "".join(out) + "</table>"
 
 
+def _energy_unit(m) -> str | None:
+    """The unit of the meter's reported energy (0.107, #210): the config's unit system, else the
+    meter's own unit (its bills', or its trended rate's), else ``None`` (a unit-free axis)."""
+    u = getattr(m, "units", None)
+    if u is not None:
+        return u["energy_unit"]
+    return ((getattr(m, "billing", None) or {}).get("units")) or getattr(m, "meter_unit", None)
+
+
 def _chart(m) -> str:
     import matplotlib
 
@@ -67,7 +76,7 @@ def _chart(m) -> str:
             gaps=gaps,
             ax=ax,
             title=f"{m.equip}: chained CUSUM across baseline versions",
-            **({} if getattr(m, "units", None) is None else {"units": m.units["energy_unit"]}),
+            units=_energy_unit(m),
         )
         img = fig_to_base64(fig)
     except Exception:  # noqa: BLE001 - an unrenderable chart must not lose the page
@@ -123,9 +132,15 @@ def _meter(m, charts: bool) -> str:
         )
     )
     rows = []
-    li = 0
+    # 0.107 (#207): each result is matched to its segment by version, never by position (a
+    # segment declined for "no data" keeps its period but has no result)
+    by_version = {
+        str(ln.baseline_version): (ln, m.adjusted[i] if i < len(m.adjusted) else None)
+        for i, ln in enumerate(m.links)
+    }
     for seg in m.segments:
-        if seg.get("period") is None:
+        ln, adj = by_version.get(str(seg["version"]), (None, None))
+        if seg.get("period") is None or ln is None:
             rows.append(
                 [
                     _e(seg["version"]),
@@ -137,11 +152,6 @@ def _meter(m, charts: bool) -> str:
                     "–",
                 ]
             )
-            continue
-        ln = m.links[li] if li < len(m.links) else None
-        adj = m.adjusted[li] if li < len(m.adjusted) else None
-        li += 1
-        if ln is None:
             continue
         rows.append(
             [
