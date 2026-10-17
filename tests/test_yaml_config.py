@@ -188,6 +188,22 @@ def test_dump_yaml_notes_and_scalars():
     assert loads_yaml(text) == data
 
 
+def _fake_ingested(store: str, dataset_id: str, fid: str) -> None:
+    """One row under ``fid``, registered as ``dataset_id``'s facility (no real download)."""
+    from camber.store import ParquetStore
+
+    long = pd.DataFrame(
+        {
+            "ts": pd.to_datetime(["2020-01-01"]),
+            "equip": ["AHU"],
+            "equip_class": ["AHU"],
+            "role": ["oat"],
+            "value": [50.0],
+        }
+    )
+    ParquetStore(store).write_long(long, facility_id=fid, dataset={"dataset_id": dataset_id})
+
+
 def test_datasets_config_format_yaml(tmp_path, capsys):
     pytest.importorskip("yaml")
     store = str(tmp_path / "store")
@@ -199,6 +215,10 @@ def test_datasets_config_format_yaml(tmp_path, capsys):
     as_json.pop("_comment")
     assert loads_yaml(text) == as_json
     out = str(tmp_path / "cfg.yaml")  # the suffix picks the format
+    # 0.107 (#218): a config file is written only for a dataset ingested in the store
+    assert main(["datasets", "config", "lbnl-sdahu", "--store", store, "--out", out]) == 1
+    assert "not ingested" in capsys.readouterr().err and not os.path.exists(out)
+    _fake_ingested(store, "lbnl-sdahu", "ds-lbnl-sdahu")
     assert main(["datasets", "config", "lbnl-sdahu", "--store", store, "--out", out]) == 0
     capsys.readouterr()
     assert load_config(out) == as_json

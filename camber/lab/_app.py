@@ -30,7 +30,6 @@ from ._jobs import JobQueue
 LAB_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_PENDING_JOBS = 20
-INGESTABLE_STATES = ("provisioning", "active")
 _JOB_ID = re.compile(r"^[0-9a-f]{12}$")
 
 
@@ -466,33 +465,31 @@ class LabApp:
         return self.jobs.submit("remove", params, work)
 
     def _remove(self, entry, purge_store: bool) -> dict:
+        from ..datasets import _lifecycle
         from ..datasets._ops import remove_dataset
 
+        reason = f"camber lab removed dataset {entry.id}" + (
+            " and purged its facilities" if purge_store else ""
+        )
         res = remove_dataset(
             entry,
             data_dir=self.data_dir,
             store=self.store if purge_store else None,
             purge_store=purge_store,
+            reason=reason,
+            audit_as=None,  # the lab writes its own lab.* lines, below
         )
         with self._report_lock:  # a purged facility's cached report goes with it
             dropped = set(res["facilities_dropped"])
             self._reports = {k: v for k, v in self._reports.items() if k[0] not in dropped}
-        reason = f"camber lab removed dataset {entry.id}" + (
-            " and purged its facilities" if purge_store else ""
-        )
-        self._audit(
-            "lab.remove",
-            reason=reason,
-            details={
-                "dataset_id": entry.id,
-                "freed_bytes": res["freed_bytes"],
-                "purge_store": purge_store,
-                "facilities_dropped": res["facilities_dropped"],
-            },
-        )
-        for fid in res["facilities_dropped"]:
-            self._audit(
-                "lab.purge", reason=reason, facility_id=fid, details={"dataset_id": entry.id}
+        if self.portfolio is not None:
+            _lifecycle.audit_remove(
+                self.portfolio,
+                "lab",
+                reason=reason,
+                dataset_id=entry.id,
+                res=res,
+                purge_store=purge_store,
             )
         return res
 
@@ -502,34 +499,12 @@ class LabApp:
         Outside a workspace nothing blocks it (``camber datasets remove --purge-store``). In one,
         a facility under a legal hold keeps everything, and one that has left ``provisioning`` /
         ``active`` (suspended, offboarding, archived) belongs to its lifecycle: its data is
-        removed by ``camber facility offboard|archive|purge``, never by a lab shortcut.
+        removed by ``camber facility offboard|archive|purge``, never by a lab shortcut. The rules
+        are :func:`camber.datasets._lifecycle.purge_blockers`, shared with the CLI (0.107, #212).
         """
-        if self.portfolio is None:
-            return []
-        from ..datasets._ingest import dataset_meta
+        from ..datasets._lifecycle import purge_blockers
 
-        pf = self.portfolio
-        try:
-            known = pf.registry.all()
-            holds = pf.legal_holds()
-        except Exception as exc:  # noqa: BLE001 - an unreadable registry blocks a purge
-            return [f"the workspace registry could not be read ({type(exc).__name__})"]
-        out = []
-        for fid, meta in sorted(known.items()):
-            if dataset_meta(meta).get("dataset_id") != entry.id:
-                continue
-            state = meta.get("state") or "active"
-            if fid in holds:
-                out.append(
-                    f"{fid} is under a legal hold: nothing of it is deleted until the hold is "
-                    "released (`camber retention release`)"
-                )
-            elif state not in INGESTABLE_STATES:
-                out.append(
-                    f"{fid} is {state}: its lifecycle owns its data (`camber facility "
-                    "resume|restore`, or `offboard|archive|purge`), so the lab does not purge it"
-                )
-        return out
+        return purge_blockers(self.portfolio, entry.id, by="the lab")
 
     def _preflight(self, entries, subset, *, download: bool, ingest: bool) -> None:
         """Refuse a job its environment cannot finish: a missing extra (409) or too little disk
@@ -656,11 +631,13 @@ class LabApp:
         job.report(f"{entry.id}: {'up to date' if res.skipped else 'ingested'}")
         out = res.as_dict()
         out.pop("store", None)
+        out.pop("dropped", None)
         return out
 
     def _ingest_in_workspace(self, job, entry, kw):
         """Ingest under the workspace lock: register ``provisioning``, ingest, activate, audit."""
-        from ..datasets._ingest import dataset_meta, ingest_dataset
+        from ..datasets import _lifecycle
+        from ..datasets._ingest import ingest_dataset
 
         pf = self.portfolio
         reason = f"camber lab ingest of dataset {entry.id}"
@@ -668,18 +645,10 @@ class LabApp:
             reg = pf.registry
             known = reg.all()
             base = entry.ingest.get("facility")
-            mine = {
-                fid
-                for fid, m in known.items()
-                if dataset_meta(m).get("dataset_id") == entry.id or fid == base
-            }
-            for fid in sorted(mine):
-                state = known[fid].get("state") or "active"
-                if state not in INGESTABLE_STATES:
-                    raise PermissionError(
-                        f"facility {fid} is {state}: the lab ingests only into provisioning or "
-                        "active facilities (use `camber facility resume|restore` first)"
-                    )
+            mine = _lifecycle.dataset_facilities(known, entry.id, base=base)
+            why = _lifecycle.ingest_blockers(known, mine, by="the lab")
+            if why:
+                raise PermissionError(why[0])
             single = entry.ingest.get("adapter") != "bdg2"  # BDG2: one facility per site
             if (
                 single
@@ -689,22 +658,13 @@ class LabApp:
                 and base not in reg.tombstones()
             ):
                 pf.add_facility(entry.title, facility_id=base, reason=reason)
-            res = ingest_dataset(entry, self.store, **kw)
+            # the lab writes its own lab.ingest lines, after each activation
+            res = ingest_dataset(entry, self.store, **kw, reason=reason, audit_as=None)
             for fid in res.facilities:
                 if pf.registry.state(fid) == "provisioning":
                     pf.transition(fid, "activate", reason=reason)
-                pf.audit(
-                    "lab.ingest",
-                    reason=reason,
-                    facility_id=fid,
-                    details={
-                        "dataset_id": entry.id,
-                        "subset": res.subset,
-                        "rows": res.rows,
-                        "skipped": res.skipped,
-                        "content_hash": res.content_hash,
-                        "corrections": res.corrections,
-                    },
+                _lifecycle.audit_ingest(
+                    pf, "lab.ingest", reason=reason, dataset_id=entry.id, res=res, facilities=[fid]
                 )
         return res
 

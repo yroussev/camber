@@ -224,14 +224,16 @@ def test_a_workspace_store_uses_the_workspace_lock_without_deadlock(ahu):
     _ops.fetch_dataset(entry, opener=opener)
     pf = Portfolio.init(tmp / "ws")
     with pf.lock(timeout=0):  # e.g. the lab holds it around its ingest: re-entered, no deadlock
-        res = _ingest.ingest_dataset(entry, pf.store_root)
+        res = _ingest.ingest_dataset(entry, pf.store_root, reason="test")
     assert res.facilities == ["ds-test-ahu"]
     assert not os.path.exists(os.path.join(pf.store_root, LOCK_FILE))  # no second lock
     proc = _hold("store", pf.store_root)  # store_lock on a workspace store = the workspace lock
     try:
         assert read_holder(str(tmp / "ws"))["pid"] == proc.pid
         with pytest.raises(PortfolioLocked):
-            _ingest.ingest_dataset(entry, pf.store_root, force=True, lock_timeout=0.2)
+            _ingest.ingest_dataset(
+                entry, pf.store_root, force=True, lock_timeout=0.2, reason="test"
+            )
     finally:
         _stop(proc)
 

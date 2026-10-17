@@ -204,7 +204,7 @@ def ingest_package(
     ``$CAMBER_LOCK_TIMEOUT``, else 30 s). A held lock raises ``PortfolioLocked`` /
     ``StoreLocked`` naming the holder.
     """
-    from ...datasets._ingest import _staging_root, _swap_in
+    from ...datasets._ingest import _staging_root, _swap_in, recover_staging
     from ...portfolio import Portfolio, is_workspace
 
     if (store is None) == (workspace is None):
@@ -273,6 +273,7 @@ def ingest_package(
             port.add_facility(disp, facility_id=fid, reason=why, activate=activate)
         else:
             reg._guard_write(fid)  # a tombstoned id or a case-variant: refused before any write
+        recover_staging(st)  # 0.107 (#213): what a crashed ingest left behind
         staging = _staging_root(st)
         try:
             rows = _write_staged(pkg, staging, fid)

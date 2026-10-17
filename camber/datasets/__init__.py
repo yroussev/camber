@@ -136,6 +136,7 @@ def ingest(
     corrections: bool = True,
     accept_noncommercial: bool = False,
     from_dir=None,
+    reason: str | None = None,
 ) -> IngestResult:
     """Normalize a fetched dataset subset into ``store`` (path or ParquetStore).
 
@@ -149,6 +150,10 @@ def ingest(
     ``from_dir`` takes the files from a local directory instead of a prior :func:`fetch` -- the way
     in for ``manual`` entries (downloaded by hand from a portal with terms): pinned files are
     verified (size + sha256) and placed in the cache first. See :mod:`camber.datasets._ingest`.
+
+    Into a portfolio workspace's store (0.107, #212) the ingest needs a ``reason`` (audited as
+    ``datasets.ingest``) and writes only into ``provisioning`` / ``active`` facilities
+    (:class:`~camber.portfolio.LifecycleError` otherwise).
     """
     entry = get(dataset_id)
     if from_dir is not None:
@@ -170,6 +175,7 @@ def ingest(
         corrections=corrections,
         accept_noncommercial=accept_noncommercial,
         via="ingest --from-dir" if from_dir is not None else "ingest",
+        reason=reason,
     )
 
 
@@ -178,9 +184,23 @@ def status(*, data_dir=None, store=None) -> list:
     return dataset_status(_entries(), data_dir=data_dir, store=store)
 
 
-def remove(dataset_id: str, *, data_dir=None, store=None, purge_store: bool = False) -> dict:
-    """Delete a dataset's local files (and, with ``purge_store``, its facilities in ``store``)."""
-    return remove_dataset(get(dataset_id), data_dir=data_dir, store=store, purge_store=purge_store)
+def remove(
+    dataset_id: str,
+    *,
+    data_dir=None,
+    store=None,
+    purge_store: bool = False,
+    reason: str | None = None,
+) -> dict:
+    """Delete a dataset's local files (and, with ``purge_store``, its facilities in ``store``).
+
+    A purge from a portfolio workspace's store (0.107, #212) needs a ``reason`` (audited as
+    ``datasets.remove`` / ``datasets.purge``) and is refused, before anything is deleted, while a
+    facility is under a legal hold or not ``provisioning`` / ``active``.
+    """
+    return remove_dataset(
+        get(dataset_id), data_dir=data_dir, store=store, purge_store=purge_store, reason=reason
+    )
 
 
 def config_template(

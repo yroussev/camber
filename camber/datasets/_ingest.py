@@ -41,8 +41,19 @@ that contains no fault) are ingested for inspection but carry no scoring label.
 ingest spec, the subset, the mapping bytes and :data:`INGEST_VERSION`. When every target facility
 already carries that hash the ingest is skipped (``force=True`` re-ingests). Otherwise the data is
 written to ``<store>/_staging/`` (invisible to reads: pyarrow ignores ``_``-prefixed paths) and
-swapped in per facility: the old partition is renamed aside, the new one renamed into place, the
-old one deleted. A crash before the swap leaves the previous data untouched.
+swapped in per facility with the store's crash-recoverable replace (:mod:`camber.store._swap`,
+0.107, #213): the staged partition becomes ``_swap-facility_id=<fid>.new``, a ``.ready`` marker is
+fsynced, and only then is the old partition moved aside and the new one moved in. A crash at any
+point leaves exactly the old or exactly the new partition once recovered, and every ingest
+recovers first (:func:`recover_staging`): it finishes or rolls back an interrupted swap, puts back
+a partition a pre-0.107 swap left in ``_staging/<fid>.old-<pid>``, and removes the staging
+directories of ingests whose process is gone. ``camber store verify`` flags any such leftover.
+
+**Lifecycle** (0.107, #212). Every swap passes the registry's write guard
+(:meth:`~camber.store.FacilityRegistry._guard_write`: no tombstoned id, no case-variant, nothing
+into an archived facility). Inside a portfolio workspace an ingest also follows
+:mod:`._lifecycle`: it writes only into ``provisioning`` / ``active`` facilities, never drops a
+held one, needs a ``reason`` and is audited (``datasets.ingest``).
 
 Provenance (licence, citation, sha256s, content hash, labels, ...) is recorded on each facility's
 registry entry under the single namespaced key ``"dataset"`` (:data:`META_KEY`).
@@ -64,6 +75,7 @@ from .. import __version__
 from ..model.mapping import MappingProvider
 from ..model.roles import _ANY_ON_ROLES, Role
 from ..store import FacilityRegistry, ParquetStore
+from ..store._leftovers import STAGING_DIR
 from ..store._lock import store_lock
 from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
@@ -86,7 +98,7 @@ from ._readers import (
 from ._units import convert_frame, convert_series, plausibility_warnings
 
 INGEST_VERSION = 1
-_STAGING = "_staging"
+_STAGING = STAGING_DIR
 # 0.103 (#124): where this ingest extracts archive members the cache cannot take (a read-only
 # cache): a scratch directory beside its staging area in the store, removed when it ends.
 _EXTRACT_SCRATCH: contextvars.ContextVar = contextvars.ContextVar("extract_scratch", default=None)
@@ -107,6 +119,7 @@ class IngestResult:
     warnings: list = field(default_factory=list)
     notes: list = field(default_factory=list)
     corrections: bool = True
+    dropped: list = field(default_factory=list)  # facilities this subset no longer produces
 
     def as_dict(self) -> dict:
         """A JSON-friendly dict."""
@@ -578,29 +591,72 @@ def _staging_root(store: ParquetStore) -> str:
     return os.path.join(store.root, _STAGING, f"ingest-{os.getpid()}-{id(store):x}")
 
 
-def _swap_in(store: ParquetStore, staging: str, fid: str) -> None:
-    """Replace ``fid``'s partition with the staged one (rename aside -> rename in -> delete)."""
+def recover_staging(store: ParquetStore) -> list:
+    """Finish or roll back what interrupted ingests left in ``store`` (the caller holds the
+    store lock); returns ``[{"path", "action"}]`` (0.107, #213).
+
+    - an interrupted partition swap is rolled forward (its new content was complete) or back,
+      and an interrupted partition delete finished (:func:`camber.store._swap.recover_tree`);
+    - a partition a pre-0.107 swap moved to ``_staging/<fid>.old-<pid>`` (its process gone) is
+      put back when the facility has no partition, else deleted (the new one is in place);
+    - the ``_staging/ingest-<pid>-*`` directories of processes that are gone are deleted.
+
+    Leftovers of a process that may still be running are left alone.
+    """
+    from ..store import _swap
+    from ..store._leftovers import staging_leftovers
+
+    # interrupted partition swaps and deletes at the store root (the store lock is held)
+    done: list = _swap.recover_tree(store.root, max_depth=0)
+    for item in staging_leftovers(store.root):
+        if item["alive"] or item["kind"] in ("swap", "trash"):
+            continue
+        path, fid = item["path"], item["facility_id"]
+        if item["kind"] == "aside":
+            final = os.path.join(store.root, f"facility_id={fid}")
+            if os.path.lexists(final):
+                _swap.discard(path)
+                done.append({"path": path, "action": "stale_partition_removed"})
+            else:
+                os.rename(path, final)
+                _swap._fsync_dir(store.root)
+                done.append({"path": final, "action": "partition_restored"})
+            _forget_cached(store, fid)
+        elif os.path.lexists(path):
+            _swap.discard(path)
+            done.append({"path": path, "action": "staging_removed"})
+    return done
+
+
+def _forget_cached(store: ParquetStore, fid: str) -> None:
     from ..resolve import clear_store_cache
 
-    final = os.path.join(store.root, f"facility_id={fid}")
-    staged = os.path.join(staging, f"facility_id={fid}")
-    aside = os.path.join(store.root, _STAGING, f"{fid}.old-{os.getpid()}")
-    os.makedirs(store.root, exist_ok=True)
-    if os.path.isdir(final):
-        if os.path.isdir(aside):  # pragma: no cover - leftover of a crashed run
-            shutil.rmtree(aside)
-        os.replace(final, aside)
-    try:
-        if os.path.isdir(staged):
-            os.replace(staged, final)
-    except OSError:  # pragma: no cover - restore the old data if the rename-in fails
-        if os.path.isdir(aside):
-            os.replace(aside, final)
-        raise
-    if os.path.isdir(aside):
-        shutil.rmtree(aside)
     store._invalidate_catalog()
     clear_store_cache(store.root, fid)
+
+
+def _swap_in(store: ParquetStore, staging: str, fid: str) -> None:
+    """Replace ``fid``'s partition with the staged one, crash-recoverably (see the module).
+
+    Passes the registry's write guard first (``ValueError`` for a tombstoned id, a case-variant
+    of a known id, or an archived facility). With nothing staged for ``fid`` the old partition
+    is deleted (atomically renamed away, then removed).
+    """
+    from ..store import _swap
+
+    FacilityRegistry(store.root)._guard_write(fid)
+    final = os.path.join(store.root, f"facility_id={fid}")
+    staged = os.path.join(staging, f"facility_id={fid}")
+    os.makedirs(store.root, exist_ok=True)
+    new = _swap.staging(final)  # recovers an earlier interrupted swap of this partition first
+    if os.path.isdir(staged):
+        os.rmdir(new)
+        os.replace(staged, new)  # same filesystem: staging lives under the store root
+        _swap.commit(final)
+    else:
+        _swap.recover(final)  # drops the empty .new
+        _swap.discard(final)
+    _forget_cached(store, fid)
 
 
 META_KEY = "dataset"  # the one registry-meta key the catalog owns (provenance + ingest record)
@@ -614,13 +670,23 @@ def _register(store: ParquetStore, fid: str, name: str, meta: dict) -> None:
     earlier ``remove --purge-store`` is tombstoned; re-ingesting the *same* dataset reclaims it.
     """
     reg = FacilityRegistry(store.root)
-    tomb = reg.tombstones().get(fid)
-    if tomb is not None and tomb.get("dataset_id") == meta.get("dataset_id"):
-        # The id is derived from the dataset itself, so re-ingesting after a purge re-creates the
-        # very same facility -- the one case a tombstoned id may be reclaimed.
-        reg.reclaim(fid, reason=f"re-ingest of dataset {meta.get('dataset_id')}")
+    _reclaim(reg, fid, meta.get("dataset_id"))
     has_name = bool(reg.get(fid).get("name"))
     reg.register(fid, name=None if has_name else name, **{META_KEY: meta})
+
+
+def _reclaimable(reg: FacilityRegistry, fid: str, dataset_id) -> bool:
+    """Whether ``fid`` is tombstoned by a purge of this very dataset (see :func:`_reclaim`)."""
+    tomb = reg.tombstones().get(fid)
+    return tomb is not None and tomb.get("dataset_id") == dataset_id
+
+
+def _reclaim(reg: FacilityRegistry, fid: str, dataset_id) -> None:
+    """Lift the tombstone a purge of this dataset left on ``fid``. The id is derived from the
+    dataset itself, so re-ingesting after a purge re-creates the very same facility -- the one
+    case a tombstoned id may be reclaimed."""
+    if _reclaimable(reg, fid, dataset_id):
+        reg.reclaim(fid, reason=f"re-ingest of dataset {dataset_id}")
 
 
 def dataset_meta(meta: dict) -> dict:
@@ -994,6 +1060,8 @@ def ingest_dataset(
     accept_noncommercial: bool = False,
     via: str = "ingest",
     lock_timeout: float | None = None,
+    reason: str | None = None,
+    audit_as: str | None = "datasets",
 ) -> IngestResult:
     """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
 
@@ -1007,8 +1075,19 @@ def ingest_dataset(
     second writer waits up to ``lock_timeout`` seconds (``None``: ``--lock-timeout``, else
     ``$CAMBER_LOCK_TIMEOUT``, else 30), then gets ``StoreLocked`` (or ``PortfolioLocked``) naming
     the holder. The cache may be read-only (see :mod:`._paths`).
+
+    0.107 (#212): inside a portfolio workspace the ingest follows the facility lifecycle
+    (:mod:`._lifecycle`): ``reason`` is required, a facility that is not ``provisioning`` /
+    ``active`` is refused (:class:`~camber.portfolio.LifecycleError`), and so is dropping a
+    held facility; each ingested facility gets one ``<audit_as>.ingest`` audit line
+    (``audit_as=None``: the caller audits, as ``camber lab`` does).
     """
+    from . import _lifecycle
+
     st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
+    pf = _lifecycle.workspace_of(st.root)
+    if pf is not None:
+        reason = _lifecycle.require_reason(reason, what=f"ingesting {entry.id}")
     sname = subset or "default"
     entry.subset(sname)  # KeyError on an unknown subset, before any work
     root = _paths.data_dir(data_dir)
@@ -1030,20 +1109,62 @@ def ingest_dataset(
     mapping_text = mapping_texts(entry)
     chash = content_hash(entry, sname, shas, mapping_text, corrections=corrections)
     with store_lock(st.root, timeout=lock_timeout):
-        return _ingest_locked(
-            st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at
+        res = _ingest_locked(
+            st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at, pf
         )
+        if pf is not None and audit_as:
+            _lifecycle.audit_ingest(
+                pf, f"{audit_as}.ingest", reason=str(reason), dataset_id=entry.id, res=res
+            )
+            for fid in res.dropped:
+                pf.audit(
+                    f"{audit_as}.purge",
+                    reason=str(reason),
+                    facility_id=fid,
+                    details={"dataset_id": entry.id, "why": "not produced by this subset"},
+                )
+        return res
+
+
+def _lifecycle_gate(pf, st, entry, fids, *, drop=()) -> None:
+    """Refuse (``LifecycleError``) an ingest writing ``fids`` / dropping ``drop`` in workspace
+    ``pf`` against the facility lifecycle (see :mod:`._lifecycle`); a no-op outside one."""
+    if pf is None:
+        return
+    from ..portfolio import LifecycleError
+    from . import _lifecycle
+
+    known = FacilityRegistry(st.root).all()
+    why = _lifecycle.ingest_blockers(known, fids, by="`camber datasets ingest`")
+    why += _lifecycle.purge_blockers(pf, entry.id, fids=drop, by="`camber datasets ingest`")
+    if why:
+        raise LifecycleError("; ".join(why) + "; nothing was ingested")
 
 
 def _ingest_locked(
-    st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at
+    st, entry, sname, root, inputs, shas, chash, force, progress, corrections, ack_at, pf=None
 ) -> IngestResult:
     """The writing part of :func:`ingest_dataset`; the caller holds the store lock."""
+    from . import _lifecycle
+
+    recovered = recover_staging(st)  # 0.107 (#213): what a crashed ingest left behind
     existing = _existing_hashes(st, entry.id)
+    known = FacilityRegistry(st.root).all()
+    _lifecycle_gate(
+        pf,
+        st,
+        entry,
+        _lifecycle.dataset_facilities(known, entry.id, base=entry.ingest.get("facility")),
+    )
     result = IngestResult(
         dataset_id=entry.id, store=os.path.abspath(st.root), subset=sname, corrections=corrections
     )
     result.content_hash = chash
+    result.warnings = [
+        f"recovered what an interrupted ingest left: {r['action']} "
+        f"{os.path.relpath(r['path'], st.root)}"
+        for r in recovered
+    ]
     if (
         not force
         and existing
@@ -1062,17 +1183,25 @@ def _ingest_locked(
         )
         base = _base_meta(entry, root, sname, shas, chash, ack_at)
         base["corrections"] = "applied" if corrections else "skipped (published data as-is)"
+        stale = sorted(fid for fid in existing if fid not in facs)
+        # every check before the first swap, so a refusal leaves the store as it was
+        _lifecycle_gate(pf, st, entry, facs, drop=stale)
+        reg = FacilityRegistry(st.root)
+        for fid in facs:
+            if not _reclaimable(reg, fid, entry.id):
+                reg._guard_write(fid)
         for fid, (name, rows, n_eq, extra) in facs.items():
+            _reclaim(reg, fid, entry.id)
             _swap_in(st, staging, fid)
             _register(st, fid, name, {**base, **extra, "rows": rows, "equipment": n_eq})
             result.rows += rows
             result.equipment += n_eq
             result.facilities.append(fid)
             result.notes += [n for n in extra.get("quirks", []) if n not in result.notes]
-        for fid in existing:  # a facility this subset no longer produces (e.g. a BDG2 site)
-            if fid not in facs:
-                st.drop_facility(fid, forget=True)
-        result.warnings = list(warns)
+        for fid in stale:  # a facility this subset no longer produces (e.g. a BDG2 site)
+            st.drop_facility(fid, forget=True)
+            result.dropped.append(fid)
+        result.warnings += list(warns)
     finally:
         _EXTRACT_SCRATCH.reset(scratch)
         shutil.rmtree(staging, ignore_errors=True)

@@ -583,6 +583,17 @@ def _add_lock_timeout(p, what: str = "the store or dataset-cache lock") -> None:
     )
 
 
+def _nonneg_int(text: str) -> int:
+    """argparse type: an integer >= 0 (0.107, #215)."""
+    try:
+        n = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not an integer") from None
+    if n < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, not {n}")
+    return n
+
+
 def _lock_scoped(fn):
     """Run ``fn`` with its ``--lock-timeout`` as the store / cache lock wait; a bad
     ``$CAMBER_LOCK_TIMEOUT`` is a usage error (exit 2) before anything runs."""
@@ -643,19 +654,33 @@ def _ds_errors(fn):
         except InsufficientSpace as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_DISK
-        except (
-            FetchError,
-            UnsafeArchive,
-            MissingExtra,
-            FileNotFoundError,
-            KeyError,
-            ValueError,
-        ) as e:
+        except KeyError as e:  # 0.107 (#214): the message, not the quoted repr
+            print(f"error: {e.args[0] if e.args else e}", file=sys.stderr)
+            return 1
+        except (FetchError, UnsafeArchive, MissingExtra, FileNotFoundError, ValueError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
 
     wrapped.__name__ = fn.__name__
     return wrapped
+
+
+def _ds_workspace(store):
+    """The portfolio workspace a ``--store`` belongs to (``None``: a standalone store)."""
+    if not store:
+        return None
+    from .store.facilities import _workspace_of_store
+
+    return _workspace_of_store(os.path.abspath(store))
+
+
+def _ds_need_reason(args, what: str) -> None:
+    """0.107 (#212): a dataset write into a workspace's store is audited, so it needs --reason."""
+    if _ds_workspace(args.store) is not None and not (args.reason or "").strip():
+        raise ValueError(
+            f"{args.store} belongs to a portfolio workspace: `camber datasets {what}` there "
+            "needs --reason (every workspace change is audited)"
+        )
 
 
 def _mb(n) -> str:
@@ -899,6 +924,7 @@ def _cmd_datasets_ingest(args) -> int:
     if args.from_dir and args.all:
         print("error: --from-dir takes named dataset id(s), not --all", file=sys.stderr)
         return 1
+    _ds_need_reason(args, "ingest")
     sname = args.subset or "default"
     entries = _ds_entries(args, include_research=True)
     if args.all:  # only what has been fetched for this subset
@@ -919,6 +945,7 @@ def _cmd_datasets_ingest(args) -> int:
             corrections=corrections,
             accept_noncommercial=args.accept_noncommercial,
             from_dir=args.from_dir,
+            reason=args.reason,
         )
         if res.skipped:
             print(f"{e.id}: up to date in {res.store} ({', '.join(res.facilities)}) -- skipped")
@@ -965,7 +992,17 @@ def _cmd_datasets_status(args) -> int:
 def _cmd_datasets_remove(args) -> int:
     from . import datasets as ds
 
-    res = ds.remove(args.id, data_dir=args.dir, store=args.store, purge_store=args.purge_store)
+    if args.purge_store and _ds_workspace(args.store) is not None:
+        # 0.107 (#212): purging from a workspace is audited and confirmed, like every deletion
+        _ds_need_reason(args, "remove --purge-store")
+        _confirmed(args, args.id, action="--purge-store from a workspace")
+    res = ds.remove(
+        args.id,
+        data_dir=args.dir,
+        store=args.store,
+        purge_store=args.purge_store,
+        reason=args.reason,
+    )
     print(f"{args.id}: freed {_mb(res['freed_bytes'])}")
     if res["facilities_dropped"]:
         print(f"  dropped from the store: {', '.join(res['facilities_dropped'])}")
@@ -1002,6 +1039,16 @@ def _cmd_datasets_config(args) -> int:
     from ._yaml import is_yaml_path
 
     fmt = args.format or ("yaml" if args.out and is_yaml_path(args.out) else "json")
+    from .datasets._ops import require_ingested
+
+    # 0.107 (#218): a "ready-to-run" config file only for a dataset that is in the store; a
+    # template printed for a look still prints, with a warning
+    try:
+        require_ingested(ds.get(args.id), args.store, args.facility)
+    except ValueError as e:
+        if args.out:
+            raise
+        print(f"warning: {e}", file=sys.stderr)
     cfg = ds.config_template(
         args.id,
         args.store,
@@ -1474,9 +1521,10 @@ def _cmd_facility_transition(args) -> int:
     return 0
 
 
-def _confirmed(args, what: str, *, typed_only: bool = False) -> None:
-    """Raise ``ValueError`` unless ``--apply`` is confirmed (``--yes``, ``--confirm ID`` or a
-    typed answer on an interactive terminal). ``typed_only`` refuses ``--yes`` (purge)."""
+def _confirmed(args, what: str, *, typed_only: bool = False, action: str = "--apply") -> None:
+    """Raise ``ValueError`` unless ``action`` (``--apply``) is confirmed (``--yes``,
+    ``--confirm ID`` or a typed answer on an interactive terminal). ``typed_only`` refuses
+    ``--yes`` (purge)."""
     typed = getattr(args, "confirm", None)
     if typed is not None:
         if typed != what:
@@ -1491,7 +1539,7 @@ def _confirmed(args, what: str, *, typed_only: bool = False) -> None:
         raise ValueError("confirmation did not match; nothing changed")
     need = f"--confirm {what}" if typed_only else f"--yes (or --confirm {what})"
     extra = " (--yes is not enough for an irreversible purge)" if typed_only else ""
-    raise ValueError(f"--apply needs confirmation: pass {need}{extra}")
+    raise ValueError(f"{action} needs confirmation: pass {need}{extra}")
 
 
 def _need_apply_reason(args) -> str:
@@ -1788,7 +1836,8 @@ def _cmd_store_verify(args) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     c = r["counts"]
-    bad = c["unreadable"] > 0 or (args.strict and c["noncanonical"] > 0)
+    left, empty = r["leftovers"], r["empty_facilities"]
+    bad = not r["ok"] or (args.strict and (c["noncanonical"] > 0 or bool(left) or bool(empty)))
     if args.json:
         print(json.dumps(r, indent=2))
         return 1 if bad else 0
@@ -1807,6 +1856,24 @@ def _cmd_store_verify(args) -> int:
         print(f"  {p['store']}/{p['path']} [{p['origin']}]: {why}")
     if len(shown) > args.limit:
         print(f"  ... and {len(shown) - args.limit} more (--json lists every part)")
+    # 0.107 (#213): what an interrupted ingest left, and facilities that lost their data
+    for x in left:
+        what = {
+            "swap": "interrupted partition swap",
+            "trash": "interrupted partition delete",
+            "aside": "partition moved aside by an interrupted ingest",
+            "scratch": "ingest staging directory",
+        }[x["kind"]]
+        who = f" of {x['facility_id']}" if x["facility_id"] else ""
+        state = " (its process is still running)" if x["alive"] else ""
+        mark = "!" if x["stranded"] else "-"
+        print(f"  {mark} leftover {x['path']}: {what}{who}{state}")
+    if any(x["stranded"] for x in left):
+        print("    ! a facility's data is outside its partition; the next ingest recovers it")
+    elif left:
+        print("    the next ingest into this store removes or recovers these")
+    for fe in empty:
+        print(f"  - {fe['facility_id']} ({fe['state']}) is registered but has no part files")
     if c["noncanonical"]:
         print("\n`camber store normalize` rewrites them (edge and year-only parts excepted)")
     return 1 if bad else 0
@@ -3241,6 +3308,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="skip the catalog's fix quirks and ingest the data exactly as published "
         "(`datasets info <id>` lists what each fix corrects); recorded in the provenance",
     )
+    dsg.add_argument(
+        "--reason", help="why (audited; required when the store belongs to a portfolio workspace)"
+    )
     _add_lock_timeout(dsg)
     dsg.set_defaults(func=_cmd_datasets_ingest)
 
@@ -3257,6 +3327,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dsr.add_argument(
         "--purge-store", dest="purge_store", action="store_true", help="also drop its facilities"
     )
+    dsr.add_argument(
+        "--reason",
+        help="why (audited; required for --purge-store from a portfolio workspace's store)",
+    )
+    dsr.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm --purge-store from a portfolio workspace's store without a prompt",
+    )
+    dsr.add_argument("--confirm", metavar="ID", help="confirm by typing the dataset id")
     _add_lock_timeout(dsr)
     dsr.set_defaults(func=_cmd_datasets_remove)
 
@@ -3561,10 +3641,14 @@ def _build_parser() -> argparse.ArgumentParser:
     stv.add_argument(
         "--strict",
         action="store_true",
-        help="exit 1 on a non-canonical part, not only on an unreadable one",
+        help="exit 1 on a non-canonical part, ingest leftovers or a registered facility with no "
+        "parts, not only on an unreadable part or stranded data",
     )
     stv.add_argument(
-        "--limit", type=int, default=20, help="non-canonical parts to list (default 20)"
+        "--limit",
+        type=_nonneg_int,
+        default=20,
+        help="non-canonical parts to list (default 20; 0 lists none)",
     )
     stv.add_argument("--json", action="store_true")
     stv.set_defaults(func=_cmd_store_verify)
@@ -3627,6 +3711,14 @@ def main(argv=None):
         return args.func(args)
     except MissingYamlExtra as e:  # 0.98 (#90): a .yaml config without the [yaml] extra
         print(f"error: {e}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        # 0.107 (#214): a config or input mistake is one line and exit 1, not a traceback;
+        # CAMBER_DEBUG=1 re-raises it for the traceback
+        if os.environ.get("CAMBER_DEBUG", "").strip() not in ("", "0"):
+            raise
+        msg = e.args[0] if isinstance(e, KeyError) and e.args else e
+        print(f"error: {msg}", file=sys.stderr)
         return 1
 
 

@@ -118,20 +118,22 @@ def test_exercise_config_templates(tmp_path):
 
 
 def test_cli_config_exercise_and_info(tmp_path, capsys):
+    import pandas as pd
+
+    from camber.store import ParquetStore
+
     out = tmp_path / "e.json"
-    rc = cli.main(
-        [
-            "datasets",
-            "config",
-            "lbnl-sdahu",
-            "--exercise",
-            "air-economizer",
-            "--store",
-            str(tmp_path),
-            "--out",
-            str(out),
-        ]
+    argv = ["datasets", "config", "lbnl-sdahu", "--exercise", "air-economizer"]
+    argv += ["--store", str(tmp_path), "--out", str(out)]
+    assert cli.main(argv) == 1  # 0.107 (#218): not ingested in the store yet
+    assert "not ingested" in capsys.readouterr().err and not out.exists()
+    row = {"ts": pd.to_datetime(["2020-01-01"]), "equip": ["AHU"], "equip_class": ["AHU"]}
+    ParquetStore(str(tmp_path)).write_long(
+        pd.DataFrame({**row, "role": ["oat"], "value": [50.0]}),
+        facility_id="ds-lbnl-sdahu",
+        dataset={"dataset_id": "lbnl-sdahu"},
     )
+    rc = cli.main(argv)
     assert rc == 0 and "free_cooling_missed" in out.read_text()
     assert (
         cli.main(

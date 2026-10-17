@@ -396,16 +396,57 @@ def dataset_status(entries, *, data_dir=None, store=None) -> list:
 
 
 def remove_dataset(
-    entry: DatasetEntry, *, data_dir=None, store=None, purge_store: bool = False
+    entry: DatasetEntry,
+    *,
+    data_dir=None,
+    store=None,
+    purge_store: bool = False,
+    reason: str | None = None,
+    audit_as: str | None = "datasets",
 ) -> dict:
     """Delete a dataset's downloads + extractions (and, with ``purge_store``, its facilities).
 
     The acknowledgement ledger is an audit trail and is never trimmed. Holds the cache lock while
     it deletes (and the store lock while it purges); a read-only cache raises
     :class:`._paths.CacheReadOnly`.
+
+    0.107 (#212): a purge from a portfolio workspace's store follows the facility lifecycle
+    (:mod:`._lifecycle`): it needs a ``reason``, and a facility under a legal hold or not
+    ``provisioning`` / ``active`` refuses the whole removal
+    (:class:`~camber.portfolio.LifecycleError`) before anything -- the cache included -- is
+    deleted. It is audited as ``<audit_as>.remove`` plus one ``<audit_as>.purge`` per facility
+    (``audit_as=None``: the caller audits, as ``camber lab`` does).
     """
+    from . import _lifecycle
+
     if purge_store and store is None:
         raise ValueError("purge_store needs the store to purge")
+    st = None
+    pf = None
+    if purge_store:
+        st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
+        pf = _lifecycle.workspace_of(st.root)
+        if pf is not None:
+            reason = _lifecycle.require_reason(reason, what=f"purging {entry.id}")
+    if st is None:
+        return _remove_files(entry, data_dir, None)
+    with store_lock(st.root):
+        why = _lifecycle.purge_blockers(pf, entry.id, by="`camber datasets remove`")
+        if why:
+            from ..portfolio import LifecycleError
+
+            raise LifecycleError("; ".join(why) + "; nothing was removed")
+        res = _remove_files(entry, data_dir, st)
+        if pf is not None and audit_as:
+            _lifecycle.audit_remove(
+                pf, audit_as, reason=str(reason), dataset_id=entry.id, res=res, purge_store=True
+            )
+        return res
+
+
+def _remove_files(entry: DatasetEntry, data_dir, st) -> dict:
+    """The deleting part of :func:`remove_dataset` (the caller holds the store lock when ``st``
+    is given)."""
     root = _paths.data_dir(data_dir)
     ddir = _paths.dataset_dir(root, entry.id)
     freed = 0
@@ -419,13 +460,11 @@ def remove_dataset(
             if manifest.pop(entry.id, None) is not None:
                 _paths.write_manifest(root, manifest)
     dropped = []
-    if purge_store:
-        st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
-        with store_lock(st.root):
-            for fid, m in sorted(st.facilities_meta().items()):
-                if dataset_meta(m).get("dataset_id") == entry.id:
-                    st.drop_facility(fid, forget=True)
-                    dropped.append(fid)
+    if st is not None:
+        for fid, m in sorted(st.facilities_meta().items()):
+            if dataset_meta(m).get("dataset_id") == entry.id:
+                st.drop_facility(fid, forget=True)
+                dropped.append(fid)
     return {"dataset_id": entry.id, "freed_bytes": freed, "facilities_dropped": dropped}
 
 
@@ -436,6 +475,24 @@ def _ingested(store, dataset_id: str) -> list:
         for fid, m in st.facilities_meta().items()
         if dataset_meta(m).get("dataset_id") == dataset_id
     )
+
+
+def require_ingested(entry: DatasetEntry, store, facility_id: str | None = None) -> list:
+    """The facilities of ``entry`` ingested in ``store``; ``ValueError`` when there are none (or
+    ``facility_id`` is not one of them), naming the command that ingests it (0.107, #218)."""
+    root = os.path.abspath(os.fspath(store.root if isinstance(store, ParquetStore) else store))
+    have = _ingested(root, entry.id) if os.path.isdir(root) else []
+    present = set(ParquetStore(root).facilities()) if have else set()
+    have = [fid for fid in have if fid in present]
+    hint = f"run `camber datasets ingest {entry.id} --store {root}` first"
+    if not have:
+        raise ValueError(f"{entry.id} is not ingested in {root}; {hint}")
+    if facility_id is not None and facility_id not in have:
+        raise ValueError(
+            f"facility {facility_id!r} of {entry.id} is not ingested in {root} (ingested: "
+            f"{', '.join(have)}); {hint}"
+        )
+    return have
 
 
 _EXERCISE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
@@ -575,6 +632,7 @@ __all__ = [
     "dataset_status",
     "remove_dataset",
     "build_config",
+    "require_ingested",
     "exercise_config",
     "exercise_config_ids",
     "score_dataset",
