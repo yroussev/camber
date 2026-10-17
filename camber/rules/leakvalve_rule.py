@@ -23,6 +23,7 @@ import pandas as pd
 
 from ..leakvalve import analyze_leak_valves
 from ..model.roles import Role
+from ._driftwording import signed
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -195,11 +196,18 @@ class LeakingValve:
             severity=severity,
             metrics=metrics,
             caveats=self._caveats(res),
+            # 0.107 (#204): an ok names no leaking coil
             summary=(
                 f"{equip}: with both valves shut, air shifts (median "
                 f"{res.median_delta_f:+.1f}F beyond {res.fan_heat_f:g}F fan heat); HW-leak "
                 f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of closed hours "
                 f"(worst: {which}){self._basis_txt(res)}"
+                if severity != "ok"
+                else f"{equip}: no valve leak -- with both valves shut, air holds near the "
+                f"{res.fan_heat_f:g}F fan-heat allowance (median "
+                f"{signed(res.median_delta_f, 1)}F beyond it); HW-leak "
+                f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of closed hours"
+                f"{self._basis_txt(res)}"
             ),
         )
 

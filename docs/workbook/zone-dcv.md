@@ -108,7 +108,8 @@ some rules are left out.
 4. In `b4b-windesheim`, which room reads "functioning" on both of its CO₂ sensors, and which one
    depends on the sensor? Give the two lifts for that room.
 5. Why does room 925038 get no DCV verdict at all?
-6. Every `b4b-windesheim` room reads **over-ventilated** in `co2_ventilation`. Is that a
+6. One `b4b-windesheim` room reads **over-ventilated** in `co2_ventilation`, and the others do
+   not. Why does the verdict depend on which hours count as occupied, and is over-ventilation a
    contradiction with "DCV functioning"?
 7. In `sdu-ou44`, which room is judged "functioning", and with what lift? Why are the other two
    "not judged", and is that bad news?

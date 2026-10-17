@@ -925,15 +925,23 @@ PARAM_DOCS["airflow_tracking"] = {
         "leave out samples where the relative error of a tiny setpoint is noise.",
         (0.0, 500.0),
     ),
+    "abs_tol": _P(
+        "cfm (the airflow setpoint's unit)",
+        "CAMBER judgment (0.107, #198): off by default",
+        "Set it to the flow sensor's accuracy at low flow (a few percent of design flow) so a "
+        "small miss on a tiny minimum setpoint, large in relative terms, is not counted as off "
+        "setpoint; a sample is off only when it misses by more than both tol_frac and abs_tol.",
+        (0.0, 200.0),
+    ),
     "warn_pct": _P(
-        "% of active samples (setpoint above min_sp)",
+        "% of judged samples (setpoint above min_sp; fan-on and occupied when trended)",
         "CAMBER judgment",
         "Read off_setpoint_pct on boxes known to be healthy; set the warn level above their "
         "spread.",
         (2.0, 30.0),
     ),
     "fault_pct": _P(
-        "% of active samples (setpoint above min_sp)",
+        "% of judged samples (setpoint above min_sp; fan-on and occupied when trended)",
         "CAMBER judgment",
         "Set it well above warn_pct.",
         (10.0, 60.0),

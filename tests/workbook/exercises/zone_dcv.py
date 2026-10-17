@@ -15,7 +15,11 @@ Real-data figures were recorded from::
     camber datasets config sdu-ou44 --store lab_store --out ou44.json
     camber run ou44.json --out ou44_out
 
-(CAMBER 0.97.0-dev, the default subsets -- each dataset's whole published record -- 2026-09-29.)
+(CAMBER 0.97.0-dev, the default subsets -- each dataset's whole published record -- 2026-09-29.
+The co2_ventilation answers re-recorded on 0.107.0-dev, 2026-10-17 (#200): the rule now judges each
+room's trended occupancy (presence) point in place of the assumed weekday 07-18 schedule, so the
+b4b rooms' over-ventilation shares fell from 73-86 % to 30-66 % (four rooms warn -> ok, room 925038
+stays warn) and sdu-ou44 ROOM2's rose from 66.5 % to 74.4 %.)
 """
 
 from __future__ import annotations
@@ -103,11 +107,13 @@ def _b4b(store) -> None:
     The ventilation valve (a fraction of the room's maximum, mapped as the OA damper) sits at its
     20 % minimum, opens to 60 % on a weekday-morning clock whether or not anyone is in, and opens
     to 90 % when the room's CO2 climbs. Rooms are occupied an hour at a time, three times a weekday;
-    most visits are one person (CO2 stays near outdoor), a third are meetings (CO2 near 1,000
-    ppm). Room 999169's BMS sensor follows the building's afternoon CO2 build-up (as a sensor in
-    a shared extract duct would) and sees only a twentieth of this room's own rise, so at a given
-    hour of day it reads the same whether the valve opened or not; its desk sensor sees the room
-    as it is. Room 925038 has no valve signal at all.
+    a third of the visits are meetings (a fifth in room 925038; CO2 near 1,000 ppm). The rest are
+    two people in the two valve rooms (CO2 near 600 ppm) and one person in room 925038 (CO2 stays
+    near outdoor, so on its trended occupied hours only that room reads over-ventilated -- 0.107,
+    #200). Room 999169's BMS sensor reads the building's CO2 (600 ppm, building up in the
+    afternoon, as a sensor in a shared extract duct would) and sees only a twentieth of this
+    room's own rise, so at a given hour of day it reads the same whether the valve opened or not;
+    its desk sensor sees the room as it is. Room 925038 has no valve signal at all.
     """
     rng = np.random.default_rng(1)
     idx = pd.date_range("2022-10-10", periods=21 * 96, freq="15min")
@@ -116,13 +122,14 @@ def _b4b(store) -> None:
     frames, labels = {}, {}
     for room in ("917810", "999169", "925038"):
         visit = weekday & np.isin(hour, (9, 11, 14))
-        meeting_day = rng.random(len(idx) // 96 + 1).repeat(96)[: len(idx)] < 0.35
-        people = np.where(visit, np.where(meeting_day, 6, 1), 0)
-        co2 = np.where(people >= 6, 1000.0, np.where(people == 1, 470.0, 440.0))
+        meetings = 0.2 if room == "925038" else 0.35  # the share of meeting days
+        meeting_day = rng.random(len(idx) // 96 + 1).repeat(96)[: len(idx)] < meetings
+        people = np.where(visit, np.where(meeting_day, 6, 1 if room == "925038" else 2), 0)
+        co2 = np.select([people >= 6, people == 2, people == 1], [1000.0, 600.0, 470.0], 440.0)
         valve = np.where(co2 > 800, 90.0, np.where(weekday & (hour >= 7) & (hour < 9), 60.0, 20.0))
         occ = (people > 0).astype(float)
         if room == "999169":  # reads the building's afternoon build-up, not this room
-            bms = np.where((hour >= 14) & (hour < 16), 850.0, 450.0) + 0.05 * (co2 - 440.0)
+            bms = np.where((hour >= 14) & (hour < 16), 850.0, 600.0) + 0.05 * (co2 - 440.0)
         else:
             bms = co2
         base = {Role.CO2: bms, Role.OCCUPANCY: occ, Role.SPACE_TEMP: np.full(len(idx), 69.5)}
@@ -213,9 +220,10 @@ def _b4b_verdicts(ctx) -> None:
 
 
 def _b4b_over_real(ctx) -> None:
-    """Every b4b room, on either sensor, has CO2 near outdoor in 73-86 % of occupied hours."""
+    """Every b4b room, on either sensor, has CO2 near outdoor in 30-66 % of its trended occupied
+    hours (0.107, #200; 73-86 % on the assumed weekday 07-18 schedule)."""
     got = [f.metrics["over_vent_pct"] for f in ctx.findings("b4b") if f.rule == "co2_ventilation"]
-    assert len(got) == 5 and 72.5 <= min(got) and max(got) < 86.0, got
+    assert len(got) == 5 and 29.5 <= min(got) and max(got) < 66.0, got
 
 
 def _ou44_verdicts(ctx) -> None:
@@ -311,7 +319,7 @@ EXERCISE = Exercise(
             on=REAL,
             quote="326 ppm",
         ),
-        Check("b4b over-ventilation shares", _b4b_over_real, on=REAL, quote="73 to 86%"),
+        Check("b4b over-ventilation shares", _b4b_over_real, on=REAL, quote="30 to 66%"),
         Metric(
             "dcv_verification",
             "ROOM_999169",
@@ -332,12 +340,13 @@ EXERCISE = Exercise(
             on=REAL,
             quote="212 ppm",
         ),
+        # judged on each room's trended occupancy (0.107, #200): only room 925038 is over-ventilated
+        Finding("co2_ventilation", "ROOM_925038", severity=("warn",), run="b4b"),
         *(
-            Finding("co2_ventilation", eq, severity=("warn",), run="b4b")
+            Finding("co2_ventilation", eq, severity=("ok",), run="b4b")
             for eq in (
                 "ROOM_917810",
                 "ROOM_917810_scd41",
-                "ROOM_925038",
                 "ROOM_999169",
                 "ROOM_999169_scd41",
             )
@@ -358,7 +367,7 @@ EXERCISE = Exercise(
         ),
         Finding("co2_ventilation", "ROOM2", severity=("warn",), run="ou44"),
         Metric(
-            "co2_ventilation", "ROOM2", "over_vent_pct", 66.5, 0.2, run="ou44", on=REAL, quote="66%"
+            "co2_ventilation", "ROOM2", "over_vent_pct", 74.4, 0.2, run="ou44", on=REAL, quote="74%"
         ),
         Finding("co2_ventilation", "ROOM1", severity=("ok",), run="ou44"),
         Finding("co2_ventilation", "ROOM3", severity=("ok",), run="ou44"),

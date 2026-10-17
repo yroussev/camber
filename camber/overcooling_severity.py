@@ -122,7 +122,7 @@ class OvercoolSeverityResult:
     interval_min: float  # inferred/declared sampling interval (minutes)
     window_min: float  # persistence window (minutes)
     median_depth_f: float  # median depth below the reference among overcooled samples
-    max_depth_f: float  # deepest excursion below the reference (degF)
+    max_depth_f: float  # deepest excursion below the reference (degF; 0 when never below)
     tier_pct: dict  # tier -> % of considered samples in a SUSTAINED run
     tier_minutes: dict  # tier -> total sustained minutes at that tier
     tier_sustained: dict  # tier -> bool (any sustained run at all)
@@ -309,7 +309,9 @@ def analyze_overcooling_severity(
 
     overcooled = (depth > 0) & ~saturated
     median_depth = float(np.median(depth[overcooled])) if overcooled.any() else 0.0
-    max_depth = float(depth[~saturated].max()) if (~saturated).any() else 0.0
+    # 0.107 (#204): floored at 0 -- a zone that never sat below the reference has no depth (the raw
+    # maximum of a zone above it is negative)
+    max_depth = max(0.0, float(depth[~saturated].max())) if (~saturated).any() else 0.0
 
     tier_pct, tier_minutes, tier_sustained = {}, {}, {}
     shortfall_pct: dict = {}

@@ -55,7 +55,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | Rule | Tunable parameters | Also fixed in code |
 |---|---|---|
 | [`actuator_stuck`](#actuator_stuck) | 14 |  |
-| [`airflow_tracking`](#airflow_tracking) | 4 |  |
+| [`airflow_tracking`](#airflow_tracking) | 5 |  |
 | [`boiler_short_cycle`](#boiler_short_cycle) | 2 |  |
 | [`boiler_summer_lockout`](#boiler_summer_lockout) | 1 |  |
 | [`chiller_approach_fouling`](#chiller_approach_fouling) | 2 |  |
@@ -156,13 +156,15 @@ How to calibrate:
 |---|---|---|---|---|
 | `tol_frac` | `0.2` | fraction of the airflow setpoint | 0.05 to 0.5 | CAMBER judgment |
 | `min_sp` | `1e-06` | cfm (the airflow setpoint's unit) | 0.0 to 500.0 | CAMBER judgment: a divide-by-zero guard |
-| `warn_pct` | `10.0` | % of active samples (setpoint above min_sp) | 2.0 to 30.0 | CAMBER judgment |
-| `fault_pct` | `25.0` | % of active samples (setpoint above min_sp) | 10.0 to 60.0 | CAMBER judgment |
+| `abs_tol` | `0.0` | cfm (the airflow setpoint's unit) | 0.0 to 200.0 | CAMBER judgment (0.107, #198): off by default |
+| `warn_pct` | `10.0` | % of judged samples (setpoint above min_sp; fan-on and occupied when trended) | 2.0 to 30.0 | CAMBER judgment |
+| `fault_pct` | `25.0` | % of judged samples (setpoint above min_sp; fan-on and occupied when trended) | 10.0 to 60.0 | CAMBER judgment |
 
 How to calibrate:
 
 - `tol_frac`: On a known-good period take the 95th percentile of |flow - setpoint| / setpoint (mean_abs_rel_error summarises it) and set the tolerance just above it; flow sensors read poorly at low flow.
 - `min_sp`: Raise it to the box's minimum-flow setpoint (or a small fraction of design flow) to leave out samples where the relative error of a tiny setpoint is noise.
+- `abs_tol`: Set it to the flow sensor's accuracy at low flow (a few percent of design flow) so a small miss on a tiny minimum setpoint, large in relative terms, is not counted as off setpoint; a sample is off only when it misses by more than both tol_frac and abs_tol.
 - `warn_pct`: Read off_setpoint_pct on boxes known to be healthy; set the warn level above their spread.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.
 

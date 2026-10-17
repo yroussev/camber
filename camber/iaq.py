@@ -72,6 +72,7 @@ def analyze_co2_ventilation(
     economizer_mask: pd.Series | None = None,
     min_hours: int = 10,
     masks_out: dict | None = None,
+    occupied: pd.Series | None = None,
 ) -> CO2VentilationResult | None:
     """Score CO2-based ventilation adequacy. ``df`` has 'CO2' (ppm) and optional
     'OutdoorCO2' (ppm); the rule wrapper maps roles to these.
@@ -92,12 +93,20 @@ def analyze_co2_ventilation(
     ``masks_out`` (0.102, #119), a dict, is filled with boolean Series on ``df``'s index:
     ``"under"`` (the samples counted in ``under_vent_pct``) and ``"over"`` (those counted in
     ``over_vent_pct``: near outdoor, outside economizer mode). The result is unchanged.
+
+    ``occupied`` (0.107, #200), a boolean Series on ``df``'s index, names the occupied samples in
+    place of the assumed weekday 07-18 schedule (pass
+    :func:`camber.schedules.effective_occupied_mask` of a trended occupancy point). It applies
+    only with ``occupied_only``.
     """
     if "CO2" not in df.columns:
         return None
     work = df.copy()
     if occupied_only:
-        work = work[occupied_mask(work.index)]
+        if occupied is None:
+            work = work[occupied_mask(work.index)]
+        else:
+            work = work[occupied.reindex(work.index).fillna(False).astype(bool).to_numpy()]
     co2 = work["CO2"].dropna()
     co2 = co2[(co2 >= 250) & (co2 <= 5000)]  # plausibility guard (drop sensor dropouts)
     if len(co2) < 10:
