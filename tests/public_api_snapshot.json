@@ -1830,7 +1830,9 @@
     "pump_diagnosis_table"
   ],
   "camber.report.rcx": [
+    "MissingPdfExtra",
     "P3_FAMILIES",
+    "PDF_INSTALL_HINT",
     "PLANT_FAMILIES",
     "RcxOptions",
     "RcxReport",

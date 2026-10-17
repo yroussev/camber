@@ -13,6 +13,23 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.107.0] — Unreleased
+
+### Added
+- **The RCx report writes PDF directly (#197).** `camber report CONFIG --layout rcx --out
+  report.pdf` renders the report's own HTML through WeasyPrint, so there is still one layout
+  source: `--paper` sets the page size, sections start pages, figures and rows stay whole, table
+  headers and the research-only banner repeat, and the inline charts are embedded. The `.pdf`
+  extension picks PDF, as `.yaml` picks a YAML config; `--out` stays the one output flag.
+  `RcxReport.to_pdf(path=None)` returns the bytes. WeasyPrint fetches only `data:` URLs, so the
+  render reads nothing from disk or the network. The PDF's dates are the end of the data period,
+  or `SOURCE_DATE_EPOCH` when set, so the same data gives the same bytes. WeasyPrint is the new
+  optional `pdf` extra (`pip install "camber-toolkit[pdf]"`, `weasyprint>=68.1`), and it needs
+  the Pango system libraries. Without the extra or Pango, the command exits 2 before the run and
+  names the extra. On conda-forge, install `weasyprint` from conda-forge or with pip. Only the
+  rcx layout writes PDF: `--layout audit` with a `.pdf` path exits 2. A separate CI job installs
+  Pango and runs the PDF tests; the core matrix skips them.
+
 ## [0.106.0] — 2026-10-17
 
 **0.106: rule fixes found while building the synthetic lab cases, for air-side maintenance, chiller plants, heat pumps and G36 zone fleets, and drift findings whose wording matches their verdict (#181–#190).** **Breaking (#183):** `chiller_staging_fleet`'s `n_running_hours` and `n_multi_hours` were sample counts and are renamed `n_running_samples` and `n_multi_samples`, with no aliases; the hours are new metrics beside them. **Scoring change (#184):** `camber datasets score` now scores each rule only on the equipment it applies to, so per-rule false-positive rates move on mixed-equipment entries; the overall confusion is unchanged. `filter_fouling` and `control_hunting` judge fan-on samples, and an unreachable hunting threshold no longer reads as a pass (#181, #182). `chiller_staging_fleet` counts only chillers and takes a declared `capacity_kw` (#183). A new `cw_flow` role lets tower drift match on heat rejected; chilled-water loops are gated on their pumps, and approach checks read running samples only (#184). Heat-pump rules handle coarse trends, no longer read a defrost as the wrong mode, and count stage changes only while running (#185). The G36 zone-fleet rules read `airflow_min_sp`, stop counting G36's high heating loop as a violation, and rate mixed heating and cooling by hours (#186). An `ok` drift finding now says the signal holds near its baseline instead of naming a fault, the drift reference declines only the detectors it could run, and the tower-approach and head-pressure detectors say which way the signal moved (#187–#190). The two synthetic entries publish the new points (generator version 2); the `air-maintenance`, `plant-chiller-multi`, `plant-heat-pump` and `zone-g36-fleet` workbook answers are re-recorded.

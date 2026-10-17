@@ -13,9 +13,11 @@ the evidence -- and adds no new detector or cost estimator. Not to be confused w
 
 The builder (:func:`build_rcx_report`) does all the analysis and renders every chart into an
 :class:`RcxReport`; the HTML renderer (:meth:`RcxReport.to_html`) reads only that object -- no JS,
-charts inlined as base64 PNG (or SVG for line charts), print CSS for browser print-to-PDF. See
-docs/RCX-REPORT.md for the layout, the week-selection algorithm, the dedup / cost rules, the
-confidence grade and the engineer-notes schema.
+charts inlined as base64 PNG (or SVG for line charts), print CSS for browser print-to-PDF.
+:meth:`RcxReport.to_pdf` (0.107, #197) renders that same HTML through WeasyPrint, the optional
+``[pdf]`` extra; there is no second template. See docs/RCX-REPORT.md for the layout, the
+week-selection algorithm, the dedup / cost rules, the confidence grade and the engineer-notes
+schema.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import html as _html
 import io
 import json
 import os
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -52,6 +55,8 @@ __all__ = [
     "P3_FAMILIES",
     "PLANT_FAMILIES",
     "WEEK_MODES",
+    "MissingPdfExtra",
+    "PDF_INSTALL_HINT",
 ]
 
 #: Representative-week panels: one unit family each, never normalized onto a shared axis.
@@ -866,6 +871,25 @@ class RcxReport:
     def to_html(self) -> str:
         """The whole report as one self-contained, printable HTML document (no JS)."""
         return _render_html(self)
+
+    def to_pdf(self, path=None) -> bytes:
+        """The report as PDF bytes (also written to ``path`` when given), 0.107 (#197).
+
+        It renders :meth:`to_html`'s document through WeasyPrint (the optional ``[pdf]`` extra),
+        so the page size, margin boxes and print rules are the HTML's own. Only ``data:`` URLs are
+        fetched, so nothing is read from disk or the network. The PDF's creation and modification
+        dates come from ``SOURCE_DATE_EPOCH`` when it is set, else from the end of the data
+        period, so two runs on the same data write the same file. Raises
+        :class:`MissingPdfExtra` when WeasyPrint or its Pango libraries are missing.
+        """
+        wp = _weasyprint()
+        html = _render_html(self, head=_pdf_head(self))
+        fetcher = wp.URLFetcher(allowed_protocols=("data",))
+        data = wp.HTML(string=html, url_fetcher=fetcher, media_type="print").write_pdf()
+        if path is not None:
+            with open(path, "wb") as fh:
+                fh.write(data)
+        return data
 
 
 def _issue_dict(i) -> dict:
@@ -3040,7 +3064,7 @@ def _blocks_html(blocks: list) -> list:
     return out
 
 
-def _render_html(rep: RcxReport) -> str:
+def _render_html(rep: RcxReport, *, head: str = "") -> str:
     from .audit import data_sources_html
 
     src = data_sources_html(rep.data_sources)
@@ -3053,7 +3077,7 @@ def _render_html(rep: RcxReport) -> str:
     out = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-        f"<title>{_esc(rep.title)}</title>",
+        f"<title>{_esc(rep.title)}</title>{head}",
         f"<style>{_page_css(rep.options.paper, nc=nc)}{_CSS}</style></head>",
         f"<body class='{'nc' if nc else ''}'>",
     ]
@@ -3091,3 +3115,80 @@ def _render_html(rep: RcxReport) -> str:
         out.append("</td></tr></tbody></table>")
     out.append("</body></html>")
     return "\n".join(out)
+
+
+# ============================================================================ PDF (0.107, #197)
+
+PDF_INSTALL_HINT = (
+    'PDF output needs the optional extra: pip install "camber-toolkit[pdf]" (WeasyPrint, which '
+    "also needs the Pango system libraries; see docs/RCX-REPORT.md), or write .html and print it "
+    "from a browser"
+)
+
+
+class MissingPdfExtra(ImportError):
+    """WeasyPrint (the ``[pdf]`` extra), or the Pango libraries it loads, is not available."""
+
+
+def _weasyprint():
+    """Import WeasyPrint, or raise :class:`MissingPdfExtra` saying how to get it."""
+    try:
+        import weasyprint  # optional: the [pdf] extra
+    except ImportError as e:
+        raise MissingPdfExtra(PDF_INSTALL_HINT) from e
+    except OSError as e:  # installed, but cffi could not load Pango / GObject
+        raise MissingPdfExtra(
+            f"WeasyPrint is installed but cannot load its system libraries ({e}). Install Pango "
+            "(see docs/RCX-REPORT.md), or write .html and print it from a browser"
+        ) from e
+    version = str(getattr(weasyprint, "__version__", "0"))
+    if _version_tuple(version) < _WEASYPRINT_FLOOR:
+        # before 68 there is no URLFetcher; 68.0 drops data: images under allowed_protocols
+        raise MissingPdfExtra(
+            f"WeasyPrint {version} is too old for PDF output (needs 68.1 or newer): "
+            'pip install -U "camber-toolkit[pdf]"'
+        )
+    return weasyprint
+
+
+_WEASYPRINT_FLOOR = (68, 1)  # keep in step with the [pdf] extra in pyproject.toml
+
+
+def _version_tuple(version: str) -> tuple:
+    """``(major, minor)`` from a version string, reading each part's leading digits."""
+    out = []
+    for part in version.split(".")[:2]:
+        m = re.match(r"\d+", part)
+        out.append(int(m.group()) if m else 0)
+    return tuple(out + [0] * (2 - len(out)))
+
+
+def _pdf_date(rep: RcxReport) -> str | None:
+    """The PDF's creation date (W3C format, UTC): ``SOURCE_DATE_EPOCH``, else the data's end."""
+    sde = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+    if sde:
+        try:
+            ts = pd.Timestamp(int(sde), unit="s", tz="UTC")
+        except (ValueError, OverflowError) as e:
+            raise ValueError(
+                f"SOURCE_DATE_EPOCH must be whole seconds since 1970, not {sde!r}"
+            ) from e
+    else:
+        end = rep.period[1] if rep.period else None
+        if end is None:
+            return None
+        ts = pd.Timestamp(end)
+        ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _pdf_head(rep: RcxReport) -> str:
+    """The ``<meta>`` tags WeasyPrint reads into the PDF's document information."""
+    tags = [f"<meta name='generator' content='CAMBER {_esc(rep.version)}'>"]
+    when = _pdf_date(rep)
+    if when:
+        tags += [
+            f"<meta name='dcterms.created' content='{when}'>",
+            f"<meta name='dcterms.modified' content='{when}'>",
+        ]
+    return "".join(tags)

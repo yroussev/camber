@@ -164,7 +164,13 @@ camber report site.json --out rcx.html --layout rcx
     [--week auto|evidence|oat-range|typical|YYYY-MM-DD]   # the representative week
     [--notes notes.json] [--notes-template slots.json]    # engineer notes in, empty slots out
     [--paper letter|a4] [--lifecycle]                     # page size; fault-store notes too
+camber report site.json --out rcx.pdf --layout rcx      # PDF directly (the [pdf] extra)
 ```
+
+An rcx `--out` path ending in `.pdf` writes the same report as PDF through WeasyPrint, the
+optional `pdf` extra (`pip install "camber-toolkit[pdf]"`, plus the Pango system libraries; see
+[Direct PDF output](RCX-REPORT.md#direct-pdf-output)). Without it the command exits 2 and names
+the extra.
 
 The rcx options also live in the config, under `"report": {"layout": "rcx", "rcx": {...}}`:
 `top_n`, `week`, `paper`, `chart_format`, `sections`, `price`, `loads`, `occupancy`,

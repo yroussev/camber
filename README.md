@@ -98,7 +98,8 @@ pip install "camber-toolkit[brick]"    # + rdflib, for robust Brick-model parsin
 
 The core is dependency-light (numpy / pandas / pyarrow / matplotlib). Everything else is an
 **optional extra**, lazy-imported so the core never pays for it: `brick`, `haystack`, `modbus`,
-`mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `yaml`, `docs`, `dev`.
+`mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `yaml`, `pdf`, `docs`,
+`dev`.
 Install what you use.
 
 ```sh

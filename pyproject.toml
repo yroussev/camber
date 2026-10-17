@@ -57,6 +57,12 @@ xlsx = ["openpyxl>=3.1"]
 # imported lazily by camber._yaml; JSON configs need nothing. Writing YAML (`camber datasets config
 # --format yaml`, `camber rules params --yaml`) needs no extra either.
 yaml = ["pyyaml>=6"]
+# Direct PDF output for the RCx report (0.107, #197): `camber report CONFIG --layout rcx --out r.pdf`
+# renders the same HTML through WeasyPrint (BSD-3-Clause), imported lazily by camber.report.rcx.
+# WeasyPrint also needs the Pango system libraries (not pip-installable); on conda-forge install
+# weasyprint from conda-forge, which brings them. 68.1: the URLFetcher API (68.0, used to fetch
+# data: URLs only; 68.0 itself drops data: images under allowed_protocols) and the CVE-2025-68616 fix.
+pdf = ["weasyprint>=68.1"]
 # a maintained Haystack client to wire via camber.ingest.haystack.client_transport;
 # phable is modern but needs Python >= 3.11, pyhaystack covers older Pythons.
 haystack = [
