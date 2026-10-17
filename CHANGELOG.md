@@ -111,14 +111,16 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   a slot overrides its prose. Shown prose carries a marker and the list of the facts it cites.
   `--prose-prompts out.json` (`camber.report.rcx.prose_prompts`) writes each slot's prompt, with
   its facts, for offline generation. `camber.report.rcx.load_prose` reads a prose file. The PDF
-  output renders the prose too.
+  output renders the prose too; a summary that shows prose drops its one-page print cap, so
+  the paragraph is never clipped.
 - **The RCx fact index (#194).** `RcxReport.facts` is built from the same objects the tables
   render: the KPIs, each issue's headline, cost, member costs, uncosted reason, hours, members,
   action, confidence reasons, caveats, sensor dependencies and AHU-to-VAV chain counts, plus the
   declines, missing inputs, caveats and chain gaps of Appendix A and the assumptions of Appendix
   B. Its ids are context-qualified: `K1@summary`, `X1@appA`, `A3@appB`, `C1@<issue key>`. An
   issue's ids follow its key, so the same inputs give the same ids. With prose on, Appendix D
-  lists the whole index; with prose off it is unchanged. `to_dict()` gains `facts` and `prose`.
+  lists the whole index; with prose off it says the index is listed when prose is enabled.
+  `to_dict()` gains `facts` and `prose`.
 - `camber.agent.verify.check(..., require_cite_each_sentence=True)`: a sentence without a
   resolving `[id]` is dropped (flagged `uncited-sentence`), and a sentence's figures must be in
   the facts it cites itself. Citations may be context-qualified (`[F1@ctx]`); plain `[F1]` ids

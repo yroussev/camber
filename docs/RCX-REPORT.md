@@ -41,7 +41,7 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P8+ | One page per issue | Headed by the finding's cause (0.98, #88: "Outdoor-air damper not modulating (stuck low)"), not the remedy; the recommended action keeps its own title ("Recommended action — Repair the outdoor-air damper or actuator: ..."), and the executive summary's Issue column shows the cause. When a member finding names the equipment at fault and the root does not, the member's cause heads the issue (0.100, #101; [precedence below](#which-cause-heads-an-issue)). $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
 | — | Verify on site | 0.98 (#88): the walk-down checklist, after the issue pages ([`camber.walkdown`](#verify-on-site), provisional). A lead paragraph links PNNL Re-tuning chapter 9 (Building Walk Down), then one table per kind of item, in walk-down order: **sensors and setpoints** (each sensor a conditional issue leans on, with its trust; a `sensor_drift` issue's sensor; each input a check declined as untrusted), **equipment and controls** (one item per issue from a per-rule, per-cause template), **design values** the checks assumed (a site fact such as a minimum outdoor-air fraction, a high limit or an occupancy schedule left at the rule's default) and **points the checks lacked** (Appendix A's checks not evaluated). Columns: # (linked to the issue; A for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Section id `verify`, engineer-note slot `section:verify`; on by default, omitted when it would be empty. |
 | — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced), plus chapter 9 when the report has a Verify on site section. Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
-| A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: the [fact index](#generated-prose-and-the-fact-index) that generated prose cites, listed when prose is on (otherwise reserved). E: orphaned engineer notes. |
+| A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: the [fact index](#generated-prose-and-the-fact-index) that generated prose cites, listed when generated prose is enabled. E: orphaned engineer notes. |
 
 ## Issues: grouping, dollars and hours
 
@@ -335,7 +335,8 @@ is not asked for that slot.
 Shown prose is boxed and marked "Generated text from an offline prose file" (or "from a language
 model"), with each citation as a superscript and the cited facts listed under the paragraph, so
 a reader can check every sentence. The summary's paragraph sits under the KPI strip. An issue
-page's paragraph sits under its opening banners. The PDF output renders the same blocks.
+page's paragraph sits under its opening banners. The PDF output renders the same blocks. When the executive summary shows prose, its one-page
+print cap is lifted, so the summary may run onto a second printed page rather than be clipped.
 
 **The fact index.** `RcxReport.facts` (a `camber.agent.Context`) is built from the same objects
 the tables render. Each fact is one statement the report shows, or one it assembles from the same
@@ -353,9 +354,9 @@ is its key, the root finding's fingerprint, so its ids stay the same from run to
 shift when other issues come or go. The executive summary may cite the report-level facts and
 the headline, cost, hours and action of the issues in its table. An issue page may cite its own
 facts and the assumptions. With prose on, Appendix D lists the whole index. With prose off,
-Appendix D is unchanged. `to_dict()` carries `facts` and `prose`, which gives each attempted
-slot's outcome: `status` (`rendered`, `fallback` or `overridden`), `source`, `reason`, `text`
-and `cited`.
+Appendix D says only that the index is listed when prose is enabled. `to_dict()` carries `facts`
+and `prose`, which gives each attempted slot's outcome: `status` (`rendered`, `fallback` or
+`overridden`), `source`, `reason`, `text` and `cited`.
 
 ## Configuration
 

@@ -594,3 +594,7 @@ _PROSE_CSS = (
     "list-style:none}"
     "@media print{.prose{break-inside:avoid}}"
 )
+
+#: added when the executive summary shows prose: lift its one-page print cap
+#: (``max-height`` + ``overflow:hidden``) so the paragraph is never clipped in print
+_SUMMARY_UNCAP_CSS = "@media print{section#summary{max-height:none;overflow:visible}}"

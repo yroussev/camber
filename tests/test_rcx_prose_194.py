@@ -191,7 +191,8 @@ def test_off_by_default_is_byte_identical(run, base):
     assert build_rcx_report(run, prose={}).to_html() == html
     assert build_rcx_report(run, client=AgentClient()).to_html() == html  # unwired client
     assert "class='prose'" not in html and ".prose{" not in html
-    assert "Reserved for the grounded fact index" in html  # Appendix D unchanged when off
+    assert "listed here when generated prose is enabled" in html  # Appendix D's line when off
+    assert "max-height:none" not in html  # the summary's print cap stays
 
 
 def test_fully_cited_prose_renders_with_marker_and_facts(run):
@@ -206,11 +207,20 @@ def test_fully_cited_prose_renders_with_marker_and_facts(run):
     assert "Generated text from an offline prose file" in html
     assert f"<sup class='cite'>[C1@{k}]</sup>" in html
     assert f"<li><b>C1@{k}</b> Issue 1 is estimated at $7,727/yr" in html  # the footnote list
-    assert "Appendix D" in html and "Reserved for the grounded fact index" not in html
+    assert "Appendix D" in html and "listed here when generated prose is enabled" not in html
+    # the summary shows prose, so its one-page print cap is lifted and nothing is clipped
+    assert "section#summary{max-height:none;overflow:visible}" in html
     assert "<td>K1@summary</td>" in html  # the full index, to audit any citation
     # the other issue pages had no prose and keep their standard text
     other = _section(rep, f"issue-{rep.issues[1].key}")
     assert not [b for b in other["blocks"] if b.get("kind") == "prose"]
+
+
+def test_issue_only_prose_keeps_the_summary_print_cap(run, base):
+    k = _top(base)
+    rep = build_rcx_report(run, prose={f"issue:{k}": _good(base)[f"issue:{k}"]})
+    html = rep.to_html()
+    assert "class='prose'" in html and "max-height:none" not in html
 
 
 def test_stub_client_fills_every_slot_and_prompts_carry_the_facts(run, base):

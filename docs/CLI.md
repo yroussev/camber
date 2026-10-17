@@ -180,6 +180,8 @@ camber report site.json --out rcx.html --layout rcx
     [--week auto|evidence|oat-range|typical|YYYY-MM-DD]   # the representative week
     [--notes notes.json] [--notes-template slots.json]    # engineer notes in, empty slots out
     [--paper letter|a4] [--lifecycle]                     # page size; fault-store notes too
+    [--prose prose.json] [--prose-prompts prompts.json]   # verified prose in, its prompts out
+    [--llm-cmd CMD]                                       # a model for the slots --prose lacks
 camber report site.json --out rcx.pdf --layout rcx      # PDF directly (the [pdf] extra)
 ```
 
@@ -188,9 +190,19 @@ optional `pdf` extra (`pip install "camber-toolkit[pdf]"`, plus the Pango system
 [Direct PDF output](RCX-REPORT.md#direct-pdf-output)). Without it the command exits 2 and names
 the extra.
 
+Generated prose is off by default (0.107, #194; see
+[Generated prose and the fact index](RCX-REPORT.md#generated-prose-and-the-fact-index)).
+`--prose` reads a JSON file of pre-generated prose keyed by slot (`exec_summary`,
+`issue:<key>`). `--prose-prompts` writes each slot's prompt, with the facts it may cite, for
+offline generation. `--llm-cmd` asks a model for the slots the prose file does not cover, through
+the same stdin/stdout seam as `explain` and `ask`. A slot is shown only when every sentence cites
+the report's fact index and every figure is in a fact that sentence cites; otherwise the page
+keeps its standard text and Appendix A lists the slot. All three flags are for `--layout rcx`
+only and exit 2 with any other layout.
+
 The rcx options also live in the config, under `"report": {"layout": "rcx", "rcx": {...}}`:
 `top_n`, `week`, `paper`, `chart_format`, `sections`, `price`, `loads`, `occupancy`,
-`oat_reference`, `sequence` and `notes`. A flag overrides the config value. `report.loads` sizes
+`oat_reference`, `sequence`, `notes` and `prose`. A flag overrides the config value. `report.loads` sizes
 equipment for the cost estimators. An unknown layout exits with code `2` and lists the known ones.
 
 ## Grounded agent from the shell

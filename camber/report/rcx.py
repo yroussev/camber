@@ -3086,7 +3086,12 @@ def _sec_appendices(S) -> list:
         _section(
             "appendix-d",
             "Appendix D — Fact index",
-            [_p("Reserved for the grounded fact index that AI prose will cite (not yet built).")],
+            [
+                _p(
+                    "The fact index that generated prose cites is listed here when generated "
+                    "prose is enabled (a prose file or a configured model)."
+                )
+            ],
             slot=False,
         )
     )
@@ -3287,8 +3292,12 @@ def _prose_css(rep: RcxReport) -> str:
     """The prose blocks' style rules, only when the report shows one (0.107, #194)."""
     if not any(b.get("kind") == "prose" for s in rep.sections for b in s["blocks"]):
         return ""
-    from .rcx_prose import _PROSE_CSS
+    from .rcx_prose import _PROSE_CSS, _SUMMARY_UNCAP_CSS
 
+    summary = next((s for s in rep.sections if s["id"] == "summary"), None)
+    if summary is not None and any(b.get("kind") == "prose" for b in summary["blocks"]):
+        # the summary's one-page print cap would clip its prose: let it run on instead
+        return _PROSE_CSS + _SUMMARY_UNCAP_CSS
     return _PROSE_CSS
 
 
