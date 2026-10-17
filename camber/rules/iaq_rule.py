@@ -22,6 +22,7 @@ import pandas as pd
 
 from ..iaq import DEFAULT_ECON_HIGH_LIMIT_F, analyze_co2_ventilation, economizer_mode_mask
 from ..model.roles import Role
+from ..schedules import effective_occupied_mask
 from ._topology_grouping import HEURISTIC_CAVEAT
 from .base import Finding
 
@@ -38,6 +39,22 @@ _ECON_ROLES = (
 )
 
 _SEV_RANK = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
+
+#: 0.107 (#200): the caveat on a finding judged on the assumed schedule
+_ASSUMED_SCHEDULE_CAVEAT = (
+    "no occupancy point trended: occupied hours assumed to be weekdays 07-18 -- map OCCUPANCY so "
+    "an empty room's hours are not judged as occupied"
+)
+
+
+def _occupied(frame: pd.DataFrame):
+    """``(mask | None, basis)``: a trended ``OCCUPANCY`` point's occupied samples (0.107, #200),
+    else ``None`` and the assumed schedule (:func:`camber.iaq.analyze_co2_ventilation` default)."""
+    occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+    if occ is not None and pd.to_numeric(occ, errors="coerce").notna().any():
+        occ = pd.to_numeric(occ, errors="coerce")
+        return effective_occupied_mask(frame.index, occ=occ), "trended occupancy"
+    return None, "assumed schedule (weekdays 07-18)"
 
 
 def _econ_mask(frame: pd.DataFrame, *, damper_min_pct=None, high_limit_f=DEFAULT_ECON_HIGH_LIMIT_F):
@@ -68,7 +85,8 @@ class CO2Ventilation:
 
     name = "co2_ventilation"
     roles_required = (Role.CO2,)
-    roles_optional = (Role.OUTDOOR_CO2,) + _ECON_ROLES
+    #: 0.107 (#200): a trended OCCUPANCY point replaces the assumed weekday 07-18 schedule
+    roles_optional = (Role.OUTDOOR_CO2, Role.OCCUPANCY) + _ECON_ROLES
 
     def __init__(
         self,
@@ -138,15 +156,19 @@ class CO2Ventilation:
     def _judge(self, equip, frame, econ, basis, *, source=None, masks_out=None) -> Finding:
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame[[r for r in _ROLE_TO_COL if r in frame.columns]].rename(columns=cols)
-        res = analyze_co2_ventilation(legacy, equip, economizer_mask=econ, masks_out=masks_out)
+        occupied, occ_basis = _occupied(frame)
+        res = analyze_co2_ventilation(
+            legacy, equip, economizer_mask=econ, masks_out=masks_out, occupied=occupied
+        )
         if res is None:
             return Finding(
                 rule=self.name,
                 equip=equip,
                 severity="info",
+                metrics={"occupancy_basis": occ_basis},
                 summary="insufficient data (need zone CO2 over occupied hours)",
             )
-        caveats: list = []
+        caveats: list = [] if occupied is not None else [_ASSUMED_SCHEDULE_CAVEAT]
         over = res.over_vent_pct
         # Under-ventilation (high CO2) is the IAQ fault and drives severity; persistent
         # over-ventilation is an energy opportunity surfaced as a warn at most.
@@ -210,6 +232,7 @@ class CO2Ventilation:
             "over_vent_pct": res.over_vent_pct,
             "outdoor_co2_ppm": res.outdoor_co2_ppm,
             "n_occupied": res.n_occupied,
+            "occupancy_basis": occ_basis,
         }
         if econ is not None:
             metrics.update(
@@ -249,7 +272,7 @@ class CO2VentilationSystem:
 
     name = "co2_ventilation_system"
     roles_required: tuple = ()
-    roles_optional = (Role.CO2, Role.OUTDOOR_CO2) + _ECON_ROLES
+    roles_optional = (Role.CO2, Role.OUTDOOR_CO2, Role.OCCUPANCY) + _ECON_ROLES
     wants_topology = True
 
     def __init__(self, **zone_kwargs):

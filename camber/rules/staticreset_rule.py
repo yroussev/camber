@@ -77,10 +77,21 @@ class StaticPressureReset:
                 severity="info",
                 summary=f"{equip}: insufficient static-pressure-setpoint data",
             )
-        rng = float(sp.max() - sp.min())
         fan, fan_src = fan_on_mask(frame)
         keep = None if fan is None else fan.reindex(frame.index).fillna(False).astype(bool)
         judged = frame[Role.DUCT_STATIC_SP] if keep is None else frame[Role.DUCT_STATIC_SP][keep]
+        # 0.107 (#203): the range and median are the fan-on setpoint's, as the classifier's are --
+        # a flat setpoint the BAS drops to 0 when the fan stops is not a reset
+        sp = judged.dropna()
+        if len(sp) < 3:
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={"fan_gate": fan_src},
+                summary=f"{equip}: insufficient fan-on static-pressure-setpoint data",
+            )
+        rng = float(sp.max() - sp.min())
         driver, driver_label = self._driver(frame, keep)
         beh = classify_setpoint_reset(
             judged,

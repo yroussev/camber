@@ -360,8 +360,10 @@ Sub-checks, each `None` when it cannot be evaluated:
   `over_vent_pct` and reported apart (`econ_hours_pct`, `over_vent_econ_pct`,
   `over_vent_all_pct`); with fewer than 10 hours left, over-ventilation is not judged. An OAT alone
   excludes nothing (a 100 % outdoor-air unit has no economizer). Under-ventilation is judged on
-  every occupied hour. Flags: `exclude_economizer`, `oa_damper_min_pct` (default: the damper's
-  5th percentile while open), `econ_high_limit_f`.
+  every occupied hour. Occupied hours (0.107, #200) are a trended `OCCUPANCY` point's, which
+  replaces the assumed weekday 07-18 schedule; a finding judged on the schedule says so in a
+  caveat, and `occupancy_basis` names the source. Flags: `exclude_economizer`,
+  `oa_damper_min_pct` (default: the damper's 5th percentile while open), `econ_high_limit_f`.
 - **`co2_ventilation_system`** (`CO2VentilationSystem`, 0.93) — the fleet twin: a zone frame
   carries CO₂ but not the damper, so each CO₂ zone is joined to its serving air handler (served-by
   topology, else the naming heuristic; one economizing unit and no grouping: every zone joins it)

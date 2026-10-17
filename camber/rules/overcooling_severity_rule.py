@@ -179,8 +179,7 @@ class OvercoolingSeverity:
                 "n_fan_off_excluded": res.n_fan_off_excluded,
             },
             summary=(
-                f"{equip}: overcooled below {ref} -- max {res.max_depth_f:.1f} degF, "
-                f"sustained tiers info/warn/fault = "
+                _head(equip, ref, res) + f"sustained tiers info/warn/fault = "
                 f"{res.tier_pct.get('info'):.0f}/{res.tier_pct.get('warn'):.0f}/"
                 f"{res.tier_pct.get('fault'):.0f}% of occupied samples "
                 f"({res.window_min:.0f}-min persistence @ {res.interval_min:.0f}-min data)"
@@ -195,6 +194,15 @@ class OvercoolingSeverity:
 
 
 _ORDER = ("ok", "info", "warn", "fault")
+
+
+def _head(equip: str, ref: str, res) -> str:
+    """The summary's opening (0.107, #204): an ``ok`` overcooling grade names no overcooling."""
+    if res.severity != "ok":
+        return f"{equip}: overcooled below {ref} -- max {res.max_depth_f:.1f} degF, "
+    if res.max_depth_f <= 0.0:
+        return f"{equip}: no sustained overcooling below {ref} (never below it), "
+    return f"{equip}: no sustained overcooling below {ref} (max {res.max_depth_f:.1f} degF below), "
 
 
 def _rank(tier: str) -> int:

@@ -362,9 +362,13 @@ class EconomizerHighLimit:
             equip=equip,
             severity=sev,
             metrics=metrics,
+            # 0.107 (#204): an ok names no fault
             summary=(
                 f"{equip}: excess OA above the {self.high_limit_f:g}°F high limit "
                 f"{pct:.0f}% of those samples ({basis}: {thresh}; economizer not locked out)"
+                if sev != "ok"
+                else f"{equip}: economizer locked out above the {self.high_limit_f:g}°F high "
+                f"limit -- excess OA {pct:.0f}% of those samples ({basis}: {thresh})"
             ),
             caveats=caveats,
         )

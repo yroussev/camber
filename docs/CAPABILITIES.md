@@ -193,8 +193,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   that fails to *track its setpoint* (control/capacity fault; fan-on hours only, and since 0.98
   only occupied ones when the unit trends occupancy). Flags: `tol_F`, `warn_pct`, `fault_pct`,
   `occupancy_gate` (`"trended"` default, `"schedule"`, `"off"`). `airflow_tracking`: flags measured VAV airflow that fails to track its
-  setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
-  `tol_frac`, `warn_pct`, `fault_pct`.
+  setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor); since 0.107
+  fan-on hours only when a fan status or speed is mapped, and occupied ones when occupancy is
+  trended. Flags: `tol_frac`, `abs_tol`, `warn_pct`, `fault_pct`.
 - **Stuck actuator** — `actuator_stuck` (0.98, #85; terminal boxes and fan coils): a damper or
   valve (`roles`: damper, heating-valve position else demand, cooling valve) that holds one
   position over occupied, fan-on hours is judged against what the zone asked for. A run of at
@@ -327,7 +328,8 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   via the served-by topology) and `Role.OA_AIRFLOW` (the OA damper judges where the flow is
   missing; a declared 100 % outdoor-air unit falls back to supply airflow or fan speed). CO₂
   adequacy (`co2_ventilation`, and the fleet twin `co2_ventilation_system`) leaves economizer-mode
-  hours out of its over-ventilation verdict (`iaq.economizer_mode_mask`). Flags: `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `co2_setpoint`,
+  hours out of its over-ventilation verdict (`iaq.economizer_mode_mask`) and, since 0.107, judges
+  a trended occupancy point's occupied hours in place of the assumed schedule. Flags: `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `co2_setpoint`,
   `oa_floor`, `min_modulation`, `min_lift_ppm`. See **[VENTILATION.md](VENTILATION.md)**.
 - **Accuracy + CI gating** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs), and
   `eval.check_against_baseline` to gate accuracy (TPR/FPR/diagnosis) against a committed baseline in
