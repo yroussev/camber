@@ -232,7 +232,10 @@ def test_cooling_tower_shades_the_high_approach_samples():
     rng = np.random.default_rng(2)
     wb = 66 + 6 * np.sin((idx.hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 0.5, len(idx))
     approach = np.where(idx.day >= 14, 12.0, 6.0) + rng.normal(0, 0.3, len(idx))
-    frame = pd.DataFrame({Role.WETBULB_TEMP: wb, Role.CW_SUPPLY_TEMP: wb + approach}, index=idx)
+    frame = pd.DataFrame(
+        {Role.WETBULB_TEMP: wb, Role.CW_SUPPLY_TEMP: wb + approach, Role.PUMP_STATUS: 1.0},
+        index=idx,
+    )  # 0.107 (#202): the approach is judged only with an operating signal
     rule = CoolingTowerApproach()
     f = rule.analyze("CT-1", frame)
     ev, flagged = _check(rule, "CT-1", frame)

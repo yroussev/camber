@@ -86,6 +86,26 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
   rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
   the default, and only a configured one is priced.
+- **`simultaneous_heat_cool` judges only samples where both valves report (#199).** A missing
+  valve sample used to read as a closed valve, so an all-missing heating valve passed as `ok` at
+  0 % and gaps understated the both-open share. The rule now declines (`info`, reason
+  `no_valve_data`) when no sample has both valves, takes its percentages over the samples that
+  do, and reports the new `valve_coverage_pct` metric. Below 95 % of occupied samples
+  (`VALVE_COVERAGE_CAVEAT_PCT`) a caveat says how many were not judged.
+- **The air-cooled DX rules need a running gate (#201).** With no compressor status and no
+  return + supply air temperature, `dx_refrigerant_charge` (target, limits and baseline modes)
+  and `discharge_superheat_drift` read every row as cooling, so compressor-off hours were judged
+  as a low charge. They now decline (`info`, reason `no_run_gate`). A reversing valve or
+  supply-fan status alone is not a gate: the valve gives the mode and the fan runs through the
+  compressor's off cycles. A water-cooled unit is still gated on its chilled-water load.
+  `dx_indoor_airflow` requires the return and supply air temperatures, so it was always gated.
+- **`cooling_tower_approach` needs an operating signal (#202).** With only the CW supply and a
+  wet-bulb, idle-tower hours were judged as operating. The rule now also gates on a pump run
+  status, a chiller run status or the condenser-water flow (above 5 % of its 95th percentile,
+  the #184 loop-flow cut) when one is mapped, on top of the fan or range gate, and reports
+  `run_gate`. With no fan speed, CW return or run signal it declines (`info`, reason
+  `no_operating_signal`), and with a run signal that never reads as running it declines with
+  reason `never_running`. `analyze_cooling_tower_approach` takes the matching `run_mask`.
 
 
 ## [0.106.0] — 2026-10-17

@@ -42,7 +42,10 @@ _CHW_COLS = {
 
 
 def cooling_rows(frame: pd.DataFrame, *, min_split_f: float = 0.0) -> pd.Series:
-    """Rows where the refrigerant circuit runs in cooling, from whatever status is mapped."""
+    """Rows where the refrigerant circuit runs in cooling, from whatever status is mapped.
+
+    With none of the running gates mapped (see :func:`has_run_gate`) every row passes; the air-
+    side DX rules check :func:`has_run_gate` first and decline (0.107, #201)."""
     ok = pd.Series(True, index=frame.index)
     if Role.COMPRESSOR_STATUS in frame.columns:
         ok &= pd.to_numeric(frame[Role.COMPRESSOR_STATUS], errors="coerce") > 0.5
@@ -56,6 +59,29 @@ def cooling_rows(frame: pd.DataFrame, *, min_split_f: float = 0.0) -> pd.Series:
         )
         ok &= split > min_split_f
     return ok.fillna(False)
+
+
+#: Why a DX rule declines on an air-cooled unit with no running gate (0.107, #201).
+NO_RUN_GATE = (
+    "no compressor status and no return + supply air temperature mapped: the hours the "
+    "compressor ran in cooling are unknown, so off-cycle readings would be judged too -- map "
+    "compressor_status"
+)
+
+
+def has_run_gate(frame: pd.DataFrame) -> bool:
+    """True when :func:`cooling_rows` can tell compressor-running hours from off hours (0.107,
+    #201): a compressor status with data, or a return and supply air temperature (their split).
+
+    A supply-fan status or the reversing valve alone is not enough: the fan runs through the
+    compressor's off cycles and the valve gives only the mode, so either would have off-cycle
+    hours read as cooling.
+    """
+
+    def has(role):
+        return role in frame.columns and pd.to_numeric(frame[role], errors="coerce").notna().any()
+
+    return has(Role.COMPRESSOR_STATUS) or (has(Role.RETURN_AIR_TEMP) and has(Role.SUPPLY_AIR_TEMP))
 
 
 def is_water_cooled(frame: pd.DataFrame) -> bool:

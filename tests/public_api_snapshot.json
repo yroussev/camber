@@ -2073,7 +2073,8 @@
     "TOWER_APPROACH_WARN_SIGMA"
   ],
   "camber.rules.coolingtower_rule": [
-    "CoolingTowerApproach"
+    "CoolingTowerApproach",
+    "NO_OPERATING_SIGNAL"
   ],
   "camber.rules.duct_static_rule": [
     "DuctStaticControlDrift",
@@ -2332,7 +2333,8 @@
     "NightWeekendSetback"
   ],
   "camber.rules.simul_hc": [
-    "SimultaneousHeatCool"
+    "SimultaneousHeatCool",
+    "VALVE_COVERAGE_CAVEAT_PCT"
   ],
   "camber.rules.source_loop_rule": [
     "SourceLoopDeltaT"

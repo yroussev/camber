@@ -28,6 +28,14 @@ _ROLE_TO_COL = {
 }
 
 
+#: Why the approach rule declines with no operating signal (0.107, #202).
+NO_OPERATING_SIGNAL = (
+    "no tower fan speed, CW return temperature, pump or chiller run status, or condenser-water "
+    "flow is mapped, so idle-tower hours cannot be told from operating ones -- map the tower fan "
+    "speed or a run status"
+)
+
+
 class CoolingTowerApproach:
     """Detects a cooling tower running above its design approach at load (CTI/ASHRAE)."""
 
@@ -39,6 +47,10 @@ class CoolingTowerApproach:
         Role.OUTDOOR_RH,
         Role.CW_RETURN_TEMP,
         Role.TOWER_FAN_SPEED,
+        # 0.107 (#202): run gates (the #184 plant gates) -- pump, chiller, condenser flow
+        Role.PUMP_STATUS,
+        Role.COMPRESSOR_STATUS,
+        Role.CW_FLOW,
     )
 
     def __init__(
@@ -95,7 +107,48 @@ class CoolingTowerApproach:
             metrics,
         )
 
+    @staticmethod
+    def _run_gate(frame: pd.DataFrame):
+        """``(running mask | None, source)`` from a mapped run signal (0.107, #202), strongest
+        first: a pump's run status, a chiller's run status, then the condenser-water flow above
+        5 % of its own 95th percentile (the #184 loop-flow cut). ``(None, None)`` when none is
+        mapped with data."""
+        from ..chwplant import chiller_running
+        from .chwplant_rule import LOOP_FLOW_RUN_FRAC, _above_p95
+
+        if not frame.index.is_unique:  # as analyze_cooling_tower_approach: the first sample wins
+            frame = frame[~frame.index.duplicated(keep="first")]
+
+        for role, source in (
+            (Role.PUMP_STATUS, "pump_status"),
+            (Role.COMPRESSOR_STATUS, "chiller_status"),
+        ):
+            if role in frame.columns:
+                run = chiller_running(frame[role], index=frame.index)
+                if run is not None:
+                    return run, source
+        if Role.CW_FLOW in frame.columns:
+            run = _above_p95(frame[Role.CW_FLOW], LOOP_FLOW_RUN_FRAC)
+            if run is not None:
+                return run, "cw_flow"
+        return None, None
+
+    @staticmethod
+    def _has_operating_gate(frame: pd.DataFrame, run_source) -> bool:
+        """True when some signal separates operating from idle hours: the tower fan speed, a CW
+        return temperature (the range gate), or a run status / flow (0.107, #202)."""
+
+        def has(role):
+            return (
+                role in frame.columns and pd.to_numeric(frame[role], errors="coerce").notna().any()
+            )
+
+        return run_source is not None or has(Role.TOWER_FAN_SPEED) or has(Role.CW_RETURN_TEMP)
+
     def _run(self, equip: str, frame: pd.DataFrame, masks_out: dict | None = None):
+        run_mask, run_source = self._run_gate(frame)
+        if not self._has_operating_gate(frame, run_source):
+            return None
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         # a 0-1 fan speed would never clear the percent gates (Registry.run normalizes upstream;
@@ -111,6 +164,7 @@ class CoolingTowerApproach:
             elevation_ft=self.elevation_ft,
             pressure_psia=self.pressure_psia,
             masks_out=masks_out,
+            run_mask=run_mask,
         )
 
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
@@ -152,8 +206,30 @@ class CoolingTowerApproach:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        run_mask, run_source = self._run_gate(frame)
+        if Role.CW_SUPPLY_TEMP in frame.columns and not self._has_operating_gate(frame, run_source):
+            # 0.107 (#202): nothing tells an idle tower from an operating one -- idle water sits
+            # wherever the weather leaves it, so it would be read as a high approach
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={"declined": True, "reason": "no_operating_signal"},
+                summary=f"{equip}: approach not judged -- {NO_OPERATING_SIGNAL}",
+                caveats=[f"could not evaluate tower approach: {NO_OPERATING_SIGNAL}"],
+            )
         res = self._run(equip, frame)
         if res is None:
+            if run_source is not None and not bool(run_mask.any()):
+                return Finding(
+                    rule=self.name,
+                    equip=equip,
+                    severity="info",
+                    metrics={"declined": True, "reason": "never_running", "run_gate": run_source},
+                    summary=f"{equip}: approach not judged -- the plant never read as running "
+                    f"(gate: {run_source})",
+                    caveats=["could not evaluate tower approach: no sample with the plant running"],
+                )
             if Role.TOWER_FAN_SPEED in frame.columns and self.min_effort_pct is not None:
                 tail, caveat, extra = self._decline_reason(frame)
                 return Finding(
@@ -215,6 +291,7 @@ class CoolingTowerApproach:
                     else "measured"
                 ),
                 "n_low_effort_excluded": res.n_low_effort_excluded,
+                "run_gate": run_source,
             },
             caveats=caveats,
             summary=(

@@ -53,6 +53,10 @@ _ROLE_TO_AHU_COL = {
 
 _SEV_RANK = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
 
+#: Below this share of occupied samples with both valves trended, the finding carries a coverage
+#: caveat (0.107, #199); the percentages are always of the samples where both valves report.
+VALVE_COVERAGE_CAVEAT_PCT = 95.0
+
 
 # ============================================================================ 0.93 (#41)
 def _dew_point_f(temp_f: pd.Series, rh_pct: pd.Series) -> pd.Series:
@@ -195,10 +199,45 @@ class SimultaneousHeatCool:
         possible = possible & fan & ~dehum
         return {"dehum": dehum, "possible": possible}, ev
 
+    @staticmethod
+    def _valve_coverage(frame: pd.DataFrame) -> tuple[int, pd.DataFrame, int, int]:
+        """``(n_rows, frame_with_both_valves, n_occupied_with_both, n_occupied)`` (0.107, #199).
+
+        The occupied counts use the same occupancy window :func:`camber.ahu.analyze_ahu` judges,
+        so the coverage share is of the samples the percentages would otherwise have read."""
+        from ..ahu import _considered
+
+        both = frame[Role.HEAT_VALVE].notna() & frame[Role.COOL_VALVE].notna()
+        cols = {role: col for role, col in _ROLE_TO_AHU_COL.items() if role in frame.columns}
+        occ_idx = _considered(frame.rename(columns=cols), True).index
+        n_occ = int(len(occ_idx))
+        n_both_occ = int(both.reindex(occ_idx).fillna(False).sum())
+        return len(frame), frame[both], n_both_occ, n_occ
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         if not frame.index.is_unique:
             frame = frame[~frame.index.duplicated(keep="last")]
+        if Role.HEAT_VALVE not in frame.columns or Role.COOL_VALVE not in frame.columns:
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
+        # 0.107 (#199): judge only the samples where both valves report -- a missing valve sample
+        # is not a closed valve (NaN > 5 is False, which read every gap as "shut")
+        n_rows, frame, n_both_occ, n_occ = self._valve_coverage(frame)
+        if n_rows == 0 or len(frame) == 0:
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={"declined": True, "reason": "no_valve_data"},
+                summary=f"{equip}: declined -- no sample with both the heating and the cooling "
+                "valve trended",
+                caveats=[
+                    "could not evaluate simultaneous heating and cooling: the heating or the "
+                    "cooling valve has no data where the other does"
+                ],
+            )
         classes, ev = self._classes(frame)
         # translate role columns -> the legacy measure-named frame analyze_ahu wants
         cols = {role: col for role, col in _ROLE_TO_AHU_COL.items() if role in frame.columns}
@@ -208,6 +247,14 @@ class SimultaneousHeatCool:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
+        caveats: list = []
+        coverage = round(100.0 * n_both_occ / n_occ, 1) if n_occ else 100.0
+        if coverage < VALVE_COVERAGE_CAVEAT_PCT:
+            caveats.append(
+                f"both valves were trended in only {coverage:.1f}% of the occupied samples: the "
+                f"percentages are of those {n_both_occ} samples, and the other "
+                f"{n_occ - n_both_occ} were not judged"
+            )
         pct = res.simultaneous_hc_pct
         metrics = {
             "simultaneous_hc_pct": pct,
@@ -215,12 +262,12 @@ class SimultaneousHeatCool:
             "hhw_open_pct": res.hhw_open_pct,
             "mean_overlap_when_simul": res.mean_overlap_when_simul,
             "n_considered": res.n_considered,
+            "valve_coverage_pct": coverage,
         }
         summary = (
             f"{equip}: both coils open {pct:.1f}% of occupied hours "
             f"(CHW {res.chw_open_pct:.0f}%, HHW {res.hhw_open_pct:.0f}%)"
         )
-        caveats: list = []
         if classes is None or res.simul_class_pct is None:
             if self.dehumidification is False:
                 metrics["dehumidification"] = False
