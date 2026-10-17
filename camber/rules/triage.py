@@ -422,6 +422,10 @@ class Issue:
     # supply air), and -- on that upstream issue -- the downstream findings it may explain.
     upstream_causes: list = field(default_factory=list)
     downstream: list = field(default_factory=list)
+    # 0.107 (#196): AHU -> VAV cause chains (:class:`ZoneLink`). On an air handler's issue, the
+    # box symptoms the served-by topology ties to it (members on other equipment); on a fleet
+    # rogue-zone census issue, the air handlers whose reset its rogue boxes sit under.
+    zone_links: list = field(default_factory=list)
 
     @property
     def conditional(self) -> bool:
@@ -733,11 +737,25 @@ def link_findings(
     plant_overlap_min: float = 0.25,
     shared_scope=None,
     part_mask_for=None,
+    zone_overlap_min: float = 0.25,
 ) -> list:
     """Link findings into ranked :class:`Issue` objects (provisional API).
 
-    Grouping follows :data:`CAUSE_CHAINS` per equipment (cross-equipment AHU->VAV chains are not
-    linked). Then:
+    Grouping follows :data:`CAUSE_CHAINS` per equipment, then (0.107, #196) the AHU -> VAV
+    chains of :data:`ZONE_CHAINS` across equipment. Then:
+
+    * **AHU -> VAV chains** (0.107): an air handler's finding that :data:`ZONE_CHAINS` names as a
+      root (supply air too warm or too cold, duct static too low) takes the matching symptom
+      findings of the boxes ``topology`` says it serves as members of its issue; the boxes are
+      counted against every box it serves (:class:`ZoneLink`, ``Issue.zone_links``). Nothing is
+      linked without an explicit topology (a ``"heuristic"`` naming guess is not used), for a box
+      the topology does not cover, or for a box served by another air handler. A symptom that
+      leans on a distrusted sensor, or whose hours do not coincide with the root's (each side's
+      mask covering less than ``zone_overlap_min`` of the other; no mask on a side -> linked,
+      "not assessed"), stays its own issue and is counted on the link. A fleet rogue-zone census
+      (:data:`ZONE_ROGUE_LINKS`) is listed on the air handler whose reset its rogue boxes sit
+      under, and kept as its own issue. :func:`zone_chain_gaps` reports what a missing topology
+      left unlinked.
 
     * **Sensor precedence** (:func:`sensor_causes`): a finding whose rule lists a tainted role in
       ``roles_required``/``roles_optional`` (``rules`` is a Registry / ``{name: rule}``) on the
@@ -795,27 +813,63 @@ def link_findings(
     ]
 
     buckets: dict = {}
+    bucket_of: dict = {}
     for f in items:
         equip, rule = _attr(f, "equip", ""), _attr(f, "rule", "")
         cid = _CHAIN_POS.get(rule, (None, None))[0]
-        buckets.setdefault((equip, cid or f"solo:{rule}"), []).append(f)
+        bk = (equip, cid or f"solo:{rule}")
+        buckets.setdefault(bk, []).append(f)
+        bucket_of[id(f)] = bk
+
+    # 0.107 (#196): AHU -> VAV chains move each linked box symptom into its air handler's bucket
+    plan = _plan_zone_chains(
+        items,
+        topology,
+        causes=causes,
+        rmap=rmap,
+        mask_for=mask_for,
+        part_mask_for=part_mask_for,
+        runtime=runtime,
+        overlap_min=zone_overlap_min,
+    )
+    for f, root in plan.moves:
+        src, dst = bucket_of[id(f)], bucket_of[id(root)]
+        buckets[src] = [g for g in buckets[src] if g is not f]
+        buckets[dst].append(f)
+        if not buckets[src]:
+            del buckets[src]
 
     def _pos(f):
         return _CHAIN_POS.get(_attr(f, "rule", ""), (None, 99))[1] or 0
 
     issues: list = []
     by_rule_equip: dict = {}
+    issue_of_root: dict = {}
     for (equip, bkey), fs in buckets.items():
-        members = sorted(fs, key=_pos)
+        # the bucket's own equipment first (root-first chain order), then linked boxes by id
+        own = sorted((f for f in fs if _attr(f, "equip", "") == equip), key=_pos)
+        boxes = sorted(
+            (f for f in fs if _attr(f, "equip", "") != equip),
+            key=lambda f: (str(_attr(f, "equip", "")), _pos(f), str(_attr(f, "rule", ""))),
+        )
+        members = own + boxes
         root = members[0]
         sev = max(
             (_attr(f, "severity", "info") for f in fs), key=lambda s: SEVERITY_ORDER.get(s, 1)
         )
         key = fingerprint(facility_id or site, equip, _attr(root, "rule", ""))
-        member_roles = set().union(*(_rule_roles(rmap, _attr(f, "rule", "")) for f in members))
         ids = {id(f) for f in members}
-        # an issue is never conditional on a cause it is itself the evidence for
-        cond = [c for c in causes if id(c.source) not in ids and _taints(c, equip, member_roles)]
+        # an issue is never conditional on a cause it is itself the evidence for; each member is
+        # judged on its own equipment (a linked box member on the box)
+        cond = [
+            c
+            for c in causes
+            if id(c.source) not in ids
+            and any(
+                _taints(c, _attr(f, "equip", ""), _rule_roles(rmap, _attr(f, "rule", "")))
+                for f in members
+            )
+        ]
 
         # hours: union of member masks, gated to fan-on when a gate is known
         gate, gate_label, fan_hours = None, "", None
@@ -881,6 +935,16 @@ def link_findings(
         issues.append(issue)
         for f in members:
             by_rule_equip.setdefault((_attr(f, "rule", ""), _attr(f, "equip", "")), issue)
+            issue_of_root[id(f)] = issue
+
+    for link in plan.links:  # 0.107 (#196): each link on its AHU issue (and its census issue)
+        iss = issue_of_root.get(id(link.root))
+        if iss is not None:
+            iss.zone_links.append(link)
+        if link.source is not None:
+            census = issue_of_root.get(id(link.source))
+            if census is not None and census is not iss:
+                census.zone_links.append(link)
 
     # a sensor-drift issue lists every finding that became conditional on it
     for iss in issues:
@@ -898,7 +962,7 @@ def link_findings(
         else:
             conf = finding_confidence(iss.root, conditional_on=iss.conditional_on)
         iss.confidence = conf.level
-        iss.why = list(conf.why) + _upstream_why(iss)
+        iss.why = list(conf.why) + _upstream_why(iss) + _zone_why(iss)
         iss.confidence_components = dict(conf.components)
 
     issues.sort(
@@ -1055,6 +1119,440 @@ def _upstream_why(iss) -> list:
         out.append(
             "May explain downstream: " + "; ".join(names) + " (linked as a conditional cause)"
         )
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# AHU -> VAV cause chains (0.107, #196)
+#
+# ``CAUSE_CHAINS`` group findings on one equipment. An air handler's supply air or duct static,
+# though, shows up downstream on the boxes it serves: supply air too warm leaves zones unable to
+# cool, supply air too cold overcools them at minimum flow and forces reheat, duct static too low
+# starves the boxes. ``ZONE_CHAINS`` names those pairs -- an AHU-side root test and a box-side
+# symptom test, each read from the rules' own metrics -- and ``link_findings`` makes the AHU
+# finding the root of an issue whose members include the matching findings of the boxes a
+# served-by topology says it serves. Nothing is guessed: no explicit topology, or a box the
+# topology does not cover, links nothing (:func:`zone_chain_gaps` says what was left unlinked).
+# --------------------------------------------------------------------------- #
+
+
+def _metrics(f) -> dict:
+    m = _attr(f, "metrics", {}) or {}
+    return m if isinstance(m, dict) else {}
+
+
+def _num(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _leads(f, a: str, b: str, *, ties: bool = True) -> bool:
+    """True when ``f``'s ``a`` share is positive and at least (``ties``) / above its ``b`` share."""
+    m = _metrics(f)
+    xa, ya = m.get(a), m.get(b)
+    x = float(xa) if isinstance(xa, (int, float)) and not isinstance(xa, bool) else 0.0
+    y = float(ya) if isinstance(ya, (int, float)) and not isinstance(ya, bool) else 0.0
+    if x <= 0:
+        return False
+    return x >= y if ties else x > y
+
+
+def _g36_flags(f, label: str) -> bool:
+    """True when a ``g36_afdd`` finding reports fault condition ``label`` (its ``flagged_fcs``)."""
+    if _attr(f, "rule", "") != "g36_afdd":
+        return False
+    flagged = _metrics(f).get("flagged_fcs")
+    return isinstance(flagged, (list, tuple)) and label in {str(x).upper() for x in flagged}
+
+
+def _reset_modes(f, reset: str) -> set:
+    """The failure modes of a ``<reset>_reset_effectiveness`` finding (empty for other rules)."""
+    if _attr(f, "rule", "") != f"{reset}_reset_effectiveness":
+        return set()
+    m = _metrics(f)
+    modes = m.get("failure_modes")
+    if not isinstance(modes, (list, tuple)) or not modes:
+        modes = [m.get("reason")] if m.get("reason") else []
+    return {str(x) for x in modes}
+
+
+def _sat_warm(f) -> bool:
+    """AHU supply air too warm: ``supply_air_control`` with its too-warm share leading, a G36
+    FC13 (:func:`is_sat_high`), or a SAT reset parked at its warm (trim) end under demand."""
+    return is_sat_high(f) or "not_responding" in _reset_modes(f, "sat")
+
+
+def _sat_cold(f) -> bool:
+    """AHU supply air too cold: ``supply_air_control`` with its too-cold share leading, a SAT
+    held cold with no upward reset (``supply_air_reset``, which warns only when supply air is below
+    58 F on most cooling hours), SAT colder than the G36 map (``supply_air_reset_compliance``), or
+    a SAT reset that does not trim back while zones are idle (not when it is also parked warm)."""
+    rule = _attr(f, "rule", "")
+    if rule == "supply_air_control":
+        return _leads(f, "too_cold_pct", "too_warm_pct", ties=False)
+    if rule in ("supply_air_reset", "supply_air_reset_compliance"):
+        return True
+    modes = _reset_modes(f, "sat")
+    return "not_trimming" in modes and "not_responding" not in modes
+
+
+def _static_low(f) -> bool:
+    """AHU duct static too low: G36 FC1 (duct static too low with the fan at full speed), or a
+    static reset parked at its low (trim) end under demand."""
+    return _g36_flags(f, "FC1") or "not_responding" in _reset_modes(f, "static")
+
+
+def _zone_warm(f) -> bool:
+    """A zone that can't cool: ``unmet_setpoint_hours`` with its too-hot share leading."""
+    return _attr(f, "rule", "") == "unmet_setpoint_hours" and _leads(
+        f, "too_hot_pct", "too_cold_pct"
+    )
+
+
+#: The box rules that read overcooling at minimum flow or the reheat it forces.
+OVERCOOL_REHEAT_RULES = (
+    "overcooling_min_flow",
+    "overcooling_severity",
+    "reheat_penalty",
+    "reheat_minimization_g36",
+)
+
+
+def _overcool_reheat(f) -> bool:
+    return _attr(f, "rule", "") in OVERCOOL_REHEAT_RULES
+
+
+def _starved(f) -> bool:
+    """A starved box: ``airflow_tracking`` with its under-setpoint share leading, or a zone that
+    can't cool (``airflow_tracking``: a box starved by low duct static cascades into unmet zone
+    temperatures)."""
+    if _attr(f, "rule", "") == "airflow_tracking":
+        return _leads(f, "undershoot_pct", "overshoot_pct")
+    return _zone_warm(f)
+
+
+#: AHU -> VAV cause chains: ``(chain id, AHU-side cause, root test, box-side symptom, symptom
+#: test, G36 fault condition whose own hours the root is read on)``. A box finding joins the first
+#: chain, in this order, whose root is found on an air handler the topology says serves the box.
+ZONE_CHAINS = (
+    ("sat_high", "supply air too warm", _sat_warm, "zones can't cool", _zone_warm, "FC13"),
+    (
+        "sat_low",
+        "supply air too cold",
+        _sat_cold,
+        "overcooling and reheat at the boxes",
+        _overcool_reheat,
+        None,
+    ),
+    ("static_low", "duct static too low", _static_low, "starved boxes", _starved, "FC1"),
+)
+
+#: SAT / duct-static reset not resetting -> the rogue zones a fleet census names (``(reset, AHU
+#: root rules, census rule)``). The census is one ``<fleet>`` finding over many air handlers, so it
+#: is listed on each AHU whose reset its rogue boxes sit under, never absorbed into one.
+ZONE_ROGUE_LINKS = (
+    ("sat", ("sat_reset_effectiveness", "supply_air_reset"), "sat_rogue_zone_census"),
+    ("static", ("static_reset_effectiveness", "static_pressure_reset"), "static_rogue_zone_census"),
+)
+
+
+@dataclass
+class ZoneLink:
+    """One AHU -> VAV cause chain: an air handler's root finding and the boxes it explains.
+
+    ``boxes`` are the served boxes whose matching findings joined the AHU issue (members on other
+    equipment); ``served`` every box the topology lists under the air handler, so a page reads
+    "14 of 22 boxes". ``rules`` are the symptom rules that joined. ``not_assessed`` lists boxes
+    joined without a same-hours check (no violation mask on one side); ``out_of_hours`` boxes
+    whose symptom did not coincide with the root and ``conditional`` boxes whose symptom leans on
+    a distrusted sensor -- both kept as their own issues. A rogue-zone census link
+    (``source`` the fleet finding, ``absorbed`` False) lists the census's rogue boxes served by the
+    air handler; the census stays its own issue.
+    """
+
+    chain: str
+    ahu: str
+    cause: str
+    symptom: str
+    root: object = field(default=None, compare=False, repr=False)
+    boxes: tuple = ()
+    served: tuple = ()
+    rules: tuple = ()
+    not_assessed: tuple = ()
+    out_of_hours: tuple = ()
+    conditional: tuple = ()
+    absorbed: bool = True
+    source: object = field(default=None, compare=False, repr=False)
+
+    def count(self) -> str:
+        """``"14 of 22 boxes"`` (``"3 boxes"`` when the topology lists none under the AHU)."""
+        n, of = len(self.boxes), len(self.served)
+        noun = "box" if (of or n) == 1 else "boxes"
+        return f"{n} of {of} {noun}" if of else f"{n} {noun}"
+
+    def label(self) -> str:
+        return f"{self.cause} at {self.ahu} -> {self.symptom} on {self.count()}"
+
+
+@dataclass
+class _ZonePlan:
+    moves: list = field(default_factory=list)  # (box finding, AHU root finding)
+    links: list = field(default_factory=list)  # ZoneLink
+    uncovered: dict = field(default_factory=dict)  # box -> {chain cause}
+    topology: str = "explicit"  # "explicit" | "semantic" | "none" | "heuristic"
+
+
+def _is_conditional(f, causes, rmap) -> bool:
+    roles = _rule_roles(rmap, _attr(f, "rule", ""))
+    equip = _attr(f, "equip", "")
+    return any(c.source is not f and _taints(c, equip, roles) for c in causes or ())
+
+
+def _pick(cands) -> object:
+    """The root among an AHU's candidates: worst severity, then rule name (deterministic)."""
+    return sorted(
+        cands,
+        key=lambda f: (-SEVERITY_ORDER.get(_attr(f, "severity", "info"), 1), _attr(f, "rule", "")),
+    )[0]
+
+
+def _coincide(root, f, fc, mask_for, part_mask_for, gate, overlap_min):
+    """``True`` / ``False`` when the two findings' hours do / don't coincide, ``None`` when a side
+    exposes no mask. The root is read on its G36 fault condition ``fc``'s own hours when the
+    evidence carries them (a ``g36_afdd`` mask is the union of every condition)."""
+    rm = None
+    if fc and _attr(root, "rule", "") == "g36_afdd" and part_mask_for is not None:
+        rm = part_mask_for(root, fc)
+    if rm is None and mask_for is not None:
+        rm = mask_for(root)
+    bm = mask_for(f) if mask_for is not None else None
+    if rm is None or bm is None:
+        return None
+    rm = rm.fillna(False).astype(bool)
+    bm = bm.fillna(False).astype(bool)
+    if gate is not None:
+        rm = rm & gate.reindex(rm.index).fillna(False).astype(bool)
+        bm = bm & gate.reindex(bm.index).fillna(False).astype(bool)
+    both = bm & rm.reindex(bm.index).fillna(False)
+    n_box, n_root, n_both = int(bm.sum()), int(rm.sum()), int(both.sum())
+    if not n_box or not n_root:
+        return False
+    return max(n_both / n_box, n_both / n_root) >= overlap_min
+
+
+def _plan_zone_chains(
+    items,
+    topology,
+    *,
+    causes=(),
+    rmap=None,
+    mask_for=None,
+    part_mask_for=None,
+    runtime=None,
+    overlap_min: float = 0.25,
+) -> _ZonePlan:
+    """Which box findings join which AHU root (see :data:`ZONE_CHAINS`), and what was left
+    unlinked for want of a topology. ``items`` are the findings already filtered to the ones
+    linked into issues."""
+    rmap = rmap or {}
+    plan = _ZonePlan()
+    usable = topology is not None and getattr(topology, "provenance", "") != "heuristic"
+    if topology is None:
+        plan.topology = "none"
+    elif not usable:
+        plan.topology = "heuristic"
+    else:
+        plan.topology = str(getattr(topology, "provenance", "explicit") or "explicit")
+
+    def actionable(f):
+        return _attr(f, "severity", "") in _ACTIONABLE
+
+    # roots per chain: {ahu: finding}; a root leaning on a distrusted sensor roots nothing
+    roots: dict = {}
+    for cid, _cause, is_root, _sym, _is_sym, _fc in ZONE_CHAINS:
+        per: dict = {}
+        for f in items:
+            if actionable(f) and is_root(f) and not _is_conditional(f, causes, rmap):
+                per.setdefault(_attr(f, "equip", ""), []).append(f)
+        roots[cid] = {a: _pick(fs) for a, fs in per.items()}
+    root_ids = {id(f) for per in roots.values() for f in per.values()}
+
+    links: dict = {}  # (id(root), chain) -> working dict
+
+    def _link(cid, cause, symptom, ahu, root, *, source=None):
+        k = (id(root), cid, id(source) if source is not None else None)
+        if k not in links:
+            links[k] = {
+                "chain": cid,
+                "ahu": ahu,
+                "cause": cause,
+                "symptom": symptom,
+                "root": root,
+                "source": source,
+                "boxes": set(),
+                "rules": set(),
+                "not_assessed": set(),
+                "out_of_hours": set(),
+                "conditional": set(),
+            }
+        return links[k]
+
+    def _gate(ahu):
+        if runtime is None:
+            return None
+        return (runtime(ahu) or (None, ""))[0]
+
+    for f in items:
+        box = _attr(f, "equip", "")
+        if not actionable(f) or id(f) in root_ids or box == "<fleet>":
+            continue
+        joined = False
+        pending: list = []  # (link dict, kind) misses, recorded only when nothing joined
+        for cid, cause, _is_root, symptom, is_sym, fc in ZONE_CHAINS:
+            per = roots[cid]
+            if not per or not is_sym(f) or box in per:
+                continue  # a symptom on the root's own unit is a same-equipment chain
+            if not usable or not topology.parents_of(box):
+                plan.uncovered.setdefault(box, set()).add(cause)
+                continue
+            ahu = topology.nearest_ancestor(box, lambda n, per=per: n in per)
+            if ahu is None:
+                continue  # served by another air handler, or by none with this root
+            root = per[ahu]
+            if _is_conditional(f, causes, rmap):
+                pending.append((_link(cid, cause, symptom, ahu, root), "conditional"))
+                continue
+            ok = _coincide(root, f, fc, mask_for, part_mask_for, _gate(ahu), overlap_min)
+            if ok is False:
+                pending.append((_link(cid, cause, symptom, ahu, root), "out_of_hours"))
+                continue
+            w = _link(cid, cause, symptom, ahu, root)
+            w["boxes"].add(box)
+            w["rules"].add(_attr(f, "rule", ""))
+            if ok is None:
+                w["not_assessed"].add(box)
+            plan.moves.append((f, root))
+            joined = True
+            break
+        if not joined:
+            for w, kind in pending:
+                w[kind].add(box)
+
+    # rogue-zone censuses: listed on the AHU whose reset the rogue boxes sit under
+    for reset, root_rules, census_rule in ZONE_ROGUE_LINKS:
+        cands: dict = {}
+        for f in items:
+            if (
+                actionable(f)
+                and _attr(f, "rule", "") in root_rules
+                and not _is_conditional(f, causes, rmap)
+            ):
+                cands.setdefault(_attr(f, "equip", ""), []).append(f)
+        per = {a: _pick(fs) for a, fs in cands.items()}
+        if not per:
+            continue
+        cause = "SAT reset not resetting" if reset == "sat" else "duct-static reset not resetting"
+        for c in items:
+            if not actionable(c) or _attr(c, "rule", "") != census_rule:
+                continue
+            for z in _metrics(c).get("rogues") or ():
+                z = str(z)
+                if not usable or not topology.parents_of(z):
+                    plan.uncovered.setdefault(z, set()).add(cause)
+                    continue
+                ahu = topology.nearest_ancestor(z, lambda n, per=per: n in per)
+                if ahu is None:
+                    continue
+                w = _link(f"{reset}_rogue", cause, "rogue zone", ahu, per[ahu], source=c)
+                w["boxes"].add(z)
+                w["rules"].add(census_rule)
+
+    for w in links.values():
+        if not w["boxes"] and not (w["conditional"] or w["out_of_hours"]):
+            continue
+        served = tuple(topology.zones_of(w["ahu"])) if usable else ()
+        plan.links.append(
+            ZoneLink(
+                chain=w["chain"],
+                ahu=w["ahu"],
+                cause=w["cause"],
+                symptom=w["symptom"],
+                root=w["root"],
+                boxes=tuple(sorted(w["boxes"])),
+                served=served,
+                rules=tuple(sorted(w["rules"])),
+                not_assessed=tuple(sorted(w["not_assessed"])),
+                out_of_hours=tuple(sorted(w["out_of_hours"] - w["boxes"])),
+                conditional=tuple(sorted(w["conditional"] - w["boxes"])),
+                absorbed=w["source"] is None,
+                source=w["source"],
+            )
+        )
+    plan.links.sort(key=lambda z: (z.ahu, z.chain))
+    return plan
+
+
+def zone_chain_gaps(findings, topology=None, *, actionable_only: bool = True) -> dict:
+    """What a missing served-by topology left out of the AHU -> VAV chains (0.107, #196).
+
+    ``{}`` when nothing was left out; else ``{"topology": "none" | "heuristic" | <provenance>,
+    "boxes": [...], "causes": [...]}``: the boxes whose findings match a chain whose root an air
+    handler on the site reports, but which no usable topology covers (``"none"``: no topology;
+    ``"heuristic"``: a naming guess, not used; otherwise the topology lists no parent for them).
+    """
+    items = [
+        f for f in findings if (not actionable_only) or _attr(f, "severity", "") in _ACTIONABLE
+    ]
+    plan = _plan_zone_chains(items, topology)
+    if not plan.uncovered:
+        return {}
+    return {
+        "topology": plan.topology,
+        "boxes": sorted(plan.uncovered),
+        "causes": sorted({c for cs in plan.uncovered.values() for c in cs}),
+    }
+
+
+def _zone_why(iss) -> list:
+    """The "why" lines naming an issue's AHU -> VAV chains (0.107, #196)."""
+    out = []
+    ids = {id(f) for f in iss.members}
+    for z in getattr(iss, "zone_links", None) or ():
+        if id(z.root) in ids:  # this issue is the air handler's
+            if z.absorbed and not z.boxes:
+                line = (
+                    f"Served-by topology: {z.cause} at {z.ahu} may explain {z.symptom}, but no "
+                    "box finding joined this issue"
+                )
+            elif z.absorbed:
+                line = (
+                    f"Cause chain (served-by topology): {z.cause} at {z.ahu} is the likely cause "
+                    f"of {z.symptom} on {z.count()} it serves ({', '.join(z.rules)}); those box "
+                    "findings are members of this issue (hours are their union, the cost the "
+                    "largest member)"
+                )
+                if z.not_assessed:
+                    line += f"; same-hours overlap not assessed for {len(z.not_assessed)}"
+            else:
+                line = (
+                    f"Rogue zone(s) {', '.join(z.boxes)} served by {z.ahu} ({z.rules[0]}, kept as "
+                    "its own issue): the reset this issue reports does not answer their requests"
+                )
+            kept = []
+            if z.out_of_hours:
+                kept.append(f"{len(z.out_of_hours)} not in the same hours")
+            if z.conditional:
+                kept.append(f"{len(z.conditional)} conditional on a sensor")
+            if kept:
+                line += (
+                    "; matching findings on served boxes that stay their own issues: "
+                    + ", ".join(kept)
+                )
+            out.append(line + ".")
+        else:  # a fleet census issue listing the air handlers its rogues sit under
+            out.append(
+                f"Rogue zone(s) {', '.join(z.boxes)} sit under {z.ahu}, whose "
+                f"{_attr(z.root, 'rule', '')} finding reports the reset not resetting (linked)."
+            )
     return out
 
 

@@ -148,7 +148,8 @@ of the naming heuristic, so the rogue-zone census and cohort starvation report
 pooled with the partial-coverage caveat. The run keeps it as `RunResult.topology`, and
 `RunResult.topology_source` records where it came from: the files and their row counts, the edge
 count, the ids that named no discovered equipment, and any edges dropped to break a cycle. The RCx
-report uses it to tie an air handler to the chilled-water plant serving it
+report uses it to tie an air handler to the chilled-water plant serving it, and, since 0.107, to
+chain an air handler's finding to the matching symptoms on the boxes it serves
 ([RCX-REPORT.md](RCX-REPORT.md)).
 
 ## Honesty is built into the type

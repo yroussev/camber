@@ -68,6 +68,33 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - A rule may declare `roles_cost`: roles it reads only to price its finding. They load like
   optional roles, but they never gate the rule, are not reported as missing and do not make the
   finding conditional.
+- **RCx issues chain an air handler to the boxes it serves (#196).** When the config declares a
+  served-by `topology`, an AHU finding roots one issue, and the matching findings on the boxes it
+  serves become members of that issue. The page and the summary give the count ("DemoAHU + 14 of
+  22 boxes"). There are three pairs (`camber.rules.triage.ZONE_CHAINS`):
+  - supply air too warm (`supply_air_control` with too-warm leading, G36 FC13, a SAT reset that
+    is not responding) leads to zones that can't cool (`unmet_setpoint_hours` with too-hot
+    leading);
+  - supply air too cold (`supply_air_control` with too-cold leading, `supply_air_reset`,
+    `supply_air_reset_compliance`, a SAT reset that is not trimming) leads to overcooling and
+    reheat (`overcooling_min_flow`, `overcooling_severity`, `reheat_penalty`,
+    `reheat_minimization_g36`);
+  - duct static too low (G36 FC1, a static reset that is not responding) leads to starved boxes
+    (`airflow_tracking` with under-setpoint leading, or a zone that can't cool).
+
+  The chain follows the existing issue rules: its cost is the largest member, never the sum,
+  and its hours are the union of the members' masks. A box symptom joins only when its hours
+  coincide with the root's, or when a side has no mask, and then the link says the overlap was
+  not assessed. A box symptom that leans on a distrusted sensor stays its own issue and is
+  counted on the link. An AHU finding that leans on one roots no chain. A SAT or static
+  rogue-zone census is listed on the air handler whose reset its rogue boxes sit under, and the
+  census stays its own issue (`ZONE_ROGUE_LINKS`). Nothing is linked without a declared
+  topology. A naming guess is not used, and neither is a box the topology does not cover or a
+  box served by another air handler. Appendix A names the boxes that a missing topology left
+  unlinked (`zone_chain_gaps`). `Issue.zone_links` holds the `ZoneLink` objects, and
+  `to_dict()` issues gain `zone_chains`. The `synthetic-g36-vav-fleet` template declares its
+  topology, but its rules form no chain: the one air handler whose resets fail has no box
+  symptom among the template's rules.
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
@@ -86,6 +113,10 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
   rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
   the default, and only a configured one is priced.
+- An RCx issue's heading never comes from a linked box member (#196): a box's reheat valve
+  cause stays on the box's own row, and the air handler's cause heads its chain. `link_findings`
+  judges sensor precedence for each member on that member's own equipment, which gives the same
+  result for a single-equipment issue.
 
 
 ## [0.106.0] — 2026-10-17

@@ -923,6 +923,26 @@ def _issue_dict(i) -> dict:
         "confidence_components": dict(i.confidence_components),
         "why": list(i.why),
         "references": _issue_refs(i),  # 0.96 (#78): linked reference ids (camber.references)
+        # 0.107 (#196): the AHU -> VAV cause chains on this issue
+        "zone_chains": [_zone_link_dict(z) for z in getattr(i, "zone_links", None) or ()],
+    }
+
+
+def _zone_link_dict(z) -> dict:
+    return {
+        "chain": z.chain,
+        "ahu": z.ahu,
+        "cause": z.cause,
+        "symptom": z.symptom,
+        "root_rule": getattr(z.root, "rule", ""),
+        "boxes": list(z.boxes),
+        "n_boxes": len(z.boxes),
+        "n_served": len(z.served),
+        "rules": list(z.rules),
+        "absorbed": z.absorbed,
+        "not_assessed": list(z.not_assessed),
+        "out_of_hours": list(z.out_of_hours),
+        "conditional": list(z.conditional),
     }
 
 
@@ -1274,7 +1294,7 @@ def build_rcx_report(
     """
     from .. import __version__
     from ..fault_economics import DEFAULTS, cost_findings
-    from ..rules.triage import finding_confidence, issue_totals, link_findings
+    from ..rules.triage import finding_confidence, issue_totals, link_findings, zone_chain_gaps
     from ..sensordrift import drift_finding
     from ..sensorhealth import frame_sensor_health, mixing_consistency, plant_gates
 
@@ -1473,6 +1493,8 @@ def build_rcx_report(
         shared_scope=oat_scope,
     )
     totals = issue_totals(issues)
+    # 0.107 (#196): AHU -> VAV chains a missing served-by topology left unlinked (Appendix A)
+    chain_gaps = zone_chain_gaps(findings, getattr(run, "topology", None))
 
     # ---- coverage + declines
     covs = []
@@ -1551,6 +1573,7 @@ def build_rcx_report(
         "kpis": kpis,
         "hl": hl,
         "g36_declared": _g36_declared_for(cfg, ctx.refs),
+        "chain_gaps": chain_gaps,
     }
     wanted = set(o.sections) if o.sections else None
 
@@ -1771,7 +1794,7 @@ def _sec_summary(S) -> dict:
             [
                 f"<a href='#issue-{iss.key}'>{iss.rank}</a>",
                 _cut(title, 60),
-                iss.equip,
+                iss.equip + _chain_boxes_note(iss),
                 cost,
                 iss.severity,
                 iss.confidence,
@@ -2469,7 +2492,11 @@ def _cause_lead(iss, *, frame=None) -> tuple:
     members = list(getattr(iss, "members", None) or [])
     if not members or _equipment_cause(iss.root):
         return None, ""
+    own = getattr(iss, "equip", "") or ""
     for f in members[1:]:
+        # 0.107 (#196): a linked box member's cause (a box's reheat valve) never heads the AHU's
+        if own and getattr(f, "equip", own) != own:
+            continue
         if not _equipment_cause(f):
             continue
         rec = recommend(f, frame=frame)
@@ -2534,8 +2561,9 @@ def _sec_issue(S, iss) -> dict:
                 + ". This finding is kept; check the plant before the coil valve.",
             }
         )
+    blocks += _zone_chain_blocks(iss)
     head = [
-        ["Equipment", iss.equip],
+        ["Equipment", iss.equip + _chain_boxes_note(iss)],
         ["Severity", iss.severity],
         [
             "$/yr",
@@ -2579,8 +2607,11 @@ def _sec_issue(S, iss) -> dict:
     if ctx.registry is not None:
         from .dashboard import _rules_map
 
-        # a reference-only member (e.g. a G36-default target with no site sequence) gets no chart
-        shown = [_R(f) for f in iss.members if not S["exclude_cost"](f)]
+        # a reference-only member (e.g. a G36-default target with no site sequence) gets no chart;
+        # 0.107 (#196): of a chain's linked box members, only the first few are charted
+        on_unit = [f for f in iss.members if getattr(f, "equip", iss.equip) == iss.equip]
+        boxes = [f for f in iss.members if getattr(f, "equip", iss.equip) != iss.equip]
+        shown = [_R(f) for f in on_unit + boxes[:_CHAIN_BOX_CHARTS] if not S["exclude_cost"](f)]
         ev_html = render_evidence_blocks(shown, _rules_map(ctx.registry), ctx.frame, dpi=ctx.dpi)
         if ev_html:
             blocks.append({"kind": "html", "html": ev_html})
@@ -2589,9 +2620,10 @@ def _sec_issue(S, iss) -> dict:
     for i, (f, c) in enumerate(zip(iss.members, iss.member_costs or [None] * len(iss.members))):
         why = excl(f)
         summ = _cut(getattr(f, "summary", ""), 160)
+        on = getattr(f, "equip", iss.equip)
         mrows.append(
             [
-                "root" if i == 0 else "member",
+                "root" if i == 0 else ("member" if on == iss.equip else f"member ({on})"),
                 getattr(f, "rule", ""),
                 getattr(f, "severity", ""),
                 "excluded" if why else (_fmt_usd(c.annual_cost_usd) if c and c.costed else "—"),
@@ -2658,6 +2690,62 @@ def _sec_issue(S, iss) -> dict:
     )
     sec["slot"] = f"issue:{iss.key}"
     return sec
+
+
+#: 0.107 (#196): evidence charts drawn for a chain's linked box members (the table lists them all)
+_CHAIN_BOX_CHARTS = 2
+_CHAIN_BOX_NAMES = 12  # box ids named on a chain line before "and N more"
+
+
+def _chain_boxes_note(iss) -> str:
+    """`` + 14 of 22 boxes`` for an AHU issue carrying linked box members (0.107, #196)."""
+    links = [
+        z
+        for z in getattr(iss, "zone_links", None) or ()
+        if z.absorbed and z.ahu == iss.equip and z.boxes
+    ]
+    if not links:
+        return ""
+    boxes = sorted({b for z in links for b in z.boxes})
+    served = sorted({b for z in links for b in z.served})
+    noun = "box" if (len(served) or len(boxes)) == 1 else "boxes"
+    return f" + {len(boxes)} of {len(served)} {noun}" if served else f" + {len(boxes)} {noun}"
+
+
+def _name_boxes(boxes) -> str:
+    boxes = list(boxes)
+    if len(boxes) > _CHAIN_BOX_NAMES:
+        more = len(boxes) - _CHAIN_BOX_NAMES
+        return ", ".join(boxes[:_CHAIN_BOX_NAMES]) + f" and {more} more"
+    return ", ".join(boxes)
+
+
+def _zone_chain_blocks(iss) -> list:
+    """The cause-chain banner(s) of an issue page (0.107, #196): on an air handler's issue, the
+    boxes its finding explains; on a fleet census issue, the air handlers its rogues sit under."""
+    out = []
+    ids = {id(f) for f in iss.members}
+    for z in getattr(iss, "zone_links", None) or ():
+        if not z.boxes:
+            continue  # only boxes kept out: the "why" line says so
+        if id(z.root) in ids and z.absorbed:
+            text = (
+                f"Cause chain: {z.cause} at {z.ahu} → {z.symptom} on {z.count()} it serves "
+                f"({_name_boxes(z.boxes)}). The box findings are listed as members below; fix the "
+                "air handler first, then re-check the boxes."
+            )
+        elif id(z.root) in ids:
+            text = (
+                f"Rogue zone(s) under {z.ahu}: {_name_boxes(z.boxes)} ({z.rules[0]}, its own "
+                "issue) drive the requests this reset does not answer."
+            )
+        else:
+            text = (
+                f"Linked cause: {z.ahu}'s {getattr(z.root, 'rule', '')} finding (reset not "
+                f"resetting) serves rogue zone(s) {_name_boxes(z.boxes)}."
+            )
+        out.append({"kind": "banner", "text": text})
+    return out
 
 
 def _issue_refs(iss, rec=None) -> list:
@@ -2849,6 +2937,21 @@ def _sec_appendices(S) -> list:
     if cav:
         blocks.append(_p("Caveats:"))
         blocks.append({"kind": "list", "items": cav})
+    gaps = S.get("chain_gaps") or {}
+    if gaps:
+        why = {
+            "none": "the config declares no served-by topology",
+            "heuristic": "the only served-by topology is a naming guess, which is not used",
+        }.get(gaps["topology"], "the served-by topology lists no air handler for them")
+        blocks.append(
+            _p(
+                "AHU-to-VAV cause chains not linked (missing topology): "
+                f"{_name_boxes(gaps['boxes'])} report symptoms an air handler on this site may "
+                f"cause ({', '.join(gaps['causes'])}), but {why}, so they are reported as their "
+                "own issues. Declare which air handler serves each box (the config's `topology`) "
+                "to link them."
+            )
+        )
     seen = {getattr(f, "equip", "") for f in S["findings"]}
     not_eval = [e for e in ctx.equips if e not in seen]
     if not_eval:
