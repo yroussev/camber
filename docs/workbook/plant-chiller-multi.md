@@ -112,8 +112,9 @@ camber run fleet_over.json --out fleet_over_out
 4. Which chiller's condenser is fouled, and how far is its approach from design?
 5. Which tower does `cooling_tower_approach` flag, and which does it pass? Both are fouled: what
    does the controlled tower do instead of widening its approach, and which rule sees that?
-6. `cooling_tower_fan_effort_drift` also warns on a tower that is not fouled. Which one, why
-   might the over-staged plant's tower look harder-working, and what point would settle it?
+6. `cooling_tower_fan_effort_drift` passes the over-staged plant's tower, which a range-only
+   match would have flagged. Why would two chillers' condenser water make a clean tower look
+   harder-working, and which point prevents that?
 7. What does the label score say for each rule, and for the plant as a whole? Which fault can no
    label score count, and why?
 8. The near-miss plant passes every check. What is a little off in it, and what would you watch?
@@ -144,8 +145,9 @@ camber run fleet_over.json --out fleet_over_out
   against a 7 °F design: a warn when the median is 1.3 times design, a fault at 1.7.
   `cooling_tower_fan_effort_drift` reads the fan speed against the reference tower at matched
   condenser load and wet-bulb: a warn at 5 percentage points, a fault at 10. With a condenser
-  flow (`cw_flow`) the load is the heat rejected; these towers trend none, so it is the range,
-  which assumes a constant condenser flow, and a fired finding says so.
+  flow (`cw_flow`) the load is the heat rejected, else the range, which assumes a constant
+  condenser flow. These towers trend it (`CW_GPM`), so the load is the heat rejected
+  (`load_source` `cw_heat_rejection`).
   `cooling_tower_approach_drift` reads the approach against the reference at matched load the
   same way (`tower_approach_load_source`).
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %

@@ -18,6 +18,10 @@ plus the three ``chiller_staging_fleet`` variants (CAMBER 0.105.0-dev, 2026-10-1
 Re-recorded for 0.106.0-dev on 2026-10-16 after #183/#184: the fleet leaves the secondary loops
 out (14 chillers, not 21), each loop is gated on its flow, ``cooling_tower_approach_drift`` runs on
 the towers, and each rule's label score counts only the equipment it ran on.
+
+Re-recorded for 0.106.0-dev on 2026-10-16 after generator version 2: the tower trends its
+condenser-water flow (``cw_flow``), so the tower drift rules match on the heat rejected and the
+over-staged plant's tower no longer reads as working harder.
 """
 
 from __future__ import annotations
@@ -161,15 +165,16 @@ EXERCISE = Exercise(
         Check("the controlled tower hides in its fan", _controlled_tower_hides_in_fan),
         Finding(_FAN, "TOWER__tower_controlled", severity=("fault",)),
         Finding(_FAN, "TOWER__tower_full_fan", severity=("fault",)),
-        Metric(_FAN, "TOWER__tower_controlled", "fan_effort_drift_pct", 34.9, 0.05, quote="34.9"),
-        Metric(_FAN, "TOWER__tower_full_fan", "fan_effort_drift_pct", 59.07, 0.05, quote="59.1"),
-        # the false positive: two chillers' condenser water halves the tower's range
-        Finding(_FAN, "TOWER__over_staged", severity=("warn",)),
-        Metric(_FAN, "TOWER__over_staged", "fan_effort_drift_pct", 6.47, 0.05, quote="6.5"),
+        Metric(_FAN, "TOWER__tower_controlled", "fan_effort_drift_pct", 37.85, 0.05, quote="37.9"),
+        Metric(_FAN, "TOWER__tower_full_fan", "fan_effort_drift_pct", 55.26, 0.05, quote="55.3"),
+        # a false positive avoided: matched on the heat rejected (cw_flow), two chillers'
+        # condenser water no longer reads as fan effort
+        Finding(_FAN, "TOWER__over_staged", severity=("ok",)),
+        Metric(_FAN, "TOWER__over_staged", "fan_effort_drift_pct", 0.78, 0.05, quote="0.8"),
         # the approach drift, now on the towers themselves (0.106, #184): only the full-fan tower
         Finding(_APPDRIFT, "TOWER__tower_full_fan", severity=("fault",)),
         Metric(
-            _APPDRIFT, "TOWER__tower_full_fan", "tower_approach_drift_f", 5.75, 0.05, quote="5.7"
+            _APPDRIFT, "TOWER__tower_full_fan", "tower_approach_drift_f", 5.84, 0.05, quote="5.8"
         ),
         *(
             Finding(_APPDRIFT, f"TOWER__{p}", severity=("ok",))
@@ -181,13 +186,13 @@ EXERCISE = Exercise(
         Metric(_APP, "CH1__near_miss", "worst_approach_ratio", 1.38, 0.005, quote="1.38"),
         Finding(_TOWER, "TOWER__near_miss", severity=("ok",)),
         Finding(_FAN, "TOWER__near_miss", severity=("ok",)),
-        Metric(_FAN, "TOWER__near_miss", "fan_effort_drift_pct", 4.87, 0.05, quote="4.9"),
+        Metric(_FAN, "TOWER__near_miss", "fan_effort_drift_pct", 0.82, 0.05, quote="0.8"),
         # 7. the label score
         Score(_TRACK, tpr=1.0, fpr=0.0),
         Score(_APP, tpr=1.0, fpr=0.0),
         Score(_TOWER, tpr=0.5, fpr=0.0, quote="TPR 50%"),
-        Score(_FAN, tpr=1.0, fpr=1 / 5, tol=0.001, quote="1 of 5"),
-        Score(None, tpr=4 / 6, fpr=1 / 22, tol=0.001, quote="4 of 6"),
+        Score(_FAN, tpr=1.0, fpr=0.0),
+        Score(None, tpr=4 / 6, fpr=0.0, tol=0.001, quote="4 of 6"),
     ),
     standin=standin,
 )

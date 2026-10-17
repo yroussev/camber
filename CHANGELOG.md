@@ -95,7 +95,8 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   are over-staged (was 100 %), still a fault. The secondary loops' `run_source` is `flow` (was
   `power`), with the same figures. The `cooling_tower_fan_effort_drift` label score counts the
   7 towers, not all 28 pieces of equipment, so its false-positive rate is 1 of 5 (was 1 of 26).
-  The over-staged plant's tower still warns, because the synthetic tower has no condenser flow.
+  That rate is now 0 of 5: the synthetic tower trends its condenser flow (generator version 2,
+  below), so the over-staged plant's tower no longer warns.
   `cooling_tower_approach_drift` now runs on the seven towers. It faults on the full-fan tower
   (+5.7 °F) and passes the others, the controlled fouled tower included; the key now records it.
 - The `plant-heat-pump` label scores move with the scoring change and are re-recorded. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
@@ -121,6 +122,29 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   starved air handler. `cohort_space_temp` needs a 1 °F difference from the median
   (`min_abs_dev`). `cohort_airflow` reads `info` when its cohort spreads past 0.3 (`max_spread`)
   and nothing stands out. See docs/TR-RESET.md and docs/CAPABILITIES.md.
+- **Two synthetic entries publish the points #184 and #186 added (generator version 2).** The
+  cache regenerates them on the next fetch or ingest, because the generator version changed.
+  `synthetic-chw-plant-multi`'s tower now trends its condenser-water flow (`CW_GPM`, mapped to
+  `cw_flow`). Each running chiller has one 600 gpm pump, so the flow is 600 or 1,200 gpm,
+  read about 1 % noisy. The tower drift rules now match on the heat rejected. The over-staged
+  plant's tower no longer reads as working harder: `cooling_tower_fan_effort_drift` drops from
+  +6.5 to +0.8 points, `ok`. The two fouled towers still fault. `synthetic-g36-vav-fleet`'s boxes
+  now trend their active airflow setpoint (`ZN{n}_FLOW_SP`, mapped to `airflow_sp`) apart from
+  their minimum (`ZN{n}_FLOW_MIN`, now `airflow_min_sp`). They also trend their heating and
+  cooling loops (`ZN{n}_HTG_LOOP` and `ZN{n}_CLG_LOOP`, mapped to `zone_heat_loop` and
+  `zone_cool_loop`). The censuses now count about as many requests as the air handlers' own
+  `SAT_REQ` and `DSP_REQ`. `reheat_minimization_g36` reads the high heating loop from the loop,
+  not the valve, and both single-maximum boxes still fault. The `plant-chiller-multi` and
+  `zone-g36-fleet` workbook answers are re-recorded (keys, pages, instructor blocks and the
+  `zone-g36-fleet` figure, whose census now counts the cooling loop). On `plant-chiller-multi`
+  the fan-effort drift reads +37.9 and +55.3 points on the fouled towers (was +34.9 and +59.1),
+  +0.8 on the near miss (was +4.9), and the full-fan tower's approach drift +5.8 °F (was +5.7);
+  the fan-effort rule's false-positive rate is 0 of 5 (was 1 of 5) and the plant's 0 of 22 (was
+  1 of 22). On `zone-g36-fleet` the SAT census's rogue sends 92.5 % of its air handler's
+  requests (was 98.9 %), the equipment room 60.8 % of the static requests (was 48.6 %), the
+  single-maximum boxes reheat above minimum outside the high heating loop 69.7 % and 93.1 % of
+  their reheating hours (was 93.9 % and 100 %), and the near miss's zone 1 sends 43.0 % and binds
+  on 45.4 % (was 41.3 % and 46.8 %).
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every

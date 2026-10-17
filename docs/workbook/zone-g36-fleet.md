@@ -146,9 +146,9 @@ camber run g36_heatcool.json --out g36_heatcool_out
   to differ from the median by 1 °F or more.
 - **Reheat.** `reheat_minimization_g36` faults a box when, of its occupied hours with the
   reheat valve open, 40 % or more have its airflow over 1.2 times its minimum outside Guideline
-  36's high heating loop (warn at 15 %). Without a heating-loop point, an hour with the valve at
-  90 % or more counts as high heating loop, where a dual-maximum box raises its airflow by
-  design. `zones_heat_cool_census` counts the occupied hours with one box heating (its valve
+  36's high heating loop (warn at 15 %), where a dual-maximum box raises its airflow by design.
+  With a heating-loop point (`zone_heat_loop`, trended here) an hour with the loop over 50 %
+  counts as the high heating loop; without one, the valve at 90 % or more. `zones_heat_cool_census` counts the occupied hours with one box heating (its valve
   open) while another cools (its valve shut, its airflow over 1.1 times its minimum), and faults
   when 75 % of the hours have one (warn at 25 %). Both read the trended occupancy point.
 - **Score.** `camber datasets score` scores only the rules that judge one piece of equipment.
@@ -168,16 +168,10 @@ camber run g36_heatcool.json --out g36_heatcool_out
 - The fleet rules write one finding for everything they see. To judge one air handler, keep
   only its equipment (the variants do), and declare the served-by topology: without one, the
   censuses guess the grouping from the equipment names.
-- `ZN{n}_FLOW_MIN`, the box's minimum airflow setpoint, is mapped to `airflow_sp`, the role of
-  the box's active airflow setpoint: this data has no active setpoint. The reheat rules read it
-  as the minimum, as they do whenever no `airflow_min_sp` is mapped. Guideline 36's
-  static-pressure requests compare the airflow with the box's active setpoint, so the static
-  census counts fewer 2- and 3-request cycles than the air handler did.
-- The SAT census cannot count a box's 1-request cycles (its cooling loop over 95 %): no box
-  trends its cooling loop (`zone_cool_loop`).
-- No box trends its heating loop either, so `reheat_minimization_g36` reads a wide-open valve
-  as the high heating loop. A single-maximum box with its valve wide open looks the same, and
-  the finding says so.
+- Each box trends its active airflow setpoint (`airflow_sp`) apart from its minimum
+  (`airflow_min_sp`), and its heating and cooling loops, so the censuses count about as many
+  requests as the air handlers did (`SAT_REQ`, `DSP_REQ`). The cooling loop is the zone's
+  cooling demand as a share of its cooling maximum, a simplification of G36's sequence.
 
 ## Going further
 

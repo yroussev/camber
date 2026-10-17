@@ -1,8 +1,9 @@
 {
-  "_comment": "Synthetic two-chiller plant (generator chw_plant_multi, camber/datasets/_synthetic_chw_plant_multi.py; 0.105, #145) -> CAMBER Role mapping for the cooling tower. CWS_T / CWR_T are the condenser water leaving and returning to the tower in F (blank while no chiller runs), CT_FAN the tower fan speed in %, WB and OAT the outdoor wet-bulb and dry-bulb in F.",
+  "_comment": "Synthetic two-chiller plant (generator chw_plant_multi, camber/datasets/_synthetic_chw_plant_multi.py; 0.105, #145) -> CAMBER Role mapping for the cooling tower. CWS_T / CWR_T are the condenser water leaving and returning to the tower in F (blank while no chiller runs), CW_GPM the condenser-water flow through the tower in gpm (one 600 gpm condenser pump per running chiller, 0 while none runs; generator version 2, 0.106), CT_FAN the tower fan speed in %, WB and OAT the outdoor wet-bulb and dry-bulb in F.",
   "aliases": {
     "CWS_T": "cw_supply_temp",
     "CWR_T": "cw_return_temp",
+    "CW_GPM": "cw_flow",
     "CT_FAN": "tower_fan_speed",
     "WB": "wetbulb_temp",
     "OAT": "oat"

@@ -292,3 +292,62 @@ def test_a_generator_module_registers_itself_when_discovered(tmp_path, monkeypat
     finally:
         GENERATORS.pop("scaffold_probe", None)
         sys.modules.pop(name, None)
+
+
+# ------------------------------------------ generator version 2 (0.106, #184 and #186 points)
+
+
+def _frame(gen: str, seed: int):
+    import io
+
+    import pandas as pd
+
+    (text,) = GENERATORS[gen].build(seed).values()
+    return pd.read_csv(io.StringIO(text))
+
+
+def _aliases(name: str) -> dict:
+    path = os.path.join(_ROOT, "camber", "datasets", "mappings", name)
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)["aliases"]
+
+
+def test_chw_plant_multi_tower_trends_its_condenser_flow():
+    """One 600 gpm condenser pump per running chiller, read about 1 % noisy; 0 with none on."""
+    df = _frame("chw_plant_multi", 145)
+    count = df["CH1_STS"] + df["CH2_STS"]
+    on = count > 0
+    ratio = df.loc[on, "CW_GPM"] / (600.0 * count[on])
+    assert ratio.between(0.989, 1.011).all()
+    assert (df.loc[~on, "CW_GPM"] == 0).all()
+    assert set(count[df["scenario"] == "over_staged"]) <= {0, 2}  # both pumps whenever it runs
+    assert _aliases("synthetic_chw_multi_tower.json")["CW_GPM"] == "cw_flow"
+
+
+def test_g36_vav_fleet_boxes_trend_their_active_setpoint_and_loops():
+    """The active airflow setpoint sits between the minimum and the cooling maximum with the fan
+    on (0 off), the loops are 0-100 %, the cooling loop over 95 % is the tier-1 SAT request, and
+    only heat_cool's fighting boxes run both loops at once."""
+    df = _frame("g36_vav_fleet", 144)
+    fan = df["SF_STS"] == 1
+    vmax = {1: 1000, 2: 900, 3: 800, 4: 1100, 5: 700, 6: 600}
+    for z, top in vmax.items():
+        sp, vmin = df[f"ZN{z}_FLOW_SP"], df[f"ZN{z}_FLOW_MIN"]
+        assert (sp[fan] >= vmin[fan]).all() and (sp[fan] <= top).all()
+        assert (sp[~fan] == 0).all()
+        for loop in ("HTG_LOOP", "CLG_LOOP"):
+            col = df[f"ZN{z}_{loop}"]
+            assert col.between(0.0, 100.0).all() and (col[~fan] == 0).all()
+        both = (df[f"ZN{z}_HTG_LOOP"] > 0) & (df[f"ZN{z}_CLG_LOOP"] > 0)
+        assert set(df.loc[both, "scenario"]) <= {"heat_cool"}
+    # the healthy air handler's summed tier-1 requests are the boxes' cooling loops over 95 %
+    # wherever no box is warm enough to ask for more
+    h = df[(df["scenario"] == "healthy") & fan]
+    warm = sum((h[f"ZN{z}_T"] - h[f"ZN{z}_CLG_SP"] >= 3.0) for z in vmax).astype(bool)
+    tier1 = sum((h[f"ZN{z}_CLG_LOOP"] > 95.0).astype(int) for z in vmax)
+    assert (tier1[~warm] == h.loc[~warm, "SAT_REQ"]).mean() > 0.95
+    zone = _aliases("synthetic_g36_fleet_zone.json")
+    assert zone["ZN{n}_FLOW_SP"] == "airflow_sp"
+    assert zone["ZN{n}_FLOW_MIN"] == "airflow_min_sp"
+    assert zone["ZN{n}_HTG_LOOP"] == "zone_heat_loop"
+    assert zone["ZN{n}_CLG_LOOP"] == "zone_cool_loop"

@@ -8,7 +8,8 @@ def register(df) -> None:
     def _wb_zone_g36_fleet():
         """The exercise's SAT rogue-zone census (#144): every box of the eight air handlers,
         placed by its share of its air handler's SAT reset requests and by the share of active
-        cycles it holds the binding (largest) request. A rogue needs both: the shaded corner.
+        cycles it holds the binding (largest) request, the cooling loop over 95 % counted as
+        one request (generator version 2). A rogue needs both: the shaded corner.
         The equipment room of AHU__rogue_sat sits alone in it; the near miss's warm corner and
         the healthy fleet's zone 1 sit just outside."""
         import matplotlib.pyplot as plt
@@ -34,6 +35,7 @@ def register(df) -> None:
                     {
                         "t": raw[f"ZN{k}_T"],
                         "sp": raw[f"ZN{k}_CLG_SP"],
+                        "loop": raw[f"ZN{k}_CLG_LOOP"],
                         "fan": raw["SF_STS"],
                         "occ": raw["OCC"],
                     }
@@ -46,6 +48,7 @@ def register(df) -> None:
             temp_col="t",
             cool_sp_col="sp",
             gate_cols=("fan", "occ"),
+            cool_loop_col="loop",
         )
         share, binding = res.zone_request_share, res.zone_binding_frac
         fig, ax = plt.subplots(figsize=df.STD)

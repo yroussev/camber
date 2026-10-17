@@ -17,7 +17,9 @@ so their answers are read from the finding's metrics. Figures were recorded from
 plus the ``zone-g36-fleet--healthy``, ``--near-miss``, ``--reheat`` and ``--heat-cool`` variants
 (CAMBER 0.105.0-dev, 2026-10-13; re-recorded on CAMBER 0.106.0-dev, 2026-10-16, after #186:
 the static census lists the equipment room as overloaded, the reheat rule reads the trended
-occupancy and excuses the high heating loop, cohort_space_temp has a 1 °F floor).
+occupancy and excuses the high heating loop, cohort_space_temp has a 1 °F floor; and again
+after generator version 2: the boxes trend their active airflow setpoint, minimum and heating and
+cooling loops, so the censuses count tier-1 and active-setpoint requests).
 """
 
 from __future__ import annotations
@@ -89,7 +91,7 @@ def _rogues(ctx) -> None:
     assert dsp["overloaded_zones"] == ["VAV1__rogue_sat"], dsp["overloaded_zones"]
     assert dsp["overloaded_share"] == {"VAV1__rogue_sat": 1.0}, dsp["overloaded_share"]
     assert dsp["worst_zone"] == "VAV5__rogue_static", dsp["worst_zone"]
-    assert dsp["zone_request_share"]["VAV1__rogue_sat"] == 0.486, dsp["zone_request_share"]
+    assert dsp["zone_request_share"]["VAV1__rogue_sat"] == 0.608, dsp["zone_request_share"]
 
 
 def _cohorts(ctx) -> None:
@@ -146,8 +148,8 @@ def _near_miss(ctx) -> None:
     """The near miss's zone 1 asks for the most and binds the most, under both bars' one."""
     m = _metrics(ctx, _SAT_ROGUE, "near-miss")
     assert m["rogues"] == [], m["rogues"]
-    assert m["zone_binding_frac"]["VAV1__near_miss"] == 0.468, m["zone_binding_frac"]
-    assert m["zone_request_share"]["VAV1__near_miss"] == 0.413, m["zone_request_share"]
+    assert m["zone_binding_frac"]["VAV1__near_miss"] == 0.454, m["zone_binding_frac"]
+    assert m["zone_request_share"]["VAV1__near_miss"] == 0.43, m["zone_request_share"]
 
 
 EXERCISE = Exercise(
@@ -199,9 +201,9 @@ EXERCISE = Exercise(
         # 2. the rogue zones
         Finding(_SAT_ROGUE, _FLEET, severity=("warn",)),
         Finding(_DSP_ROGUE, _FLEET, severity=("warn",)),
-        Metric(_SAT_ROGUE, _FLEET, "worst_zone_share", 0.989, 0.0005, quote="98.9%"),
+        Metric(_SAT_ROGUE, _FLEET, "worst_zone_share", 0.925, 0.0005, quote="92.5%"),
         Metric(_DSP_ROGUE, _FLEET, "worst_zone_share", 0.959, 0.0005, quote="95.9%"),
-        Check("the rogues by air handler", _rogues, quote="48.6 %"),
+        Check("the rogues by air handler", _rogues, quote="60.8 %"),
         # 3. the starved cohorts
         Finding(_SAT_COHORT, _FLEET, severity=("warn",)),
         Finding(_DSP_COHORT, _FLEET, severity=("warn",)),
@@ -218,8 +220,9 @@ EXERCISE = Exercise(
         Finding(_REHEAT, "VAV4__reheat", severity=("fault",)),
         Finding(_REHEAT, "VAV2__healthy", severity=("ok",)),
         Metric(_REHEAT, "VAV2__reheat", "reheat_hours_pct", 18.3, 0.05, quote="18.3 %"),
-        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 93.9, 0.05, quote="93.9 %"),
+        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 69.7, 0.05, quote="69.7 %"),
         Metric(_REHEAT, "VAV4__reheat", "reheat_hours_pct", 16.1, 0.05, quote="16.1 %"),
+        Metric(_REHEAT, "VAV4__reheat", "reheat_above_min_pct", 93.1, 0.05, quote="93.1 %"),
         Metric(_REHEAT, "VAV2__healthy", "reheat_hours_pct", 17.2, 0.05, quote="17.2 %"),
         Metric(_REHEAT, "VAV2__healthy", "reheat_above_min_pct", 0.0, 0.05),
         Metric(_REHEAT, "VAV2__healthy", "reheat_high_loop_pct", 9.7, 0.05, quote="9.7 %"),
@@ -245,7 +248,7 @@ EXERCISE = Exercise(
         Metric(_CENSUS, _FLEET, "pct_hours_mixed", 17.2, 0.05, run="healthy", quote="17.2 %"),
         Metric(_CENSUS, _FLEET, "pct_hours_any_both", 2.2, 0.05, run="healthy", quote="2.2 %"),
         Finding(_SAT_ROGUE, _FLEET, severity=("ok",), run="near-miss"),
-        Check("the near miss", _near_miss, quote="46.8%"),
+        Check("the near miss", _near_miss, quote="45.4%"),
     ),
     standin=standin,
 )

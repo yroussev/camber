@@ -1,8 +1,8 @@
 {
- "_comment": "0.105 (#145): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "_comment": "0.105 (#145); version 2 in 0.106 (#184): what the entry generates; tests/test_datasets_synthetic.py checks it",
  "generator": "chw_plant_multi",
  "seed": 145,
- "version": 1,
+ "version": 2,
  "header": [
   "Timestamp",
   "scenario",
@@ -28,6 +28,7 @@
   "SEC_PUMP_KW",
   "CWS_T",
   "CWR_T",
+  "CW_GPM",
   "CT_FAN"
  ],
  "scenarios": [
