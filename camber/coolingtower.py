@@ -233,6 +233,7 @@ def analyze_cooling_tower_approach(
     elevation_ft: float | None = None,  # site elevation for a derived wet-bulb (None = sea level)
     pressure_psia: float | None = None,  # or a measured barometric pressure
     masks_out: dict | None = None,  # 0.102 (#119): filled with the judged samples
+    run_mask: pd.Series | None = None,  # 0.107 (#202): plant/pump running, ANDed with the gate
 ) -> CoolingTowerResult | None:
     """Compute tower approach from CW supply temp and wet-bulb (measured or derived).
 
@@ -252,6 +253,10 @@ def analyze_cooling_tower_approach(
 
     A derived wet-bulb assumes sea level unless ``elevation_ft`` / ``pressure_psia`` is given (see
     :func:`stull_wetbulb_f`); at altitude the uncorrected approach reads low.
+
+    ``run_mask`` (0.107, #202) is a boolean Series on ``df``'s index of the samples the plant
+    was running (a condenser pump, chiller or plant run status); when given, only those samples
+    are judged, on top of the fan / range gate. Missing samples count as not running.
 
     ``masks_out`` (0.102, #119), a dict, is filled with ``"judged"`` (a DataFrame of the
     ``wetbulb`` and ``approach`` of every sample judged) and ``"high"`` (a boolean Series on
@@ -284,6 +289,9 @@ def analyze_cooling_tower_approach(
     if "CWR_Temp" in w.columns:
         w = w[w.CWR_Temp.between(40, 130)]
 
+    if run_mask is not None:
+        run = pd.Series(run_mask).reindex(w.index)
+        w = w[run.where(run.notna(), False).astype(bool)]
     # "operating": fan running if we have it, else real heat rejection (CW range)
     effort_gated = None
     n_low_effort = None

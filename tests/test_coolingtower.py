@@ -147,6 +147,7 @@ def test_high_approach_at_full_fan_still_fires():
 
 def test_no_fan_trend_is_caveated():
     frame = _winter_floor_frame().drop(columns=[Role.TOWER_FAN_SPEED])
+    frame[Role.PUMP_STATUS] = 1.0  # 0.107 (#202): a run gate stands in for the fan
     got = CoolingTowerApproach(design_approach_f=8.0).analyze("CT-1", frame)
     assert got.metrics["effort_gated"] is None
     assert any("minimum condenser-water temperature" in c for c in got.caveats)

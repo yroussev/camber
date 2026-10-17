@@ -143,6 +143,10 @@ class DischargeSuperheatDrift:
             )
         caveats: list = []
         water = _dxfit.is_water_cooled(current)
+        # 0.107 (#201): an air-cooled unit needs a running gate; a water-cooled one is gated on
+        # its chilled-water load
+        if not water and not (_dxfit.has_run_gate(baseline) and _dxfit.has_run_gate(current)):
+            return self._declined(equip, _dxfit.NO_RUN_GATE, "no_run_gate")
         base_t = _dxfit.prepared(baseline, _ROLE, water=water)
         cur_t = _dxfit.prepared(current, _ROLE, water=water)
         if base_t.empty or cur_t.empty:

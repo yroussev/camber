@@ -175,6 +175,8 @@ class DXRefrigerantCharge:
                 "nameplate / installation manual, or score it against a fault-free baseline)",
                 "no_target",
             )
+        if not _dxfit.has_run_gate(frame):  # 0.107 (#201)
+            return self._declined(equip, _dxfit.NO_RUN_GATE, "no_run_gate")
         rows = frame[_dxfit.cooling_rows(frame)]
         vals = pd.to_numeric(rows[role], errors="coerce")
         lo, hi = _plausible(role)
@@ -284,6 +286,10 @@ class DXRefrigerantCharge:
             return self._declined(equip, f"no {self.metric} point", f"{self.metric}_not_mapped")
         caveats: list = []
         water = _dxfit.is_water_cooled(current)
+        # 0.107 (#201): an air-cooled unit needs a running gate; a water-cooled one is gated on
+        # its chilled-water load
+        if not water and not (_dxfit.has_run_gate(baseline) and _dxfit.has_run_gate(current)):
+            return self._declined(equip, _dxfit.NO_RUN_GATE, "no_run_gate")
         base_t = _dxfit.prepared(baseline, role, water=water)
         cur_t = _dxfit.prepared(current, role, water=water)
         if base_t.empty or cur_t.empty:
