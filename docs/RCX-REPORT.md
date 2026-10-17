@@ -12,6 +12,7 @@ camber report site.json --out rcx.html --layout rcx
 camber report site.json --out rcx.html --layout rcx --week oat-range --paper a4
 camber report site.json --out rcx.html --layout rcx --notes notes.json --notes-template slots.json
 camber report site.json --out rcx.pdf --layout rcx   # PDF directly (the [pdf] extra, 0.107)
+camber report site.json --out rcx.html --layout rcx --prose prose.json   # verified prose (0.107)
 ```
 
 ![Screenshot of the RCx report's contents, cover and executive summary](img/shots/rcx-report.png)
@@ -40,7 +41,7 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P8+ | One page per issue | Headed by the finding's cause (0.98, #88: "Outdoor-air damper not modulating (stuck low)"), not the remedy; the recommended action keeps its own title ("Recommended action — Repair the outdoor-air damper or actuator: ..."), and the executive summary's Issue column shows the cause. When a member finding names the equipment at fault and the root does not, the member's cause heads the issue (0.100, #101; [precedence below](#which-cause-heads-an-issue)). $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
 | — | Verify on site | 0.98 (#88): the walk-down checklist, after the issue pages ([`camber.walkdown`](#verify-on-site), provisional). A lead paragraph links PNNL Re-tuning chapter 9 (Building Walk Down), then one table per kind of item, in walk-down order: **sensors and setpoints** (each sensor a conditional issue leans on, with its trust; a `sensor_drift` issue's sensor; each input a check declined as untrusted), **equipment and controls** (one item per issue from a per-rule, per-cause template), **design values** the checks assumed (a site fact such as a minimum outdoor-air fraction, a high limit or an occupancy schedule left at the rule's default) and **points the checks lacked** (Appendix A's checks not evaluated). Columns: # (linked to the issue; A for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Section id `verify`, engineer-note slot `section:verify`; on by default, omitted when it would be empty. |
 | — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced), plus chapter 9 when the report has a Verify on site section. Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
-| A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: fact index (reserved). E: orphaned engineer notes. |
+| A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: the [fact index](#generated-prose-and-the-fact-index) that generated prose cites, listed when generated prose is enabled. E: orphaned engineer notes. |
 
 ## Issues: grouping, dollars and hours
 
@@ -281,6 +282,82 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
 `FaultRecord.notes` from the fault store: the facility-keyed `state/<facility_id>/faults.json` in a
 [portfolio workspace](PORTFOLIO.md), or the config's `faults.store`.
 
+## Generated prose and the fact index
+
+0.107 (#194). The report can carry generated prose in two kinds of slot: one paragraph in the
+executive summary (slot `exec_summary`), and a "what we found / why it matters" paragraph on each
+issue page (slot `issue:<key>`). These are the slot ids the engineer notes use. Prose is **off by
+default**: with no prose source, the report is the deterministic one, byte for byte.
+
+**Sources.** No network call is made unless you configure one.
+
+- A **prose file**: JSON keyed by slot, each value a string or `{"text": ...}`. Pass it with
+  `--prose prose.json` or set `report.rcx.prose` (a path relative to the config). The same
+  inputs and the same prose file give the same report, so this is the offline, reproducible path.
+- A **model you wire**. On the CLI, `--llm-cmd CMD` is the seam `camber explain` and
+  `camber ask` use: a shell command that reads the prompt on stdin and writes the completion on
+  stdout. In Python, pass an [`AgentClient`](AGENT.md) as `build_rcx_report(run, client=...)`.
+  The model is asked only for the slots the prose file does not cover. A failed call falls back
+  like a failed slot. The command is a CLI flag only; a config cannot start one.
+
+`--prose-prompts prompts.json` (`camber.report.rcx.prose_prompts(report)`) writes each slot's
+prompt: the instructions, the facts the slot may cite and the task. Send them to a model of your
+choice, then save the answers as a prose file:
+
+```bash
+camber report site.json --layout rcx --out rcx.html --prose-prompts prompts.json
+# generate prose.json from prompts.json offline, keyed by the same slots
+camber report site.json --layout rcx --out rcx.html --prose prose.json
+```
+
+```json
+{
+  "exec_summary": "The report ranks 3 issues [K1@summary]. The 1 costed, non-conditional issue(s) total $7,727/yr [K2@summary].",
+  "issue:a8612f9b8b3b": "Both coils were open 26.7% of occupied hours [F2@a8612f9b8b3b], an estimated $7,727/yr [C1@a8612f9b8b3b]."
+}
+```
+
+**Verification.** Each slot's text goes through `camber.agent.verify.check` with
+`require_cite_each_sentence=True`, against the facts that slot may cite:
+
+- Every sentence must cite at least one fact id that resolves, as `[id]` before its full stop.
+- Every figure in a sentence must appear in a fact *that sentence* cites. A total from the
+  summary cannot back a figure in a sentence that cites only an issue's hours.
+- A citation of an id the slot may not cite is stripped. That is an unknown id, or a real fact
+  outside the slot's scope.
+
+A slot is shown only when no sentence was dropped. When a sentence is uncited or states a
+figure no cited fact holds, the whole slot falls back: the page keeps its standard text, and
+Appendix A lists the slot, its source and why ("1 sentence(s) stating a figure no cited fact
+holds"). An engineer note on a slot overrides its prose. The prose is not shown, and a wired model
+is not asked for that slot.
+
+Shown prose is boxed and marked "Generated text from an offline prose file" (or "from a language
+model"), with each citation as a superscript and the cited facts listed under the paragraph, so
+a reader can check every sentence. The summary's paragraph sits under the KPI strip. An issue
+page's paragraph sits under its opening banners. The PDF output renders the same blocks. When the executive summary shows prose, its one-page
+print cap is lifted, so the summary may run onto a second printed page rather than be clipped.
+
+**The fact index.** `RcxReport.facts` (a `camber.agent.Context`) is built from the same objects
+the tables render. Each fact is one statement the report shows, or one it assembles from the same
+values. An id is a kind letter, a number and a context: `K1@summary`.
+
+| Context | Kinds (letter) |
+|---|---|
+| `summary` | KPIs (`K`): issues ranked, the costed total, at-risk dollars, uncosted and conditional counts, data coverage, declined checks |
+| `appA` | declines (`X`), checks not evaluated and missing optional inputs (`M`), caveats (`V`), AHU-to-VAV chains left unlinked (`G`), equipment no rule evaluated (`Q`) |
+| `appB` | assumptions (`A`): each cost default, the energy price, the sizing supplied |
+| the issue key | the headline (`I`, with rank, cause, equipment, severity, confidence), the issue cost or its uncosted reason (`C1`), the member costs and exclusions (`C2`...), the violation hours (`T`), the members (`F`), the action (`R`), the confidence reasons (`W`), sensor dependencies (`D`), upstream and downstream links (`U`), cause chains with their box counts (`Z`), caveats (`V`) |
+
+Numbers count per kind within a context, in the order the report shows them. An issue's context
+is its key, the root finding's fingerprint, so its ids stay the same from run to run and do not
+shift when other issues come or go. The executive summary may cite the report-level facts and
+the headline, cost, hours and action of the issues in its table. An issue page may cite its own
+facts and the assumptions. With prose on, Appendix D lists the whole index. With prose off,
+Appendix D says only that the index is listed when prose is enabled. `to_dict()` carries `facts`
+and `prose`, which gives each attempted slot's outcome: `status` (`rendered`, `fallback` or
+`overridden`), `source`, `reason`, `text` and `cited`.
+
 ## Configuration
 
 ```json
@@ -294,7 +371,8 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
     "occupancy": {"start_hour": 6, "end_hour": 20, "days": [0, 1, 2, 3, 4, 5]},
     "oat_reference": {"csv": "weather/oat_reference.csv"},
     "sequence": {"sat_reset": {"oat": [50, 70], "sat": [60, 55], "tol_f": 2}},
-    "notes": "notes.json"
+    "notes": "notes.json",
+    "prose": "prose.json"
   }
 }
 ```

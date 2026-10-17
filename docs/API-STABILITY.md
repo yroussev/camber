@@ -788,6 +788,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `ENTHALPY_BTUH_PER_CFM`, `HEATING_RISE_F` and `HEATING_VALVE_PCT`; and the rule attribute
   `roles_cost`. **Behaviour change:** `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`
   (the generic 20 %, judged as before, but not priced).
+- **RCx generated prose and fact index** (0.107; #194), additive and provisional: the module
+  `camber.report.rcx_prose` (`load_prose`, `prose_prompts`); `camber.report.rcx.load_prose` and
+  `prose_prompts`; `RcxOptions.prose` (config `report.rcx.prose`); `RcxReport.facts`, `prose`
+  and `prose_enabled`, and the `facts` and `prose` keys of `RcxReport.to_dict()`; the `prose=`
+  keyword of `build_rcx_report` (its `client=` now writes prose); the
+  `require_cite_each_sentence=` keyword of `camber.agent.verify.check` and context-qualified
+  `[F1@ctx]` citations; and `camber report --prose`, `--prose-prompts` and `--llm-cmd`. The fact
+  kinds, id letters and slot scopes may change in a minor release.
 - **RCx zone chains** (0.107; #196), additive and provisional: `camber.rules.triage.ZONE_CHAINS`,
   `ZONE_ROGUE_LINKS`, `ZoneLink`, `zone_chain_gaps`, `Issue.zone_links` and the `zone_chains`
   key of `Issue.to_dict()`. The chain pairs may change in a minor release. **Behaviour change:**

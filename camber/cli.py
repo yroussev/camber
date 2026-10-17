@@ -135,6 +135,18 @@ def _cmd_report(args) -> int:
     layout = args.layout or str((cfg.get("report") or {}).get("layout") or "audit")
     if layout == "rcx":
         return _report_rcx(args, cfg, base)
+    extra = [
+        flag
+        for flag, val in (
+            ("--prose", getattr(args, "prose", None)),
+            ("--prose-prompts", getattr(args, "prose_prompts", None)),
+            ("--llm-cmd", getattr(args, "llm_cmd", None)),
+        )
+        if val
+    ]
+    if extra:  # 0.107 (#194): only the rcx layout has prose slots
+        print(f"error: {', '.join(extra)} is for --layout rcx", file=sys.stderr)
+        return 2
     if _is_pdf(args.out):  # 0.107 (#197): only the rcx layout has print rules to render
         print(
             f"error: PDF output is for --layout rcx; the {layout} layout writes .html "
@@ -214,11 +226,15 @@ def _report_rcx(args, cfg, base) -> int:
         rcx_cfg["lifecycle"] = True
     rep_cfg["rcx"] = rcx_cfg
     options = RcxOptions.from_config(rep_cfg, base_dir=base)
+    if getattr(args, "prose", None):  # 0.107 (#194): the flag beats report.rcx.prose
+        options.prose = args.prose
     notes_path = args.notes or rcx_cfg.get("notes")
     if notes_path and not os.path.isabs(notes_path) and not args.notes:
         notes_path = os.path.join(base, notes_path)
     res = run_config(cfg, base_dir=base)
-    rep = build_rcx_report(res, options=options, notes=load_notes(notes_path))
+    rep = build_rcx_report(
+        res, options=options, notes=load_notes(notes_path), client=_client_from_args(args)
+    )
     if pdf:
         try:
             rep.to_pdf(args.out)
@@ -239,7 +255,19 @@ def _report_rcx(args, cfg, base) -> int:
         print("week: " + (w.explanation if not w.declined else f"declined -- {w.reason}"))
     if rep.orphans:
         print(f"{len(rep.orphans)} engineer note(s) matched no slot -> Appendix E")
+    if rep.prose_enabled:
+        shown = sum(1 for v in rep.prose.values() if v["status"] == "rendered")
+        fell = sum(1 for v in rep.prose.values() if v["status"] == "fallback")
+        print(f"prose: {shown} slot(s) shown, {fell} fell back to the standard text (Appendix A)")
     written = {args.out: "report"}
+    if getattr(args, "prose_prompts", None):
+        from .report.rcx import prose_prompts
+
+        prompts = prose_prompts(rep)
+        with open(args.prose_prompts, "w") as fh:
+            json.dump(prompts, fh, indent=2)
+        print(f"wrote {args.prose_prompts}  ({len(prompts)} prose slots)")
+        written[args.prose_prompts] = "report"
     if args.notes_template:
         with open(args.notes_template, "w") as fh:
             json.dump(notes_template(rep), fh, indent=2)
@@ -2847,6 +2875,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--lifecycle",
         action="store_true",
         help="rcx: also show the fault store's notes on each issue page",
+    )
+    prep.add_argument(
+        "--prose",
+        help="rcx: pre-generated prose JSON (slot -> text), shown only when every sentence "
+        "cites the fact index",
+    )
+    prep.add_argument(
+        "--prose-prompts",
+        dest="prose_prompts",
+        help="rcx: write each prose slot's prompt (with its facts) here, for offline generation",
+    )
+    prep.add_argument(
+        "--llm-cmd",
+        dest="llm_cmd",
+        help="rcx: shell command (prompt on stdin -> completion on stdout) that writes the "
+        "prose slots --prose does not cover",
     )
     prep.set_defaults(func=_cmd_report)
 

@@ -117,6 +117,12 @@ Every generated answer runs through `verify.check(text, context, *, strict=True)
   subset instead of misleading;
 - if strict verification empties the answer, `explain`/`ask` **fall back to the deterministic
   template** — you always get a useful, grounded response.
+- `require_cite_each_sentence=True` (0.107, #194) is the stricter mode the
+  [RCx report's prose slots](RCX-REPORT.md#generated-prose-and-the-fact-index) use: a sentence
+  with no `[id]` that resolves is flagged `uncited-sentence` and dropped, and each sentence's
+  numbers must appear in the facts that sentence cites.
+- a fact id may be **context-qualified**, `[F1@ctx]` (0.107): the part after `@` (letters,
+  digits, `_`, `-`) says where the fact lives. Plain `[F1]` ids work as before.
 
 `Grounded(text, cited, facts, grounded, flagged, source)` — `source ∈ {"llm", "template"}` tells you
 which path produced the answer.

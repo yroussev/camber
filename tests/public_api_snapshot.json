@@ -1858,8 +1858,14 @@
     "WeekChoice",
     "build_rcx_report",
     "load_notes",
+    "load_prose",
     "notes_template",
+    "prose_prompts",
     "select_week"
+  ],
+  "camber.report.rcx_prose": [
+    "load_prose",
+    "prose_prompts"
   ],
   "camber.report.site": [
     "build_site_report"
