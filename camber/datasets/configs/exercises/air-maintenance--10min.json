@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise air-maintenance, the resolution lesson (1): control_hunting on the same 5-minute data resampled to 10 minutes. Each 10-minute value is the mean of two samples, which averages an 11-minute hunting cycle away, and a 10-minute trend can show at most 6 reversals an hour, the warn threshold itself: the verdict is capped and a pass proves little.",
+  "_comment": "Workbook exercise air-maintenance, the resolution lesson (1): control_hunting on the same 5-minute data resampled to 10 minutes. Each 10-minute value is the mean of two samples, which averages an 11-minute hunting cycle away, and a 10-minute trend can show at most 6 reversals an hour, the warn threshold itself, too close to it to judge, so the rule declines (info) on every unit.",
   "_dataset": "synthetic-ahu-maintenance",
   "source": {
     "kind": "store",

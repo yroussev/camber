@@ -14,9 +14,9 @@ Read these first (PNNL, free):
 
 - [Chapter 5: Air Handling Units][pnnl-retuning-ch5] of the re-tuning training, for reading an
   air handler's trends before you change anything.
-- [Chapter 9: Building Walk Down][pnnl-retuning-ch9]: its air-handler walk-down lists dirty,
-  plugged or collapsed filters among the things to inspect. A trend tells you which unit to
-  open first.
+- [Chapter 9: Building Walk Down][pnnl-retuning-ch9], the reference `filter_fouling` cites: its
+  air-handler walk-down lists dirty, plugged or collapsed filters among the things to inspect. A
+  trend tells you which unit to open first.
 - [Trending Requirements for Re-Tuning][pnnl-trending-requirements]: which points to trend, at
   what interval and for how long. Steps 6 and 7 show why the interval matters here.
 
@@ -96,32 +96,33 @@ camber run ahu15.json --out ahu15_out
 1. Which filters does `filter_fouling` flag over the fortnight, and how badly? What do
    `pct_over_threshold` and `filter_dp_p95_inwc` say about the filter that passes but
    rose the most in your step 1 plot?
-2. What share of the run is the fan off, and what does a filter transmitter read then? What do
-   those samples do to the median the rule judges?
+2. What share of the run is the fan off, what does a filter transmitter read then, and what does
+   the rule do with those samples?
 3. Judged on the last week only, what does `filter_fouling` say about `AHU__loading`? What
    should the site do, and when should the next check run?
 4. Which valve does `control_hunting` flag, at what rate, and why not as a fault? What separates
    `AHU__near_miss` from it?
 5. What does the label score say for the two rules over the fortnight, and on the last week for
    `filter_fouling`? Which miss is the rule's, and which is the window's?
-6. Resampled to 10 minutes, what does `control_hunting` say about `AHU__hunting`, and what does
-   the caveat say? Is that `ok` a pass?
-7. Resampled to 15 minutes, what does the rule say, and why is that more honest than the 10-minute
-   answer?
+6. Resampled to 10 minutes, what does `control_hunting` say, and what does
+   `reversal_share_of_max` show about the hunting valve against the near miss?
+7. Resampled to 15 minutes, what does the rule say, and why does it decline for a different
+   reason than at 10 minutes?
 
 ## What CAMBER shows
 
 - **Findings.** `camber run` prints one line per finding: one per rule and unit.
 - **Filter.** `filter_fouling` reports `filter_dp_median_inwc` (the median differential
-  pressure over every sample of the run), `pct_over_threshold` (the share of samples above the
-  change-out pressure), `filter_dp_p95_inwc` and `change_dp_inwc`. It warns when the median
-  reaches the change-out pressure (1.0 in. w.c. by default) and faults at 1.5 times it.
+  pressure over the fan-on samples), `pct_over_threshold` (the share of those samples above the
+  change-out pressure), `filter_dp_p95_inwc`, `change_dp_inwc` and `n_masked_fan_off` (the
+  fan-off samples it set aside). It warns when the median reaches the change-out pressure (1.0
+  in. w.c. by default) and faults at `fault_factor` (1.5) times it.
 - **Hunting.** `control_hunting` reports `reversals_per_hr` (direction reversals beyond a 5 %
-  deadband, per observed hour of the trend) on the worst of the unit's valves and dampers,
+  deadband, per fan-on hour of the trend) on the worst of the unit's valves and dampers,
   `reversals` and `max_resolvable_per_hr`, the most reversals the trend's interval can show (one
   per sample). It warns at 6 an hour and faults at 12. When the interval cannot show the warn
-  rate it declines (`info`) with a caveat; when it cannot show the fault rate, a caveat says the
-  severity is capped at warn.
+  rate with a margin (its ceiling must be 1.25 times a threshold) it declines (`info`) with a
+  caveat; when it cannot show the fault rate, a caveat says the severity is capped at warn.
 - **Score.** `camber datasets score` prints the true- and false-positive rates for the entry's
   two declared detectors.
 
@@ -134,7 +135,8 @@ camber run ahu15.json --out ahu15_out
 - The data are synthetic: CAMBER's own model of one air handler, built to show these faults.
   They show what the rules see, not how real units behave; never cite them as evidence about a
   building.
-- Both rules read every sample of the run, the hours with the fan off included.
+- Both rules judge only the samples with the fan running (status, else speed, else airflow); a
+  unit with no fan signal is judged over every sample, with a caveat.
 - `filter_fouling` does not correct for airflow. A filter's pressure drop rises with the air
   through it, so on a variable-volume unit a low fan speed reads as a cleaner filter. This unit is
   constant-volume.
