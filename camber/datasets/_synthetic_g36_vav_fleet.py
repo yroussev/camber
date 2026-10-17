@@ -41,10 +41,22 @@ The eight air handlers (``scenario``):
   than the healthy fleet's zone 1, but not often enough to be called a rogue.
 
 Every air handler runs weekdays 05:00-19:00 (the occupancy point reads occupied 06:00-18:00);
-the zones set back to 62-80 °F with the fan off. Each box reports its airflow, its minimum airflow
-setpoint (``ZN{n}_FLOW_MIN``), its damper and its reheat valve, as well as the space temperature
-and both setpoints. The resets keep trimming while the fan is off (no requests), so each morning
-starts at the trim end.
+the zones set back to 62-80 °F with the fan off. Each box reports its airflow, its active airflow
+setpoint (``ZN{n}_FLOW_SP``: what the controller asks the damper for this hour, between the
+minimum and the cooling or heating maximum; 0 with the fan off) and its minimum airflow setpoint
+(``ZN{n}_FLOW_MIN``), its damper and its reheat valve, its heating and cooling loop outputs
+(``ZN{n}_HTG_LOOP`` and ``ZN{n}_CLG_LOOP``, 0-100 %, 0 with the fan off), as well as the space
+temperature and both setpoints. The resets keep trimming while the fan is off (no requests), so
+each morning starts at the trim end.
+
+The loops are the signals the boxes are sequenced on (version 2, 0.106). The cooling loop is the
+zone's cooling demand as a share of its cooling maximum: the box holds its minimum until the loop
+asks for more, and the loop over 95 % is the tier-1 SAT request. The heating loop is the zone's
+heating demand: in the dual-maximum sequence the reheat valve opens over its first half and the
+airflow rises toward the heating maximum over its second; the single-maximum boxes of ``reheat``
+follow the same loop with their airflow held high. The fighting boxes of ``heat_cool`` carry both
+loops at once: a heating loop at half their valve (the dual-maximum valve range) and a cooling
+loop that includes the reheat they add.
 """
 
 from __future__ import annotations
@@ -143,7 +155,7 @@ def _fleet(seed: int, scenario: str, a: int, idx: pd.DatetimeIndex, oat: np.ndar
     heat_sp[~fan] = 62.0
     jit = [(_noise(n, seed, 300 + 10 * a + k) - 0.5) for k in range(_N_ZONES)]
     fight = [_smooth(_noise(n, seed, 400 + k), 4) for k in range(_N_ZONES)]
-    cols = {f: np.zeros((n, _N_ZONES)) for f in ("T", "FLOW", "DMPR", "VLV")}
+    cols = {f: np.zeros((n, _N_ZONES)) for f in ("T", "FLOW", "DMPR", "VLV", "SP", "HL", "CL")}
     sat_sp_out, dsp_sp_out = np.empty(n), np.empty(n)
     sat_req_out, dsp_req_out = np.zeros(n), np.zeros(n)
     dsp_out, sat_out = np.empty(n), np.empty(n)
@@ -166,14 +178,16 @@ def _fleet(seed: int, scenario: str, a: int, idx: pd.DatetimeIndex, oat: np.ndar
             c = load[i, k] * 20.0 / (_COOL_SP - sat_sp)  # warmer supply air needs more of it
             reheat_box = scenario == "reheat" and k in (1, 3)
             fighting = scenario == "heat_cool" and k < 5
-            valve = 0.0
+            valve = heat_loop = 0.0
             if fighting:
                 c = c + 0.35  # the reheat it adds is load the cooling airflow must remove
                 valve = 35.0 + 25.0 * float(fight[k][i])
+                heat_loop = valve / 2.0  # the dual-maximum valve range is the loop's first half
             if c >= 0.0:
                 want = min(max(c * vmax[k], vmin[k]), vmax[k])
             else:
                 h = min(-c / 0.8, 1.0)  # heating loop, 0-1
+                heat_loop = 100.0 * h
                 if reheat_box:
                     want = 0.8 * vmax[k]
                     valve = 100.0 * min(1.0, h + 0.15)
@@ -193,7 +207,7 @@ def _fleet(seed: int, scenario: str, a: int, idx: pd.DatetimeIndex, oat: np.ndar
                 # held between the two setpoints; the heating loop lets go once the zone is warm
                 t = cool_sp[i, k] + 0.4 + min(_WARM_F * short, 9.0)
                 if t >= heat_sp[i, k]:
-                    valve = 0.0
+                    valve = heat_loop = 0.0
             elif c >= 0.0:
                 t = cool_sp[i, k] - 1.2 + 1.0 * min(c, 1.0) + min(_WARM_F * short, 9.0)
             else:
@@ -202,6 +216,8 @@ def _fleet(seed: int, scenario: str, a: int, idx: pd.DatetimeIndex, oat: np.ndar
             temp[k] = t
             cols["T"][i, k], cols["FLOW"][i, k] = t, flow
             cols["DMPR"][i, k], cols["VLV"][i, k] = damper, valve
+            cols["SP"][i, k], cols["HL"][i, k] = want, heat_loop
+            cols["CL"][i, k] = 100.0 * min(max(c, 0.0), 1.0)
             # the box's G36 reset requests (SAT and duct static)
             over = t - cool_sp[i, k]
             sat_req += 3 if over >= 5.0 else 2 if over >= 3.0 else 1 if c > 0.95 else 0
@@ -238,9 +254,12 @@ def _fleet(seed: int, scenario: str, a: int, idx: pd.DatetimeIndex, oat: np.ndar
         out[z + "CLG_SP"] = cool_sp[:, k]
         out[z + "HTG_SP"] = heat_sp[:, k]
         out[z + "FLOW"] = np.round(cols["FLOW"][:, k]).astype(int)
+        out[z + "FLOW_SP"] = np.round(cols["SP"][:, k]).astype(int)
         out[z + "FLOW_MIN"] = np.full(n, int(vmin[k]))
         out[z + "DMPR"] = np.round(cols["DMPR"][:, k]).astype(int)
         out[z + "RHT_VLV"] = np.round(cols["VLV"][:, k]).astype(int)
+        out[z + "HTG_LOOP"] = np.round(cols["HL"][:, k], 1)
+        out[z + "CLG_LOOP"] = np.round(cols["CL"][:, k], 1)
     return out
 
 
@@ -263,13 +282,14 @@ def _g36_vav_fleet(seed: int) -> dict:
 register(
     "g36_vav_fleet",
     Generator(
-        version=1,
+        version=2,
         files=("g36_vav_fleet.csv",),
         build=_g36_vav_fleet,
         description=(
             "a VAV air handler with six reheat boxes under Guideline 36 trim-and-respond resets "
             "(SAT and duct-static setpoints and request counts; each box's space temperature and "
-            "setpoints, airflow and minimum, damper and reheat valve), hourly for three weeks of "
+            "setpoints, airflow, active airflow setpoint and minimum, damper, reheat valve and "
+            "heating and cooling loops), hourly for three weeks of "
             "spring, as eight air handlers: a healthy one, a rogue zone dragging the SAT reset, a "
             "rogue zone holding duct static up, a starved cohort behind a capped fan, a reset "
             "that ignores its requests, single-maximum reheat, overlapping heating and cooling "

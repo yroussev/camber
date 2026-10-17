@@ -25,10 +25,16 @@ plants that differ in one way each:
 Each plant is four pieces of equipment in the CSV's columns: ``CH1_*`` and ``CH2_*`` (each
 chiller's run status, power, leaving and entering water, condenser and evaporator approach),
 ``SEC_*`` (the secondary loop's supply and return, flow, pump speed and pump power; the plant's
-supply setpoint ``CHWS_SP`` is shared), and the tower's ``CWS_T``, ``CWR_T`` and ``CT_FAN``, with
-the outdoor ``OAT`` and ``WB``. The approaches are the chiller controller's own refrigerant-side
-readings, emitted directly. Off samples carry a 0 (status, power, flow, fan) or a blank (the
-approaches and the condenser water).
+supply setpoint ``CHWS_SP`` is shared), and the tower's ``CWS_T``, ``CWR_T``, ``CW_GPM`` and
+``CT_FAN``, with the outdoor ``OAT`` and ``WB``. The approaches are the chiller controller's own
+refrigerant-side readings, emitted directly. Off samples carry a 0 (status, power, flow, fan) or a
+blank (the approaches and the condenser water temperatures).
+
+Each running chiller has its own constant-speed condenser pump (600 gpm), so the tower's
+condenser-water flow ``CW_GPM`` (version 2, 0.106) steps from 600 to 1200 gpm when the lag chiller
+stages on, read through a flow meter about 1 % noisy. With both chillers on, the same heat
+rejected spreads over twice the water and the tower's range halves: a rule that matched the
+tower's fan effort on the range alone read that as the tower working harder.
 """
 
 from __future__ import annotations
@@ -102,7 +108,7 @@ def _chw_plant_multi(seed: int) -> dict:
     frames = []
     for k, (scenario, spec) in enumerate(_PLANTS.items()):
         up, down, (dt0, dt1), cond_foul, tower_foul = spec
-        jit = [_noise(n, seed, 100 * (k + 1) + s) - 0.5 for s in range(8)]
+        jit = [_noise(n, seed, 100 * (k + 1) + s) - 0.5 for s in range(9)]
         count = _stage(tons, on, up, down)
         prim = _PRI_GPM * count
         # secondary loop: the coils' delta-T sets the flow the pumps must move
@@ -131,6 +137,8 @@ def _chw_plant_multi(seed: int) -> dict:
         cw_gpm = _CW_GPM * np.maximum(count, 1)
         cwr = cws + rej * 24.0 / cw_gpm
         fan_pct = np.where(running, np.clip(100.0 * fan + 0.8 * jit[3], 0.0, 100.0), 0.0)
+        # the condenser pumps (one per running chiller), through a flow meter about 1 % noisy
+        cw_flow = np.where(running, _CW_GPM * count * (1.0 + 0.02 * jit[8]), 0.0)
         cols = {
             "Timestamp": idx.strftime("%Y-%m-%d %H:%M"),
             "scenario": scenario,
@@ -165,6 +173,7 @@ def _chw_plant_multi(seed: int) -> dict:
                 "SEC_PUMP_KW": np.round(pump_kw, 1),
                 "CWS_T": np.round(cws, 1),
                 "CWR_T": np.round(cwr, 1),
+                "CW_GPM": np.round(cw_flow, 0),
                 "CT_FAN": np.round(fan_pct, 1),
             }
         )
@@ -178,7 +187,7 @@ def _chw_plant_multi(seed: int) -> dict:
 register(
     "chw_plant_multi",
     Generator(
-        version=1,
+        version=2,
         files=("chw_plant_multi.csv",),
         build=_chw_plant_multi,
         description=(
@@ -186,11 +195,11 @@ register(
             "variable-flow secondary loop and one cooling tower (OAT, wet-bulb; each chiller's "
             "status, power, leaving and entering water, condenser and evaporator approach; the "
             "secondary supply, return, setpoint, flow, pump speed and power; the tower's "
-            "leaving and return water and fan speed), every 15 minutes for three summer weeks "
-            "with a heat wave, as seven plants: well run, both chillers always on, decoupler "
-            "reverse mixing from low delta-T coils, a fouled condenser on chiller 1, a fouled "
-            "tower pinned at full fan, a fouled tower that holds its setpoint by fan effort, "
-            "and a near miss"
+            "leaving and return water, condenser-water flow and fan speed), every 15 minutes "
+            "for three summer weeks with a heat wave, as seven plants: well run, both chillers "
+            "always on, decoupler reverse mixing from low delta-T coils, a fouled condenser on "
+            "chiller 1, a fouled tower pinned at full fan, a fouled tower that holds its "
+            "setpoint by fan effort, and a near miss"
         ),
     ),
 )

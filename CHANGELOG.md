@@ -121,6 +121,20 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   starved air handler. `cohort_space_temp` needs a 1 °F difference from the median
   (`min_abs_dev`). `cohort_airflow` reads `info` when its cohort spreads past 0.3 (`max_spread`)
   and nothing stands out. See docs/TR-RESET.md and docs/CAPABILITIES.md.
+- **Two synthetic entries publish the points #184 and #186 added (generator version 2).** The
+  cache regenerates them on the next fetch or ingest, because the generator version changed.
+  `synthetic-chw-plant-multi`'s tower now trends its condenser-water flow (`CW_GPM`, mapped to
+  `cw_flow`). Each running chiller has one 600 gpm pump, so the flow is 600 or 1,200 gpm,
+  read about 1 % noisy. The tower drift rules now match on the heat rejected. The over-staged
+  plant's tower no longer reads as working harder: `cooling_tower_fan_effort_drift` drops from
+  +6.5 to +0.8 points, `ok`. The two fouled towers still fault. `synthetic-g36-vav-fleet`'s boxes
+  now trend their active airflow setpoint (`ZN{n}_FLOW_SP`, mapped to `airflow_sp`) apart from
+  their minimum (`ZN{n}_FLOW_MIN`, now `airflow_min_sp`). They also trend their heating and
+  cooling loops (`ZN{n}_HTG_LOOP` and `ZN{n}_CLG_LOOP`, mapped to `zone_heat_loop` and
+  `zone_cool_loop`). The censuses now count about as many requests as the air handlers' own
+  `SAT_REQ` and `DSP_REQ`. `reheat_minimization_g36` reads the high heating loop from the loop,
+  not the valve, and both single-maximum boxes still fault. The `plant-chiller-multi` and
+  `zone-g36-fleet` workbook answers move.
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
