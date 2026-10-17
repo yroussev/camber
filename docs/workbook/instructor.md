@@ -722,15 +722,16 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 5. *Room 925038.* Its valve column is an assumed constant in the published data, not a
    measurement, so it is not mapped. With no outdoor-air signal the DCV rule does not evaluate
    the room: no finding at all.
-6. *Over-ventilated and functioning?* No contradiction. The rooms are occupied only a small share
-   of the time, and the valve's 20 % minimum keeps CO₂ near outdoor in 73 to 86% of occupied hours
-   (`co2_ventilation` **warn** on all five). DCV responds to demand. Whether the minimum is
-   higher than the rooms need is a separate, energy question.
+6. *Over-ventilated and functioning?* No contradiction. Judged on the hours each room's presence
+   sensor reads occupied, CO₂ sits near outdoor in 30 to 66% of them. Only room 925038 (66%)
+   reaches the over-ventilation **warn**; the other four are `ok`. On the assumed weekday 07-18
+   schedule, which counted empty hours, all five were **warn** at 73 to 86%. DCV responds to
+   demand. Whether the minimum is higher than the rooms need is a separate, energy question.
 7. *The Danish rooms.* `ROOM1`, the lecture room, functions: a 181 ppm lift, correlation 0.89.
    `ROOM2` and `ROOM3` are "DCV not judged -- CO₂ never reached the level where DCV should
    respond" (reason `demand_below_engage`). The study zones never got busy enough to test the
    DCV. That is neither good nor bad news about the controls, only an absence of evidence.
-   `ROOM2` is also over-ventilated (CO₂ near outdoor in 66% of occupied hours).
+   `ROOM2` is also over-ventilated (CO₂ near outdoor in 74% of occupied hours).
 8. *Which sensor to trust?* Check each sensor against outdoor air when the room is empty (does it
    settle near 400–450 ppm?), against the other sensor when the room is busy, and for location
    (a desk sensor sees the occupants, a return-air or duct sensor sees a mix). Calibrate or

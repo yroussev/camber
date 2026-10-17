@@ -100,7 +100,12 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   over-ventilated. `OCCUPANCY` is now an optional role: a trended point replaces the schedule
   (`effective_occupied_mask`, as in `dcv_verification`). A finding judged on the assumed schedule
   carries a caveat, and the new `occupancy_basis` metric says which was used.
-  `analyze_co2_ventilation` takes an `occupied` mask.
+  `analyze_co2_ventilation` takes an `occupied` mask. Workbook `zone-dcv` is re-recorded on the
+  rooms' trended presence points. The b4b-windesheim rooms' over-ventilation share moves from
+  73-86 % to 30-66 %, and `co2_ventilation` moves from warn to ok on ROOM_917810,
+  ROOM_917810_scd41, ROOM_999169 and ROOM_999169_scd41 (ROOM_925038 stays warn). The sdu-ou44
+  ROOM2 `over_vent_pct` moves from 66.5 to 74.4 (still warn). The b4b stand-in gives its two
+  valve rooms two-person visits, so it tells the same story.
 - **`static_pressure_reset` takes its range and median from fan-on samples (#203).** Only the
   classifier saw the fan-gated setpoint; `sp_range_inwc` and `sp_median_inwc` came from every
   sample, so a flat setpoint that reads 0 with the fan stopped showed a range of its full value
