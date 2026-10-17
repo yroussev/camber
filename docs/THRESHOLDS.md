@@ -70,7 +70,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`cohort_airflow`](#cohort_airflow) | 6 |  |
 | [`cohort_space_temp`](#cohort_space_temp) | 6 |  |
 | [`compressor_short_cycle`](#compressor_short_cycle) | 2 | yes |
-| [`compressor_staging`](#compressor_staging) | 1 | yes |
+| [`compressor_staging`](#compressor_staging) | 2 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
 | [`condenser_water_reset`](#condenser_water_reset) | 4 |  |
 | [`control_hunting`](#control_hunting) | 6 |  |
@@ -84,10 +84,10 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`filter_fouling`](#filter_fouling) | 3 |  |
 | [`free_cooling_missed`](#free_cooling_missed) | 11 |  |
 | [`g36_afdd`](#g36_afdd) | 16 |  |
-| [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
-| [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
-| [`hp_mode_vs_need`](#hp_mode_vs_need) | 9 |  |
-| [`hp_room_imbalance`](#hp_room_imbalance) | 9 |  |
+| [`heatpump_defrost`](#heatpump_defrost) | 2 | yes |
+| [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 11 |  |
+| [`hp_mode_vs_need`](#hp_mode_vs_need) | 10 |  |
+| [`hp_room_imbalance`](#hp_room_imbalance) | 10 |  |
 | [`hw_plant_deltat`](#hw_plant_deltat) | 1 |  |
 | [`hw_pump_dp_reset`](#hw_pump_dp_reset) | 2 | yes |
 | [`hw_pump_summer_lockout`](#hw_pump_summer_lockout) | 1 |  |
@@ -367,10 +367,12 @@ Fixed in code: warn at max_starts_per_day or more; fault at twice it (the factor
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `max_changes_per_day` | `24.0` | compressor-stage changes per day | 8.0 to 96.0 | CAMBER judgment: depends on the staging hysteresis; no source is cited |
+| `max_interval_min` | `5.0` | minutes | 1.0 to 15.0 | CAMBER judgment: a stage held for less than the trend interval averages away in a resampled mean; stage-up and stage-down delays are typically a few minutes |
 
 How to calibrate:
 
-- `max_changes_per_day`: Count the stage changes per day in a known-good period with a similar load and set the ceiling above its busiest day; the controller's stage-up / stage-down delays bound what a stable sequence can do. *Note:* Warn at the ceiling, fault at twice it.
+- `max_changes_per_day`: Count the stage changes per day in a known-good period with a similar load and set the ceiling above its busiest day; the controller's stage-up / stage-down delays bound what a stable sequence can do. *Note:* Warn at the ceiling, fault at twice it. Only changes while the compressor runs count (0.106): a start or stop (to or from stage 0) is compressor_short_cycle's.
+- `max_interval_min`: Keep it at or below the controller's shortest stage delay. Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the changes. *Note:* Coarser than this, a count at or above max_changes_per_day stands with a caveat that it is a floor. Below the limit, when samples sit between two stages (a resampled mean that is not a whole number), the verdict declines to info instead of ok; with none, ok stands with the caveat.
 
 Fixed in code: warn at max_changes_per_day or more; fault at twice it (the factor 2 is fixed in code)
 
@@ -711,10 +713,12 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `max_reversals_per_day` | `24.0` | reversing-valve transitions per day | 12.0 to 96.0 | CAMBER judgment: a screening ceiling of about 12 defrosts a day (two transitions each); defrost at worst about once an hour in cold weather would reach ~48 transitions a day |
+| `max_interval_min` | `5.0` | minutes | 1.0 to 15.0 | CAMBER judgment: a defrost lasts a few minutes (typically 2-10), so a coarser bin averages it away |
 
 How to calibrate:
 
 - `max_reversals_per_day`: Read the defrost-control interval (time- or demand-based) from the unit's manual, or count the reversals per day in a known-good cold spell and set the ceiling above that. Each defrost counts two transitions (into cooling and back), so allow for that. *Note:* Warn at the ceiling, fault at twice it. Heating/cooling changeovers count too.
+- `max_interval_min`: Keep it at or below the unit's shortest defrost. Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the defrosts. *Note:* On a resampled valve a bin part-way between heating and cooling counts the fewest changes it allows (two for a defrost inside a heating spell). Coarser than this, a count at or above max_reversals_per_day stands with a caveat that it is a floor; below it, part-way samples decline the verdict to info instead of ok; with none, ok stands with the caveat.
 
 Fixed in code: warn at max_reversals_per_day or more; fault at twice it (the factor 2 is fixed in code)
 
@@ -732,6 +736,7 @@ Fixed in code: warn at max_reversals_per_day or more; fault at twice it (the fac
 | `band_tol_f` | `1.0` | °F (past the setpoint) | 0.0 to 3.0 | CAMBER judgment: the zone must be clearly past a setpoint to count as outside the band |
 | `heat_rise_f` | `15.0` | °F (discharge air above the zone) | 8.0 to 30.0 | CAMBER judgment: a water-to-air heat pump delivers about 85-105 °F air in heating against a ~70 °F room |
 | `cool_drop_f` | `10.0` | °F (discharge air below the zone) | 5.0 to 20.0 | CAMBER judgment: a heat pump in cooling delivers about 52-60 °F air |
+| `max_defrost_min` | `15.0` | minutes (one reversed run with the compressor on) | 0.0 to 30.0 | CAMBER judgment: a defrost ends on a coil temperature or a 10-14 minute timer |
 
 How to calibrate:
 
@@ -745,6 +750,7 @@ How to calibrate:
 - `band_tol_f`: Set it to about the thermostat's deadband or the zone sensor's accuracy, whichever is larger.
 - `heat_rise_f`: Look at a known-good week: the discharge-minus-zone difference while the unit heats clusters well above zero; set this below that cluster and above the fan-only rise. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
 - `cool_drop_f`: Look at a known-good week: set it below the zone-minus-discharge difference seen while the unit cools and above the fan-only difference. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
+- `max_defrost_min`: Set it a little above the unit's defrost termination time from its manual or the longest defrost in a known-good cold spell. 0 turns the defrost reading off. *Note:* Only with compressor status and the reversing-valve command both mapped: a cooling run this short with heating on both sides is a defrost and counts as heating.
 
 ## hp_mode_vs_need
 
@@ -759,6 +765,7 @@ How to calibrate:
 | `band_tol_f` | `1.0` | °F (past the setpoint) | 0.0 to 3.0 | CAMBER judgment: the zone must be clearly past a setpoint to count as outside the band |
 | `heat_rise_f` | `15.0` | °F (discharge air above the zone) | 8.0 to 30.0 | CAMBER judgment: a water-to-air heat pump delivers about 85-105 °F air in heating against a ~70 °F room |
 | `cool_drop_f` | `10.0` | °F (discharge air below the zone) | 5.0 to 20.0 | CAMBER judgment: a heat pump in cooling delivers about 52-60 °F air |
+| `max_defrost_min` | `15.0` | minutes (one reversed run with the compressor on) | 0.0 to 30.0 | CAMBER judgment: a defrost ends on a coil temperature or a 10-14 minute timer |
 
 How to calibrate:
 
@@ -771,6 +778,7 @@ How to calibrate:
 - `band_tol_f`: Set it to about the thermostat's deadband or the zone sensor's accuracy, whichever is larger.
 - `heat_rise_f`: Look at a known-good week: the discharge-minus-zone difference while the unit heats clusters well above zero; set this below that cluster and above the fan-only rise. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
 - `cool_drop_f`: Look at a known-good week: set it below the zone-minus-discharge difference seen while the unit cools and above the fan-only difference. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
+- `max_defrost_min`: Set it a little above the unit's defrost termination time from its manual or the longest defrost in a known-good cold spell. 0 turns the defrost reading off. *Note:* Only with compressor status and the reversing-valve command both mapped: a cooling run this short with heating on both sides is a defrost and counts as heating.
 
 ## hp_room_imbalance
 
@@ -785,6 +793,7 @@ How to calibrate:
 | `band_tol_f` | `1.0` | °F (past the setpoint) | 0.0 to 3.0 | CAMBER judgment: the zone must be clearly past a setpoint to count as outside the band |
 | `heat_rise_f` | `15.0` | °F (discharge air above the zone) | 8.0 to 30.0 | CAMBER judgment: a water-to-air heat pump delivers about 85-105 °F air in heating against a ~70 °F room |
 | `cool_drop_f` | `10.0` | °F (discharge air below the zone) | 5.0 to 20.0 | CAMBER judgment: a heat pump in cooling delivers about 52-60 °F air |
+| `max_defrost_min` | `15.0` | minutes (one reversed run with the compressor on) | 0.0 to 30.0 | CAMBER judgment: a defrost ends on a coil temperature or a 10-14 minute timer |
 
 How to calibrate:
 
@@ -797,6 +806,7 @@ How to calibrate:
 - `band_tol_f`: Set it to about the thermostat's deadband or the zone sensor's accuracy, whichever is larger.
 - `heat_rise_f`: Look at a known-good week: the discharge-minus-zone difference while the unit heats clusters well above zero; set this below that cluster and above the fan-only rise. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
 - `cool_drop_f`: Look at a known-good week: set it below the zone-minus-discharge difference seen while the unit cools and above the fan-only difference. *Note:* Ignored when compressor status and the reversing-valve command are both mapped.
+- `max_defrost_min`: Set it a little above the unit's defrost termination time from its manual or the longest defrost in a known-good cold spell. 0 turns the defrost reading off. *Note:* Only with compressor status and the reversing-valve command both mapped: a cooling run this short with heating on both sides is a defrost and counts as heating.
 
 Not thresholds: `rooms` (a structural mapping {room: [unit, ...]} that declares which units share a room (else the topology), not a threshold).
 

@@ -4,7 +4,7 @@
  "summary": "SYNTHETIC, generated locally by CAMBER (no download, no real building): one small building's heat pumps through a fortnight of late winter with damp frosty days, a three-day cold snap, mild fog and a sunny spell, every 5 minutes. Four air-source units (zone and discharge-air temperatures, fan, occupancy, setpoints, compressor status and reversing valve): a healthy one, one whose defrost sensor reads far too cold, one on a 60-minute defrost timer and one whose strip heat has failed. Six water-source units (the same points with the compressor stage instead): two that share a room and agree, one with its reversing valve stuck in heating, one whose second stage hunts, and two that fight in one room. And the water-source units' loop (supply and return water, pump status, speed and DP): variable flow, and constant speed with the bypass stuck open.",
  "teaches": [
   "excessive heat-pump defrost, a stuck reversing valve, a heat pump short of capacity in a cold snap, compressor stages that hunt and two units fighting in one room, which no open dataset shows",
-  "why a 15-minute trend hides 5-minute defrosts and stage changes",
+  "why a 15-minute trend cannot vouch for 5-minute defrosts and stage changes",
   "a source loop that pumps water without carrying heat",
   "choosing the reversals-per-day limit: a unit just under the default"
  ],

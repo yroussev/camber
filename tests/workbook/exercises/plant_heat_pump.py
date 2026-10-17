@@ -13,7 +13,10 @@ recorded from::
     camber datasets score synthetic-heat-pump --store lab_store --findings hp_out/findings.json
 
 plus the ``plant-heat-pump--15min`` and ``plant-heat-pump--20rev`` variants (CAMBER
-0.105.0-dev, 2026-10-13).
+0.105.0-dev, 2026-10-13). Re-recorded for 0.106.0-dev on 2026-10-16 after #185: a defrost reads
+as heating, the control verdict gives the unit's split, a fighting room's capacity findings name
+the fight, stage changes count only while running, and a 15-minute trend floors or declines the
+defrost and stage counts.
 """
 
 from __future__ import annotations
@@ -61,11 +64,13 @@ def _rooms(ctx) -> None:
     assert topo["WSHP__window_side"] == topo["WSHP__door_side"] == "ROOM_B", topo
 
 
-def _defrost_is_read_as_cooling(ctx) -> None:
-    """ASHP__no_aux_heat's wrong-mode warn is its defrosts in the cold snap: the mode comes from
-    the compressor and the valve, and a defrost reverses the valve while the room is cold."""
+def _defrost_is_read_as_heating(ctx) -> None:
+    """ASHP__no_aux_heat's defrosts in the cold snap are read as heating: the mode comes from the
+    compressor and the valve, and a short reversal between two heating samples is a defrost."""
     f = ctx.finding(_MODE, "ASHP__no_aux_heat")
     assert f is not None and f.metrics["mode_source"] == "status", f
+    assert f.metrics["defrost_hours"] == 3.0, f.metrics
+    assert f.metrics["cooling_while_cold_hours"] == 0.0, f.metrics
     assert f.metrics["heating_while_warm_hours"] == 0.0, f.metrics
     g = ctx.finding(_MODE, "WSHP__stuck_heating")
     assert g is not None and g.metrics["mode_source"] == "discharge_vs_zone", g
@@ -73,24 +78,39 @@ def _defrost_is_read_as_cooling(ctx) -> None:
 
 def _stuck_unit_reads_as_control(ctx) -> None:
     """The stuck unit's capacity finding is on the cooling side with a control verdict: it never
-    cooled, because every cooling call heated."""
+    cooled, because every cooling call heated, and the summary gives that split."""
     f = ctx.finding(_CAP, "WSHP__stuck_heating")
     assert f is not None, "no capacity finding on WSHP__stuck_heating"
     m = f.metrics
     assert m["side"] == "cooling" and m["verdict"] == "control", m
     assert m["cooling_working_pct"] == 0.0, m
-    assert "mostly idle" in f.summary, f.summary
+    assert m["cooling_opposite_pct"] == 41.04, m
+    assert "heating 41% and idle 59%" in f.summary, f.summary
 
 
-def _a_coarse_trend_hides_defrosts(ctx) -> None:
-    """Resampled to 15 minutes, a 5-minute defrost averages to a valve near 0.67 that rounds to
-    heating: the faulty unit's count all but vanishes, with no caveat."""
+def _fight_is_the_cause(ctx) -> None:
+    """Both ROOM_B units keep their capacity severity, but the verdict names the fight."""
+    for u in ("WSHP__window_side", "WSHP__door_side"):
+        f = ctx.finding(_CAP, u)
+        assert f is not None, f"no capacity finding on {u}"
+        m = f.metrics
+        assert m["verdict"] == "room_fight" and m["verdict_alone"] == "capacity", m
+        assert m["room"] == "ROOM_B" and m["deferred_to"] == _ROOM, m
+
+
+def _a_coarse_trend_only_floors_the_count(ctx) -> None:
+    """Resampled to 15 minutes, a 5-minute defrost averages to a valve near 0.67, counted as two
+    reversals: the faulty unit still faults, with a caveat that the count is a floor, and the
+    healthy unit's count cannot be vouched for."""
     cfg = ctx.config("15min")
     assert cfg["resample"] == "15min", cfg["resample"]
     f = ctx.finding(_DEFROST, "ASHP__defrost_sensor", "15min")
-    assert f is not None and f.severity == "ok", f
-    assert f.metrics["n_reversals"] == 2, f.metrics
-    assert not f.caveats, f.caveats
+    assert f is not None and f.severity == "fault", f
+    assert f.metrics["n_reversals"] == 698 and f.metrics["interval_min"] == 15.0, f.metrics
+    assert f.caveats and "floor" in f.caveats[0], f.caveats
+    g = ctx.finding(_DEFROST, "ASHP__healthy", "15min")
+    assert g is not None and g.severity == "info", g
+    assert "cannot confirm on a 15-minute trend" in g.summary, g.summary
 
 
 EXERCISE = Exercise(
@@ -136,27 +156,28 @@ EXERCISE = Exercise(
         # 2. the near-miss: just under the default limit
         Finding(_DEFROST, "ASHP__defrost_timer", severity=("ok",)),
         Metric(_DEFROST, "ASHP__defrost_timer", "reversals_per_day", 23.43, 0.005, quote="23.43"),
-        # 3. mode: the stuck valve faults; the defrosts read as cooling on the unit without aux
+        # 3. mode: the stuck valve faults; the defrosts read as heating on every air-source unit
         Finding(_MODE, "WSHP__stuck_heating", severity=("fault",)),
-        Finding(_MODE, "ASHP__no_aux_heat", severity=("warn",)),
         Metric(
             _MODE, "WSHP__stuck_heating", "heating_while_warm_hours", 30.33, 0.005, quote="30.33"
         ),
         Metric(
             _MODE, "WSHP__stuck_heating", "wrong_mode_pct_of_running", 98.11, 0.005, quote="98.1%"
         ),
-        Metric(_MODE, "ASHP__no_aux_heat", "cooling_while_cold_hours", 2.83, 0.005, quote="2.83"),
-        Metric(_MODE, "ASHP__no_aux_heat", "wrong_mode_pct_of_running", 4.24, 0.005, quote="4.24%"),
-        Check("a defrost reads as cooling", _defrost_is_read_as_cooling, quote="status"),
-        *(Finding(_MODE, f"ASHP__{u}", severity=("ok",)) for u in _ASHP[:3]),
+        Metric(_MODE, "ASHP__no_aux_heat", "cooling_while_cold_hours", 0.0, 0.005),
+        Metric(_MODE, "ASHP__no_aux_heat", "defrost_hours", 3.0, 0.005, quote="3.0"),
+        Check("a defrost reads as heating", _defrost_is_read_as_heating, quote="status"),
+        *(Finding(_MODE, f"ASHP__{u}", severity=("ok",)) for u in _ASHP),
         *(Finding(_MODE, f"WSHP__{u}", severity=("ok",)) for u in _WSHP if u != "stuck_heating"),
         # 4. capacity: the unit without strip heat; the stuck unit reads as a control problem
         Finding(_CAP, "ASHP__no_aux_heat", severity=("fault",)),
         Metric(_CAP, "ASHP__no_aux_heat", "heating_outside_pct", 43.33, 0.005, quote="43.33%"),
-        Metric(_CAP, "ASHP__no_aux_heat", "heating_working_pct", 94.06, 0.005, quote="94.06%"),
+        Metric(_CAP, "ASHP__no_aux_heat", "heating_working_pct", 100.0, 0.005, quote="100%"),
         Finding(_CAP, "WSHP__stuck_heating", severity=("fault",)),
         Metric(_CAP, "WSHP__stuck_heating", "cooling_outside_pct", 67.2, 0.005, quote="67.2%"),
-        Check("the stuck unit reads as a control problem", _stuck_unit_reads_as_control),
+        Check(
+            "the stuck unit reads as a control problem", _stuck_unit_reads_as_control, quote="41%"
+        ),
         *(Finding(_CAP, f"ASHP__{u}", severity=("ok",)) for u in _ASHP[:3]),
         *(Finding(_CAP, f"WSHP__{u}", severity=("ok",)) for u in _WSHP[:2] + ("stage_hunting",)),
         # 5. the rooms: the fleet rule sees the fight; the per-unit rules misread it
@@ -165,12 +186,13 @@ EXERCISE = Exercise(
         Finding(_CAP, "WSHP__door_side", severity=("warn",)),
         Metric(_CAP, "WSHP__window_side", "heating_outside_pct", 27.42, 0.005, quote="27.42%"),
         Metric(_CAP, "WSHP__door_side", "cooling_outside_pct", 12.95, 0.005, quote="12.95%"),
+        Check("the fight is the cause", _fight_is_the_cause, quote="room_fight"),
         # 6. stages
-        Finding(_STAGE, "WSHP__stage_hunting", severity=("fault",)),
-        Metric(_STAGE, "WSHP__stage_hunting", "stage_changes_per_day", 52.23, 0.005, quote="52.23"),
-        Metric(_STAGE, "WSHP__door_side", "stage_changes_per_day", 4.29, 0.005, quote="4.29"),
-        Metric(_STAGE, "WSHP__window_side", "stage_changes_per_day", 6.5, 0.005, quote="6.5"),
-        Metric(_STAGE, "WSHP__stuck_heating", "stage_changes_per_day", 17.43, 0.005, quote="17.43"),
+        Finding(_STAGE, "WSHP__stage_hunting", severity=("warn",)),
+        Metric(_STAGE, "WSHP__stage_hunting", "stage_changes_per_day", 43.3, 0.005, quote="43.3"),
+        Metric(_STAGE, "WSHP__door_side", "stage_changes_per_day", 1.0, 0.005, quote="1.0"),
+        Metric(_STAGE, "WSHP__window_side", "stage_changes_per_day", 2.43, 0.005, quote="2.43"),
+        Metric(_STAGE, "WSHP__stuck_heating", "stage_changes_per_day", 4.86, 0.005, quote="4.86"),
         *(Finding(_STAGE, f"WSHP__{u}", severity=("ok",)) for u in _WSHP if u != "stage_hunting"),
         # 7. the loop
         Finding(_LOOP, "LOOP__loop_flat", severity=("fault",)),
@@ -185,30 +207,35 @@ EXERCISE = Exercise(
         Score(_DEFROST, tpr=1.0, fpr=0.0),
         Score(_STAGE, tpr=1.0, fpr=0.0),
         Score(_LOOP, tpr=1.0, fpr=0.0),
-        Score(_MODE, tpr=1.0, fpr=1 / 11, tol=0.001, quote="9%"),
+        Score(_MODE, tpr=1.0, fpr=0.0),
         Score(_CAP, tpr=1.0, fpr=3 / 11, tol=0.001, quote="27%"),
-        # 9. every 15 minutes: the defrosts and the hunting vanish
-        *(Finding(_DEFROST, f"ASHP__{u}", severity=("ok",), run="15min") for u in _ASHP),
-        *(Finding(_STAGE, f"WSHP__{u}", severity=("ok",), run="15min") for u in _WSHP),
+        # 9. every 15 minutes: the faulty defrost faults on a floor; the rest decline to info
+        Finding(_DEFROST, "ASHP__defrost_sensor", severity=("fault",), run="15min"),
+        *(
+            Finding(_DEFROST, f"ASHP__{u}", severity=("info",), run="15min")
+            for u in _ASHP
+            if u != "defrost_sensor"
+        ),
+        *(Finding(_STAGE, f"WSHP__{u}", severity=("info",), run="15min") for u in _WSHP),
         Metric(
             _DEFROST,
             "ASHP__defrost_sensor",
             "reversals_per_day",
-            0.14,
+            49.89,
             0.005,
             run="15min",
-            quote="0.14",
+            quote="49.89",
         ),
         Metric(
             _STAGE,
             "WSHP__stage_hunting",
             "stage_changes_per_day",
-            15.51,
+            6.58,
             0.005,
             run="15min",
-            quote="15.51",
         ),
-        Check("a 15-minute trend hides 5-minute defrosts", _a_coarse_trend_hides_defrosts),
+        Score(_DEFROST, tpr=1.0, fpr=0.0, run="15min"),
+        Check("a 15-minute trend only floors the count", _a_coarse_trend_only_floors_the_count),
         # the threshold lesson: at 20 a day the timer unit warns, the healthy one still passes
         Finding(_DEFROST, "ASHP__defrost_timer", severity=("warn",), run="limit20"),
         Finding(_DEFROST, "ASHP__healthy", severity=("ok",), run="limit20"),

@@ -29,6 +29,15 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - `filter_fouling` links to PNNL Re-tuning chapter 9 (Building Walk Down). The chapter's
   air-handler walk-down lists missing, dirty, plugged or collapsed filters among the things to
   inspect. It gives no pressure threshold, so the change-out default is still CAMBER's own.
+- **`compressor_staging` counts only stage changes while the compressor runs (#185).** A change
+  to or from stage 0 is a start or a stop, which `compressor_short_cycle` already judges; counting
+  it here made a healthy unit cycling two or three times an hour read as hunting. On
+  `synthetic-heat-pump` the well-staged units now read 1.0 to 2.43 changes a day (4.29 to 6.5
+  before) and `WSHP__stage_hunting` 43.3 (52.23), a warn rather than a fault.
+- **`hp_capacity_shortfall` names a fighting room as the cause (#185).** When `hp_room_imbalance`
+  runs in the same config and finds a unit's room fighting, that unit's `capacity` or `mixed`
+  verdict becomes `room_fight` (`verdict_alone` keeps the old one, `deferred_to` and `room` say
+  where to look). The severity stands: the room is out of band, but a bigger unit will not fix it.
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
@@ -58,6 +67,28 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   "only warn-level hunting was testable" on an `ok`.
 - `filter_fouling`'s summary said "% of hours" above the change-out pressure; the figure is a
   share of samples (fan-on samples when gated), and it now says so.
+- **A coarse trend no longer hides a heat pump's defrosts and stage changes (#185).**
+  `heatpump_defrost` and `compressor_staging` take `max_interval_min` (default 5 minutes). As
+  `boiler_short_cycle` does since #143, on a coarser trend the count is a floor: a count at or
+  above the limit keeps its verdict with a caveat, and below it, samples part-way between two
+  states decline the verdict to `info` ("cannot confirm on a 15-minute trend"). A resampled
+  reversing valve also counts the fewest changes its means allow, so a 5-minute defrost in a
+  15-minute bin (0.67) is two changes, not none. On `plant-heat-pump--15min`,
+  `ASHP__defrost_sensor` now faults at 49.89 a day (0.14, `ok`, before). Both rules report
+  `interval_min` and `n_partial`. **This changes behaviour on any trend coarser than 5 minutes:**
+  `heatpump_defrost` and `compressor_staging` now caveat every such finding, and decline a count
+  below the limit to `info`, where they used to pass silently. Run at the stored interval, or
+  raise `max_interval_min` only if the unit's defrosts and stage delays are longer than the
+  interval.
+- **A defrost no longer reads as cooling a cold room (#185).** With the mode read from the
+  compressor and the reversing valve, `hp_mode_vs_need`, `hp_capacity_shortfall` and
+  `hp_room_imbalance` count a cooling run of at most `max_defrost_min` (15 minutes) with heating
+  on both sides as heating. `hp_mode_vs_need` reports it as `defrost_hours`. `ASHP__no_aux_heat`
+  on `synthetic-heat-pump` no longer warns for its defrosts.
+- **`hp_capacity_shortfall`'s control verdict no longer calls a unit running the other way
+  "mostly idle" (#185).** The summary gives the split (in the needed mode, the other mode, idle),
+  and a new metric per side, `heating_opposite_pct` / `cooling_opposite_pct`, holds the share in
+  the other mode.
 
 ## [0.105.0] — Unreleased
 
