@@ -458,6 +458,15 @@ Version numbers are given only where a release is already planned.
     - [x] #163, #174, #179 M&V names registry with industry-standard names and citations;
     - [x] #164 `lbnl-chiller` pump rules read pump data;
     - [x] #180 pump DP-reset rules judge only running hours.
+  - **0.106 — rule fixes from the synthetic lab cases; drift wording that matches the verdict** (released 2026-10-17). Closes #181–#190:
+    - [x] #181, #182 `filter_fouling` and `control_hunting` on fan-on samples; hunting resolution ceiling;
+    - [x] #183 `chiller_staging_fleet` counts only chillers, declared capacity, sample counts renamed (breaking);
+    - [x] #184 `cw_flow`, loop run gates, approach gate, tower drift on variable condenser flow, applicable-equipment scoring;
+    - [x] #185 heat-pump rules: coarse trends, defrost, capacity verdict wording, staging while running;
+    - [x] #186 G36 zone-fleet rules: `airflow_min_sp`, mixed heating/cooling hours, high heating loop, reset and cohort edges;
+    - [x] #187, #189 `ok` drift findings name no fault;
+    - [x] #188 the drift reference declines only the detectors it could run;
+    - [x] #190 tower-approach and head-pressure drift say which way the signal moved.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process

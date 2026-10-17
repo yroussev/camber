@@ -13,7 +13,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [0.106.0] — Unreleased
+## [0.106.0] — 2026-10-17
+
+**0.106: rule fixes found while building the synthetic lab cases, for air-side maintenance, chiller plants, heat pumps and G36 zone fleets, and drift findings whose wording matches their verdict (#181–#190).** **Breaking (#183):** `chiller_staging_fleet`'s `n_running_hours` and `n_multi_hours` were sample counts and are renamed `n_running_samples` and `n_multi_samples`, with no aliases; the hours are new metrics beside them. **Scoring change (#184):** `camber datasets score` now scores each rule only on the equipment it applies to, so per-rule false-positive rates move on mixed-equipment entries; the overall confusion is unchanged. `filter_fouling` and `control_hunting` judge fan-on samples, and an unreachable hunting threshold no longer reads as a pass (#181, #182). `chiller_staging_fleet` counts only chillers and takes a declared `capacity_kw` (#183). A new `cw_flow` role lets tower drift match on heat rejected; chilled-water loops are gated on their pumps, and approach checks read running samples only (#184). Heat-pump rules handle coarse trends, no longer read a defrost as the wrong mode, and count stage changes only while running (#185). The G36 zone-fleet rules read `airflow_min_sp`, stop counting G36's high heating loop as a violation, and rate mixed heating and cooling by hours (#186). An `ok` drift finding now says the signal holds near its baseline instead of naming a fault, the drift reference declines only the detectors it could run, and the tower-approach and head-pressure detectors say which way the signal moved (#187–#190). The two synthetic entries publish the new points (generator version 2); the `air-maintenance`, `plant-chiller-multi`, `plant-heat-pump` and `zone-g36-fleet` workbook answers are re-recorded.
 
 ### Added
 - **A condenser-water flow role, `cw_flow` (#184).** The flow through the tower in gpm. With
