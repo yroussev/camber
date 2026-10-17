@@ -66,8 +66,9 @@ def _legacy_store(root: str, fid: str = "f1") -> ParquetStore:
     return st
 
 
-def _land_edge(root: str, tmp_path, fid: str = "demo-fac-1") -> list:
-    """Land one forwarder batch into the store at its key, as a presigned PUT does."""
+def _land_edge(root: str, tmp_path, fid: str = "demo-fac-1", layout: str = "legacy") -> list:
+    """Land one forwarder batch into the store at its key, as a presigned PUT does (by default in
+    the pre-0.107 bytes an older forwarder still sends)."""
 
     class _Landing:
         def put(self, key, data, *, content_type="", metadata=None):
@@ -77,7 +78,8 @@ def _land_edge(root: str, tmp_path, fid: str = "demo-fac-1") -> list:
                 fh.write(data)
             return {"ok": True}
 
-    return _forwarder(tmp_path / f"spool-{fid}", _Landing()).poll_once().keys
+    spool = tmp_path / f"spool-{fid}-{layout}"
+    return _forwarder(spool, _Landing(), part_layout=layout).poll_once().keys
 
 
 def _files(root: str) -> dict:
@@ -546,9 +548,10 @@ def test_lifecycle_constants_match_their_sources():
 # --------------------------------------------------------------------------- edge parts (decision)
 
 
-def test_the_forwarder_still_writes_content_addressed_non_canonical_parts(tmp_path):
-    """The 0.104 decision (#136): edge parts keep their pre-0.103 serialization, so a batch an
-    upgraded forwarder re-sends lands on the key the old forwarder used, never on a second one."""
+def test_the_forwarder_writes_content_addressed_canonical_parts(tmp_path):
+    """0.107 (#142): edge parts are in the store's canonical layout and still named by their
+    bytes' sha256, so the same rows re-sent land on the same key. The landing's row digest
+    recognises a month re-sent in the bytes an older forwarder wrote (test_edge_row_digest)."""
     sink, log = collect_sink()
     _forwarder(tmp_path / "a", sink).poll_once()
     _forwarder(tmp_path / "b", sink).poll_once()
@@ -557,8 +560,26 @@ def test_the_forwarder_still_writes_content_addressed_non_canonical_parts(tmp_pa
     sha = hashlib.sha256(first["data"]).hexdigest()
     assert first["key"].endswith(f"part-{sha[:16]}.parquet")
     assert first["metadata"]["content_sha256"] == sha
+    assert first["metadata"]["part_layout"] == "canonical"
     meta = pq.ParquetFile(io.BytesIO(first["data"])).schema_arrow.metadata or {}
+    assert b"pandas" not in meta and meta.get(b"camber.layout") == b"1"
+    # the legacy layout is still there for a cloud landing that predates the row digest
+    sink2, log2 = collect_sink()
+    _forwarder(tmp_path / "c", sink2, part_layout="legacy").poll_once()
+    (old,) = log2
+    assert old["key"] != first["key"] and old["metadata"]["part_layout"] == "legacy"
+    assert old["metadata"]["rows_sha256"] == first["metadata"]["rows_sha256"]
+    meta = pq.ParquetFile(io.BytesIO(old["data"])).schema_arrow.metadata or {}
     assert b"pandas" in meta and b"camber.layout" not in meta
+
+
+def test_verify_counts_a_canonical_edge_part_as_canonical(tmp_path):
+    root = str(tmp_path / "store")
+    (edge_key,) = _land_edge(root, tmp_path, layout="canonical")
+    r = ParquetStore(root).verify()
+    (part,) = r["parts"]
+    assert part["path"] == edge_key and part["origin"] == "edge" and part["canonical"]
+    assert ParquetStore(root).normalize(apply=True)["parts"] == 0
 
 
 def test_a_resent_edge_batch_after_normalize_adds_no_rows(tmp_path):

@@ -10,7 +10,9 @@ store. It goes to the workspace's ``quarantine/`` directory under its original k
 
 (or the year-only key an older forwarder wrote). A year-only upload whose name and content the
 store already migrated into month partitions (``camber store migrate-partitions``) is a
-``duplicate``: it is quarantined, never stored twice, and cannot be released.
+``duplicate``: it is quarantined, never stored twice, and cannot be released. So is an upload
+whose rows a part of its store partition already holds in different bytes (0.107, #142): a month
+re-sent after a forwarder, pandas or pyarrow upgrade (see :mod:`camber.edge.row_digest`).
 
 A bucket that a presigned-URL broker routes with :func:`camber.edge.landing.route_key` holds the
 same thing under its ``_quarantine/`` prefix.
@@ -49,6 +51,7 @@ from .landing import (
     parse_landed_key,
     reconcile,
 )
+from .row_digest import PartitionRows, file_rows_digest
 
 __all__ = [
     "QUARANTINE_DIR",
@@ -243,13 +246,58 @@ def _select(portfolio, facility_id, keys) -> list:
 
 # ---------------------------------------------------------------------- landing gate
 
+_DUPLICATE_ROWS_DETAIL = (
+    "the store already holds these rows as {match}, in different bytes (a re-send after a "
+    "forwarder, pandas or pyarrow upgrade); storing it again would double them"
+)
+
+
+def _rows_index(indexes: dict, dst: str) -> PartitionRows:
+    d = os.path.dirname(dst)
+    if d not in indexes:
+        indexes[d] = PartitionRows(d)
+    return indexes[d]
+
+
+def _check_rows(row: dict, src: str, dst: str, name: str, indexes: dict, landing: dict) -> None:
+    """Route a new store key by its rows (#142): a ``duplicate`` when its partition already holds
+    a part with the same row digest, or when another object of this run does; else the store.
+
+    An object with no digest (unreadable, or not the five long columns) lands as before 0.107."""
+    digest, nrows = file_rows_digest(src)
+    row["rows_sha256"] = digest
+    if digest is None:
+        row["to"] = "store"
+        return
+    d = os.path.dirname(dst)
+    match = _rows_index(indexes, dst).find(digest, exclude=name) or landing.get((d, digest))
+    if match is not None:
+        row.update(
+            category="duplicate",
+            detail=_DUPLICATE_ROWS_DETAIL.format(match=match),
+            duplicate_of=match,
+            to="quarantine",
+        )
+        return
+    landing[(d, digest)] = name
+    row.update(to="store", rows=nrows)
+
+
+def _record_rows(indexes: dict, dst: str, row: dict) -> None:
+    """Record a part just stored in its partition's row index (digested from the file if the plan
+    has no digest for it)."""
+    _rows_index(indexes, dst).record(os.path.basename(dst), row.get("rows_sha256"), row.get("rows"))
+
 
 def land(portfolio, inbox, *, apply: bool = False, reason=None) -> dict:
     """Route every object in a landing ``inbox``: into the store, or into quarantine.
 
     An object goes to the store when its facility accepts data (``provisioning`` / ``active``, or
     a store partition with no registry entry) and to quarantine when the facility does not, is
-    unknown, or the content's sha256 does not start with the ``part-<sha16>`` in its name.
+    unknown, or the content's sha256 does not start with the ``part-<sha16>`` in its name. A
+    Parquet object whose rows a part of its store partition already holds, in different bytes, is
+    a ``duplicate`` and goes to quarantine too (0.107, #142: see :mod:`camber.edge.row_digest`);
+    each part it stores is recorded in that partition's row index.
     Orphaned objects (no store key) and NDJSON objects (not a store format) stay in the inbox and
     are reported. A dry run by default; ``apply=True`` needs a ``reason``, takes the lock, and
     audits one begin and one done record per facility.
@@ -263,6 +311,8 @@ def land(portfolio, inbox, *, apply: bool = False, reason=None) -> dict:
     with lock:
         reg = _Registry(portfolio)
         plan = []
+        indexes: dict = {}  # partition dir -> PartitionRows (the store's row digests)
+        landing: dict = {}  # (partition dir, digest) -> name planned in this run
         for key, mtime, size in _walk(inbox):
             row = {
                 "key": key,
@@ -301,10 +351,13 @@ def land(portfolio, inbox, *, apply: bool = False, reason=None) -> dict:
                     row.update(detail="ndjson is not a store format; convert it first", to="inbox")
                 else:
                     dst = _path(portfolio.store_root, key)
-                    if os.path.exists(dst) and _sha256(dst) != _sha256(src):
-                        row.update(detail="the store already has different content", to="inbox")
+                    if os.path.exists(dst):
+                        if _sha256(dst) != _sha256(src):
+                            row.update(detail="the store already has different content", to="inbox")
+                        else:
+                            row["to"] = "store"  # the same bytes at the same key: deduplicated
                     else:
-                        row["to"] = "store"
+                        _check_rows(row, src, dst, lk.name, indexes, landing)
             else:
                 row.update(category=st["status"], to="quarantine")
             plan.append(row)
@@ -336,9 +389,13 @@ def land(portfolio, inbox, *, apply: bool = False, reason=None) -> dict:
             for r in rows:
                 src = _path(inbox, r["key"])
                 if r["to"] == "store":
-                    r["result"] = _move(src, _path(portfolio.store_root, r["key"]))
+                    dst = _path(portfolio.store_root, r["key"])
+                    r["result"] = _move(src, dst)
+                    _record_rows(indexes, dst, r)
                 else:
                     r["result"] = _quarantine_one(portfolio, src, r, reason=reason, source="land")
+            for idx in indexes.values():
+                idx.save()
             _audit(
                 portfolio,
                 "edge.land",
@@ -404,7 +461,8 @@ def release(portfolio, *, facility_id=None, keys=None, reason=None, apply: bool 
 
     Select by ``facility_id`` and/or ``keys``. An object is refused (and stays put) while its
     facility does not accept data (resume or restore it first), when its content failed the hash
-    check, or when the store holds different content at its key. A dry run by default;
+    check, when the store holds different content at its key, or when a part of its partition
+    already holds the same rows (0.107, #142). A dry run by default;
     ``apply=True`` needs a ``reason``, takes the lock and is audited per facility.
     """
     if apply:
@@ -416,6 +474,8 @@ def release(portfolio, *, facility_id=None, keys=None, reason=None, apply: bool 
         qroot = quarantine_root(portfolio)
         planned: list = []
         refused: list = []
+        indexes: dict = {}
+        landing: dict = {}
         for r in rows:
             fid = r.get("facility_id")
             st = reg.status(fid) if fid else {"status": "orphaned", "detail": "no facility"}
@@ -436,8 +496,20 @@ def release(portfolio, *, facility_id=None, keys=None, reason=None, apply: bool 
             else:
                 dst = _path(portfolio.store_root, r["key"])
                 src = _path(qroot, r["key"])
-                if os.path.exists(dst) and _sha256(dst) != _sha256(src):
-                    why = "the store already has different content at this key"
+                if os.path.exists(dst):
+                    if _sha256(dst) != _sha256(src):
+                        why = "the store already has different content at this key"
+                elif r["key"].endswith(".parquet"):
+                    digest, nrows = file_rows_digest(src)
+                    d = os.path.dirname(dst)
+                    match = _rows_index(indexes, dst).find(
+                        digest, exclude=os.path.basename(dst)
+                    ) or landing.get((d, digest))
+                    if match is not None:
+                        why = f"the store already holds these rows as {match}; discard it"
+                    elif digest is not None:
+                        landing[(d, digest)] = os.path.basename(dst)
+                        r = {**r, "rows_sha256": digest, "rows": nrows}
             (refused if why else planned).append({**r, "refused": why} if why else r)
         report = {
             "planned": [r["key"] for r in planned],
@@ -458,9 +530,14 @@ def release(portfolio, *, facility_id=None, keys=None, reason=None, apply: bool 
             )
             for r in grp:
                 src = _path(qroot, r["key"])
-                _move(src, _path(portfolio.store_root, r["key"]))
+                dst = _path(portfolio.store_root, r["key"])
+                _move(src, dst)
+                if dst.endswith(".parquet"):
+                    _record_rows(indexes, dst, r)
                 with contextlib.suppress(FileNotFoundError):
                     os.remove(src + RECORD_SUFFIX)
+            for idx in indexes.values():
+                idx.save()
             _audit(
                 portfolio,
                 "edge.quarantine.release",

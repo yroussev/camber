@@ -29,6 +29,8 @@ Each object falls in one category:
     a year-only object whose name and content ``camber store migrate-partitions`` already moved
     into month partitions (see ``ParquetStore.migrated_files``): an older forwarder re-sent it.
     Storing it again would count its rows twice, so it is quarantined (then discarded).
+    ``camber edge land`` also calls an object a ``duplicate`` when a part of its store partition
+    already holds the same rows in different bytes (0.107, #142; :mod:`camber.edge.row_digest`).
 
 Lifecycle state is read **only** through the :mod:`camber.portfolio` API (``Portfolio.facilities``
 and the registry's tombstones). A purged facility is tombstoned, not a registry state, so its
@@ -53,6 +55,7 @@ __all__ = [
     "ACCEPTING_STATES",
     "NON_ACCEPTING_STATES",
     "QUARANTINE_PREFIX",
+    "INBOX_PREFIX",
     "CATEGORIES",
     "LandedKey",
     "parse_landed_key",
@@ -71,6 +74,9 @@ NON_ACCEPTING_STATES = ("suspended", "offboarding", "archived", "purged")
 # The bucket-side quarantine prefix a presigned-URL broker routes non-accepted uploads to. A
 # leading underscore keeps Hive / pyarrow dataset discovery from ever reading it as data.
 QUARANTINE_PREFIX = "_quarantine/"
+# The bucket-side staging prefix a broker signs accepted uploads into with route_key(inbox=True)
+# (0.107, #142); `camber edge land` moves them into the store after its checks.
+INBOX_PREFIX = "_inbox/"
 CATEGORIES = (
     "ok",
     "orphaned",
@@ -236,18 +242,26 @@ def facility_status(portfolio, facility_id: str) -> dict:
     return _Registry(portfolio).status(facility_id)
 
 
-def route_key(portfolio, key: str) -> str:
-    """Where an upload for ``key`` should land: ``key`` itself, or ``_quarantine/<key>``.
+def route_key(portfolio, key: str, *, inbox: bool = False) -> str:
+    """Where an upload for ``key`` should land: ``key`` itself, ``_inbox/<key>`` or
+    ``_quarantine/<key>``.
 
     For a presigned-URL broker: sign the returned key, so a facility that does not accept data
     (or an unknown one) can never write into the store's layout. An unparseable key raises
     ``ValueError`` -- a broker should refuse it outright.
+
+    ``inbox=True`` (0.107, #142) signs an accepted upload into the bucket's ``_inbox/`` prefix
+    instead of the store's layout, so nothing reaches the store until ``camber edge land
+    <bucket>/_inbox`` has checked it -- including the row digest that recognises a month re-sent
+    in different bytes. The leading underscore keeps readers from seeing staged objects.
     """
     lk, why = parse_landed_key(key)
     if lk is None:
         raise ValueError(f"not a landed-object key: {why}")
     st = facility_status(portfolio, lk.facility_id)["status"]
-    return lk.key if st in ("ok", "unregistered") else QUARANTINE_PREFIX + lk.key
+    if st not in ("ok", "unregistered"):
+        return QUARANTINE_PREFIX + lk.key
+    return INBOX_PREFIX + lk.key if inbox else lk.key
 
 
 # ---------------------------------------------------------------------- sources

@@ -83,6 +83,7 @@ class EdgeConfig:
     quality: bool = True
     wire_format: str = "parquet"
     device_id: str | None = None  # 0.95 (#18): names the device in its retirement record
+    part_layout: str = "canonical"  # 0.107 (#142): "legacy" for a pre-0.107 cloud landing
 
 
 def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
@@ -115,6 +116,7 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
         quality=bool(raw.get("quality", True)),
         wire_format=environ.get("CAMBER_EDGE_WIRE_FORMAT") or raw.get("wire_format", "parquet"),
         device_id=environ.get("CAMBER_EDGE_DEVICE_ID") or raw.get("device_id"),
+        part_layout=environ.get("CAMBER_EDGE_PART_LAYOUT") or raw.get("part_layout", "canonical"),
     )
 
 
@@ -190,4 +192,5 @@ def build_forwarder(cfg: EdgeConfig, *, source=None, sink=None, environ=None):
         resample=cfg.resample,
         quality=cfg.quality,
         wire_format=cfg.wire_format,
+        part_layout=cfg.part_layout,
     )
