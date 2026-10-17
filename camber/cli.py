@@ -6,6 +6,7 @@ Subcommands:
                                                      # (a .yaml / .yml config needs [yaml])
     camber report  <config.json> --out site.html    # run + write an HTML audit report
                    [--layout audit|rcx|<plugin>]    # rcx: the printable RCx layout
+                                                     # (rcx --out x.pdf needs [pdf])
     camber explain <config.json> [--no-strict]      # grounded plain-language explanation of
                                                      # findings
     camber ask "<question>" --config <config.json> [--llm-cmd CMD]   # grounded Q&A over the run
@@ -134,6 +135,13 @@ def _cmd_report(args) -> int:
     layout = args.layout or str((cfg.get("report") or {}).get("layout") or "audit")
     if layout == "rcx":
         return _report_rcx(args, cfg, base)
+    if _is_pdf(args.out):  # 0.107 (#197): only the rcx layout has print rules to render
+        print(
+            f"error: PDF output is for --layout rcx; the {layout} layout writes .html "
+            "(print it from a browser)",
+            file=sys.stderr,
+        )
+        return 2
     res = run_config(cfg, base_dir=base)
     if layout == "audit":
         html = _audit_html(res, cfg, base)
@@ -172,9 +180,29 @@ def _plugin_report(layout: str, res):
     return str(obj(res))
 
 
+def _is_pdf(path) -> bool:
+    """True when an output path asks for PDF (``.pdf``, any case)."""
+    return str(path).lower().endswith(".pdf")
+
+
 def _report_rcx(args, cfg, base) -> int:
     from .config import run_config
-    from .report.rcx import RcxOptions, build_rcx_report, load_notes, notes_template
+    from .report.rcx import (
+        MissingPdfExtra,
+        RcxOptions,
+        _weasyprint,
+        build_rcx_report,
+        load_notes,
+        notes_template,
+    )
+
+    pdf = _is_pdf(args.out)
+    if pdf:  # 0.107 (#197): fail before the run, not after it
+        try:
+            _weasyprint()
+        except MissingPdfExtra as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
 
     rep_cfg = dict(cfg.get("report") or {})
     rcx_cfg = dict(rep_cfg.get("rcx") or {})
@@ -191,8 +219,15 @@ def _report_rcx(args, cfg, base) -> int:
         notes_path = os.path.join(base, notes_path)
     res = run_config(cfg, base_dir=base)
     rep = build_rcx_report(res, options=options, notes=load_notes(notes_path))
-    with open(args.out, "w") as fh:
-        fh.write(rep.to_html())
+    if pdf:
+        try:
+            rep.to_pdf(args.out)
+        except ValueError as e:  # a malformed SOURCE_DATE_EPOCH
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+    else:
+        with open(args.out, "w") as fh:
+            fh.write(rep.to_html())
     k = rep.kpis
     dollars = f"${k['annual_cost_usd']:,.0f}/yr costed" if k["n_costed"] else "no costed issues"
     print(
@@ -2704,7 +2739,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     prep = sub.add_parser("report", help="run a config and write an HTML report")
     prep.add_argument("config")
-    prep.add_argument("--out", required=True, help="output .html path")
+    prep.add_argument(
+        "--out",
+        required=True,
+        help="output .html path; rcx: a .pdf path writes PDF (the [pdf] extra, WeasyPrint)",
+    )
     prep.add_argument(
         "--layout",
         help="audit (default), rcx (printable RCx layout), or a camber.reports plugin name; "

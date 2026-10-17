@@ -11,6 +11,7 @@ and the action recommendations — and adds no new detector or cost model. The m
 camber report site.json --out rcx.html --layout rcx
 camber report site.json --out rcx.html --layout rcx --week oat-range --paper a4
 camber report site.json --out rcx.html --layout rcx --notes notes.json --notes-template slots.json
+camber report site.json --out rcx.pdf --layout rcx   # PDF directly (the [pdf] extra, 0.107)
 ```
 
 ![Screenshot of the RCx report's contents, cover and executive summary](img/shots/rcx-report.png)
@@ -290,6 +291,38 @@ section on a new page and keeps figures and rows whole. It also repeats table he
 colours, hides the table of contents, and repeats the research-only banner on every page. The
 report uses no JavaScript and loads no external assets: the charts are inline base64 PNG at 150
 dpi, or SVG.
+
+### Direct PDF output
+
+Since 0.107 (#197), an `--out` path ending in `.pdf` writes the PDF directly, for unattended
+runs:
+
+```bash
+pip install "camber-toolkit[pdf]"
+camber report site.json --layout rcx --out rcx.pdf --paper a4
+```
+
+The PDF is the same HTML rendered by [WeasyPrint](https://weasyprint.org/), so there is one
+layout source and the print rules above all hold: `--paper` sets the page size, every section
+starts a page, figures and table rows stay whole, table headers and the research-only banner repeat,
+and the inline charts are embedded. WeasyPrint is given the HTML with only `data:` URLs allowed,
+so the render reads nothing from disk or the network. From Python, `RcxReport.to_pdf(path)`
+returns the bytes and writes them when given a path.
+
+The PDF is reproducible: its creation and modification dates are the end of the data period, or
+`SOURCE_DATE_EPOCH` (whole seconds since 1970, UTC) when that is set, so the same data gives the
+same bytes. A malformed `SOURCE_DATE_EPOCH` exits 2.
+
+**Installing.** The `pdf` extra pins `weasyprint>=68.1`. WeasyPrint also needs the **Pango**
+system libraries, which pip cannot install: on Debian or Ubuntu, `apt install libpango-1.0-0
+libpangoft2-1.0-0`; on macOS, `brew install pango`; on Windows, see WeasyPrint's installation
+guide. Without the extra, or without Pango, `camber report` exits 2 before the run and names
+`pip install "camber-toolkit[pdf]"`. **conda-forge users:** the CAMBER feedstock does not pull
+WeasyPrint, so install `weasyprint` from conda-forge (`conda install -c conda-forge weasyprint`,
+which brings Pango) or with pip.
+
+Only the rcx layout writes PDF; `--layout audit` with a `.pdf` path exits 2. In CI the real PDF
+tests run in a separate job that installs Pango; elsewhere they skip.
 
 ## Worked example: the LBNL single-duct AHU
 

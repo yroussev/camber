@@ -32,6 +32,19 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   the arrangement and the upgrade order.
 - The edge config's `part_layout` (`canonical` or `legacy`; `CAMBER_EDGE_PART_LAYOUT`) and two
   manifest fields, `part_layout` and `rows_sha256`, for audit.
+- **The RCx report writes PDF directly (#197).** `camber report CONFIG --layout rcx --out
+  report.pdf` renders the report's own HTML through WeasyPrint, so there is still one layout
+  source: `--paper` sets the page size, sections start pages, figures and rows stay whole, table
+  headers and the research-only banner repeat, and the inline charts are embedded. The `.pdf`
+  extension picks PDF, as `.yaml` picks a YAML config; `--out` stays the one output flag.
+  `RcxReport.to_pdf(path=None)` returns the bytes. WeasyPrint fetches only `data:` URLs, so the
+  render reads nothing from disk or the network. The PDF's dates are the end of the data period,
+  or `SOURCE_DATE_EPOCH` when set, so the same data gives the same bytes. WeasyPrint is the new
+  optional `pdf` extra (`pip install "camber-toolkit[pdf]"`, `weasyprint>=68.1`), and it needs
+  the Pango system libraries. Without the extra or Pango, the command exits 2 before the run and
+  names the extra. On conda-forge, install `weasyprint` from conda-forge or with pip. Only the
+  rcx layout writes PDF: `--layout audit` with a `.pdf` path exits 2. A separate CI job installs
+  Pango and runs the PDF tests; the core matrix skips them.
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
@@ -47,6 +60,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   forwarder that must keep sending to an older landing can set `part_layout: legacy`. Batches
   already in a spool keep their bytes and key. Uploads signed straight into the store's layout
   get no row check.
+
 
 ## [0.106.0] — 2026-10-17
 
