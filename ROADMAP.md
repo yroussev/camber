@@ -436,6 +436,16 @@ Version numbers are given only where a release is already planned.
     - [x] #130 byte-reproducible store part files;
     - [x] #132 `hw_pump_summer_lockout`, a gated synthetic scenario;
     - [x] #133 a `synthetic` catalog kind and the `plant-lockout` exercise.
+  - **0.104 — `camber serve` cross-site check, store locks, store verify/normalize, coarse-trend start counts, size-relative pump gates** (released 2026-10-17). Closes #134–#139, #141, #143, #150:
+    - [x] #134 `camber serve` refuses cross-site requests; `--auth none`; token-by-default deprecation notice;
+    - [x] #135 every plain-store write takes the store lock; `--lock-timeout`;
+    - [x] #136 canonical edge parts; `camber store verify` / `normalize`;
+    - [x] #137 two synthetic plant cases and the `plant-boiler-cycling` / `plant-chiller-staging` exercises;
+    - [x] #138 README images render on PyPI;
+    - [x] #139 flaky portfolio-migrate test;
+    - [x] #141 a catalog rebuild no longer hides a racing write;
+    - [x] #143 start counts on coarse trends; resampled run status no longer hides short cycling;
+    - [x] #150 pump and loop drift gates scale to the pump; constant-speed pumps.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
