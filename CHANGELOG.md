@@ -31,9 +31,11 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 ### Changed
 - **`chiller_staging_fleet` counts only chillers (#183).** A chilled-water loop's power point
   is its pumps', so loops are left out of the fleet (new metric `n_loops_excluded`, with a
-  caveat naming them). The counts were samples named as hours. `n_running_hours` and
-  `n_multi_hours` are now `n_running_samples` and `n_multi_samples`, with `running_hours`,
-  `multi_hours` and `sample_interval_min` beside them.
+  caveat naming them).
+- **Breaking: `chiller_staging_fleet`'s count metrics are renamed (#183).** They were sample
+  counts named as hours. `n_running_hours` is now `n_running_samples` and `n_multi_hours` is now
+  `n_multi_samples`, with no aliases: a reader of the old keys gets nothing. The hours are new
+  metrics beside them (`running_hours`, `multi_hours`, and `sample_interval_min`).
 - **`chw_supply_tracking` and `chw_plant_reset` gate a chilled-water loop on its pumps (#184).**
   Equipment whose class is a loop is "running" by its pumps' `pump_status` (duty above 0.5),
   else its `chw_flow` above 5 % of its 95th percentile, else its pumps' `power` above a tenth of
@@ -54,20 +56,22 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   (`cw_flow` and the range), else on the range, with the constant-flow caveat on a fired
   finding. The new metric `tower_approach_load_source` says which. Equipment with chilled-water
   tons scores as before.
-- **`camber datasets score` scores each rule on the equipment it ran on (#184).** A rule's
-  false-positive rate counted every labelled equipment, including equipment the rule cannot run
-  on (the chillers, for a tower rule). Each record now lists the rules that ran on it
+- **`camber datasets score` scores each rule only on the equipment it applies to (#184).** This
+  changes per-rule label scores on any entry whose rules do not all run on every equipment. A
+  rule's false-positive rate counted every labelled equipment, including equipment the rule
+  cannot run on (the chillers, for a tower rule). Each record now lists the rules that ran on it
   (`scored`, leaving out a class decline), and each rule's confusion counts those records only.
   A suite rule with no finding anywhere is still scored over every record. The overall
   confusion is unchanged. `camber.eval.benchmark` reads the optional `scored` key.
-- The `plant-chiller-multi` workbook answers move; the new answers are pending sign-off. Over
+- The `plant-chiller-multi` workbook answers are re-recorded (key, page, instructor block and the
+  config comments). Over
   the whole facility the fleet counts 14 chillers, not 21, and 84.6 % of multi-chiller samples
   are over-staged (was 100 %), still a fault. The secondary loops' `run_source` is `flow` (was
   `power`), with the same figures. The `cooling_tower_fan_effort_drift` label score counts the
   7 towers, not all 28 pieces of equipment, so its false-positive rate is 1 of 5 (was 1 of 26).
   The over-staged plant's tower still warns, because the synthetic tower has no condenser flow.
   `cooling_tower_approach_drift` now runs on the seven towers. It faults on the full-fan tower
-  (+5.7 °F) and passes the others.
+  (+5.7 °F) and passes the others, the controlled fouled tower included; the key now records it.
 - The `plant-heat-pump` label scores move with the scoring change; the new answers are pending
   sign-off. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
   `hp_capacity_shortfall` over the 10 heat pumps, `heatpump_defrost` over the 4 air-source heat

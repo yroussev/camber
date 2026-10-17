@@ -14,6 +14,10 @@ recorded from::
         --findings multi_out/findings.json
 
 plus the three ``chiller_staging_fleet`` variants (CAMBER 0.105.0-dev, 2026-10-13).
+
+Re-recorded for 0.106.0-dev on 2026-10-16 after #183/#184: the fleet leaves the secondary loops
+out (14 chillers, not 21), each loop is gated on its flow, ``cooling_tower_approach_drift`` runs on
+the towers, and each rule's label score counts only the equipment it ran on.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ _DS = "synthetic-chw-plant-multi"
 _FLEET, _TRACK = "chiller_staging_fleet", "chw_supply_tracking"
 _APP, _TOWER = "chiller_approach_fouling", "cooling_tower_approach"
 _FAN = "cooling_tower_fan_effort_drift"
+_APPDRIFT = "cooling_tower_approach_drift"
 _PLANTS = (
     "well_run",
     "over_staged",
@@ -46,13 +51,14 @@ def standin(store) -> None:
 
 
 def _pooled_fleet(ctx) -> None:
-    """Over the whole facility the fleet rule pools 21 'chillers' on one clock -- the 14 chillers
-    of seven plants plus the seven secondary loops, whose pump power reads as a chiller's -- and
-    calls every multi-chiller sample over-staged. Its finding sits on ``<fleet>``."""
+    """Over the whole facility the fleet rule pools the 14 chillers of seven plants on one clock
+    (the seven secondary loops are left out: their power is the pumps') and calls 84.6 % of the
+    multi-chiller samples over-staged. Its finding sits on ``<fleet>``."""
     f = ctx.finding(_FLEET, "<fleet>")
     assert f is not None, "no chiller_staging_fleet finding on <fleet>"
-    assert f.metrics["n_chillers"] == 21, f.metrics
-    assert f.metrics["pct_overstaged"] == 100.0, f.metrics
+    assert f.metrics["n_chillers"] == 14, f.metrics
+    assert f.metrics["n_loops_excluded"] == 7, f.metrics
+    assert f.metrics["pct_overstaged"] == 84.6, f.metrics
 
 
 def _fleet_counts_two(ctx) -> None:
@@ -69,7 +75,7 @@ def _chillers_hold_setpoint(ctx) -> None:
         assert f is not None and f.severity == "ok", (ch, f and f.severity)
         assert f.metrics["above_pct"] == 0.0 and f.metrics["chwst_median_f"] == 44.0, f.metrics
     loop = ctx.finding(_TRACK, "SECLOOP__reverse_mixing")
-    assert loop is not None and loop.metrics["run_source"] == "power", loop and loop.metrics
+    assert loop is not None and loop.metrics["run_source"] == "flow", loop and loop.metrics
 
 
 def _controlled_tower_hides_in_fan(ctx) -> None:
@@ -112,7 +118,8 @@ EXERCISE = Exercise(
     expect=(
         # 1. the fleet rule over the whole facility: one pooled fleet
         Finding(_FLEET, "<fleet>", severity=("fault",)),
-        Check("the pooled fleet", _pooled_fleet, quote="21"),
+        Check("the pooled fleet", _pooled_fleet, quote="14 chillers"),
+        Metric(_FLEET, "<fleet>", "pct_overstaged", 84.6, 0.05, quote="84.6%"),
         # 2. the fleet rule on one plant at a time
         Check("one plant, two chillers", _fleet_counts_two),
         Finding(_FLEET, "<fleet>", severity=("ok",), run="well_run"),
@@ -159,6 +166,16 @@ EXERCISE = Exercise(
         # the false positive: two chillers' condenser water halves the tower's range
         Finding(_FAN, "TOWER__over_staged", severity=("warn",)),
         Metric(_FAN, "TOWER__over_staged", "fan_effort_drift_pct", 6.47, 0.05, quote="6.5"),
+        # the approach drift, now on the towers themselves (0.106, #184): only the full-fan tower
+        Finding(_APPDRIFT, "TOWER__tower_full_fan", severity=("fault",)),
+        Metric(
+            _APPDRIFT, "TOWER__tower_full_fan", "tower_approach_drift_f", 5.75, 0.05, quote="5.7"
+        ),
+        *(
+            Finding(_APPDRIFT, f"TOWER__{p}", severity=("ok",))
+            for p in _PLANTS
+            if p not in ("well_run", "tower_full_fan")
+        ),
         # 6. the near miss passes everything
         Finding(_APP, "CH1__near_miss", severity=("ok",)),
         Metric(_APP, "CH1__near_miss", "worst_approach_ratio", 1.38, 0.005, quote="1.38"),
@@ -169,7 +186,7 @@ EXERCISE = Exercise(
         Score(_TRACK, tpr=1.0, fpr=0.0),
         Score(_APP, tpr=1.0, fpr=0.0),
         Score(_TOWER, tpr=0.5, fpr=0.0, quote="TPR 50%"),
-        Score(_FAN, tpr=1.0, fpr=1 / 26, tol=0.001, quote="1 of 26"),
+        Score(_FAN, tpr=1.0, fpr=1 / 5, tol=0.001, quote="1 of 5"),
         Score(None, tpr=4 / 6, fpr=1 / 22, tol=0.001, quote="4 of 6"),
     ),
     standin=standin,

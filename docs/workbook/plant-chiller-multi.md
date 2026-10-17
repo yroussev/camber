@@ -85,7 +85,8 @@ camber run fleet_over.json --out fleet_over_out
 2. **Run the exercise's config** (the commands above) and read the `chiller_staging_fleet` line
    `camber run` prints. How many chillers does it count, and where does its finding sit?
 3. **One plant at a time.** Run the three fleet variants and read `pct_overstaged`,
-   `n_multi_hours`, `median_running_count` and `rep_capacity_kw` in each `findings.json`.
+   `n_multi_samples` (and `multi_hours`), `median_running_count`, `rep_capacity_kw` and
+   `capacity_source` in each `findings.json`.
 4. **The secondary loop.** Read `chw_supply_tracking` for every `SECLOOP__<plant>` and for the
    reverse-mixing plant's two chillers: `above_pct`, `median_excess_above_f`, `chwst_median_f`,
    `deltaT_median_f` and `run_source`.
@@ -94,22 +95,25 @@ camber run fleet_over.json --out fleet_over_out
 6. **The towers.** Read `cooling_tower_approach` for `TOWER__well_run`, `TOWER__tower_full_fan`
    and `TOWER__tower_controlled`: `approach_median_f`, `pct_hours_high_approach`, `n_operating`
    and `n_low_effort_excluded`. Then read `cooling_tower_fan_effort_drift` for every tower:
-   `fan_effort_drift_pct` and the summary.
+   `fan_effort_drift_pct`, the summary and the caveats. Read `cooling_tower_approach_drift` too:
+   `tower_approach_drift_f` and `tower_approach_load_source`.
 7. **Score.** Run `camber datasets score` and read the overall rates and each rule's.
 
 ## Questions
 
-1. Over the whole facility, how many chillers does `chiller_staging_fleet` count, and what does
-   it conclude? Why is that number wrong, and what fixes it?
+1. Over the whole facility, how many chillers does `chiller_staging_fleet` count, what does it
+   leave out, and what does it conclude? Why is pooling seven plants on one clock still wrong,
+   and what fixes it?
 2. On one plant at a time, which plant over-stages? What capacity does the rule assume for a
-   chiller, where does that figure come from, and why does it read low on that plant?
+   chiller, where does that figure come from, why does it read low on that plant, and what
+   would you declare instead?
 3. Which plant's secondary loop misses its setpoint? Are its chillers at fault? What is the loop
    delta-T, and what is the water in the decoupler doing?
 4. Which chiller's condenser is fouled, and how far is its approach from design?
 5. Which tower does `cooling_tower_approach` flag, and which does it pass? Both are fouled: what
    does the controlled tower do instead of widening its approach, and which rule sees that?
-6. `cooling_tower_fan_effort_drift` also warns on a tower that is not fouled. Which one, and why
-   might the over-staged plant's tower look harder-working?
+6. `cooling_tower_fan_effort_drift` also warns on a tower that is not fouled. Which one, why
+   might the over-staged plant's tower look harder-working, and what point would settle it?
 7. What does the label score say for each rule, and for the plant as a whole? Which fault can no
    label score count, and why?
 8. The near-miss plant passes every check. What is a little off in it, and what would you watch?
@@ -118,17 +122,20 @@ camber run fleet_over.json --out fleet_over_out
 
 - **Findings.** `camber run` prints one line per finding: one per rule and equipment, plus one
   `<fleet>` line for `chiller_staging_fleet`.
-- **Fleet.** `chiller_staging_fleet` takes every equipment that carries a chiller's power and
-  puts them on one clock. A sample is over-staged when two or more run and their total power
-  would fit in one machine fewer at 90 % (`redundancy_ceiling`) of a chiller's capacity. That
-  capacity (`rep_capacity_kw`) is the median, across the chillers, of each one's own 95th
-  percentile running power. It warns when 20 % of the multi-chiller samples are over-staged and
-  faults at 50 %. Its finding sits on `<fleet>`, not on a chiller.
+- **Fleet.** `chiller_staging_fleet` takes every chiller that carries a power point and puts
+  them on one clock. A chilled-water loop (`CHW_LOOP`, `SECLOOP`) is left out
+  (`n_loops_excluded`): its power is its pumps'. A sample is over-staged when two or more run and
+  their total power would fit in one machine fewer at 90 % (`redundancy_ceiling`) of a chiller's
+  capacity. That capacity (`rep_capacity_kw`) is the declared full-load power (`capacity_kw`)
+  when given, else the median, across the chillers, of each one's own 95th percentile running
+  power (`capacity_source`). It warns when 20 % of the multi-chiller samples are over-staged
+  and faults at 50 %. The counts are samples (`n_multi_samples`), with their hours beside them
+  (`multi_hours`). Its finding sits on `<fleet>`, not on a chiller.
 - **Supply tracking.** `chw_supply_tracking` reports the share of running time with the supply
   more than 3 °F above its setpoint (`above_pct`): a warn at 10 %, a fault at 25 %. "Running" is
-  the chiller's status when mapped, else its power (`run_source`). The secondary loop has no
-  chiller status, so the rule reads its power point, the pumps' here, and its caveat calls that
-  the chiller's power.
+  the chiller's status when mapped, else its power (`run_source`). The secondary loop is a loop,
+  so it is gated on its pumps: their status when mapped, else the loop flow (here, `run_source`
+  is `flow`), else the pumps' power.
 - **Approach.** `chiller_approach_fouling` compares each chiller's median condenser and
   evaporator approach with 5 and 4 °F (`worst_approach_ratio`): a warn at 1.5 times design, a
   fault at 2.
@@ -136,7 +143,11 @@ camber run fleet_over.json --out fleet_over_out
   samples with the fan at 90 % or more (`n_operating`; the rest are `n_low_effort_excluded`),
   against a 7 °F design: a warn when the median is 1.3 times design, a fault at 1.7.
   `cooling_tower_fan_effort_drift` reads the fan speed against the reference tower at matched
-  condenser range and wet-bulb: a warn at 5 percentage points, a fault at 10.
+  condenser load and wet-bulb: a warn at 5 percentage points, a fault at 10. With a condenser
+  flow (`cw_flow`) the load is the heat rejected; these towers trend none, so it is the range,
+  which assumes a constant condenser flow, and a fired finding says so.
+  `cooling_tower_approach_drift` reads the approach against the reference at matched load the
+  same way (`tower_approach_load_source`).
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the entry's declared detectors and for the plant as a whole.
 
@@ -153,8 +164,8 @@ camber run fleet_over.json --out fleet_over_out
   controller trends them.
 - In the heat wave, the badly fouled tower sends condenser water near 99 °F. A real chiller would
   trip on high head pressure before that.
-- A 15-minute trend averages a chiller's start into its first sample, and the fleet rule's counts
-  are of 15-minute samples, not hours.
+- A 15-minute trend averages a chiller's start into its first sample. The fleet rule's counts are
+  of 15-minute samples (`n_multi_samples`); `multi_hours` gives their hours.
 
 ## Going further
 
@@ -162,6 +173,8 @@ camber run fleet_over.json --out fleet_over_out
   controlled to the wet-bulb plus 8 °F, so its fouling shows only as fan effort, and
   `cooling_tower_approach` scores no fouled run there.
 - Edit `fleet_over.json` and set `chiller_staging_fleet`'s `redundancy_ceiling` lower and higher.
-  How does the over-staged share move, and what would you set it from on a real plant?
+  How does the over-staged share move, and what would you set it from on a real plant? Then
+  declare `capacity_kw` (about 138 kW, a chiller's draw at full load here) and read the verdict
+  again.
 - Run `camber rules params chw_supply_tracking` and `camber rules params cooling_tower_approach`
   to see where each default comes from.
