@@ -47,6 +47,7 @@ from ..coolingtower import tower_approach_f
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _chillerfit
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -368,14 +369,34 @@ class CoolingTowerApproachDrift:
         # add a temporal claim resting on the weaker, untuned parameters -- label both.
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
+        if severity == "ok" and (direction == "up" or round(drift.drift_f, 1) == 0.0):
+            # 0.106 (#190): an ok widening names no fault -- that belongs to warn and fault
+            summary = holds_near_baseline(
+                equip,
+                "cooling-tower approach",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="°F",
+                matched="matched load",
+            )
+        elif direction == "up":
+            summary = (
+                f"{equip}: cooling-tower approach widened {drift.drift_f:+.1f}°F "
+                f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched load"
+            )
+        else:
+            # one-sided: a narrowing is a better-than-baseline tower, never a fault (#190)
+            summary = (
+                f"{equip}: cooling-tower approach narrowed {abs(drift.drift_f):.1f}°F "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched load "
+                "(a narrower approach is not a fault)"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: cooling-tower approach widened {drift.drift_f:+.1f}°F "
-                f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched load"
-            ),
+            summary=summary,
             caveats=caveats,
         )

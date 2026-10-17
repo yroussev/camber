@@ -187,6 +187,15 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   fault. The pump and loop detectors now use the same helper, and their text is unchanged. Only
   the text moves: no golden file quotes these summaries, and no severity, metric, caveat or
   benchmark figure changes.
+- **`cooling_tower_approach_drift` and `chiller_head_pressure_drift` say which way the signal
+  moved (#190).** The tower summary said "approach widened" whatever the sign, so a fall read
+  "widened -0.4°F". It now says "narrowed" with the size of the fall, and adds that a narrower
+  approach is not a fault. `chiller_head_pressure_drift` said "climbed" on any rise, even an
+  `ok` one, and printed a fall as a bare signed number. A fall now says "fell", still noting that
+  a fall is not a high-side fault. An `ok` rise on either detector now says the signal "holds
+  near its baseline", with the signed shift and its σ, as in #187 and #189. `warn` and `fault`
+  wording is unchanged. Only the text moves: no golden file or workbook answer quotes these
+  summaries, and no severity, metric or caveat changes.
 
 ## [0.105.0] — Unreleased
 
