@@ -61,7 +61,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`chiller_approach_fouling`](#chiller_approach_fouling) | 2 |  |
 | [`chiller_efficiency`](#chiller_efficiency) | 1 |  |
 | [`chiller_staging`](#chiller_staging) | 3 |  |
-| [`chiller_staging_fleet`](#chiller_staging_fleet) | 1 |  |
+| [`chiller_staging_fleet`](#chiller_staging_fleet) | 2 |  |
 | [`chw_plant_reset`](#chw_plant_reset) | 4 | yes |
 | [`chw_pump_dp_reset`](#chw_pump_dp_reset) | 2 | yes |
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
@@ -197,7 +197,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `cond_design_f`: Use the condenser approach from the chiller's selection report or start-up log, or the median of a period just after a tube cleaning at similar load. *Note:* Severity is fixed in code on the worse leg's median / design: warn at >= 1.5x, fault at >= 2x.
+- `cond_design_f`: Use the condenser approach from the chiller's selection report or start-up log, or the median of a period just after a tube cleaning at similar load. *Note:* Severity is fixed in code on the worse leg's median / design: warn at >= 1.5x, fault at >= 2x. 0.106 (#184): the medians read running samples only -- compressor_status duty > 0.5, else power above a tenth of its 95th percentile (run_source); with neither, every sample, with a caveat.
 - `evap_design_f`: Use the evaporator approach from the chiller's selection report or start-up log, or the median of a known-good period with correct charge and flow. *Note:* Same warn (1.5x) / fault (2x) ratios as the condenser leg.
 
 ## chiller_efficiency
@@ -229,10 +229,12 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `redundancy_ceiling` | `0.9` | fraction of one chiller's capacity | 0.5 to 1.0 | CAMBER judgment: how fully one chiller can be loaded before the next must stage on |
+| `capacity_kw` | `null` | kW (one number, or {equip: kW}) | 10.0 to 5000.0 | CAMBER judgment: None reads each chiller's observed 95th-percentile running power; a site input, not a threshold |
 
 How to calibrate:
 
-- `redundancy_ceiling`: Use the plant's stage-up load from its staging sequence (e.g. 0.85-0.95 of capacity). Capacity is each chiller's 95th-percentile power, so a plant that never reaches full load reads a low capacity; lower this if the flagged hours look like correct staging. *Note:* Severity is fixed in code: warn when >= 20 % of multi-chiller hours are over-staged, fault at >= 50 %.
+- `redundancy_ceiling`: Use the plant's stage-up load from its staging sequence (e.g. 0.85-0.95 of capacity). Without a declared capacity_kw, capacity is each chiller's 95th-percentile power, so a plant that never reaches full load reads a low capacity; declare capacity_kw, or lower this if the flagged samples look like correct staging. *Note:* Severity is fixed in code: warn when >= 20 % of multi-chiller samples are over-staged, fault at >= 50 %.
+- `capacity_kw`: Enter each chiller's full-load electric power from its nameplate, selection report or start-up log: one number when the chillers are equal, else an {equip: kW} map (a chiller left out of the map keeps its observed figure). 0.106 (#183). *Note:* The observed 95th percentile is only as high as the chiller ever ran, so a plant that never loads a chiller fully (an over-staged one) reads a low capacity and under-states its over-staging; the finding says so (capacity_source) when nothing is declared. Chilled-water loops (CHW_LOOP, SECLOOP) are never in the fleet: their power is the pumps'.
 
 ## chw_plant_reset
 

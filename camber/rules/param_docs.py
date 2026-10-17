@@ -2202,11 +2202,26 @@ PARAM_DOCS["chiller_staging_fleet"] = {
         "fraction of one chiller's capacity",
         "CAMBER judgment: how fully one chiller can be loaded before the next must stage on",
         "Use the plant's stage-up load from its staging sequence (e.g. 0.85-0.95 of capacity). "
-        "Capacity is each chiller's 95th-percentile power, so a plant that never reaches full "
-        "load reads a low capacity; lower this if the flagged hours look like correct staging.",
+        "Without a declared capacity_kw, capacity is each chiller's 95th-percentile power, so a "
+        "plant that never reaches full load reads a low capacity; declare capacity_kw, or lower "
+        "this if the flagged samples look like correct staging.",
         (0.5, 1.0),
-        "Severity is fixed in code: warn when >= 20 % of multi-chiller hours are over-staged, "
+        "Severity is fixed in code: warn when >= 20 % of multi-chiller samples are over-staged, "
         "fault at >= 50 %.",
+    ),
+    "capacity_kw": _P(
+        "kW (one number, or {equip: kW})",
+        "CAMBER judgment: None reads each chiller's observed 95th-percentile running power; a "
+        "site input, not a threshold",
+        "Enter each chiller's full-load electric power from its nameplate, selection report or "
+        "start-up log: one number when the chillers are equal, else an {equip: kW} map (a chiller "
+        "left out of the map keeps its observed figure). 0.106 (#183).",
+        (10.0, 5000.0),
+        "The observed 95th percentile is only as high as the chiller ever ran, so a plant that "
+        "never loads a chiller fully (an over-staged one) reads a low capacity and under-states "
+        "its over-staging; the finding says so (capacity_source) when nothing is declared. "
+        "Chilled-water loops (CHW_LOOP, SECLOOP) are never in the fleet: their power is the "
+        "pumps'.",
     ),
 }
 
@@ -2218,7 +2233,9 @@ PARAM_DOCS["chiller_approach_fouling"] = {
         "median of a period just after a tube cleaning at similar load.",
         (1.0, 10.0),
         "Severity is fixed in code on the worse leg's median / design: warn at >= 1.5x, fault "
-        "at >= 2x.",
+        "at >= 2x. 0.106 (#184): the medians read running samples only -- compressor_status "
+        "duty > 0.5, else power above a tenth of its 95th percentile (run_source); with neither, "
+        "every sample, with a caveat.",
     ),
     "evap_design_f": _P(
         "°F",

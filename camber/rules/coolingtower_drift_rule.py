@@ -16,7 +16,11 @@ kW/ton -- so this pairs directly with the chiller condenser-side drift detectors
 The comparison is made **at matched load**. Approach widens with heat rejection on its own, so a
 busier current period looks like degradation to any level-vs-level test; scoring the residuals
 against a fitted ``approach ~ f(tons)`` line removes that confound (:mod:`camber.chillerbaseline`),
-using chiller tons as the condenser-heat proxy the CW-range detector already uses. The reference is
+using chiller tons as the condenser-heat proxy the CW-range detector already uses. A tower that is
+its own equipment carries no chilled-water points (0.106, #184), so the load falls back to the
+condenser side: the heat rejected (``cw_flow * range / 24``, tons) when the condenser flow is
+trended, else the tower's range (``cw_return_temp - cw_supply_temp``), which is right only while
+the condenser flow is constant and says so when a finding fires. The reference is
 **frozen**, not rolling (:mod:`camber.store.modelstore`): a refit from the window being judged would
 define away the drift it is meant to catch.
 
@@ -46,6 +50,8 @@ from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
+    Role.CW_RETURN_TEMP: "CWR_Temp",
+    Role.CW_FLOW: "CW_Flow",
     Role.CHW_SUPPLY_TEMP: "CHWS_Temp",
     Role.CHW_RETURN_TEMP: "CHWR_Temp",
     Role.CHW_FLOW: "CHW_Flow",
@@ -94,8 +100,26 @@ class CoolingTowerApproachDrift:
     """
 
     name = "cooling_tower_approach_drift"
-    roles_required = (Role.CHW_FLOW, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP)
-    roles_optional = (Role.CW_SUPPLY_TEMP, Role.WETBULB_TEMP, Role.OAT, Role.OUTDOOR_RH)
+    # 0.106 (#184): the load no longer has to be chilled-water tons, so a tower that is its own
+    # equipment (no CHW points) runs on its condenser-side load; the approach itself still needs
+    # the condenser-water supply and a wet-bulb, and declines without them
+    roles_required = ()
+    roles_any_of = ((Role.CHW_FLOW, Role.CW_RETURN_TEMP),)
+    roles_optional = (
+        Role.CHW_FLOW,
+        Role.CHW_SUPPLY_TEMP,
+        Role.CHW_RETURN_TEMP,
+        Role.CW_SUPPLY_TEMP,
+        Role.CW_RETURN_TEMP,
+        Role.CW_FLOW,
+        Role.WETBULB_TEMP,
+        Role.OAT,
+        Role.OUTDOOR_RH,
+    )
+
+    #: the load sources, strongest first: chilled-water tons, condenser heat rejected (tons),
+    #: the tower's range (F)
+    LOAD_SOURCES = ("chw_tons", "cw_heat_rejection", "cw_range")
 
     def __init__(
         self,
@@ -145,10 +169,40 @@ class CoolingTowerApproachDrift:
             Role.OAT in frame.columns and Role.OUTDOOR_RH in frame.columns
         )
 
-    def _prepared(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """A ``tons`` + tower-approach frame; tons derived as in :mod:`camber.chiller`."""
+    @staticmethod
+    def load_source(frame: pd.DataFrame) -> str | None:
+        """The load the approach is matched on (0.106, #184): ``"chw_tons"`` (CHW flow and both
+        temperatures), ``"cw_heat_rejection"`` (condenser flow and range), ``"cw_range"`` (the
+        tower's range alone) or ``None``."""
+
+        def has(*roles):
+            return all(
+                r in frame.columns and pd.to_numeric(frame[r], errors="coerce").notna().any()
+                for r in roles
+            )
+
+        if has(Role.CHW_FLOW, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP):
+            return "chw_tons"
+        if has(Role.CW_SUPPLY_TEMP, Role.CW_RETURN_TEMP):
+            return "cw_heat_rejection" if has(Role.CW_FLOW) else "cw_range"
+        return None
+
+    def _prepared(self, frame: pd.DataFrame, source: str | None = None) -> pd.DataFrame:
+        """A ``tons`` + tower-approach frame. ``tons`` is the matched load: chilled-water tons as in
+        :mod:`camber.chiller`, else the condenser side (see :meth:`load_source`)."""
         legacy = frame.rename(columns={r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns})
-        out = pd.DataFrame({"tons": tons_from_flow(legacy)}, index=frame.index)
+        source = source or self.load_source(frame)
+        if source == "chw_tons":
+            load = tons_from_flow(legacy)
+        elif source in ("cw_heat_rejection", "cw_range"):
+            load = pd.to_numeric(legacy["CWR_Temp"], errors="coerce") - pd.to_numeric(
+                legacy["CWS_Temp"], errors="coerce"
+            )
+            if source == "cw_heat_rejection":
+                load = pd.to_numeric(legacy["CW_Flow"], errors="coerce") * load / 24.0
+        else:
+            load = pd.Series(float("nan"), index=frame.index)
+        out = pd.DataFrame({"tons": load}, index=frame.index)
         if self._has_approach(frame):
             out[_METRIC] = tower_approach_f(
                 legacy, elevation_ft=self.elevation_ft, pressure_psia=self.pressure_psia
@@ -210,7 +264,21 @@ class CoolingTowerApproachDrift:
                 ],
             )
 
-        base_t, cur_t = self._prepared(baseline), self._prepared(current)
+        src_b, src_c = self.load_source(baseline), self.load_source(current)
+        if src_b is None or src_b != src_c:
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={"declined": True, "reason": "no_load"},
+                summary=f"{equip}: declined -- no tower load to match the approach on",
+                caveats=[
+                    "could not evaluate cooling-tower approach drift: the matched load needs CHW "
+                    "flow + supply + return, or the condenser-water supply and return (with the "
+                    "condenser flow, if trended), read the same way in both periods"
+                ],
+            )
+        base_t, cur_t = self._prepared(baseline, src_b), self._prepared(current, src_c)
         gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
         frozen = self._frozen_baseline(equip, base_t, caveats, gate)
         if frozen is None:
@@ -257,6 +325,13 @@ class CoolingTowerApproachDrift:
             "tower_approach_baseline_frozen_at": rec.frozen_at if rec else "",
         }
         metrics["tower_approach_min_tons"] = gate[0]
+        metrics["tower_approach_load_source"] = src_b  # 0.106 (#184)
+        if severity != "ok" and src_b == "cw_range":
+            caveats.append(
+                "the matched load is the tower's range, which assumes a constant condenser flow: "
+                "with more chillers (and condenser pumps) on than in the baseline the range falls "
+                "for the same heat -- map the condenser flow (cw_flow) to match on heat rejected"
+            )
         _chillerfit.fit_notes(frozen, caveats, metrics, "tower_approach")
         _chillerfit.envelope_caveats(drift, caveats, frozen)
 

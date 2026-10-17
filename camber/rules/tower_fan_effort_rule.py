@@ -11,10 +11,17 @@ plant the 65 % fouled tower moved its high-fan median approach only about 1 F wh
 
 against a **frozen** baseline, and flags the current period's fan speed running above it at matched
 load and wet-bulb. It is **one-sided**: fouling (fill scale, plugged nozzles, a slipping belt) only
-ever makes the fans work harder for the same heat. The condenser load is the tower's own range
-(``cw_return_temp - cw_supply_temp``: heat rejected per unit of the usually constant condenser
-flow) when both are trended, else the chilled-water load in tons from the CHW flow and temperatures.
-Wet-bulb is measured, or derived from OAT + RH (Stull).
+ever makes the fans work harder for the same heat. The condenser load is the heat the tower
+rejects, in tons (``cw_flow * (cw_return_temp - cw_supply_temp) / 24``), when the condenser-water
+flow is trended (0.106, #184); else the tower's own range (``cw_return_temp - cw_supply_temp``:
+heat rejected per unit of condenser flow, so only right while that flow is constant); else the
+chilled-water load in tons from the CHW flow and temperatures. Wet-bulb is measured, or derived
+from OAT + RH (Stull).
+
+**The range assumes a constant condenser flow.** When a second chiller stages on with its own
+condenser pump the flow doubles and the range halves for the same heat, so a range-matched fan
+effort reads high -- a plant that over-stages its chillers looks like a working-harder tower. A
+fired finding on the range says so; map the condenser flow (``cw_flow``) to read heat rejection.
 
 **A biased leaving-water sensor drives the fan the same way.** A tower controller that reads its
 water 2 F warm cools the real water 2 F further and spends the effort to do it (on the LBNL plant
@@ -77,6 +84,7 @@ class CoolingTowerFanEffortDrift:
     roles_required = (Role.TOWER_FAN_SPEED, Role.CW_SUPPLY_TEMP)
     roles_optional = (
         Role.CW_RETURN_TEMP,
+        Role.CW_FLOW,  # 0.106 (#184): heat rejection, right when the condenser flow changes
         Role.CHW_FLOW,
         Role.CHW_SUPPLY_TEMP,
         Role.CHW_RETURN_TEMP,
@@ -114,8 +122,11 @@ class CoolingTowerFanEffortDrift:
         return pd.to_numeric(frame[role], errors="coerce")
 
     def load_source(self, frame: pd.DataFrame) -> str | None:
-        """``"cw_range"`` (tower range), ``"chw_tons"`` or ``None``."""
+        """``"cw_heat_rejection"`` (condenser flow x range, 0.106), ``"cw_range"`` (tower range),
+        ``"chw_tons"`` or ``None``."""
         if Role.CW_RETURN_TEMP in frame.columns:
+            if Role.CW_FLOW in frame.columns and self._num(frame, Role.CW_FLOW).notna().any():
+                return "cw_heat_rejection"
             return "cw_range"
         if all(
             r in frame.columns for r in (Role.CHW_FLOW, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP)
@@ -140,8 +151,10 @@ class CoolingTowerFanEffortDrift:
     def _prepared(self, frame: pd.DataFrame, source: str) -> pd.DataFrame:
         """Fan-running samples: fan %, load and wet-bulb."""
         fan = normalize_percent(self._num(frame, Role.TOWER_FAN_SPEED))
-        if source == "cw_range":
+        if source in ("cw_range", "cw_heat_rejection"):
             load = self._num(frame, Role.CW_RETURN_TEMP) - self._num(frame, Role.CW_SUPPLY_TEMP)
+            if source == "cw_heat_rejection":  # tons rejected: gpm x F / 24
+                load = self._num(frame, Role.CW_FLOW) * load / 24.0
         else:
             dt = self._num(frame, Role.CHW_RETURN_TEMP) - self._num(frame, Role.CHW_SUPPLY_TEMP)
             load = self._num(frame, Role.CHW_FLOW) * dt / 24.0
@@ -241,7 +254,8 @@ class CoolingTowerFanEffortDrift:
                 "no_load",
                 [
                     "could not evaluate tower fan effort: the condenser load needs the condenser "
-                    "return temperature, or CHW flow + supply + return, in both periods"
+                    "return temperature (with the condenser flow, if trended), or CHW flow + "
+                    "supply + return, read the same way in both periods"
                 ],
                 "no condenser load to match on",
             )
@@ -304,6 +318,13 @@ class CoolingTowerFanEffortDrift:
             caveats.append(
                 "over 10% of the current period ran outside the baseline's load envelope, so part "
                 "of this drift is extrapolated"
+            )
+        if severity != "ok" and src_b == "cw_range":
+            caveats.append(
+                "the condenser load is the tower's range, which assumes a constant condenser "
+                "flow: with more chillers (and condenser pumps) on than in the baseline the range "
+                "falls for the same heat and the fans read as working harder -- map the condenser "
+                "flow (cw_flow) to match on heat rejected, or check the chillers' staging"
             )
         metrics = {
             "fan_effort_drift_pct": round(rise, 2),

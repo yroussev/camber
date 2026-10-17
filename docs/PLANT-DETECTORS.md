@@ -59,11 +59,16 @@ is accepted with a caveat, and `Natural_Gas_Usage_Sensor` (a cumulative amount) 
 
 Most towers run their fans under a leaving-water controller. A controlled tower that fouls keeps
 its approach and works its fans harder, which is why `cooling_tower_approach_drift` scores the LBNL
-tower-fouling runs as healthy. This rule fits the fan speed against the condenser load -- the tower's
-range (`cw_return_temp - cw_supply_temp`, heat per unit of a usually constant condenser flow), else
-the chilled-water tons -- and the wet-bulb (measured, or from OAT + RH), and scores the current
-period's median fan-speed residual. Warn at +5 %-points, fault at +10. The high-fan share (hours at
-90 % or more) is reported alongside.
+tower-fouling runs as healthy. This rule fits the fan speed against the condenser load -- the heat
+the tower rejects (`cw_flow` times the range, over 24, in tons) when the condenser flow is trended
+(0.106), else the tower's range (`cw_return_temp - cw_supply_temp`), else the chilled-water tons --
+and the wet-bulb (measured, or from OAT + RH), and scores the current period's median fan-speed
+residual. Warn at +5 %-points, fault at +10. The high-fan share (hours at 90 % or more) is reported
+alongside. The range is heat per unit of condenser flow, so it is right only while that flow is
+constant: when a second chiller and its condenser pump stage on, the range halves for the same heat
+and the fans read as working harder. A fired finding on the range says so; map `cw_flow` to match
+on heat rejected. `cooling_tower_approach_drift` reads its load the same way when the tower is its
+own equipment with no chilled-water points (0.106).
 
 **The cross-check.** A tower controller whose leaving-water sensor reads 2 F warm cools the real
 water 2 F further and spends the fan effort to do it. When the water entering the chillers

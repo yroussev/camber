@@ -14,6 +14,20 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 ## [0.106.0] — Unreleased
 
+### Added
+- **A condenser-water flow role, `cw_flow` (#184).** The flow through the tower in gpm. With
+  the tower's range it gives the heat rejected, so the tower drift rules match load correctly
+  when chillers and their condenser pumps stage. It has a Haystack hint, the Brick class
+  `Condenser_Water_Flow_Sensor`, a 223P quantity, physical bounds and the gpm unit check.
+- **`chiller_staging_fleet` takes a declared capacity (#183).** The new `capacity_kw` parameter
+  is each chiller's full-load power: one number for equal chillers, or an `{equip: kW}` map.
+  The new metric `capacity_source` (`declared`, `observed_p95` or `mixed`) says where the
+  capacity came from. Without a declaration a caveat says the observed figure reads low on a
+  plant that never loads a chiller fully.
+- `camber.model.equipclass.is_chw_loop` tells a chilled-water loop (`CHW_LOOP`, `SECLOOP`,
+  `CHILLED_WATER_LOOP`) from a chiller in the `chw_plant` family. `CHWLOOP` and
+  `CHILLEDWATERLOOP` are now listed spellings of that family.
+
 ### Changed
 - **`filter_fouling` and `control_hunting` judge fan-on samples (#181).** Both read the fan
   from supply-fan status, else speed, else airflow (`schedules.fan_on_mask`), as the other
@@ -38,6 +52,56 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   runs in the same config and finds a unit's room fighting, that unit's `capacity` or `mixed`
   verdict becomes `room_fight` (`verdict_alone` keeps the old one, `deferred_to` and `room` say
   where to look). The severity stands: the room is out of band, but a bigger unit will not fix it.
+- **`chiller_staging_fleet` counts only chillers (#183).** A chilled-water loop's power point
+  is its pumps', so loops are left out of the fleet (new metric `n_loops_excluded`, with a
+  caveat naming them).
+- **Breaking: `chiller_staging_fleet`'s count metrics are renamed (#183).** They were sample
+  counts named as hours. `n_running_hours` is now `n_running_samples` and `n_multi_hours` is now
+  `n_multi_samples`, with no aliases: a reader of the old keys gets nothing. The hours are new
+  metrics beside them (`running_hours`, `multi_hours`, and `sample_interval_min`).
+- **`chw_supply_tracking` and `chw_plant_reset` gate a chilled-water loop on its pumps (#184).**
+  Equipment whose class is a loop is "running" by its pumps' `pump_status` (duty above 0.5),
+  else its `chw_flow` above 5 % of its 95th percentile, else its pumps' `power` above a tenth of
+  its 95th percentile. `run_source` reads `pump_status`, `flow` or `pump_power`. A loop's power
+  is no longer called the chiller's. Chillers keep their status-then-power gate.
+- **`chiller_approach_fouling` reads running samples only (#184).** The medians read the samples
+  the chiller ran, by its `compressor_status` (duty above 0.5) or else its `power` above a tenth
+  of its 95th percentile. With neither, every sample is read, with a caveat. New metrics
+  `run_source` and `n_judged`. A chiller that never ran is `info`.
+- **`cooling_tower_fan_effort_drift` matches on heat rejected when the condenser flow is
+  trended (#184).** The new `load_source` `cw_heat_rejection` is `cw_flow` times the range, over
+  24. On the range alone the rule assumes a constant condenser flow, and a fired finding now says
+  so: when a second chiller and its condenser pump stage on, the range halves for the same heat
+  and the fans read as working harder.
+- **`cooling_tower_approach_drift` runs on a tower of its own (#184).** It needed chilled-water
+  flow and temperatures on the tower's own equipment, so it never ran on a separate tower. It
+  now matches the approach on chilled-water tons when they are there, else on the heat rejected
+  (`cw_flow` and the range), else on the range, with the constant-flow caveat on a fired
+  finding. The new metric `tower_approach_load_source` says which. Equipment with chilled-water
+  tons scores as before.
+- **`camber datasets score` scores each rule only on the equipment it applies to (#184).** This
+  changes per-rule label scores on any entry whose rules do not all run on every equipment. A
+  rule's false-positive rate counted every labelled equipment, including equipment the rule
+  cannot run on (the chillers, for a tower rule). Each record now lists the rules that ran on it
+  (`scored`, leaving out a class decline), and each rule's confusion counts those records only.
+  A suite rule with no finding anywhere is still scored over every record. The overall
+  confusion is unchanged. `camber.eval.benchmark` reads the optional `scored` key.
+- The `plant-chiller-multi` workbook answers are re-recorded (key, page, instructor block and the
+  config comments). Over
+  the whole facility the fleet counts 14 chillers, not 21, and 84.6 % of multi-chiller samples
+  are over-staged (was 100 %), still a fault. The secondary loops' `run_source` is `flow` (was
+  `power`), with the same figures. The `cooling_tower_fan_effort_drift` label score counts the
+  7 towers, not all 28 pieces of equipment, so its false-positive rate is 1 of 5 (was 1 of 26).
+  The over-staged plant's tower still warns, because the synthetic tower has no condenser flow.
+  `cooling_tower_approach_drift` now runs on the seven towers. It faults on the full-fan tower
+  (+5.7 °F) and passes the others, the controlled fouled tower included; the key now records it.
+- The `plant-heat-pump` label scores move with the scoring change; the new answers are pending
+  sign-off. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
+  `hp_capacity_shortfall` over the 10 heat pumps, `heatpump_defrost` over the 4 air-source heat
+  pumps, `compressor_staging` over the 6 water-source heat pumps and `source_loop_deltat` over the
+  2 loops, not all 12. The same false positives now read `hp_mode_vs_need` 1 of 9 (was 1 of 11),
+  `hp_capacity_shortfall` 3 of 9 (was 3 of 11), and `heatpump_defrost` on the 20-reversal
+  variant 1 of 3 (was 1 of 11). Every true-positive rate and every zero false-positive rate stays.
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every

@@ -76,6 +76,7 @@ DIRECT_CLASS_TO_ROLE = {
     # --- condenser water (named relative to the chiller's condenser) ---
     "Entering_Condenser_Water_Temperature_Sensor": Role.CW_SUPPLY_TEMP,
     "Leaving_Condenser_Water_Temperature_Sensor": Role.CW_RETURN_TEMP,
+    "Condenser_Water_Flow_Sensor": Role.CW_FLOW,  # 0.106 (#184)
 }
 
 # Non-standard class names seen in published Brick models, accepted because the meaning is
@@ -164,7 +165,7 @@ _COMMAND_FALLBACK = {
 # Volumetric-flow roles (cfm / gpm). A point typed as one of these whose *name* says it is a
 # speed / percent is a mis-typed point: mapping it would feed a 0-100 % series to a cfm rule.
 _FLOW_ROLES = frozenset(
-    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.AIRFLOW_SP, Role.HW_FLOW, Role.CHW_FLOW}
+    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.AIRFLOW_SP, Role.HW_FLOW, Role.CHW_FLOW, Role.CW_FLOW}
 )
 _SPEEDLIKE_TOKENS = frozenset({"spd", "speed", "pct", "percent", "vfd", "hz", "freq"})
 

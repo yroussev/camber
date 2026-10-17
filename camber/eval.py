@@ -140,6 +140,11 @@ def benchmark(records, detector_targets: dict) -> BenchmarkReport:
     legitimately sees several fault types (an OA-fraction check sees a stuck damper *and* a
     blocked OA inlet) may map to a list or tuple of them.
 
+    A record may also carry ``"scored"``: the detectors that apply to it (0.106, #184). A
+    detector's confusion then counts only the records that list it, so equipment a rule cannot
+    run on is not one of its correct negatives; a record without the key counts for every
+    detector, as before.
+
     Returns the overall detection confusion (any detector vs. faulty), a per-detector
     confusion (each detector judged against the scenarios of its target fault types),
     and the correct-diagnosis rate (a faulty scenario is correctly diagnosed when a
@@ -151,10 +156,19 @@ def benchmark(records, detector_targets: dict) -> BenchmarkReport:
         t = detector_targets.get(d)
         return (t,) if isinstance(t, str) or t is None else tuple(t)
 
+    records = list(records)
     recs = [{"truth": (r.get("truth") or ""), "fired": set(r.get("fired") or ())} for r in records]
+    # 0.106 (#184): the detectors each record is scored for (None: every detector)
+    scored: list = [None if r.get("scored") is None else set(r["scored"]) for r in records]
     overall = confusion([bool(r["truth"]) for r in recs], [bool(r["fired"]) for r in recs])
+
+    def _for(d) -> list:
+        return [r for r, s in zip(recs, scored) if s is None or d in s]
+
     per = {
-        d: confusion([r["truth"] in _targets(d) for r in recs], [d in r["fired"] for r in recs])
+        d: confusion(
+            [r["truth"] in _targets(d) for r in _for(d)], [d in r["fired"] for r in _for(d)]
+        )
         for d in detector_targets
     }
     faulty = [r for r in recs if r["truth"]]

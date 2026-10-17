@@ -49,6 +49,7 @@ ROLE_TO_BRICK_POINT_CLASS = {
     Role.CHW_FLOW: "Chilled_Water_Flow_Sensor",
     Role.CW_SUPPLY_TEMP: "Entering_Condenser_Water_Temperature_Sensor",
     Role.CW_RETURN_TEMP: "Leaving_Condenser_Water_Temperature_Sensor",
+    Role.CW_FLOW: "Condenser_Water_Flow_Sensor",  # 0.106 (#184)
 }
 
 # Context roles -> (part name, part Brick class, point Brick class). The part is
