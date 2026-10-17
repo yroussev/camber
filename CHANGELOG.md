@@ -221,7 +221,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   wording is unchanged. Only the text moves: no golden file or workbook answer quotes these
   summaries, and no severity, metric or caveat changes.
 
-## [0.105.0] — Unreleased
+## [0.105.0] — 2026-10-17
+
+**0.105: faithful CalTRACK 2.0 Daily, Billing and Hourly methods, an M&V names registry with the industry-standard names, a TOWT matching LBNL RMV2.0, sturdier M&V data handling, pump drift on hot-water loops, and four synthetic catalog entries with workbook exercises (#144–#149, #151–#180).** **Renames (#156, #163):** `mandv.caltrack.caltrack_savings` and `caltrack_savings_hourly` were not CalTRACK-comparable and are now `daily_changepoint_savings` and `towt_savings_hourly`; `fit_degree_day` / `DegreeDayModel` are now `fit_mean_temp_degree_day` / `MeanTempDegreeDayModel`. The old names keep working with a `DeprecationWarning` until 1.0 and return the same numbers. The `caltrack_daily_savings`, `caltrack_billing_savings` and `caltrack_hourly_savings` functions implement the published methods and match eemeter 2.10 where asked (#156, #166, #167, #170, #171). Reports, legends and the dossier name models by their registry labels (#163, #174, #179). TOWT gains an unseen-bin fallback, optional non-negative predictions, fixed knots and recency weighting, and an RMV2.0 variant that matches the R reference to 1e-10 (#154, #155, #162, #165, #176–#178). **M&V numbers can move on messy data:** daily frames drop partial days, the fall-back DST hour is no longer double-counted, and implausible temperatures are screened at fit and prediction time (#157–#159, #168, #169); clean data gives the same numbers. `best_model` and `ModelFitError` say why no model could be fit (#160, #172, #173, #175), and `seasonal_forecast` warns on long horizons (#161). On the FDD side, the pump drift family runs on hot-water loops (#152), the pump DP-reset rules judge only running hours (#180), `lbnl-chiller`'s pump rules read pump data (#164), the trust score checks the mixed-air order without airflow stations (#151), and plant-rule context is sharper (#148, #149, #153). Four synthetic entries (G36 VAV fleet, two-chiller plant, AHU maintenance, heat pumps) bring workbook exercises (#144–#147); answers in `plant-chw-reset-pumping` and `plant-sensor-vs-equipment` are re-recorded on running hours (#180).
 
 ### Added
 - `mandv.intervalfit.day_coverage` (each day's covered share) and `day_hours` (each day's
@@ -646,7 +648,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   at 34.5 %, as the real data's do. The `near_min_pct` rationale in `docs/THRESHOLDS.md` no
   longer calls 34.5 % the pump's floor.
 
-## [0.104.0] — Unreleased
+## [0.104.0] — 2026-10-17
+
+**0.104: a safer `camber serve`, store locks on every write, store verify/normalize, coarse-trend caveats for start counts, pump drift gates that scale to the pump, and two synthetic plant cases (#134–#139, #141, #143, #150).** **Behaviour change (#134):** `camber serve` now refuses cross-site browser requests (403); `curl`, scripts and health probes are unaffected, but a link to the viewer from another site no longer opens it. **Deprecation (#134):** a future release, 0.105 at the earliest, will make `--auth token` the default on loopback; pass `--auth token` or `--auth none` now to choose. Every write to a plain store now takes its single-writer lock, and `--lock-timeout` / `CAMBER_LOCK_TIMEOUT` set the wait (#135). `camber store verify` and `camber store normalize` check and rewrite parts into the 0.103 canonical layout (#136). `boiler_short_cycle`, `compressor_short_cycle` and `chiller_staging` say when a trend is too coarse to count starts, and a resampled run status no longer hides short cycling (#143). The pump and loop drift detectors size their gates to the pump, so small and constant-speed pumps are checked instead of declined; full-size results are unchanged (#150). Two new synthetic catalog entries bring the `plant-boiler-cycling` and `plant-chiller-staging` exercises (#137). Also: README images render on PyPI (#138), a flaky test (#139) and a catalog-rebuild race (#141) are fixed.
 
 ### Added
 - **`camber serve --auth none` (#134)** chooses no authentication explicitly: the same open
