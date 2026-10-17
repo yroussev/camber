@@ -18,6 +18,7 @@ flowchart LR
   cmp --> out["extra_runtime_slots, n_missing, agreement"]
 ```
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.schedule import detect_schedule, compare_schedule
 

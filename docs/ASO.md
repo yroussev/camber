@@ -23,6 +23,7 @@ flowchart LR
 
 ## Use
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.aso import recommend, recommend_findings
 

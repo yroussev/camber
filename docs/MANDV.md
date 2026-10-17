@@ -173,6 +173,7 @@ When a report, a testing portal or an evaluator asks for the model type, give th
 name** from the table above, with its citation, and the CAMBER label beside it. The registry has
 the same text for code to read:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.names import citations, model_label, mv_name
 
@@ -228,6 +229,7 @@ model_label(model)  # a fitted model's label, e.g. '2P (5P fallback)'
 
 ## Quick use
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.caltrack import daily_changepoint_savings
 
@@ -352,6 +354,7 @@ treat a reporting category the baseline never fitted as unsupported (bind a peri
 To keep computing it (with a widened band and a caveat starting "SEVERE extrapolation — not a
 defensible saving"), opt out:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.caltrack import daily_changepoint_savings
 from camber.mandv.coverage import ExtrapolationPolicy
@@ -419,6 +422,7 @@ tool) and ρ-adjusted (`sep_valid_rho_adjusted`), with a caveat when they disagr
 This is a **separate verdict** from `FitStats.accept`, the G14-style gate (CV(RMSE), NMBE, R²)
 that governs savings claims — which is unchanged.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.models import fit_model
 from camber.mandv.stats import logical_signs, model_regression_tests, sep_validity
@@ -445,6 +449,7 @@ the baseline cannot support a valid model but the reporting period can.
   the IPMVP Core Concepts review draft calls a backcast *avoided energy*; CAMBER claims neither
   and labels the result `method="backcast"`, `basis="baseline-period conditions"`.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.methods import backcast_savings
 
@@ -811,6 +816,7 @@ band is conservative.
 twice their standard error): an event is flagged when `|effect| ≥ max(threshold, 2·SE)`
 (`is_material`; `materiality_threshold` in energy units over the period).
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.adjustments import (
     NonRoutineAdjustment,
@@ -1209,6 +1215,7 @@ then reads the weights as variance weights and a reporting hour as one of averag
 | negative predictions | set to zero | RMV2.0 `fitLBNLregress` |
 | recency weight | `s² / (s² + Δt²)`, `Δt` in days from the fit's centre, `s = 14` days | RMV2.0 `makeBaseline` |
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.towt import fit_towt, towt_lbnl_config
 
@@ -1255,6 +1262,7 @@ local fit as a narrow weighted problem (#176), with the same minimum-norm coeffi
 separate weighted least-squares fit per centre; a year of hourly data fits in about the time of
 one pooled TOWT fit.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.towt_rmv2 import fit_towt_rmv2
 
@@ -1860,6 +1868,7 @@ each constant (`mandv._caltrack`) cites its source.
 | Billing | `caltrack_billing_savings` | `fit_caltrack_billing` | `CalTRACKBillingModel` |
 | Hourly | `caltrack_hourly_savings` | `fit_caltrack_hourly` | `CalTRACKHourlyModel` |
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.caltrack_daily import caltrack_daily_savings
 from camber.mandv.caltrack_hourly import caltrack_hourly_savings
@@ -2030,6 +2039,7 @@ daily degree-days over each period: a shoulder month whose mean sits above the b
 days below it, and the mean-temperature form misses them. For VBDD on bills, with separate heating
 and cooling bases, use `mandv.basetemp` (`DD-H` / `DD-C` / `DD-HC`, [Billing data](#billing-data)).
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mandv.degreeday import fit_mean_temp_degree_day
 
@@ -2056,8 +2066,8 @@ retrofit): savings = measured Δparameter × stipulated duty.
 from camber.mandv.option_a import option_a_savings, stipulated_annual_hours
 
 r = option_a_savings(
-    baseline_kw=100, reporting_kw=60, stipulated_factor=stipulated_annual_hours(hours_per_day=10)
-)  # 2600 h
+    100, 60, stipulated_factor=stipulated_annual_hours(hours_per_day=10)
+)  # baseline 100 kW, reporting 60 kW, 2600 h
 r.savings, r.measured_delta, r.reduction_pct  # 104000 kWh, 40 kW, 0.40
 ```
 

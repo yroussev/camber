@@ -18,6 +18,7 @@ flowchart LR
     fuse --> sev["severity: ok / warn / fault"]
 ```
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.anomaly import detect_anomalies
 

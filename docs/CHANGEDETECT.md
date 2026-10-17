@@ -18,6 +18,7 @@ flowchart LR
     done --> largest["largest_shift"]
 ```
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.changedetect import detect_level_shifts, largest_shift
 

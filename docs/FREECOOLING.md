@@ -18,6 +18,7 @@ flowchart LR
 ```
 *Free-cooling hours are missed when it is cool out yet mechanical cooling runs; power and price value them.*
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.freecooling import free_cooling_opportunity
 

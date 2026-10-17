@@ -32,6 +32,7 @@ camber datasets score lbnl-sdahu --store lab_store
 
 The same from Python:
 
+<!-- fence: skip (needs a dataset) -->
 ```python
 from camber import datasets
 
@@ -576,10 +577,14 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   `dataset cache … is locked by <pid>@<host> since <time>` or `store … is locked by …`
   (`camber datasets` exits 1; a lab job fails with that message). Run it again once the other
   job finishes;
-- since 0.104, `--lock-timeout SECONDS` on `camber datasets fetch|ingest|remove` and
-  `camber lab` sets that wait, and `0` fails at once. Without the flag, the
-  `CAMBER_LOCK_TIMEOUT` environment variable sets it, else it is 30 seconds. A value that is not
-  a number of seconds >= 0 is refused (exit 2). The lab never waits on a workspace's lock;
+- since 0.104, `--lock-timeout SECONDS` sets that wait, and `0` fails at once. It is accepted by
+  `camber datasets fetch|ingest|remove`, `camber lab`, `camber interop openfdd ingest`,
+  `camber store migrate-partitions`, `camber store normalize` and `camber retention apply`.
+  Without the flag, the `CAMBER_LOCK_TIMEOUT` environment variable sets it, else it is 30
+  seconds; `retention apply` and an `interop openfdd ingest` into a workspace wait 0 unless the
+  flag is given. A value that is not a number of seconds >= 0 is refused (exit 2). The lab never
+  waits on a workspace's lock. (`camber edge compact --lock-timeout` is the edge spool's own
+  wait, 30 seconds by default; the environment variable does not apply to it);
 - reads take no lock: `status`, the lab's catalog, trends and reports, and `camber run` on the
   store. Files and partitions are swapped in whole, so a reader sees the old data or the new;
 - the lock is the kernel's (`flock`, or `msvcrt` on Windows), the same one the portfolio uses. It

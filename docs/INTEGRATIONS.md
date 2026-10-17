@@ -42,6 +42,7 @@ flowchart LR
 `dispatch_findings(findings, transport, *, channel, min_severity, site, seen, dedupe, dry_run)`
 renders, **filters by severity**, **dedupes**, formats per channel, and sends.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.integrate import dispatch_findings, webhook_transport, email_transport
 
@@ -96,6 +97,7 @@ tests.
 
 ## Export for BI / warehouse
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.integrate import export_findings, findings_to_frame
 

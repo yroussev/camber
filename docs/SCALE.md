@@ -160,6 +160,7 @@ Taking the lock afresh costs a file open, an `flock` and a short holder record (
 millisecond on a local disk). For a bulk load, take it once around the whole load. The writes
 inside re-enter it, which costs microseconds:
 
+<!-- fence: skip (fragment) -->
 ```python
 st = ParquetStore("lake")
 with st.lock():  # once for the whole load

@@ -438,6 +438,7 @@ a verdict, and they are not listed as missing inputs.
 
 In Python:
 
+<!-- fence: skip (needs a file) -->
 ```python
 from camber.config import run_config_file
 from camber.report import RcxOptions, build_rcx_report

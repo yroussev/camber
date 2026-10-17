@@ -19,6 +19,7 @@ flowchart LR
 
 ## Forecast — `seasonal_forecast`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.forecast import seasonal_forecast
 
@@ -45,6 +46,7 @@ week of history to avoid it.
 
 ## Backtest — `backtest`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.forecast import backtest
 
@@ -60,6 +62,7 @@ accuracy reported is then that of a longer horizon than the forecaster is built 
 
 ## Learned-normal anomalies — `forecast_anomalies`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.forecast import forecast_anomalies
 

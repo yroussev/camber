@@ -65,6 +65,7 @@ day's mean outdoor temperature) for every meter over 2016, judged against the G1
 tiers. That is this exercise's weather-dependence chart in numbers. The load-shape metrics come
 from CAMBER's Python API, on the same store:
 
+<!-- fence: skip (needs a store) -->
 ```python
 from camber.demand import analyze_demand, baseload_anomaly
 from camber.loadprofile import weekday_weekend_profiles

@@ -77,6 +77,7 @@ camber run ornl.json --out ornl_out
 The drift section freezes a baseline on January to June and scores July to December. For the
 M&V attempt on the RTU tests, in Python:
 
+<!-- fence: skip (needs a store) -->
 ```python
 from camber.mandv.caltrack import towt_savings_hourly
 from camber.model.roles import Role

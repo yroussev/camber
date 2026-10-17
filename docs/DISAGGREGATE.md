@@ -17,6 +17,7 @@ flowchart LR
     other --> sum
 ```
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.disaggregate import disaggregate_load
 

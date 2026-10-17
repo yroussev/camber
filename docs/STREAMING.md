@@ -29,6 +29,7 @@ sequenceDiagram
   high/low accumulators). With `limit`/`slack` it's a two-sided **tabular** CUSUM raising
   `alarm="savings"|"waste"` on a sustained shift — savings erosion caught as an FDD signal.
 
+  <!-- fence: skip (fragment) -->
   ```python
   from camber.mandv.online import OnlineCusum
 
@@ -49,6 +50,7 @@ sequenceDiagram
 role-frame window** and re-runs the rules as samples arrive, emitting a `Transition` **only when a
 rule's verdict changes** — so a sustained fault alerts once, not every sample.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.rules.online import OnlineFDD
 from camber.rules.builtin import builtin_registry

@@ -23,15 +23,15 @@ flowchart LR
 ## Brick
 
 - **Import** — `mapping_from_brick` / `roles_from_brick` derive `Role` mappings from a Brick model
-  (point classes + `hasPoint`/`hasPart` relationships). See `camber/interop/brick.py`. **45 of 64
-  roles** can come from a Brick model: air-side temperatures, pressures, flows, humidity, CO₂ and
+  (point classes + `hasPoint`/`hasPart` relationships). See `camber/interop/brick.py`. These roles
+  can come from a Brick model: air-side temperatures, pressures, flows, humidity, CO₂ and
   setpoints; the hot-/chilled-/condenser-water plant (supply/return temperatures, CHW supply
   setpoint, loop DP and DP setpoint, water flow); and, from the owning equipment's class, coil
   valves, the outdoor-air damper, supply-fan / hot- and chilled-water-pump / tower-fan speed,
   supply-fan and pump status, boiler run status, equipment power, and zone heating/cooling
-  setpoints. The other 19 (refrigerant-side temperatures and pressures, DX stages and statuses,
-  mode flags, reset-request counts, the terminal damper, thermal energy rate, pump head) have no
-  Brick class CAMBER maps yet.
+  setpoints. The others (refrigerant-side temperatures and pressures, DX stages and statuses,
+  mode flags, reset-request counts, the terminal damper, thermal energy rate, pump head, among
+  others) have no Brick class CAMBER maps yet.
 - **Import review — `brick_mapping_report(ttl)`** — the same import, per point: `mapped` (a
   standard class), `alias` (a non-standard class accepted with a caveat), `ambiguous` (a role is
   plausible but the model does not pin it down — **not** mapped, with the reason) or `unmapped`
@@ -63,7 +63,7 @@ flowchart LR
   On the published LBNL boiler-plant model this maps 17 of 22 points (previously 1: the plant
   classes were missing), with both boiler on/off statuses reported `ambiguous` and gas meters /
   heating demand listed as unmapped.
-- **Export** — `to_brick(equip_id, equip_class, roles)` emits Brick Turtle for **39 of 64 roles**
+- **Export** — `to_brick(equip_id, equip_class, roles)` emits Brick Turtle for **40 of 84 roles**
   (every direct class the importer knows, plus the coil-valve / OA-damper / supply-fan part
   context). Export and import are exact inverses: a test enumerates every role the exporter can
   emit and re-imports it on both parsers (the CO₂, outdoor-air flow, outdoor CO₂/RH and airflow
@@ -82,8 +82,8 @@ flowchart LR
 - **Import (0.6)** — `role_from_tags(tags)` / `roles_from_haystack(points)` / `mapping_from_haystack`
   recover roles from a point's marker tags, closing the round-trip to Brick-level parity. A role matches
   when its hint tag-set is a subset of the point's tags; the **most specific** hint wins ties (so
-  `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. All 64 roles
-  round-trip export→import. A few roles also carry **excluding tags**: the terminal `damper` role
+  `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. Every role
+  round-trips export→import (a test checks each one). A few roles also carry **excluding tags**: the terminal `damper` role
   (hint `damper cmd`) does not match a point that names an air stream (`return` / `exhaust` /
   `relief` / `mixed`), since those are air-handler dampers with no CAMBER role — previously every
   return and exhaust damper imported as a VAV-box damper. `camber/interop/haystack_semantic.py`.
@@ -98,6 +98,7 @@ still maturing, so `camber.interop.semantic223` exports/round-trips a deliberate
 profile**: equipment, their observable properties, and each property's QUDT **quantity-kind** +
 **medium** derived from the role.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.interop import site_to_223, site_from_223
 
@@ -105,9 +106,9 @@ ttl = site_to_223(site, profile="minimal", include_relations=True)
 site2 = site_from_223(ttl)  # round-trips equip_class + the points' roles
 ```
 
-Mapping coverage was broadened in **0.6** from 21 to **44 of 54 roles** — the full plant/hydronic side
+Mapping coverage was broadened in **0.6** from 21 to 44 of the then 54 roles — the full plant/hydronic side
 (CHW/HW/CW temps, loop pressures, pump/tower speeds), power/thermal energy, ambient/humidity, and the
-refrigerant-side approach temps; the vocabulary has since grown, and today **51 of 64 roles** map. The
+refrigerant-side approach temps; the vocabulary has since grown, and today **71 of 84 roles** map. The
 remaining 13 roles are binary/enumerated **status & command**
 signals and counts (`*_status`, `*_stage`, `reversing_valve_cmd`, `econ_cmd`, warm-up/cool-down, the G36
 reset-request counts) that carry no QUDT
