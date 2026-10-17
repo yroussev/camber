@@ -53,8 +53,9 @@ bare `GET /health`.
 Since 0.104 the API also refuses cross-site browser requests (403): a `Sec-Fetch-Site:
 cross-site` header, or an `Origin` whose host is not on the allowlist. The `HEALTHCHECK` and
 `curl` send neither header and pass. Behind a proxy that rewrites `Host`, still list the public
-name the browser uses, since it arrives in `Origin`. The planned switch to token auth by default
-covers loopback binds only, so the image (bound to `0.0.0.0`) keeps its current behaviour.
+name the browser uses, since it arrives in `Origin`. Token auth became the default in 0.107 for
+loopback binds only, so the image (bound to `0.0.0.0`) keeps no authentication by default, with
+the warning; a container started with `CAMBER_API_HOST=127.0.0.1` gets token auth.
 
 ## Run any command / a shell
 

@@ -727,7 +727,7 @@ def test_camber_serve_still_refuses_post(tmp_path):
     api = ReadAPI(ParquetStore(str(tmp_path / "s")))
     for path in ("/", "/ui", "/facilities", "/points", "/history", "/lab/jobs/fetch"):
         assert dispatch(api, "POST", path, {})[0] == 405
-    httpd = make_server(ParquetStore(str(tmp_path / "s")), port=0)
+    httpd = make_server(ParquetStore(str(tmp_path / "s")), port=0, auth="none")
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     try:

@@ -15,12 +15,17 @@ Request checks (0.103, #128), in :func:`check_request` before ``dispatch``:
   ``Sec-Fetch-Site: cross-site`` (or an unknown value), or with an ``Origin`` whose host is not on
   the allowlist, is 403. ``same-origin``, ``same-site`` and ``none`` pass; a request with neither
   header (curl, a script, a container health probe) passes.
-- **Optional token auth** (``auth="token"`` / ``camber serve --auth token``): the ``camber lab``
-  model (:mod:`camber._access`) -- a printed launch URL with ``?token=``, exchanged for an
+- **Token auth** (``auth="token"`` / ``camber serve --auth token``): the ``camber lab`` model
+  (:mod:`camber._access`) -- a printed launch URL with ``?token=``, exchanged for an
   ``HttpOnly; SameSite=Strict`` session cookie, or ``Authorization: Bearer <token>``.
-  ``auth="none"`` (``--auth none``, 0.104) chooses no authentication explicitly. Leaving it unset
-  is no authentication today; a future release makes token auth the default on loopback (see
-  docs/SECURITY.md section 3), and ``camber serve`` prints a notice until then.
+  ``auth="none"`` (``--auth none``, 0.104) chooses no authentication explicitly. Left unset
+  (0.107, #221), it is token auth when bound to loopback and no authentication on any other bind
+  (which warns); see docs/SECURITY.md section 3.
+
+Errors (0.107, #216): only a malformed query parameter (:class:`~camber.api.read.BadQuery`) is a
+400. Any other failure (a store or read error, a bug) is a 500 whose body is
+``{"error": "internal error"}``; the detail goes to the server's stderr, never over the wire, so
+no server path reaches a client.
 
 Endpoints (facility_id addresses a facility; the legacy ``site=`` param is still accepted):
   GET /            | /about | /health   -> service info
@@ -38,10 +43,11 @@ import json
 import os
 import socket
 import sys
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .read import ReadAPI
+from .read import BadQuery, ReadAPI
 from .ui import live_dashboard_html
 
 # Strict same-origin CSP for the inline-JS/CSS live dashboard (the app ships no external asset; the
@@ -58,14 +64,44 @@ def _q(query: dict, *keys):
     return {k: query[k][0] for k in keys if query.get(k)}
 
 
+#: the body of every 500 (0.107, #216): the detail is logged to stderr, never sent
+_INTERNAL_ERROR = {"error": "internal error"}
+
+
+def _log_internal(method: str, path: str, exc: BaseException) -> None:
+    """Write a failed request's exception and traceback to stderr (the server's log)."""
+    print(
+        f"camber read-api: internal error on {method} {path!r}: {type(exc).__name__}: {exc}",
+        file=sys.stderr,
+    )
+    traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
+    sys.stderr.flush()
+
+
 def dispatch(api: ReadAPI, method: str, path: str, query: dict):
     """Route a request to the read API. Returns ``(status_code, body)``.
 
     ``body`` is a JSON-serializable dict for every endpoint except the live dashboard route
     ``/ui``, which returns the dashboard HTML as a ``str`` (the handler serves it as ``text/html``).
+
+    0.107 (#216): a malformed query parameter (:class:`~camber.api.read.BadQuery`) is 400 with
+    its message; any other exception (a corrupt store file, an unreadable directory) is 500 with
+    the generic ``{"error": "internal error"}``, and the detail is logged to stderr. No error
+    body carries a server path. ``camber lab`` delegates its read routes here, so the same holds
+    for them.
     """
     if method != "GET":
         return 405, {"error": "method not allowed", "method": method}
+    try:
+        return _route(api, path, query)
+    except BadQuery as exc:  # a malformed start / end / limit / max_points (0.103, #122)
+        return 400, {"error": "bad request", "detail": str(exc)}
+    except Exception as exc:  # a store / read failure: generic body, detail to the log
+        _log_internal(method, path, exc)
+        return 500, dict(_INTERNAL_ERROR)
+
+
+def _route(api: ReadAPI, path: str, query: dict):
     if path in ("/ui", "/ui/"):  # the live web dashboard (HTML; fetches the JSON endpoints below)
         return 200, live_dashboard_html()
     if path in ("/", "/about", "/health"):
@@ -80,20 +116,29 @@ def dispatch(api: ReadAPI, method: str, path: str, query: dict):
         kw = _q(
             query, "facility_id", "site", "equip", "role", "start", "end", "limit", "max_points"
         )
-        try:
-            return 200, api.history(**kw)
-        except ValueError as exc:  # a malformed start / end / limit / max_points (0.103, #122)
-            return 400, {"error": "bad request", "detail": str(exc)}
+        return 200, api.history(**kw)
     return 404, {"error": "not found", "path": path}
 
 
 _AUTH_MODES = ("none", "token")
-#: printed by ``camber serve`` on loopback when ``--auth`` is not given (0.104, #134)
+#: printed by ``camber serve`` on loopback when ``--auth`` is not given (0.107, #221: the
+#: default is token auth there; 0.104 printed a deprecation notice instead)
 _AUTH_DEFAULT_NOTICE = (
-    "notice: a future camber release will make token auth the default for `camber serve` on "
-    "loopback; pass --auth token to opt in now, or --auth none to keep serving without "
-    "authentication after the switch (either one hides this notice)."
+    "note: token auth is the default on loopback since camber 0.107; pass --auth none for a "
+    "server without authentication (either --auth choice hides this note)."
 )
+
+
+def _default_auth(bind_host: str) -> str:
+    """The auth mode when ``auth`` is left unset (0.107, #221): ``"token"`` when ``bind_host``
+    is loopback (``127.0.0.1`` and the rest of ``127.0.0.0/8``, ``localhost``, ``::1``), else
+    ``"none"`` -- every interface (``0.0.0.0`` / ``::``, the container image) and any other
+    address keep no authentication, with the startup warning."""
+    from .._access import is_loopback
+
+    return "token" if is_loopback(bind_host) else "none"
+
+
 #: the env var with extra allowed ``Host`` names (comma-separated), like ``--allow-host``
 ALLOWED_HOSTS_ENV = "CAMBER_API_ALLOWED_HOSTS"
 _COOKIE_PREFIX = "camber-serve-"
@@ -112,7 +157,7 @@ class _ServeAccess:
         self.bind_host = bind_host
         self.port = int(port)
         self.hosts = HostAllowlist(bind_host, self.port, allowed_hosts)
-        self.auth = auth or "none"
+        self.auth = auth or _default_auth(bind_host)
         #: ``True`` when ``auth`` was passed (``"none"`` or ``"token"``), not left to the default
         self.auth_explicit = auth is not None
         self.access_token: str | None = None
@@ -258,8 +303,9 @@ class ReadAPIHandler(BaseHTTPRequestHandler):
                 status, body, extra = refused
             else:
                 status, body = dispatch(self.server.api, method, parsed.path, query)  # type: ignore[attr-defined]
-        except Exception as exc:  # never leak a stack trace over the wire
-            status, body = 500, {"error": "internal error", "detail": str(exc)}
+        except Exception as exc:  # never leak a stack trace (or a path) over the wire (#216)
+            _log_internal(method, parsed.path, exc)
+            status, body, extra = 500, dict(_INTERNAL_ERROR), {}
         self.send_response(status)
         if isinstance(body, str):  # the /ui live-dashboard HTML (or a refusal page)
             payload = body.encode("utf-8")
@@ -319,6 +365,44 @@ class _ReadHTTPServer6(_ReadHTTPServer):
     address_family = socket.AF_INET6
 
 
+#: what a ParquetStore root holds besides the ``facility_id=`` partitions (its metadata files)
+_STORE_MARKERS = (
+    "_catalog.json",
+    "_catalog.gen",
+    "_facilities.json",
+    "_tombstones.json",
+    "_workspace.json",
+    "_migrated.json",
+    "_lock",
+)
+
+
+def _store_problem(root) -> str | None:
+    """Why ``root`` cannot be served as a ParquetStore, or ``None`` when it can (0.107, #217).
+
+    A store is a directory holding ``facility_id=`` partitions or the store's metadata files; an
+    empty directory is a store with nothing written yet. A missing path, a file, or a directory
+    of other things is refused, so a mistyped path is not served as an empty store.
+    """
+    root = os.fspath(root)
+    if not os.path.exists(root):
+        return f"{root} is not a ParquetStore: no such directory"
+    if not os.path.isdir(root):
+        return f"{root} is not a ParquetStore: not a directory"
+    try:
+        names = os.listdir(root)
+    except OSError as exc:
+        return f"{root} is not a ParquetStore: cannot list it ({exc.strerror or exc})"
+    if not names:
+        return None
+    if any(n.startswith("facility_id=") or n in _STORE_MARKERS for n in names):
+        return None
+    return (
+        f"{root} is not a ParquetStore: it holds no facility_id= partitions or store files "
+        "(point camber serve at the store directory, e.g. a workspace's store/)"
+    )
+
+
 def _resolve_allowed_hosts(allowed_hosts) -> list:
     """``allowed_hosts`` (a list, or a comma-separated string); ``None`` reads the env var."""
     from .._access import parse_host_list
@@ -351,9 +435,10 @@ def make_server(
     interface (``0.0.0.0`` / ``::``) without an explicit allowlist raises ``ValueError``.
     ``auth="token"`` requires the per-run access token (``server.access.launch_url()``) or its
     session cookie on every route; ``access_token`` fixes the token (16+ characters).
-    ``auth="none"`` turns authentication off explicitly. ``auth=None`` (the default) is no
-    authentication too, for now: a future release makes it token auth when bound to loopback,
-    so pass ``auth="none"`` to keep an open server (docs/API-STABILITY.md).
+    ``auth="none"`` turns authentication off explicitly. ``auth=None`` (the default) is
+    :func:`_default_auth` of ``host`` (0.107, #221): token auth when bound to loopback, no
+    authentication on every other bind; pass ``auth="none"`` for an open loopback server
+    (docs/API-STABILITY.md). A ``port`` outside 0-65535 raises ``ValueError`` (0.107, #217).
 
     0.104 (#134): a cross-site browser request (``Sec-Fetch-Site: cross-site``, or an ``Origin``
     not on the Host allowlist) is 403 on every route.
@@ -362,6 +447,12 @@ def make_server(
 
     if auth not in (None, *_AUTH_MODES):
         raise ValueError(f"auth must be one of {', '.join(_AUTH_MODES)} (got {auth!r})")
+    try:
+        port_ok = 0 <= int(port) <= 65535
+    except (TypeError, ValueError):
+        port_ok = False
+    if not port_ok:
+        raise ValueError(f"port must be an integer from 0 to 65535 (got {port!r})")
     extra = _resolve_allowed_hosts(allowed_hosts)
     if is_wildcard(host) and not extra:
         raise ValueError(
@@ -458,11 +549,12 @@ if __name__ == "__main__":  # pragma: no cover
 
     # argv wins; otherwise env (CAMBER_STORE / _API_HOST / _API_PORT / _API_ALLOWED_HOSTS /
     # _API_AUTH ("none" or "token") / _API_TOKEN) -- the container sets HOST=0.0.0.0 to be
-    # reachable, plus an allowlist; a bare `python -m` stays on localhost.
+    # reachable, plus an allowlist; a bare `python -m` stays on localhost, where an unset
+    # CAMBER_API_AUTH is token auth (0.107, #221) and the launch URL is printed.
     root = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CAMBER_STORE", "tsdb")
     host = os.environ.get("CAMBER_API_HOST", "127.0.0.1")
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("CAMBER_API_PORT", "8080"))
     try:
+        port = int(sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CAMBER_API_PORT", "8080"))
         serve(
             ParquetStore(root),
             host=host,

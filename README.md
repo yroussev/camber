@@ -124,7 +124,7 @@ CAMBER installs a `camber` console script. A whole analysis is one JSON config
 camber run    config.json --out out/   # discover equipment, run the rules, write findings.json
 camber report config.json --out audit.html
 camber ask    "which building is worst?" --config config.json   # grounded, cited
-camber serve  ./store                  # read-only API + live dashboard at /ui
+camber serve  ./store                  # read-only API + live dashboard (open the printed URL)
 ```
 
 Drift detection needs a frozen reference, so it has its own verbs — see

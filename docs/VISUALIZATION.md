@@ -400,15 +400,16 @@ a single vanilla-JS page served by the read-only API at **`GET /ui`** that fetch
 synchronized multitrend links to a timestamp readout exactly like the static panels.
 
 ```sh
-camber serve /path/to/store          # read-only API + live dashboard at http://127.0.0.1:8080/ui
-camber serve /path/to/store --auth token   # open the printed URL (it ends in ?token=...) instead
+camber serve /path/to/store          # API + live dashboard: open the printed URL (?token=...)
+camber serve /path/to/store --auth none    # no token: http://127.0.0.1:8080/ui
 python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints unchanged
 ```
 
 Open the viewer at `http://127.0.0.1:8080/ui` or `http://localhost:8080/ui`. Since 0.103 the
 server answers only the names it is bound to (a DNS-rebinding defence); for any other name, add
-`--allow-host NAME`. With `--auth token`, open the launch URL the command prints; it sets a session
-cookie, so later visits in that browser need no token (see [CLI.md](CLI.md)).
+`--allow-host NAME`. On loopback, token auth is the default since 0.107 (`--auth token` on other
+binds): open the launch URL the command prints; it sets a session cookie, so later visits in that
+browser need no token (see [CLI.md](CLI.md)). `--auth none` serves without a token.
 
 ![Screenshot of the live trend viewer: facility and equipment selectors, role checkboxes, date range and zoom controls, a line giving the span and sample count, and two unit panels on a time axis labelled local time (no time zone recorded)](img/shots/trend-viewer.png)
 
@@ -417,7 +418,8 @@ cookie, so later visits in that browser need no token (see [CLI.md](CLI.md)).
 Framework-free and dependency-light: stdlib `http.server` + inline vanilla JS/SVG, **no framework, no
 CDN, no external asset** (a strict `Content-Security-Policy` header is sent on the HTML route). It is
 **read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on another interface is your
-decision; it checks the `Host` header and offers opt-in token auth (`--auth token`), but no user
+decision; it checks the `Host` header and uses token auth on loopback by default (`--auth token`
+elsewhere), but no user
 accounts or TLS (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
 **carpet/heatmap** panel; the live multitrend + selectors + cross-panel linking + polling ship now.
 

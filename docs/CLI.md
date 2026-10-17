@@ -31,7 +31,8 @@ camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge 
 and polling). Read-only (GET-only), localhost-bound by default; see
 [VISUALIZATION.md](VISUALIZATION.md) and [SECURITY.md](SECURITY.md).
 
-Who may connect (0.103; the cross-site check and `--auth none` 0.104):
+Who may connect (0.103; the cross-site check and `--auth none` 0.104; token auth by default on
+loopback 0.107):
 
 - **Host allowlist, always on.** A request whose `Host` header is not an allowed name is refused
   (403), so a web page on another site cannot read the store through your browser by pointing its
@@ -47,7 +48,9 @@ Who may connect (0.103; the cross-site check and `--auth none` 0.104):
   `camber lab`. Requests with neither header (curl, scripts, container and Kubernetes health
   probes) and the viewer's own requests are unaffected. A link to the viewer from a page on
   another site is refused: open the URL directly or from a bookmark.
-- **`--auth token` (opt-in).** Every route needs this run's access token, as in `camber lab`: the
+- **Token auth, the default on loopback (0.107).** Bound to loopback (the default `--host`, or
+  `localhost`, `::1`) with `--auth` left out, or with `--auth token` on any bind, every route
+  needs this run's access token, as in `camber lab`: the
   command prints a launch URL ending in `?token=...` and saves it, readable by you only, in
   `serve-<port>.url` (in `$XDG_RUNTIME_DIR/camber`, else `~/.config/camber`). Opening it sets an
   `HttpOnly; SameSite=Strict` session cookie and redirects to the same page without the token.
@@ -55,19 +58,29 @@ Who may connect (0.103; the cross-site check and `--auth none` 0.104):
   wrong token), except `GET /health`, which then answers only `{"ok": true}` for health checks.
   `CAMBER_API_TOKEN` (16 or more characters) fixes the token instead of a fresh one per run; use
   an environment variable, never the command line, which other accounts can read.
-- **`--auth none` (0.104)** chooses no authentication explicitly. Leaving `--auth` out is the
-  same today, but on loopback it prints a one-line notice: a future release (0.105.0 at the
-  earliest) will make `--auth token` the default on loopback. Pass `--auth token` to opt in now,
-  or `--auth none` to keep the open server after the switch; either one hides the notice. See
-  [SECURITY.md](SECURITY.md) section 3. `python -m camber.api.server` reads the same choice from
-  `CAMBER_API_AUTH` (`none` or `token`).
-- Bound to anything but loopback without `--auth token`, it prints a warning: anyone who can reach
-  the address can read every facility. Put an authenticating reverse proxy in front.
+  On loopback without `--auth` it also prints a one-line note that token auth is the default.
+- **`--auth none` (0.104)** turns authentication off: the open server that loopback gave by
+  default before 0.107. Use it for a deliberately open read-only server, for example behind an
+  authenticating proxy. See [SECURITY.md](SECURITY.md) section 3. `python -m camber.api.server`
+  reads the same choice from `CAMBER_API_AUTH` (`none` or `token`); unset, it follows the same
+  default as `camber serve`.
+- **Other binds keep no authentication by default.** Bound to anything but loopback (a LAN
+  address, or `0.0.0.0` / `::` as in the container image) without `--auth token`, the server has
+  no authentication, as before 0.107, and prints a warning: anyone who can reach the address can
+  read every facility. Put an authenticating reverse proxy in front.
+- **Startup checks (0.107).** `--port` takes 0 to 65535 (0 picks a free port); anything else is a
+  usage error (exit 2). The store must exist: a missing path, a file, or a folder that holds no
+  store partitions or store files exits 1 with "not a ParquetStore" before anything is bound. An
+  empty folder is a store with nothing written yet and is served.
+- **Errors (0.107).** Only a malformed query parameter (`start`, `end`, `limit`, `max_points`) is
+  400. A store or read failure, such as a corrupt part file, is 500 with the body
+  `{"error": "internal error"}`; the detail goes to the server's stderr. No error body names a
+  server path.
 
 ```sh
-camber serve ./store                                   # http://127.0.0.1:8080/ui, no token (notice)
-camber serve ./store --auth none                       # the same, chosen explicitly (no notice)
-camber serve ./store --auth token                      # prints the launch URL with ?token=
+camber serve ./store                                   # prints the launch URL with ?token= (0.107)
+camber serve ./store --auth token                      # the same, chosen explicitly (no note)
+camber serve ./store --auth none                       # http://127.0.0.1:8080/ui, no token
 camber serve ./store --host 0.0.0.0 --allow-host camber.example.org   # behind a proxy
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/facilities
 ```
@@ -581,7 +594,8 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   also need a per-run CSRF token, from the lab's own origin, as JSON of at most 16 KiB (see
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
 - **Port in use.** When the port is taken, `camber lab` exits with code 1 and says so, suggesting
-  `--port` (0.103). `--port 0` picks a free port.
+  `--port` (0.103). `--port 0` picks a free port; a port outside 0 to 65535 is a usage error
+  (exit 2, 0.107).
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
 

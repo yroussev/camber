@@ -178,7 +178,7 @@ first step is the trend view you just opened.
 > camber datasets config ornl-frp-ops --store lab_store --out ops.json
 > camber run ops.json --out ops_out              # every finding, including the ok ones
 > camber report ops.json --out ops.html          # the report the lab shows
-> camber serve lab_store                         # the trend viewer at http://127.0.0.1:8080/ui
+> camber serve lab_store                         # the trend viewer: open the URL it prints
 > ```
 >
 > The workbook gives both routes for every exercise. See [CLI.md](CLI.md#open-datasets).
@@ -497,8 +497,9 @@ shared computer:
 - give each learner their own login, and run one lab per learner;
 - do not leave a lab running unattended; stop it with Ctrl-C when you are done;
 - to show data to a room, project your screen, or publish a store read-only with
-  `camber serve` (it accepts no writes and needs a token only with `--auth token`: see its notes
-  in SECURITY.md). The lab cannot be opened from another computer.
+  `camber serve` (it accepts no writes; on loopback it needs its token unless you pass
+  `--auth none`, and on other binds only with `--auth token`: see its notes in SECURITY.md). The
+  lab cannot be opened from another computer.
 
 The full list of the lab's request checks is in
 [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096).
