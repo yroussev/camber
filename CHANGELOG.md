@@ -13,7 +13,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [0.107.0] — Unreleased
+## [0.107.0] — 2026-10-17
+
+**0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).
 
 ### Added
 - **The edge landing recognises a month re-sent in different bytes (#142).** `camber edge land`
@@ -129,7 +131,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   every `python` fence in README.md and docs/ (the workbook included; not docs/dev/ or
   docs/proposals/), each page's fences in order in one fresh interpreter, offline and in a
   temporary folder. A fence that cannot run on its own (a fragment, or one that needs a dataset,
-  a store, a file, an optional extra or the network) carries `<!-- fence: skip (reason) -->` on
+  a store, a file, an optional extra or the network) carries a `fence: skip (reason)` HTML comment on
   the line above it, which renders on neither GitHub nor the docs site.
 - **The CLI reference is checked against the parser (#224).** `tests/test_cli_reference.py`
   fails when docs/CLI.md does not name a command or an option the parser accepts. docs/CLI.md

@@ -467,8 +467,17 @@ Version numbers are given only where a release is already planned.
     - [x] #187, #189 `ok` drift findings name no fault;
     - [x] #188 the drift reference declines only the detectors it could run;
     - [x] #190 tower-approach and head-pressure drift say which way the signal moved.
-- **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
-  model, cross-equipment (AHU → VAV) issues, and PDF output.
+  - **0.107 — RCx next phase, edge dedupe, audit fixes** (released 2026-10-17). Closes #142, #194–#225:
+    - [x] #194 grounded generated prose with a cited fact index (off by default);
+    - [x] #195 excess-outside-air cost;
+    - [x] #196 AHU-to-VAV cause chains from the served-by topology;
+    - [x] #197 direct PDF output (optional `pdf` extra);
+    - [x] #142 byte-independent dedupe at landing; canonical forwarder parts;
+    - [x] #198–#204 rule gating and ok wording (airflow, valves, CO2 occupancy, DX, tower, static reset);
+    - [x] #205–#211, #225 M&V report and fleet report agree with `mv run`;
+    - [x] #212–#218 lifecycle and legal holds on every path, crash-safe ingest swap, one-line CLI errors, server error bodies;
+    - [x] #221 `camber serve` token auth by default on loopback;
+    - [x] #219, #220, #222–#224 docs checked by tests: examples, CLI flags, references, API-stability ledger.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
