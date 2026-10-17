@@ -446,6 +446,18 @@ Version numbers are given only where a release is already planned.
     - [x] #141 a catalog rebuild no longer hides a racing write;
     - [x] #143 start counts on coarse trends; resampled run status no longer hides short cycling;
     - [x] #150 pump and loop drift gates scale to the pump; constant-speed pumps.
+  - **0.105 — faithful CalTRACK 2.0, M&V names registry, TOWT RMV2.0, M&V data handling, hot-water pump drift, four synthetic exercises** (released 2026-10-17). Closes #144–#149, #151–#180:
+    - [x] #144–#147 synthetic G36 VAV fleet, two-chiller plant, AHU maintenance and heat-pump entries with workbook exercises;
+    - [x] #148, #149, #153 plant-rule context, duty-weighted HW pump lockout, neutral ok loop ΔT wording;
+    - [x] #151 trust score checks the mixed-air order without airflow stations;
+    - [x] #152 pump and loop drift on hot-water loops;
+    - [x] #154, #155, #162, #165, #176–#178 TOWT: unseen-bin fallback, non-negative predictions, fixed knots and recency weighting, the RMV2.0 variant;
+    - [x] #156, #166, #167, #170, #171 CalTRACK 2.0 Daily, Billing and Hourly; the look-alikes renamed;
+    - [x] #157–#159, #168, #169 day coverage, DST fall-back hour, temperature screens at fit and prediction;
+    - [x] #160, #161, #172, #173, #175 clearer fit errors; long-horizon forecast warning;
+    - [x] #163, #174, #179 M&V names registry with industry-standard names and citations;
+    - [x] #164 `lbnl-chiller` pump rules read pump data;
+    - [x] #180 pump DP-reset rules judge only running hours.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
