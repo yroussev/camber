@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise plant-heat-pump, the resolution lesson: heatpump_defrost and compressor_staging on the same 5-minute data resampled to 15 minutes. A resampled reversing valve or stage is the bin's mean; a 5-minute defrost in a 15-minute bin reads 0.67, which rounds back to heating, so the defrost is not counted. The faulty defrost sensor's count falls from 50 a day to 0.14 and the hunting stage's from 52 to 16, both ok, with no caveat that the trend is too coarse.",
+  "_comment": "Workbook exercise plant-heat-pump, the resolution lesson: heatpump_defrost and compressor_staging on the same 5-minute data resampled to 15 minutes. A resampled reversing valve or stage is the bin's mean; a 5-minute defrost in a 15-minute bin reads 0.67, which CAMBER counts as two reversals, the fewest the bin allows. Both rules need a trend of 5 minutes or finer (max_interval_min): coarser, a count is a floor. ASHP__defrost_sensor still faults (49.89 a day) with a caveat saying so; the other units, and every stage count, decline to info ('cannot confirm on a 15-minute trend') because part-way samples show the interval hid changes.",
   "_dataset": "synthetic-heat-pump",
   "source": {
     "kind": "store",

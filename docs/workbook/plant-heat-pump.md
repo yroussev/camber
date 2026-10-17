@@ -124,20 +124,20 @@ camber run hp20.json --out hp20_out
 2. `ASHP__defrost_timer` passes, just under the limit. What makes it defrost more than the healthy
    unit, especially in the dry cold snap? With a limit of 20, what changes, and is it a fault?
 3. Which unit heats a room that is already too warm? How does CAMBER know the unit is heating
-   when no compressor or valve is trended? Why does `ASHP__no_aux_heat` also warn on
-   `hp_mode_vs_need`?
+   when no compressor or valve is trended? What does `defrost_hours` say for the air-source
+   units, and why are those hours not cooling?
 4. Which unit falls out of its heating band while it runs flat out? What does the verdict say,
-   and what does it say for `WSHP__stuck_heating`?
-5. Which room's units fight, and for what share of the occupied time? Why do
-   `hp_mode_vs_need` and `hp_capacity_shortfall` not see the fight, and what do they report
-   instead?
+   and what does it say for `WSHP__stuck_heating`, and how did that unit spend its time?
+5. Which room's units fight, and for what share of the occupied time? Why does
+   `hp_mode_vs_need` not see the fight, and what verdict does `hp_capacity_shortfall` give its
+   two units?
 6. Which unit's stages hunt? What do the stage changes per day of the other water-source units
    say about normal staging?
 7. Which loop carries almost no heat, and what do its delta-T and DP say?
 8. What does the label score say for each rule? Which unit is the false alarm for each rule that
    has one?
-9. Resampled to 15 minutes, what happens to the defrost and stage counts? Why does a 15-minute
-   trend hide a 5-minute defrost?
+9. Resampled to 15 minutes, what happens to the defrost and stage counts and their verdicts?
+   Why can a 15-minute trend not vouch for a 5-minute defrost?
 
 ## What CAMBER shows
 
@@ -146,21 +146,28 @@ camber run hp20.json --out hp20_out
 - **Defrost.** `heatpump_defrost` counts every change of the reversing valve (into a defrost
   and out of it, and every heating/cooling changeover) and reports `reversals_per_day`,
   `n_reversals` and `max_reversals_per_day`. It warns at the limit (24) and faults at twice it.
+  It needs a trend of 5 minutes or finer (`max_interval_min`): coarser, the count is a floor, and
+  a count below the limit declines to `info`.
 - **Mode.** `hp_mode_vs_need` reports `heating_while_warm_hours`, `cooling_while_cold_hours` and
   `wrong_mode_pct_of_running`, in occupied hours. `mode_source` says how it knew the mode:
   `status` (the compressor and the reversing valve) or `discharge_vs_zone` (discharge air at least
-  15 °F above the zone reads as heating, at least 10 °F below as cooling). It warns at 2 hours and
-  2 % of the running time, and faults at 10 hours and 10 %.
+  15 °F above the zone reads as heating, at least 10 °F below as cooling). With `status`, a
+  reversal of at most 15 minutes between two heating samples is a defrost and counts as heating;
+  `defrost_hours` reports it. It warns at 2 hours and 2 % of the running time, and faults at 10
+  hours and 10 %.
 - **Capacity.** `hp_capacity_shortfall` reports, per side, the share of occupied time out of band
   (`heating_outside_pct`, `cooling_outside_pct`) and the share of that time the unit was working
   in the right mode (`heating_working_pct`, `cooling_working_pct`). Its `verdict` is `capacity`
-  (working at least 70 % of that time), `control` (at most 30 %) or `mixed`. It warns at 10 % of
-  occupied time and faults at 25 %.
+  (working at least 70 % of that time), `control` (at most 30 %) or `mixed`;
+  `heating_opposite_pct` and `cooling_opposite_pct` give the share spent in the other mode. A
+  unit in a room whose units fight gets `room_fight` instead of `capacity` or `mixed`. It warns at
+  10 % of occupied time and faults at 25 %.
 - **Rooms.** `hp_room_imbalance` reports per room `fight_pct` (one unit heating while another
   cools), the units' `active_pct` and its spread, and `zone_sensor_spread_f`. A room faults at a
   10 % fight and warns at 2 %, a 40-point active spread or a 3 °F sensor spread.
-- **Stages.** `compressor_staging` reports `stage_changes_per_day` (every change of the stage,
-  including on and off) and `max_stage`. It warns at 24 changes a day and faults at 48.
+- **Stages.** `compressor_staging` reports `stage_changes_per_day` (changes of the stage while the
+  compressor runs; starts and stops are not counted) and `max_stage`. It warns at 24 changes a
+  day and faults at 48, and like the defrost count it needs a trend of 5 minutes or finer.
 - **Loop.** `source_loop_deltat` reports the loop's |delta-T| while it pumps: `deltat_median_f`,
   `deltat_p90_f` and `flat_pct` (the share under 1 °F), against a 10 °F design value. It faults
   when 80 % of the pumping time is flat and the 90th percentile is under a quarter of the design.

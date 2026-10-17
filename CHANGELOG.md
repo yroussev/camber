@@ -34,7 +34,11 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   reversing valve also counts the fewest changes its means allow, so a 5-minute defrost in a
   15-minute bin (0.67) is two changes, not none. On `plant-heat-pump--15min`,
   `ASHP__defrost_sensor` now faults at 49.89 a day (0.14, `ok`, before). Both rules report
-  `interval_min` and `n_partial`.
+  `interval_min` and `n_partial`. **This changes behaviour on any trend coarser than 5 minutes:**
+  `heatpump_defrost` and `compressor_staging` now caveat every such finding, and decline a count
+  below the limit to `info`, where they used to pass silently. Run at the stored interval, or
+  raise `max_interval_min` only if the unit's defrosts and stage delays are longer than the
+  interval.
 - **A defrost no longer reads as cooling a cold room (#185).** With the mode read from the
   compressor and the reversing valve, `hp_mode_vs_need`, `hp_capacity_shortfall` and
   `hp_room_imbalance` count a cooling run of at most `max_defrost_min` (15 minutes) with heating
