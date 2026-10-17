@@ -20,6 +20,16 @@ every absolute bound can still run unlike its 40 siblings.
   the low side.
 * ``tail`` -- ``"low"`` or ``"high"`` flags one side only.
 
+**Small differences and wide cohorts (0.106, #186).** ``min_abs_dev`` sets the smallest
+difference from the cohort median that can make an outlier, in the role's units: by default 1 °F
+for ``cohort_space_temp``, so six boxes whose mean temperatures sit within a fraction of a degree
+(a MAD of hundredths of a degree) no longer flag a real but small exposure difference. It applies
+to the raw summary only (not with ``normalise``). ``max_spread`` is the robust spread
+(1.4826 x MAD / |median|) above which the cohort is too unlike to judge: by default 0.3 for
+``cohort_airflow``, whose box sizes and loads differ. Over it, "no outlier" reads ``info`` with a
+caveat (group the boxes by air handler, or normalise them), not ``ok``; outliers still warn. The
+spread is reported as ``cohort_spread`` (per group with ``group_by_topology``).
+
 **Size normalisation alone cannot isolate a stuck box.** On the ORNL test building (default subset:
 one box stuck at 0-100 % among ten, one day per position, 15-minute data, grouped per day under its
 rooftop unit, ``k`` 3.5), the raw mean airflow never flagged the stuck box (robust z -1.5 to
@@ -48,6 +58,21 @@ from .base import Finding
 
 _NORMALISE = (None, "reference", "design_max")
 
+# 0.106 (#186): per-role defaults for min_abs_dev (role units) and max_spread (robust CV)
+_DEFAULT_MIN_ABS_DEV = {Role.SPACE_TEMP: 1.0}  # °F
+_DEFAULT_MAX_SPREAD = {Role.AIRFLOW: 0.3}
+
+
+def _spread(vals: pd.Series) -> float | None:
+    """Robust spread of a cohort's values: 1.4826 x MAD / |median| (None when undefined)."""
+    v = pd.Series(vals, dtype=float).dropna()
+    if len(v) < 2:
+        return None
+    med = float(v.median())
+    if med == 0:
+        return None
+    return round(1.4826 * float((v - med).abs().median()) / abs(med), 3)
+
 
 class CohortDeviation:
     """Flag units deviating > ``k`` robust-σ from their cohort on ``role`` (a FleetRule)."""
@@ -67,6 +92,8 @@ class CohortDeviation:
         reference: dict | None = None,
         design_max: dict | None = None,
         tail: str = "both",
+        min_abs_dev: float | None = None,
+        max_spread: float | None = None,
     ):
         self.role = role
         self.k = k
@@ -87,6 +114,13 @@ class CohortDeviation:
         self.reference = dict(reference or {})
         self.design_max = dict(design_max or {})
         self.tail = tail
+        # 0.106 (#186): None = the role's default (1 °F for space temperature; 0.3 for airflow)
+        self.min_abs_dev = (
+            float(_DEFAULT_MIN_ABS_DEV.get(role, 0.0))
+            if min_abs_dev is None
+            else float(min_abs_dev)
+        )
+        self.max_spread = _DEFAULT_MAX_SPREAD.get(role) if max_spread is None else max_spread
         if self.group_by_topology:
             self.wants_topology = True  # the runner auto-builds a naming topology when none given
         if normalise == "design_max":
@@ -101,7 +135,12 @@ class CohortDeviation:
         if not self._plain():
             return self._analyze_options(frames, topology)
         res = cohort_deviation(
-            frames, self.role, k=self.k, summary=self.summary, min_cohort=self.min_cohort
+            frames,
+            self.role,
+            k=self.k,
+            summary=self.summary,
+            min_cohort=self.min_cohort,
+            min_abs_dev=self.min_abs_dev,
         )
         rname = getattr(self.role, "name", str(self.role))
         n = len(res.values)
@@ -121,13 +160,17 @@ class CohortDeviation:
             "z": res.z,
             "median": res.median,
             "mad": res.mad,
+            "min_abs_dev": self.min_abs_dev,
+            "cohort_spread": _spread(pd.Series(res.values)),
         }
+        caveats = self._spread_caveats(metrics["cohort_spread"])
         if res.outliers:
             return Finding(
                 rule=self.name,
                 equip="<fleet>",
                 severity="warn",
                 metrics=metrics,
+                caveats=caveats,
                 summary=(
                     f"cohort: {len(res.outliers)} of {n} units deviate > {self.k}σ on "
                     f"{rname} ({self.summary}): " + ", ".join(res.outliers)
@@ -136,10 +179,25 @@ class CohortDeviation:
         return Finding(
             rule=self.name,
             equip="<fleet>",
-            severity="ok",
+            severity="info" if caveats else "ok",
             metrics=metrics,
-            summary=f"cohort: all {n} units within {self.k}σ on {rname} ({self.summary})",
+            caveats=caveats,
+            summary=(
+                f"cohort: all {n} units within {self.k}σ on {rname} ({self.summary})"
+                + (" -- too unlike to judge" if caveats else "")
+            ),
         )
+
+    def _spread_caveats(self, spread) -> list:
+        """A caveat when the cohort spreads past ``max_spread`` (0.106, #186)."""
+        if self.max_spread is None or spread is None or spread <= self.max_spread:
+            return []
+        return [
+            f"the cohort's {self.summary} spreads widely (robust spread {spread:.0%} of the "
+            f"median, over {self.max_spread:.0%}: unit sizes or loads differ), so only an extreme "
+            "unit can stand out -- no outlier is weak evidence; compare like units "
+            "(group_by_topology) or normalise them"
+        ]
 
     # ------------------------------------------------------------------ 0.98 (#85) options
     def _values(self, frames: dict) -> tuple:
@@ -202,10 +260,14 @@ class CohortDeviation:
         outliers: list = []
         by_group: dict = {}
         small: list = []
+        spreads: dict = {}
+        raw = self.normalise is None  # min_abs_dev and max_spread act on the raw summary only
         for g, members in groups.items():
             if len(members) < self.min_cohort:
                 small.extend(members)
                 continue
+            if raw:
+                spreads[g] = _spread(vals[members])
             res = cohort_deviation_from_values(
                 vals[members],
                 self.role,
@@ -213,6 +275,7 @@ class CohortDeviation:
                 summary=self.summary,
                 min_cohort=self.min_cohort,
                 tail=self.tail,
+                min_abs_dev=self.min_abs_dev if raw else 0.0,
             )
             z.update(res.z)
             outliers.extend(res.outliers)
@@ -233,7 +296,14 @@ class CohortDeviation:
             "z": z,
             "unscored_small_groups": sorted(small),
             "left_out": left_out,
+            "min_abs_dev": self.min_abs_dev if raw else None,
+            "cohort_spread": (spreads.get("<all>") if list(spreads) == ["<all>"] else spreads)
+            if raw
+            else None,
         }
+        widest = max((v for v in spreads.values() if v is not None), default=None)
+        wide = self._spread_caveats(widest)
+        caveats = caveats + wide
         if small:
             caveats.append(
                 f"{len(small)} unit(s) in groups of fewer than {self.min_cohort} were not scored"
@@ -264,8 +334,9 @@ class CohortDeviation:
         return Finding(
             rule=self.name,
             equip="<fleet>",
-            severity="ok",
+            severity="info" if wide else "ok",
             metrics=metrics,
-            summary=f"cohort: all {n} units within {self.k}σ{side} on {what}",
+            summary=f"cohort: all {n} units within {self.k}σ{side} on {what}"
+            + (" -- too unlike to judge" if wide else ""),
             caveats=caveats,
         )

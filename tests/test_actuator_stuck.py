@@ -242,7 +242,19 @@ class _Topo:
 def test_cohort_defaults_unchanged():
     frames = _fleet()
     a = CohortDeviation(Role.AIRFLOW, name="cohort_airflow").analyze_fleet(frames)
-    assert set(a.metrics) == {"n", "summary", "k", "outliers", "z", "median", "mad"}
+    # 0.106 (#186) added min_abs_dev and cohort_spread (airflow: no floor, so outliers unchanged)
+    assert set(a.metrics) == {
+        "n",
+        "summary",
+        "k",
+        "outliers",
+        "z",
+        "median",
+        "mad",
+        "min_abs_dev",
+        "cohort_spread",
+    }
+    assert a.metrics["min_abs_dev"] == 0.0
     assert not hasattr(CohortDeviation(Role.AIRFLOW), "wants_topology")
 
 

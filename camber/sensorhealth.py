@@ -93,11 +93,14 @@ PHYSICAL_BOUNDS: dict = {
     Role.COOL_VALVE: (-2.0, 102.0),
     Role.OA_DAMPER: (-2.0, 102.0),
     Role.DAMPER: (-2.0, 102.0),
+    Role.ZONE_HEAT_LOOP: (-2.0, 102.0),  # 0.106 (#186)
+    Role.ZONE_COOL_LOOP: (-2.0, 102.0),  # 0.106 (#186)
     Role.SUPPLY_FAN_SPEED: (-2.0, 102.0),
     Role.CHW_PUMP_SPEED: (-2.0, 102.0),
     Role.HW_PUMP_SPEED: (-2.0, 102.0),
     Role.TOWER_FAN_SPEED: (-2.0, 102.0),
     Role.AIRFLOW: (-1.0, 1e6),
+    Role.AIRFLOW_MIN_SP: (-1.0, 1e6),  # 0.106 (#186)
     Role.OA_AIRFLOW: (-1.0, 1e6),
     Role.CHW_FLOW: (-1.0, 1e6),
     Role.CW_FLOW: (-1.0, 1e6),  # 0.106 (#184)

@@ -16,6 +16,11 @@ compares it to the trended setpoint, flagging four failure modes:
 * **diverges** — the setpoint moves the *opposite* way to the T&R command on most cycles (an
   inverted or mis-wired reset).
 
+0.106 (#186): "not responding" and "not trimming" are judged on the cycles where the trajectory the
+requests imply had itself left that end of the band, so a correct but slow reset under modest
+demand is not called unresponsive; the finding lists every failure mode that holds
+(``failure_modes``), with ``reason`` the first of them.
+
 The rule is **reset-agnostic**: instantiate it with ``reset="sat"`` (supply-air-temp setpoint in °F,
 `SAT_TR` preset) or ``reset="static"`` (duct-static setpoint in in. w.c., `STATIC_TR` preset). It
 needs both the reset **setpoint** and the aggregated per-cycle **request** count mapped, so unlike
@@ -154,6 +159,9 @@ class ResetEffectiveness:
             "pct_cycles_wrong_direction": res.pct_cycles_wrong_direction,
             "pct_high_demand_unresponsive": res.pct_high_demand_unresponsive,
             "pct_idle_untrimmed": res.pct_idle_untrimmed,
+            "failure_modes": list(res.failure_modes),
+            "n_demand_judged": res.n_demand_judged,
+            "n_idle_judged": res.n_idle_judged,
             "n": res.n,
         }
         if res.effective:
@@ -163,8 +171,9 @@ class ResetEffectiveness:
                 f"{self._unit}) -- effective"
             )
         else:
+            modes = "; ".join(_REASONS.get(m, m) for m in res.failure_modes or [res.reason])
             summary = (
-                f"{equip}: {self._label} reset -- {_REASONS.get(res.reason, res.reason)}; "
+                f"{equip}: {self._label} reset -- {modes}; "
                 f"actual swing {res.actual_sp_range:g} vs expected {res.expected_sp_range:g} "
                 f"{self._unit} over {res.n} cycles"
             )

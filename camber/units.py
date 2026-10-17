@@ -40,6 +40,8 @@ PERCENT_ROLES = frozenset(
         Role.COOL_VALVE,
         Role.OA_DAMPER,
         Role.DAMPER,
+        Role.ZONE_HEAT_LOOP,  # 0.106 (#186)
+        Role.ZONE_COOL_LOOP,  # 0.106 (#186)
         Role.SUPPLY_FAN_SPEED,
         Role.CHW_PUMP_SPEED,
         Role.HW_PUMP_SPEED,

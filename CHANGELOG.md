@@ -27,6 +27,8 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - `camber.model.equipclass.is_chw_loop` tells a chilled-water loop (`CHW_LOOP`, `SECLOOP`,
   `CHILLED_WATER_LOOP`) from a chiller in the `chw_plant` family. `CHWLOOP` and
   `CHILLEDWATERLOOP` are now listed spellings of that family.
+- The roles `airflow_min_sp` (a VAV box's minimum airflow setpoint), `zone_heat_loop` and
+  `zone_cool_loop` (a zone's heating and cooling loop outputs, %) (#186).
 
 ### Changed
 - **`filter_fouling` and `control_hunting` judge fan-on samples (#181).** Both read the fan
@@ -102,6 +104,22 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `heatpump_defrost` on the 20-reversal variant 1 of 3 (was 1 of 11). `hp_mode_vs_need`'s one
   false positive is gone with #185 (a defrost reads as heating). Every true-positive rate and
   every zero false-positive rate stays.
+- **G36 zone-fleet rules (#186).** `airflow_sp` is the box's active airflow setpoint; the
+  reheat-at-minimum rules (`reheat_minimization_g36`, `zones_heat_cool_census`, `reheat_penalty`,
+  `overcooling_min_flow`) read `airflow_min_sp` when it is mapped. With only `airflow_sp` they
+  read it as the minimum as before, unless it swings with load while the airflow tracks it: then
+  the G36 rules infer the minimum and say so. `zones_heat_cool_census` now rates the occupied
+  hours with one zone heating while another cools (`pct_hours_mixed`), not one box heating
+  above its minimum. `reheat_minimization_g36` no longer counts G36's high heating loop (the
+  heating loop above 50 %, else the valve at 90 % or more or the discharge 15 °F or more above
+  the space) as a violation, and reads a trended occupancy point. Reset effectiveness judges
+  "not responding" and "not trimming" only on the cycles where the request-implied trajectory
+  had left that end, and lists every failure mode (`failure_modes`). The static rogue census
+  lists a rogue that is short of cooling under `overloaded_zones`, not `rogues`. The SAT
+  censuses count tier-1 requests from `zone_cool_loop`. The cohort-starvation summary names every
+  starved air handler. `cohort_space_temp` needs a 1 °F difference from the median
+  (`min_abs_dev`). `cohort_airflow` reads `info` when its cohort spreads past 0.3 (`max_spread`)
+  and nothing stands out. See docs/TR-RESET.md and docs/CAPABILITIES.md.
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every

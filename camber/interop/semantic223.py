@@ -32,6 +32,7 @@ ROLE_TO_223 = {
     Role.AIRFLOW: ("VolumeFlowRate", "Air"),
     Role.OA_AIRFLOW: ("VolumeFlowRate", "Air"),
     Role.AIRFLOW_SP: ("VolumeFlowRate", "Air"),
+    Role.AIRFLOW_MIN_SP: ("VolumeFlowRate", "Air"),  # 0.106 (#186)
     Role.DUCT_STATIC: ("Pressure", "Air"),
     Role.DUCT_STATIC_SP: ("Pressure", "Air"),
     Role.CO2: ("MoleFraction", "Air"),
@@ -44,6 +45,8 @@ ROLE_TO_223 = {
     Role.COOL_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE_POSITION: ("PositionRatio", "Water"),  # 0.98 (#85)
+    Role.ZONE_HEAT_LOOP: ("PositionRatio", "Air"),  # 0.106 (#186): a 0-100 % loop output
+    Role.ZONE_COOL_LOOP: ("PositionRatio", "Air"),  # 0.106 (#186)
     Role.OA_DAMPER: ("PositionRatio", "Air"),
     Role.DAMPER: ("PositionRatio", "Air"),
     Role.SUPPLY_FAN_SPEED: ("DimensionlessRatio", "Air"),

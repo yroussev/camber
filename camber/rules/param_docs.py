@@ -1076,6 +1076,7 @@ PARAM_DOCS["overcooling_severity"] = {
 }
 
 PARAM_DOCS["reheat_minimization_g36"] = {
+    **_SCHEDULE,
     "valve_thr": _P(
         "% valve open",
         "CAMBER judgment: the dual-max logic follows ASHRAE Guideline 36 §5.6.5; this value "
@@ -1094,6 +1095,32 @@ PARAM_DOCS["reheat_minimization_g36"] = {
         "setpoint; set the margin just above it so sensor noise and tracking error do not count "
         "as violations.",
         (1.05, 2.0),
+        "The minimum is airflow_min_sp when mapped, else airflow_sp read as the minimum, else "
+        "(airflow_sp moving like an active setpoint) the 5th percentile of airflow_sp (0.106, "
+        "#186).",
+    ),
+    "dual_max_valve": _P(
+        "% valve open",
+        "CAMBER judgment (0.106, #186): in ASHRAE Guideline 36 §5.6.5's dual-maximum sequence "
+        "the airflow rises above the minimum only once the heating loop passes 50 %, with the "
+        "discharge air at its maximum and the reheat valve near fully open; this value is not "
+        "from G36",
+        "On a box known to run dual maximum, read the valve command in the hours its airflow "
+        "rises above the minimum while heating; set this just below their low end.",
+        (50.0, 100.0),
+        "Used only when the zone heating loop (zone_heat_loop) is not trended; with it, the high "
+        "heating loop is the loop above 50 %.",
+    ),
+    "dual_max_dat_rise": _P(
+        "°F (discharge minus space temperature)",
+        "CAMBER judgment (0.106, #186): G36's dual-maximum sequence raises the discharge air to "
+        "its maximum, typically about 20 °F above the space, before it raises the airflow; 15 °F "
+        "leaves room for sensor offsets",
+        "On a box known to run dual maximum, read the discharge-minus-space difference in the "
+        "hours its airflow rises above the minimum while heating; set this just below it.",
+        (5.0, 40.0),
+        "Used only without zone_heat_loop and when the box's discharge temperature "
+        "(supply_air_temp at a terminal) and space temperature are both trended.",
     ),
 }
 
@@ -1464,8 +1491,31 @@ _ZONE_COHORT_OPTIONS = {
         ("both", "low", "high"),
     ),
 }
+_ZONE_COHORT_EDGES = {
+    "min_abs_dev": _P(
+        "the role's units (°F for space temperature, cfm for airflow)",
+        "CAMBER judgment (0.106, #186): in a tight cohort a MAD of hundredths of a degree makes a "
+        "real but small exposure difference (a north zone 0.8 °F cooler) look like a 10-sigma "
+        "outlier; 1 °F is about the smallest space-temperature difference worth a visit",
+        "Set it to the smallest difference from the cohort median you would act on.",
+        (0.0, 10.0),
+        "None (default) = the role's own floor: 1 °F for cohort_space_temp, none (0) for "
+        "cohort_airflow. Applies to the raw summary only, not with normalise.",
+    ),
+    "max_spread": _P(
+        "fraction of the cohort median (robust spread, 1.4826 x MAD / |median|)",
+        "CAMBER judgment (0.106, #186): measured on the synthetic G36 fleet, boxes behind one "
+        "air handler spread 0.13-0.26 in mean airflow and the 48 boxes of eight air handlers 0.34",
+        "Read cohort_spread on a cohort you trust; set this above it. Over it, 'no outlier' "
+        "reads info, not ok.",
+        (0.05, 2.0),
+        "None (default) = the role's own: 0.3 for cohort_airflow, no limit for "
+        "cohort_space_temp. Applies to the raw summary only, not with normalise.",
+    ),
+}
 for _name in ("cohort_airflow", "cohort_space_temp"):
     PARAM_DOCS[_name].update(_ZONE_COHORT_OPTIONS)
+    PARAM_DOCS[_name].update(_ZONE_COHORT_EDGES)
     EXEMPT[_name] = {
         "reference": "structured input: {equip: reference_equip} for normalise='reference', "
         "one entry per unit (described under normalise)",
@@ -2847,8 +2897,17 @@ FIXED["co2_ventilation"] = (
     "weekday 07:00-18:00"
 )
 FIXED["reheat_minimization_g36"] = (
-    "warn when >= 15 % and fault when >= 40 % of reheating hours run above minimum flow "
-    "(camber/rules/reheat_min_rule.py)"
+    "warn when >= 15 % and fault when >= 40 % of reheating hours run above minimum flow outside "
+    "the high heating loop; the zone heating loop counts as high above 50 % (G36 §5.6.5); a "
+    "minimum inferred from an active airflow_sp caps the rating at warn; an airflow_sp counts as "
+    "active when its 90th percentile is >= 1.5 x its 10th and the airflow tracks it within 10 % "
+    "(median) (camber/rules/reheat_min_rule.py, camber/rules/_minflow.py)"
+)
+FIXED["zones_heat_cool_census"] = (
+    "a zone heats when its reheat valve is > 5 % open and cools when it does not heat and its "
+    "airflow is > 1.1 x its minimum (else its space at or above its cooling setpoint); fault when "
+    ">= 75 % and warn when >= 25 % of occupied hours have a zone heating while another cools "
+    "(camber/zones.py, camber/rules/zones_rule.py)"
 )
 FIXED["dcv_system_verification"] = (
     "a zone needs >= 24 CO2 samples to take part, and >= 24 unoccupied samples for the "

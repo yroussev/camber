@@ -43,7 +43,14 @@ class Role(str, Enum):
     HEAT_SP = "heat_sp"  # active heating setpoint
     SUPPLY_AIR_TEMP_SP = "supply_air_temp_sp"
     DUCT_STATIC_SP = "duct_static_sp"
+    # The box's ACTIVE airflow setpoint: what the controller asks the damper for right now (G36's
+    # active airflow setpoint, between the minimum and the cooling or heating maximum).
     AIRFLOW_SP = "airflow_sp"
+    # 0.106 (#186): the box's MINIMUM airflow setpoint (cfm), kept apart from the active one. The
+    # reheat-at-minimum rules (reheat_minimization_g36, zones_heat_cool_census, reheat_penalty,
+    # overcooling_min_flow) read it when mapped; with only airflow_sp mapped they read that as the
+    # minimum, as before, and say so when it moves like an active setpoint.
+    AIRFLOW_MIN_SP = "airflow_min_sp"
 
     # --- reset requests (G36 trim-and-respond); the aggregated per-cycle request count ---
     SAT_RESET_REQUESTS = "sat_reset_requests"
@@ -61,6 +68,11 @@ class Role(str, Enum):
     COOL_VALVE = "cool_valve"  # cooling-coil valve position
     OA_DAMPER = "oa_damper"
     DAMPER = "damper"  # terminal/zone damper position
+    # 0.106 (#186): a zone's heating and cooling control-loop outputs (0-100 %), the signals G36
+    # sequences terminal units on (§5.6.5 dual-maximum reheat; §5.6.8 tier-1 SAT reset requests
+    # at a cooling loop above 95 %). Optional evidence; the rules fall back without them.
+    ZONE_HEAT_LOOP = "zone_heat_loop"
+    ZONE_COOL_LOOP = "zone_cool_loop"
 
     # --- flows / pressures ---
     AIRFLOW = "airflow"
@@ -243,6 +255,9 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.SAT_RESET_REQUESTS: "discharge air temp reset request point",
     Role.STATIC_PRESSURE_REQUESTS: "duct air pressure reset request point",
     Role.AIRFLOW_SP: "discharge air flow sp",
+    Role.AIRFLOW_MIN_SP: "discharge air flow min sp",  # 0.106 (#186)
+    Role.ZONE_HEAT_LOOP: "zone air heating loop output",  # 0.106 (#186)
+    Role.ZONE_COOL_LOOP: "zone air cooling loop output",  # 0.106 (#186)
     Role.HEAT_VALVE: "heating valve cmd",
     Role.HEAT_VALVE_POSITION: "heating valve sensor",  # 0.98 (#85): the measured position
     Role.COOL_VALVE: "cooling valve cmd",

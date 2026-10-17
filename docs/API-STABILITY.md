@@ -710,6 +710,26 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   keyword-only `gate=` of `sensorhealth.frame_checks`. **Behaviour change:** on a unit without
   both airflow stations, a mixed-air temperature outside [OAT, RAT] on fan-on samples is capped
   at "suspect" (see docs/SENSOR-HEALTH.md). The thresholds may be retuned in a minor release.
+- **G36 zone-fleet edges** (0.106; #186), additive and provisional: the roles `airflow_min_sp`
+  (a box's minimum airflow setpoint; Haystack `discharge air flow min sp`), `zone_heat_loop` and
+  `zone_cool_loop` (a zone's heating and cooling loop outputs, %), none exported as a Brick
+  point; the `reheat_minimization_g36` keywords `dual_max_valve=`, `dual_max_dat_rise=`,
+  `start_hour=`, `end_hour=`, `occupied_days=` and its metrics `reheat_high_loop_pct`,
+  `min_flow_basis`, `high_loop_evidence`, `occupancy`; the `zones_heat_cool_census` metrics
+  `pct_hours_mixed`, `avg_zones_cooling_only`, `avg_zones_heating_when_mixed` and the
+  `camber.zones.zone_states` columns `n_cooling_only`, `mixed`; the reset-effectiveness fields
+  and metrics `failure_modes`, `n_demand_judged`, `n_idle_judged`; the static rogue census
+  metrics `overloaded_zones`, `overloaded_share`; the `cool_loop_col=` keyword of
+  `rogue_zone_census` and `cohort_starvation`; the `CohortDeviation` keywords `min_abs_dev=`,
+  `max_spread=`, the `min_abs_dev=` keyword of `cohort_deviation` and
+  `cohort_deviation_from_values`, and the cohort metrics `min_abs_dev`, `cohort_spread`.
+  **Behaviour changes:** `zones_heat_cool_census` rates on `pct_hours_mixed` (different zones
+  heating and cooling) instead of `pct_hours_any_both`; `reheat_minimization_g36` no longer
+  counts G36's high heating loop as a violation and reads a trended occupancy point; the
+  not-responding and not-trimming shares count only the cycles where the T&R trajectory had left
+  that end; a static rogue that is short of cooling moves from `rogues` to `overloaded_zones`;
+  `cohort_space_temp` needs a 1 °F difference from the median, and `cohort_airflow` reads `info`
+  instead of `ok` when its cohort spreads past 0.3.
 
 ### The read API server: `camber.api.server`
 
