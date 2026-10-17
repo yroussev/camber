@@ -16,7 +16,8 @@ plus the ``plant-heat-pump--15min`` and ``plant-heat-pump--20rev`` variants (CAM
 0.105.0-dev, 2026-10-13). Re-recorded for 0.106.0-dev on 2026-10-16 after #185: a defrost reads
 as heating, the control verdict gives the unit's split, a fighting room's capacity findings name
 the fight, stage changes count only while running, and a 15-minute trend floors or declines the
-defrost and stage counts.
+defrost and stage counts. With #184's scoring each rule counts only the equipment it ran on:
+capacity FPR 3 of 9, 20-reversal defrost FPR 1 of 3.
 """
 
 from __future__ import annotations
@@ -208,7 +209,7 @@ EXERCISE = Exercise(
         Score(_STAGE, tpr=1.0, fpr=0.0),
         Score(_LOOP, tpr=1.0, fpr=0.0),
         Score(_MODE, tpr=1.0, fpr=0.0),
-        Score(_CAP, tpr=1.0, fpr=3 / 11, tol=0.001, quote="27%"),
+        Score(_CAP, tpr=1.0, fpr=3 / 9, tol=0.001, quote="33%"),
         # 9. every 15 minutes: the faulty defrost faults on a floor; the rest decline to info
         Finding(_DEFROST, "ASHP__defrost_sensor", severity=("fault",), run="15min"),
         *(
@@ -240,7 +241,7 @@ EXERCISE = Exercise(
         Finding(_DEFROST, "ASHP__defrost_timer", severity=("warn",), run="limit20"),
         Finding(_DEFROST, "ASHP__healthy", severity=("ok",), run="limit20"),
         Finding(_DEFROST, "ASHP__defrost_sensor", severity=("fault",), run="limit20"),
-        Score(_DEFROST, tpr=1.0, fpr=1 / 11, tol=0.001, run="limit20"),
+        Score(_DEFROST, tpr=1.0, fpr=1 / 3, tol=0.001, run="limit20", quote="33%"),
     ),
     standin=standin,
 )

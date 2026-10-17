@@ -1398,7 +1398,7 @@ bypass stuck open, five times the design flow past the plant's sensors.
    defrosts after every hour of heating below freezing, frost or not, so it defrosts most in the
    dry cold snap (46 changes a day, against 16 for the healthy unit), when there is little frost.
    With a limit of 20 it **warns** and the healthy unit still passes; the label score then reads
-   FPR 9% for `heatpump_defrost`, since the timer unit is labelled healthy. It is not broken: a 60-minute
+   FPR 33% for `heatpump_defrost` (one of the 3 healthy-labelled air-source units), since the timer unit is labelled healthy. It is not broken: a 60-minute
    time-temperature control is a factory setting. The question is whether a demand defrost, or a
    90-minute interval in this climate, would save the wasted defrosts. NRCan's guide says demand
    defrost is generally the more efficient one.
@@ -1437,7 +1437,7 @@ bypass stuck open, five times the design flow past the plant's sensors.
 8. *Score.* Overall, every fault is detected and no healthy unit fires (TPR 100%, FPR 0 %).
    `heatpump_defrost`, `compressor_staging` and `source_loop_deltat` score TPR 100%, FPR 0 %.
    `hp_mode_vs_need` scores TPR 100% and FPR 0 %: the defrosts no longer read as cooling.
-   `hp_capacity_shortfall` scores TPR 100% and FPR 27% (three of 11: `WSHP__stuck_heating`,
+   `hp_capacity_shortfall` scores TPR 100% and FPR 33% (three of 9: `WSHP__stuck_heating`,
    `WSHP__window_side` and `WSHP__door_side`). Those units do have a fault, just not a capacity
    fault: the stuck unit's verdict says `control`, the room pair's `room_fight`. `hp_room_imbalance` is not
    scored (a fleet finding).

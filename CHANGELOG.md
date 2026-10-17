@@ -95,13 +95,13 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   The over-staged plant's tower still warns, because the synthetic tower has no condenser flow.
   `cooling_tower_approach_drift` now runs on the seven towers. It faults on the full-fan tower
   (+5.7 °F) and passes the others, the controlled fouled tower included; the key now records it.
-- The `plant-heat-pump` label scores move with the scoring change; the new answers are pending
-  sign-off. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
+- The `plant-heat-pump` label scores move with the scoring change and are re-recorded. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
   `hp_capacity_shortfall` over the 10 heat pumps, `heatpump_defrost` over the 4 air-source heat
   pumps, `compressor_staging` over the 6 water-source heat pumps and `source_loop_deltat` over the
-  2 loops, not all 12. The same false positives now read `hp_mode_vs_need` 1 of 9 (was 1 of 11),
-  `hp_capacity_shortfall` 3 of 9 (was 3 of 11), and `heatpump_defrost` on the 20-reversal
-  variant 1 of 3 (was 1 of 11). Every true-positive rate and every zero false-positive rate stays.
+  2 loops, not all 12. The same false positives now read `hp_capacity_shortfall` 3 of 9 (was 3 of 11) and
+  `heatpump_defrost` on the 20-reversal variant 1 of 3 (was 1 of 11). `hp_mode_vs_need`'s one
+  false positive is gone with #185 (a defrost reads as heating). Every true-positive rate and
+  every zero false-positive rate stays.
 
 ### Fixed
 - **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
