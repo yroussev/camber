@@ -44,33 +44,44 @@ def _time_axis(tz: str | None) -> dict:
     return {"timezone": None, "local_label": _NO_ZONE_LABEL, "utc_label": None}
 
 
+class BadQuery(ValueError):
+    """A malformed read-API query parameter (0.107, #216): ``start`` / ``end`` that is not a
+    timestamp, or a ``limit`` / ``max_points`` that is not a big-enough integer.
+
+    Only this exception is a 400 over HTTP (:func:`camber.api.server.dispatch`); a store or read
+    failure is a 500 with a generic body. A ``ValueError`` subclass, so code that catches
+    ``ValueError`` from :meth:`ReadAPI.history` keeps working. Its message names the parameter and
+    the value given, never a server path.
+    """
+
+
 def _parse_ts(value, name: str):
     """A ``start`` / ``end`` query value as a naive :class:`pandas.Timestamp` (``None`` passes).
 
     The store holds naive wall-clock time, so an offset on the value is dropped (the wall clock it
-    names is kept). A value pandas cannot parse raises ``ValueError`` (a 400 over HTTP).
+    names is kept). A value pandas cannot parse raises :class:`BadQuery` (a 400 over HTTP).
     """
     if value is None or value == "":
         return None
     try:
         ts = pd.Timestamp(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name}: not a timestamp: {value!r}") from exc
+        raise BadQuery(f"{name}: not a timestamp: {value!r}") from exc
     if ts is pd.NaT:
-        raise ValueError(f"{name}: not a timestamp: {value!r}")
+        raise BadQuery(f"{name}: not a timestamp: {value!r}")
     return ts.tz_localize(None) if ts.tzinfo is not None else ts
 
 
 def _positive_int(value, name: str, minimum: int = 1):
-    """A positive-integer query value (``None`` passes); anything else raises ``ValueError``."""
+    """A positive-integer query value (``None`` passes); anything else raises :class:`BadQuery`."""
     if value is None or value == "":
         return None
     try:
         n = int(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name}: not an integer: {value!r}") from exc
+        raise BadQuery(f"{name}: not an integer: {value!r}") from exc
     if n < minimum:
-        raise ValueError(f"{name}: must be at least {minimum}, got {n}")
+        raise BadQuery(f"{name}: must be at least {minimum}, got {n}")
     return n
 
 
@@ -200,7 +211,8 @@ class ReadAPI:
         ``count`` (the rows returned) the reply carries ``source_count`` (the rows in the window
         before thinning), ``downsampled`` (whether any series was thinned), ``max_points``, and
         ``first`` / ``last``, the first and last timestamp in the window (``None`` when empty).
-        A malformed ``start``, ``end``, ``limit`` or ``max_points`` raises ``ValueError``.
+        A malformed ``start``, ``end``, ``limit`` or ``max_points`` raises :class:`BadQuery` (a
+        ``ValueError``) before the store is read.
         """
         facility_id = facility_id or site  # accept the legacy ``site=`` alias
         start = _parse_ts(start, "start")

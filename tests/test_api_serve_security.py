@@ -1,5 +1,6 @@
 """`camber serve` request checks (0.103, #128): the Host allowlist against DNS rebinding, the
-opt-in token auth (the `camber lab` model), and GET-only (405 on every other method)."""
+token auth (the `camber lab` model; the loopback default since 0.107, #221), and GET-only (405 on
+every other method)."""
 
 import http.client
 import json
@@ -130,7 +131,7 @@ def test_wildcard_bind_needs_an_allowlist(tmp_path, monkeypatch):
 
 
 def test_host_check_over_http(running):
-    httpd = running()
+    httpd = running(auth="none")
     port = httpd.server_address[1]
     assert _req(httpd, "/facilities")[0] == 200
     assert _req(httpd, "/facilities", host=f"localhost:{port}")[0] == 200
@@ -149,7 +150,7 @@ def test_ipv6_loopback_bind(running):
     if not socket.has_ipv6:
         pytest.skip("no IPv6")
     try:
-        httpd = running(host="::1")
+        httpd = running(host="::1", auth="none")
     except OSError:
         pytest.skip("cannot bind ::1 here")
     port = httpd.server_address[1]
@@ -160,10 +161,10 @@ def test_ipv6_loopback_bind(running):
 
 def test_allowed_hosts_env_and_proxy_name(running, monkeypatch):
     monkeypatch.setenv(ALLOWED_HOSTS_ENV, "camber.example.org")
-    httpd = running()
+    httpd = running(auth="none")
     assert _req(httpd, "/facilities", host="camber.example.org")[0] == 200
     assert _req(httpd, "/facilities", host="other.example.org")[0] == 403
-    httpd2 = running(allowed_hosts=["*"])  # the argument wins over the env var
+    httpd2 = running(allowed_hosts=["*"], auth="none")  # the argument wins over the env var
     assert _req(httpd2, "/facilities", host="whatever.example")[0] == 200
 
 
@@ -171,7 +172,7 @@ def test_allowed_hosts_env_and_proxy_name(running, monkeypatch):
 
 
 def test_every_other_method_is_405(running):
-    httpd = running()
+    httpd = running(auth="none")
     for method in ("POST", "PUT", "DELETE", "PATCH", "OPTIONS"):
         for path in ("/facilities", "/ui", "/history"):
             status, _, body = _req(httpd, path, method=method)
@@ -184,11 +185,42 @@ def test_every_other_method_is_405(running):
 # --------------------------------------------------------------------------- token auth
 
 
-def test_no_auth_by_default_on_every_route(running):
-    httpd = running()
+def test_token_auth_by_default_on_loopback(running, monkeypatch):
+    """0.107 (#221): ``auth`` left unset is token auth on loopback; ``auth="none"`` is open."""
+    for host in ("127.0.0.1", "localhost"):
+        httpd = running(host=host)
+        assert httpd.access.auth == "token" and not httpd.access.auth_explicit
+        assert len(httpd.access.access_token) == 43
+        assert "?token=" in httpd.access.launch_url()
+        for path in ROUTES:
+            assert _req(httpd, path)[0] == 401, (host, path)
+        bearer = {"Authorization": f"Bearer {httpd.access.access_token}"}
+        for path in ROUTES:
+            assert _req(httpd, path, headers=bearer)[0] == 200, (host, path)
+        assert json.loads(_req(httpd, "/health")[2]) == {"ok": True}  # probes need no secret
+    opened = running(auth="none")
+    assert opened.access.auth == "none" and opened.access.access_token is None
+    for path in ROUTES:
+        assert _req(opened, path)[0] == 200, path
+
+
+def test_non_loopback_default_is_unchanged(running, monkeypatch, capsys):
+    """0.107 (#221): every other bind keeps no authentication with the warning (#134's scope),
+    including the container image's 0.0.0.0 with CAMBER_API_ALLOWED_HOSTS."""
+    from camber.api.server import _default_auth
+
+    assert _default_auth("127.0.0.1") == _default_auth("127.5.6.7") == "token"
+    assert _default_auth("localhost") == _default_auth("::1") == _default_auth("[::1]") == "token"
+    for host in ("0.0.0.0", "::", "", "192.168.1.10", "fd00::5", "camber.lan"):
+        assert _default_auth(host) == "none", host
+    monkeypatch.setenv(ALLOWED_HOSTS_ENV, "localhost,127.0.0.1")
+    httpd = running(host="0.0.0.0")
     assert httpd.access.auth == "none" and httpd.access.access_token is None
     for path in ROUTES:
         assert _req(httpd, path)[0] == 200, path
+    assert _announce(httpd) is None  # no launch file
+    out, err = capsys.readouterr()
+    assert "no authentication" in err and "note:" not in err and "token" not in out
 
 
 def test_token_auth_on_every_route(running):
@@ -260,10 +292,11 @@ def test_announce_writes_private_launch_file_and_warns(running, tmp_path, capsys
     assert "warning" not in err  # loopback + token: nothing to warn about
     # a non-loopback bind without --auth token warns
     lan = running(allowed_hosts=["camber.lan"], host="0.0.0.0")
+    assert lan.access.auth == "none"
     assert _announce(lan) is None
     out, err = capsys.readouterr()
     assert "no authentication" in err and "camber.lan (any port)" in out
-    star = running(allowed_hosts=["*"])
+    star = running(allowed_hosts=["*"], auth="none")
     _announce(star)
     assert "Host check off" in capsys.readouterr().err
 
@@ -341,7 +374,7 @@ def test_cross_site_requests_are_refused(running):
 
 
 def test_same_origin_browser_and_non_browser_requests_pass(running):
-    httpd = running()
+    httpd = running(auth="none")
     port = httpd.server_address[1]
     me = f"http://127.0.0.1:{port}"
     # the trend viewer opened from the address bar, then its own same-origin fetches (a GET
@@ -391,31 +424,173 @@ def test_cross_site_launch_url_gets_no_cookie(running):
     assert _req(httpd, "/facilities", headers=bearer)[0] == 403
 
 
-# --------------------------------------------------------------------------- the default notice
+# --------------------------------------------------------------------------- the default note
 
 
-def test_auth_default_notice_on_loopback(running, capsys, monkeypatch, tmp_path):
+def test_auth_default_note_on_loopback(running, capsys, monkeypatch, tmp_path):
+    """0.107 (#221): the 0.104 deprecation notice is now a note that token auth is the default,
+    printed with the launch URL; the token is in the terminal and the launch file, as with
+    ``--auth token``."""
     from camber.api.server import _AUTH_DEFAULT_NOTICE
 
     assert "\n" not in _AUTH_DEFAULT_NOTICE
-    assert "--auth token" in _AUTH_DEFAULT_NOTICE and "--auth none" in _AUTH_DEFAULT_NOTICE
+    assert "--auth none" in _AUTH_DEFAULT_NOTICE and "0.107" in _AUTH_DEFAULT_NOTICE
+    assert "future" not in _AUTH_DEFAULT_NOTICE
     implicit = running()
-    assert implicit.access.auth == "none" and not implicit.access.auth_explicit
-    _announce(implicit)
+    assert implicit.access.auth == "token" and not implicit.access.auth_explicit
+    path = _announce(implicit, launch_dir=tmp_path / "run")
     out, err = capsys.readouterr()
-    assert err.count(_AUTH_DEFAULT_NOTICE) == 1 and "notice" not in out
-    # --auth none: the same open server, chosen explicitly -- no notice, no behaviour change
+    assert err.count(_AUTH_DEFAULT_NOTICE) == 1 and "note:" not in out
+    url = implicit.access.launch_url()
+    assert url in out and path in out and open(path).read() == url + "\n"
+    if hasattr(os, "getuid"):
+        assert os.stat(path).st_mode & 0o777 == 0o600
+    # the printed URL opens the viewer: 303 + the session cookie
+    status, h, _ = _req(implicit, url.split(str(implicit.access.port), 1)[1])
+    assert status == 303 and "set-cookie" in h
+    # --auth none: the open server, chosen explicitly -- no note
     explicit = running(auth="none")
     assert explicit.access.auth == "none" and explicit.access.auth_explicit
     _announce(explicit)
-    assert "notice" not in capsys.readouterr().err
+    assert "note:" not in capsys.readouterr().err
     for path in ROUTES:
         assert _req(explicit, path)[0] == 200, path
-    # --auth token: no notice
-    _announce(running(auth="token", access_token=TOKEN), launch_dir=tmp_path / "run")
-    assert "notice" not in capsys.readouterr().err
-    # not loopback: the existing no-authentication warning, not the notice
+    # --auth token: no note
+    _announce(running(auth="token", access_token=TOKEN), launch_dir=tmp_path / "run2")
+    assert "note:" not in capsys.readouterr().err
+    # not loopback: the existing no-authentication warning, not the note
     monkeypatch.setenv(ALLOWED_HOSTS_ENV, "camber.lan")
     _announce(running(host="0.0.0.0"))
     err = capsys.readouterr().err
-    assert "no authentication" in err and "notice" not in err
+    assert "no authentication" in err and "note:" not in err
+
+
+# --------------------------------------------------------------------------- errors (0.107, #216)
+
+
+def _corrupt_one_part(store):
+    for root, _, files in os.walk(store.root):
+        for f in files:
+            if f.endswith(".parquet"):
+                p = os.path.join(root, f)
+                with open(p, "wb") as fh:
+                    fh.write(b"PAR1 this is not a parquet file PAR1")
+                return p
+    raise AssertionError("no part file")
+
+
+def test_bad_query_is_400_store_failure_is_generic_500(tmp_path, capsys):
+    from camber.api import BadQuery, ReadAPI, dispatch
+
+    st = _store(tmp_path)
+    api = ReadAPI(st)
+    for q in ({"start": ["nope"]}, {"limit": ["x"]}, {"limit": ["0"]}, {"max_points": ["1"]}):
+        status, body = dispatch(api, "GET", "/history", {"facility_id": ["S"], **q})
+        assert status == 400 and body["error"] == "bad request", q
+    assert issubclass(BadQuery, ValueError)
+    with pytest.raises(BadQuery):
+        api.history(facility_id="S", end="not-a-time")
+    part = _corrupt_one_part(st)
+    status, body = dispatch(api, "GET", "/history", {"facility_id": ["S"], "limit": ["1"]})
+    assert status == 500 and body == {"error": "internal error"}
+    text = json.dumps(body)
+    assert str(tmp_path) not in text and os.path.basename(part) not in text
+    err = capsys.readouterr().err
+    assert "internal error on GET '/history'" in err and "Traceback" in err
+
+    # a ValueError that is not a BadQuery (pyarrow's ArrowInvalid is one) is a 500, not a 400
+    class Boom:
+        def history(self, **kw):
+            raise ValueError(f"cannot read {tmp_path}/facility_id=S/part-0.parquet")
+
+        def points(self, **kw):
+            raise OSError(2, "No such file", str(tmp_path / "x"))
+
+    for path in ("/history", "/points"):
+        status, body = dispatch(Boom(), "GET", path, {})
+        assert status == 500 and body == {"error": "internal error"}, path
+    assert str(tmp_path) in capsys.readouterr().err  # the detail is logged, not sent
+
+
+def test_corrupt_store_over_http_and_lab_passthrough(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(ALLOWED_HOSTS_ENV, raising=False)
+    st = _store(tmp_path)
+    _corrupt_one_part(st)
+    httpd = make_server(st, port=0, auth="none")
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        status, h, body = _req(httpd, "/history?facility_id=S&limit=1")
+        assert status == 500 and json.loads(body) == {"error": "internal error"}
+        assert str(tmp_path).encode() not in body and b"parquet" not in body
+        assert _req(httpd, "/history?facility_id=S&start=bad")[0] == 400
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        t.join(timeout=5)
+    assert "internal error" in capsys.readouterr().err
+    # camber lab delegates /history to the same dispatch
+    from camber.lab import LabApp
+    from camber.lab._server import dispatch_lab
+
+    app = LabApp(store=st.root, data_dir=str(tmp_path / "cache"))
+    try:
+        app.bind(8765)
+        hdrs = {"Host": "127.0.0.1:8765", "Authorization": f"Bearer {app.access_token}"}
+        status, body, _ = dispatch_lab(
+            app, "GET", "/history", {"facility_id": ["S"], "limit": ["1"]}, hdrs, b""
+        )
+        assert status == 500 and str(tmp_path) not in json.dumps(body)
+    finally:
+        app.close()
+
+
+def test_handler_500_is_generic(running, monkeypatch, capsys, tmp_path):
+    import camber.api.server as server
+
+    def boom(*a, **k):
+        raise RuntimeError(f"failed at {tmp_path}/secret/path")
+
+    httpd = running(auth="none")
+    monkeypatch.setattr(server, "check_request", boom)
+    status, _, body = _req(httpd, "/facilities")
+    assert status == 500 and json.loads(body) == {"error": "internal error"}
+    assert str(tmp_path).encode() not in body
+    assert "secret/path" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------- startup (0.107, #217)
+
+
+def test_port_range_and_store_check(tmp_path, capsys, monkeypatch):
+    from camber.api.server import _store_problem
+    from camber.cli import main
+
+    for argv in (
+        ["serve", str(tmp_path), "--port", "99999"],
+        ["serve", str(tmp_path), "--port", "-1"],
+        ["serve", str(tmp_path), "--port", "http"],
+        ["lab", "--port", "-1"],
+        ["lab", "--port", "65536"],
+    ):
+        with pytest.raises(SystemExit) as e:
+            main(argv)
+        assert e.value.code == 2, argv
+        err = capsys.readouterr().err
+        assert "--port" in err and "Traceback" not in err and "OverflowError" not in err
+    with pytest.raises(ValueError, match="0 to 65535"):
+        make_server(_store(tmp_path), port=70000)
+    # a missing path, a file, a folder of other things: exit 1, "not a ParquetStore"
+    junk = tmp_path / "junk"
+    junk.mkdir()
+    (junk / "notes.txt").write_text("x")
+    (tmp_path / "file").write_text("x")
+    for bad in (tmp_path / "does-not-exist", tmp_path / "file", junk):
+        assert main(["serve", str(bad), "--auth", "none"]) == 1, bad
+        assert "not a ParquetStore" in capsys.readouterr().err
+        assert _store_problem(bad) is not None
+    assert not (tmp_path / "does-not-exist").exists()  # nothing created
+    # a real store, a fresh (empty) store folder and a workspace store are servable
+    assert _store_problem(_store(tmp_path).root) is None
+    (tmp_path / "empty").mkdir()
+    assert _store_problem(tmp_path / "empty") is None

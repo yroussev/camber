@@ -749,15 +749,23 @@ stability:
 `check_request`'s `access` argument is the server's `server.access` object, whose class is
 private; its attributes are not API. The routes (`/`, `/about`, `/health`, `/ui`, `/facilities`,
 `/sites`, `/points`, `/history`) and their JSON fields follow the read API in `camber.api.read`.
+`camber.api.read.BadQuery` (0.107, #216; also exported from `camber.api`, provisional) is the
+`ValueError` subclass a malformed `start`, `end`, `limit` or `max_points` raises; it is the only
+400 from `dispatch`. Any other failure is a 500 whose body is `{"error": "internal error"}` (no
+`detail`), with the detail logged to stderr. `make_server` / `serve` refuse a `port` outside 0
+to 65535 with `ValueError` (0.107, #217).
 The request checks are behaviour, not names: the Host allowlist (0.103) and the cross-site check
 (0.104) may tighten in a minor release, with a CHANGELOG entry.
 
-**Planned default change for `auth`.** Today `auth=None` (the default) and `auth="none"` both
-mean no authentication. A future release, 0.105.0 at the earliest, will make `auth=None` mean
-`"token"` when the server is bound to loopback (`127.0.0.1`, `localhost`, `::1`); other binds keep
-no authentication. `camber serve` prints a notice about it on loopback from 0.104. To keep
-today's behaviour after the switch, pass `auth="none"` (`--auth none`, `CAMBER_API_AUTH=none`);
-to opt in now, pass `auth="token"`. Code that already passes `auth` explicitly is unaffected.
+**Default change for `auth` (0.107, #221; announced in 0.104, #134).** `auth=None` (the default)
+now means `"token"` when the server is bound to loopback (`127.0.0.1` and the rest of
+`127.0.0.0/8`, `localhost`, `::1`), and `"none"` on every other bind, `0.0.0.0` and `::`
+included. Before 0.107 it meant `"none"` everywhere, with a deprecation notice on loopback from
+0.104. The same holds for `camber serve` without `--auth` and for `python -m camber.api.server`
+with `CAMBER_API_AUTH` unset. To keep an open loopback server, pass `auth="none"` (`--auth none`,
+`CAMBER_API_AUTH=none`). Code that passes `auth` explicitly, and every non-loopback bind, is
+unaffected. With token auth, `server.access.launch_url()` is the URL with the token, and
+`camber serve` prints it and saves it in the launch file.
 
 ## Deprecated
 

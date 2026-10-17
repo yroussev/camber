@@ -71,7 +71,7 @@ The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.
 every other method, `HEAD` and `OPTIONS` included, is 405, and it answers no CORS preflight. It
 binds `127.0.0.1` by default; the `/ui` HTML is served with a strict same-origin
 `Content-Security-Policy` and loads no external asset. Its request checks (0.103, #128; the
-cross-site check 0.104, #134), in this order:
+cross-site check 0.104, #134; token auth by default on loopback 0.107, #221), in this order:
 
 - **Host allowlist, always on (DNS rebinding).** A web page on another site can point its own DNS
   name at 127.0.0.1 (or at the server's LAN address) and then read the answers through a visitor's
@@ -98,7 +98,7 @@ cross-site check 0.104, #134), in this order:
   opens the viewer. Following a link from **another site** to `camber serve` is refused; open its
   URL directly. Behind a proxy that rewrites `Host`, list the proxy's public name with
   `--allow-host` so that a browser's `Origin` matches.
-- **Token auth, opt-in (`--auth token`).** The same model as `camber lab` (§11, shared code in
+- **Token auth (`--auth token`; the loopback default since 0.107).** The same model as `camber lab` (§11, shared code in
   `camber._access`): a random 256-bit access token per run (or `CAMBER_API_TOKEN`, 16+ characters,
   from the environment, never argv); a launch URL `http://127.0.0.1:<port>/ui?token=...` printed
   to the terminal and saved in a 0600 launch file `serve-<port>.url` in a 0700 folder; a GET with a
@@ -107,24 +107,23 @@ cross-site check 0.104, #134), in this order:
   Every route needs the cookie or the token (401 without, 403 for a wrong one), except that a bare
   `GET /health` answers `{"ok": true}` and nothing else, for container health checks. Secrets are
   compared with `hmac.compare_digest`.
-- **Default off, for now.** Without `--auth token` the server has **no authentication**: on a
-  computer shared by several accounts, any local user can read every facility, point and history
-  it serves, and bound to another interface, anyone who can reach that address can. It prints a
-  warning when bound to anything but loopback without `--auth token`. `--auth none` (0.104)
-  chooses no authentication explicitly.
-- **Planned default switch (announced in 0.104, #134).** A future release will make `--auth
-  token` the default when `camber serve` (or `make_server` / `serve` with `auth` left unset) is
-  bound to **loopback**. Nothing changes in 0.104: it only prints a one-line notice on loopback
-  when `--auth` is not given. Timeline:
-  - **0.104:** the notice; `--auth none` accepted.
-  - **No earlier than 0.105.0:** loopback without `--auth` requires the token. That release will
-    list the change under **Changed** in the CHANGELOG.
-
-  Binding to another interface keeps its current default (no authentication, with the warning)
-  under this plan; the container image binds `0.0.0.0` and is not affected. To prepare, pass
-  `--auth token` now, or `--auth none` (`CAMBER_API_AUTH=none` for `python -m
-  camber.api.server`, `auth="none"` from Python) to keep an open server deliberately after the
-  switch, for example behind an authenticating proxy. Either choice hides the notice.
+- **The default (0.107, #221).** With `--auth` left out, a server bound to **loopback**
+  (`127.0.0.1`, the default; `localhost`; `::1`) uses token auth, and prints its launch URL and
+  saves it in the launch file as `--auth token` does, with a one-line note that this is the
+  default. The same holds for `make_server` / `serve` with `auth` unset and for
+  `python -m camber.api.server` with `CAMBER_API_AUTH` unset. Every other bind keeps no
+  authentication by default, as #134 scoped it: a LAN address, a host name, and `0.0.0.0` / `::`
+  (the container image) serve every facility, point and history to anyone who can reach them,
+  and print a warning. `--auth none` (`CAMBER_API_AUTH=none`, `auth="none"`) turns authentication
+  off on any bind; on a computer shared by several accounts, any local user can then read
+  everything the server serves.
+- **History.** 0.103 added opt-in token auth (#128). 0.104 announced the switch with a notice on
+  loopback and accepted `--auth none` (#134). 0.107 made the switch; its CHANGELOG lists it under
+  **Changed** as a behaviour change.
+- **Errors (0.107, #216).** Only a malformed query parameter is 400. A store or read failure (a
+  corrupt or unreadable part file, for example) is 500 with the body `{"error": "internal
+  error"}`, and the detail, which can name server paths, goes to the server's stderr only. The
+  lab's read routes share this behaviour.
 
 Residual risks: the server speaks plain HTTP (no TLS), so the token and the cookie cross the
 network in clear text when it is bound beyond loopback; terminate TLS at a proxy. The cookie has no

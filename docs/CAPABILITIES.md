@@ -485,8 +485,8 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
   `/history`, plus a live vanilla-JS dashboard at **`/ui`** (facility/equip/role selectors + a
   synchronized multitrend, brush-linked via `window.CAMBER`, polling for fresh data; a date range
   and brush-to-zoom over a min/max-thinned whole span, 0.103). Read-only,
-  localhost-bound, CSP-locked, no framework; a `Host` allowlist against DNS rebinding and opt-in
-  token auth (`--auth token`, 0.103). Env: `CAMBER_STORE` / `CAMBER_API_HOST` / `CAMBER_API_PORT` /
+  localhost-bound, CSP-locked, no framework; a `Host` allowlist against DNS rebinding and token
+  auth (`--auth token`, 0.103; the loopback default since 0.107, `--auth none` opts out). Env: `CAMBER_STORE` / `CAMBER_API_HOST` / `CAMBER_API_PORT` /
   `CAMBER_API_ALLOWED_HOSTS` / `CAMBER_API_AUTH` / `CAMBER_API_TOKEN`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
 
 ## Orchestration & distribution

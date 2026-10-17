@@ -84,12 +84,14 @@
     "detect_anomalies"
   ],
   "camber.api": [
+    "BadQuery",
     "ReadAPI",
     "dispatch",
     "make_server",
     "serve"
   ],
   "camber.api.read": [
+    "BadQuery",
     "ReadAPI"
   ],
   "camber.api.server": [

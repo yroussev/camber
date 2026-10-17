@@ -92,7 +92,7 @@ def test_live_dashboard_html_is_well_formed():
 
 
 def _serve(store):
-    srv = make_server(store, port=0)
+    srv = make_server(store, port=0, auth="none")  # open: token is the loopback default (#221)
     threading.Thread(target=srv.handle_request, daemon=True).start()  # one request, then stop
     return srv.server_address[1]
 

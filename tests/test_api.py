@@ -74,7 +74,7 @@ def test_dispatch_unknown_and_method(tmp_path):
 
 
 def test_http_server_round_trip(tmp_path):
-    httpd = make_server(_store(tmp_path), port=0)  # ephemeral port
+    httpd = make_server(_store(tmp_path), port=0, auth="none")  # ephemeral port; open (#221)
     port = httpd.server_address[1]
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()

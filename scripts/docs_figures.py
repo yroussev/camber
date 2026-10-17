@@ -1171,7 +1171,9 @@ def screenshots() -> list:
             p_api, p_lab = _free_port(), _free_port()
             servers.append(
                 subprocess.Popen(
-                    [py, "-c", boot, "serve", "store", "--port", str(p_api)],
+                    # an open throwaway server for the screenshot: token auth is the loopback
+                    # default since 0.107 (#221)
+                    [py, "-c", boot, "serve", "store", "--port", str(p_api), "--auth", "none"],
                     cwd=tmp,
                     env=env,
                     stdout=subprocess.DEVNULL,

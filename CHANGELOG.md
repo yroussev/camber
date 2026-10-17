@@ -68,6 +68,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - A rule may declare `roles_cost`: roles it reads only to price its finding. They load like
   optional roles, but they never gate the rule, are not reported as missing and do not make the
   finding conditional.
+- `camber.api.BadQuery` (also `camber.api.read.BadQuery`, #216): the `ValueError` subclass a
+  malformed `start`, `end`, `limit` or `max_points` raises. It is the only error that the read
+  API's `dispatch` answers with 400.
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
@@ -86,7 +89,30 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
   rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
   the default, and only a configured one is priced.
-
+- **Behaviour change (#221): `camber serve` on loopback requires its access token by default.**
+  This completes the switch announced as a deprecation in 0.104 (#134). Bound to loopback
+  (`127.0.0.1`, the default; `localhost`; `::1`) with `--auth` left out, the server now uses token
+  auth: it prints the launch URL with `?token=` and saves it in the launch file
+  `serve-<port>.url`, as `--auth token` does, and says in a one-line note that this is the
+  default. The 0.104 notice about a future switch is gone. `make_server` / `serve` with `auth`
+  unset and `python -m camber.api.server` with `CAMBER_API_AUTH` unset follow the same default.
+  `--auth none` (`CAMBER_API_AUTH=none`, `auth="none"`) keeps an open server. Binds to any other
+  address, including the container image's `0.0.0.0` and the Kubernetes manifest, keep no
+  authentication by default, with the warning, exactly as before; `GET /health` still needs no
+  token. Scripts that read a loopback server without credentials get 401 now: send
+  `Authorization: Bearer <token>` (fix it with `CAMBER_API_TOKEN`), or pass `--auth none`.
+- **`camber serve` error codes (#216).** A corrupt or unreadable store file gave 400 (pyarrow's
+  `ArrowInvalid` is a `ValueError`), and 400 and 500 bodies could name server paths. Now only a
+  malformed query parameter is 400. Any other failure is 500 with the body
+  `{"error": "internal error"}`, with no `detail`, and the exception and traceback go to the
+  server's stderr. `camber lab`'s `/history`, `/points` and `/facilities` routes go through the
+  same code, so their errors carry no path either.
+- **`camber serve` and `camber lab` check their startup arguments (#217).** `--port` outside 0 to
+  65535 is a usage error (exit 2) instead of an `OverflowError` traceback, and `make_server`
+  raises `ValueError` for such a port. `camber serve` exits 1 with "not a ParquetStore" when the
+  store path is missing, is a file, or is a folder with no store partitions or store files,
+  instead of serving an empty store. An empty folder is still served as a store with nothing
+  written yet.
 
 ## [0.106.0] — 2026-10-17
 

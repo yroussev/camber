@@ -263,10 +263,26 @@ def _cmd_validate(args) -> int:
     return 0
 
 
+def _port(value: str) -> int:
+    """argparse ``type`` for ``--port`` (``serve``, ``lab``; 0.107, #217): an integer 0-65535
+    (0 binds an ephemeral port). Anything else is a usage error (exit 2), not a bind traceback."""
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"not a port number: {value!r}") from None
+    if not 0 <= port <= 65535:
+        raise argparse.ArgumentTypeError(f"port must be from 0 to 65535 (got {port})")
+    return port
+
+
 def _cmd_serve(args) -> int:  # pragma: no cover - blocking server loop
-    from .api.server import serve
+    from .api.server import _store_problem, serve
     from .store import ParquetStore
 
+    problem = _store_problem(args.store)  # 0.107 (#217): never serve a mistyped path as empty
+    if problem is not None:
+        print(f"error: {problem}", file=sys.stderr)
+        return 1
     # no --allow-host: None, so make_server reads CAMBER_API_ALLOWED_HOSTS
     allowed = list(args.allow_host) if args.allow_host else None
     try:
@@ -2824,7 +2840,9 @@ def _build_parser() -> argparse.ArgumentParser:
     psv.add_argument(
         "--host", default="127.0.0.1", help="bind host (default 127.0.0.1 / localhost)"
     )
-    psv.add_argument("--port", type=int, default=8080, help="bind port (default 8080)")
+    psv.add_argument(
+        "--port", type=_port, default=8080, help="bind port, 0-65535 (default 8080; 0: any free)"
+    )
     psv.add_argument(
         "--allow-host",
         action="append",
@@ -2840,9 +2858,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="'token': require this run's access token on every route (the launch URL printed "
         "at startup sets a session cookie; scripts send Authorization: Bearer); env "
-        "CAMBER_API_TOKEN fixes the token. 'none': no authentication, chosen explicitly. Not "
-        "given: no authentication for now, with a notice on loopback; a future release makes "
-        "token the default on loopback, and --auth none keeps an open server",
+        "CAMBER_API_TOKEN fixes the token. 'none': no authentication. Not given (0.107): "
+        "token on loopback (the default host), none on any other bind (with a warning)",
     )
     psv.set_defaults(func=_cmd_serve)
 
@@ -3327,7 +3344,9 @@ def _build_parser() -> argparse.ArgumentParser:
     plab.add_argument(
         "--dir", help="dataset cache directory (default: $CAMBER_DATA_DIR or ~/.cache)"
     )
-    plab.add_argument("--port", type=int, default=8765, help="port on 127.0.0.1 (default 8765)")
+    plab.add_argument(
+        "--port", type=_port, default=8765, help="port on 127.0.0.1, 0-65535 (default 8765)"
+    )
     plab.add_argument(
         "--docs",
         help="docs source tree to serve workbook exercise pages from offline (default: docs/ "
