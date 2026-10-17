@@ -388,3 +388,25 @@ def test_validation_modes_on_synthetic_runs():
     assert len(spliced) == len(frames["AHU_annual.csv"]) and spliced.index.is_monotonic_increasing
     keys = L.report({"sdahu": {"split": L.score_unit(frames, unit, "split")}})
     assert keys["leak_drift.sdahu.split.tpr"] == 1.0 and keys["leak_drift.sdahu.split.fpr"] == 0.0
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_f": 1e6, "fault_f": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_shift_toward_a_leak_names_no_cause():
+    """A shift in the leak direction under the floors names no leak (0.106, #189)."""
+    f = _rule(**_NO_FLOOR).analyze_periods("AHU-1", _ahu(), _ahu(seed=1, leak_f=1.1))
+    assert f.severity == "ok" and f.metrics["coil_leak_drift_direction"] == "down"
+    assert f.summary.startswith(
+        "AHU-1: cooling-coil valve-shut air rise holds near its baseline (-"
+    )
+    for word in ("uncommanded", "leaking", "passing"):
+        assert word not in f.summary
+
+
+def test_a_flagged_leak_keeps_the_cause():
+    f = _rule().analyze_periods("AHU-1", _ahu(), _ahu(seed=1, leak_f=1.1))
+    assert f.severity in ("warn", "fault")
+    assert f.summary.endswith("-- uncommanded cooling (a leaking or passing valve)")

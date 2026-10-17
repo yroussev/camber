@@ -41,6 +41,7 @@ from ..chillerdrift import (
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _pumpgates as G
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "pump_power"
@@ -356,9 +357,14 @@ class PumpPowerDrift:
 
         if direction == "up" and severity == "ok":
             # 0.106 (#187): an ok finding names no excess -- that belongs to warn and fault
-            headline = (
-                f"{equip}: pump power holds near its baseline ({G.signed(drift.drift_f, 1)} kW, "
-                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            headline = holds_near_baseline(
+                equip,
+                "pump power",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit=" kW",
+                matched="matched flow",
             )
         elif direction == "up":
             headline = (

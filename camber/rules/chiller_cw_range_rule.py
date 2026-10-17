@@ -58,6 +58,7 @@ from ..coolingtower import cw_range_f
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _chillerfit
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -312,19 +313,32 @@ class ChillerCwRangeDrift:
         # add a temporal claim resting on the weaker, untuned parameters -- label both.
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        arrow, cause = (
-            ("widened", "less condenser-water flow")
-            if direction == "up"
-            else ("narrowed", "more flow, or flow bypassing the condenser")
-        )
+        if severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            summary = holds_near_baseline(
+                equip,
+                "condenser-water range",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="°F",
+                matched="matched load",
+            )
+        else:
+            arrow, cause = (
+                ("widened", "less condenser-water flow")
+                if direction == "up"
+                else ("narrowed", "more flow, or flow bypassing the condenser")
+            )
+            summary = (
+                f"{equip}: condenser-water range {arrow} {abs(drift.drift_f):.1f}°F "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched load — {cause}"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: condenser-water range {arrow} {abs(drift.drift_f):.1f}°F "
-                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched load — {cause}"
-            ),
+            summary=summary,
             caveats=caveats,
         )

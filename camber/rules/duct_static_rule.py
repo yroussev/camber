@@ -36,6 +36,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "duct_static"
@@ -313,20 +314,40 @@ class DuctStaticControlDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        cause = (
-            "over-pressurization / sensor-low / stuck damper"
-            if direction == "up"
-            else "the fan cannot hold setpoint (fan degradation, duct leakage)"
-        )
         arrow = "rose" if direction == "up" else "fell"
+        if severity == "ok" and setpoint_driven:
+            # 0.106 (#189): an ok finding names no fault; a reset-driven move says so
+            summary = (
+                f"{equip}: duct static {arrow} {abs(drift.drift_f):.2f} inH2O "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched airflow -- "
+                "explained by the static setpoint reset"
+            )
+        elif severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            summary = holds_near_baseline(
+                equip,
+                "duct static",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=2,
+                unit=" inH2O",
+                matched="matched airflow",
+            )
+        else:
+            cause = (
+                "over-pressurization / sensor-low / stuck damper"
+                if direction == "up"
+                else "the fan cannot hold setpoint (fan degradation, duct leakage)"
+            )
+            summary = (
+                f"{equip}: duct static {arrow} {abs(drift.drift_f):.2f} inH2O "
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched airflow -- {cause}"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: duct static {arrow} {abs(drift.drift_f):.2f} inH2O "
-                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched airflow -- {cause}"
-            ),
+            summary=summary,
             caveats=caveats,
         )

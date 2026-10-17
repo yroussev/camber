@@ -53,6 +53,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _METRIC = "coil_valve_pct"  # the valve column, renamed to a stable key for the fit
@@ -408,7 +409,18 @@ class CoilValveDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "up":
+        if direction == "up" and severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            headline = holds_near_baseline(
+                equip,
+                f"{self._label}-coil valve",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=0,
+                unit="%",
+                matched="matched air-ΔT",
+            )
+        elif direction == "up":
             headline = (
                 f"{equip}: {self._label}-coil valve creep {drift.drift_f:+.0f}% "
                 f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched air-ΔT -- "

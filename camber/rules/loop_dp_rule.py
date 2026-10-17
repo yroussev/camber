@@ -48,6 +48,7 @@ from ..chillerdrift import (
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _pumpgates as G
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "loop_dp"
@@ -439,9 +440,14 @@ class LoopDPDrift:
             )
         elif severity == "ok":
             # 0.106 (#187): an ok finding names no fault -- the cause belongs to warn and fault
-            summary = (
-                f"{equip}: loop DP holds near its baseline ({G.signed(drift.drift_f, 1)}, "
-                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            summary = holds_near_baseline(
+                equip,
+                "loop DP",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="",
+                matched="matched flow",
             )
         else:
             cause = (

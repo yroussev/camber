@@ -228,3 +228,25 @@ def test_no_baseline_scatter_is_judged_on_percent_alone():
     )
     assert f.severity == "fault"
     assert any("no residual scatter" in c for c in f.caveats)
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_pct": 1e6, "fault_pct": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_rise_short_of_the_floors_names_no_cause():
+    """A damper rise under the floors is not called creep and names no cause (0.106, #189)."""
+    f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+        "VAV_1", *_base_and({"creep_pct": 16.0})
+    )
+    assert f.severity == "ok"
+    assert f.summary.startswith("VAV_1: VAV damper holds near its baseline (+")
+    for word in ("creep", "authority", "starvation", "airflow_tracking"):
+        assert word not in f.summary
+
+
+def test_a_flagged_rise_keeps_the_cause():
+    f = _rule(BaselineStore()).analyze_periods("VAV_1", *_base_and({"creep_pct": 16.0}))
+    assert f.severity in ("warn", "fault") and "VAV damper creep" in f.summary
+    assert "actuator/linkage authority loss or upstream starvation" in f.summary
