@@ -174,6 +174,51 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   authentication by default, with the warning, exactly as before; `GET /health` still needs no
   token. Scripts that read a loopback server without credentials get 401 now: send
   `Authorization: Bearer <token>` (fix it with `CAMBER_API_TOKEN`), or pass `--auth none`.
+- An RCx issue's heading never comes from a linked box member (#196): a box's reheat valve
+  cause stays on the box's own row, and the air handler's cause heads its chain. `link_findings`
+  judges sensor precedence for each member on that member's own equipment, which gives the same
+  result for a single-equipment issue.
+- **Dataset writes follow the facility lifecycle on every path (#212).** `camber datasets
+  ingest` and `remove --purge-store` (and `camber.datasets.ingest` / `remove`) now apply the
+  rules `camber lab` already applied, from one shared module (`camber.datasets._lifecycle`).
+  Inside a portfolio workspace, new refusals:
+  - an ingest into a facility that is not `provisioning` or `active` (suspended, offboarding,
+    archived) is refused before anything is written;
+  - a purge of a facility under a legal hold, or not `provisioning` / `active`, is refused
+    before anything is deleted, the dataset cache included; so is an ingest that would drop such
+    a facility because its subset no longer produces it;
+  - both need `--reason` (`reason=` in the API), and a purge also needs `--yes` or
+    `--confirm ID`. They are audited as `datasets.ingest`, `datasets.remove` and
+    `datasets.purge`.
+
+  Every ingest swap now passes the registry's write guard, so no ingest, in a workspace or not,
+  writes into an archived facility. Plain stores need no reason or confirmation, as before.
+  `camber lab` behaves as before.
+- **Behaviour change: a legal hold blocks a forced re-ingest, on every path (#212).** A hold
+  means nothing held is deleted, and a re-ingest replaces the facility's partition. So
+  `camber datasets ingest --force` (or a changed re-ingest) into a held facility that has data
+  is refused with `LifecycleError` and changes nothing: exit 1 in the CLI, 409 in `camber lab`
+  (which allowed it before), and the API raises. An unchanged re-ingest is still skipped, and
+  release the hold (`camber retention release`) to re-ingest. There is no override.
+- **`camber store verify` reports interrupted ingests (#213).** It lists leftover swap and
+  staging directories, and registered facilities with no part files in a state that should have
+  some. A facility whose data is stranded outside its partition fails verify even without
+  `--strict`; `--strict` also fails on any leftover or empty facility. The JSON report gains
+  `leftovers` and `empty_facilities`.
+- **More rules link their PNNL reading (#222).** Rules whose threshold bases cite a PNNL guide
+  or chapter now map to it, so reports give them *Learn more* links: the pump family's ten drift
+  detectors (`pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift`,
+  `pump_power_drift` and their `hw_` twins) link chapter 8, and the loop delta-T pair also the
+  plant guide whose heading asks whether the loop delta-T is low; `coil_leak_drift` links
+  chapter 5's leaking-valve checks; `economizer_damper_drift` links chapters 6 and 5; and
+  `outdoor_air_fraction` and `economizer_high_limit` add chapter 5, whose outdoor-air fraction
+  their bases cite. The pump detectors' `min_speed` basis cites chapter 8 only: the plant guides'
+  pressure headings ask about resetting the setpoint, which those detectors do not judge. In the
+  RCx report the economizer issue gains a chapter 5 link.
+- The docs build fails on a link to a heading that does not exist (`validation: anchors` in
+  mkdocs.yml, so `mkdocs build --strict` catches it) (#220).
+
+### Fixed
 - **`camber serve` error codes (#216).** A corrupt or unreadable store file gave 400 (pyarrow's
   `ArrowInvalid` is a `ValueError`), and 400 and 500 bodies could name server paths. Now only a
   malformed query parameter is 400. Any other failure is 500 with the body
@@ -206,37 +251,6 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   `run_gate`. With no fan speed, CW return or run signal it declines (`info`, reason
   `no_operating_signal`), and with a run signal that never reads as running it declines with
   reason `never_running`. `analyze_cooling_tower_approach` takes the matching `run_mask`.
-- An RCx issue's heading never comes from a linked box member (#196): a box's reheat valve
-  cause stays on the box's own row, and the air handler's cause heads its chain. `link_findings`
-  judges sensor precedence for each member on that member's own equipment, which gives the same
-  result for a single-equipment issue.
-- **Dataset writes follow the facility lifecycle on every path (#212).** `camber datasets
-  ingest` and `remove --purge-store` (and `camber.datasets.ingest` / `remove`) now apply the
-  rules `camber lab` already applied, from one shared module (`camber.datasets._lifecycle`).
-  Inside a portfolio workspace, new refusals:
-  - an ingest into a facility that is not `provisioning` or `active` (suspended, offboarding,
-    archived) is refused before anything is written;
-  - a purge of a facility under a legal hold, or not `provisioning` / `active`, is refused
-    before anything is deleted, the dataset cache included; so is an ingest that would drop such
-    a facility because its subset no longer produces it;
-  - both need `--reason` (`reason=` in the API), and a purge also needs `--yes` or
-    `--confirm ID`. They are audited as `datasets.ingest`, `datasets.remove` and
-    `datasets.purge`.
-
-  Every ingest swap now passes the registry's write guard, so no ingest, in a workspace or not,
-  writes into an archived facility. Plain stores need no reason or confirmation, as before.
-  `camber lab` behaves as before.
-- **Behaviour change: a legal hold blocks a forced re-ingest, on every path (#212).** A hold
-  means nothing held is deleted, and a re-ingest replaces the facility's partition. So
-  `camber datasets ingest --force` (or a changed re-ingest) into a held facility that has data
-  is refused with `LifecycleError` and changes nothing: exit 1 in the CLI, 409 in `camber lab`
-  (which allowed it before), and the API raises. An unchanged re-ingest is still skipped, and
-  release the hold (`camber retention release`) to re-ingest. There is no override.
-- **`camber store verify` reports interrupted ingests (#213).** It lists leftover swap and
-  staging directories, and registered facilities with no part files in a state that should have
-  some. A facility whose data is stranded outside its partition fails verify even without
-  `--strict`; `--strict` also fails on any leftover or empty facility. The JSON report gains
-  `leftovers` and `empty_facilities`.
 - **The store commands refuse a path that is not a store (#215).** `store verify`, `normalize`
   and `migrate-partitions` exit 1 with "not a ParquetStore" for a missing path, a file, or a
   directory with no partitions, registry or workspace marker, and create nothing (normalize no
@@ -255,20 +269,6 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   - `resample` must be a pandas frequency.
 
   An unknown rule name lists close matches and every valid rule.
-- **More rules link their PNNL reading (#222).** Rules whose threshold bases cite a PNNL guide
-  or chapter now map to it, so reports give them *Learn more* links: the pump family's ten drift
-  detectors (`pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift`,
-  `pump_power_drift` and their `hw_` twins) link chapter 8, and the loop delta-T pair also the
-  plant guide whose heading asks whether the loop delta-T is low; `coil_leak_drift` links
-  chapter 5's leaking-valve checks; `economizer_damper_drift` links chapters 6 and 5; and
-  `outdoor_air_fraction` and `economizer_high_limit` add chapter 5, whose outdoor-air fraction
-  their bases cite. The pump detectors' `min_speed` basis cites chapter 8 only: the plant guides'
-  pressure headings ask about resetting the setpoint, which those detectors do not judge. In the
-  RCx report the economizer issue gains a chapter 5 link.
-- The docs build fails on a link to a heading that does not exist (`validation: anchors` in
-  mkdocs.yml, so `mkdocs build --strict` catches it) (#220).
-
-### Fixed
 - The IPMVP Option A example in docs/MANDV.md called `option_a_savings` with keywords it does
   not take; it now passes the measured values by position (#219).
 - docs/ONTOLOGY.md, docs/CAPABILITIES.md and docs/workbook/index.md stated role and exercise
