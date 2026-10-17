@@ -408,6 +408,8 @@ def plan_freeze(
 
 
 def _change(rec, fit, what: str) -> dict:
+    from .mandv.names import model_label
+
     st = fit["st"]
     return {
         "baseline": f"{rec.equip}/{rec.kind}",
@@ -415,6 +417,7 @@ def _change(rec, fit, what: str) -> dict:
         "version": version_label(rec),
         "window": [rec.period_start, rec.period_end],
         "model": getattr(fit["model"], "kind", type(fit["model"]).__name__),
+        "model_label": model_label(fit["model"]),  # 0.107 (#209): the plan text's label
         "r2": round(float(st.r2), 4),
         "cv_rmse": round(float(st.cv_rmse), 4),
         "g14_accept": bool(st.accept),
@@ -436,6 +439,24 @@ def _billing_change(fit) -> dict:
         if b.get(k) is not None:
             out[k] = b[k]
     return out
+
+
+def _extrapolation(entry: dict):
+    """The entry's :class:`~camber.mandv.coverage.ExtrapolationPolicy` (its ``extrapolation``
+    block), as ``camber mv run`` applies it (0.107, #205): report, propose and rebaseline grade
+    coverage with the same policy."""
+    from .mandv.coverage import ExtrapolationPolicy
+
+    return ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
+
+
+def _ledger_window(ledger, baseline_start, reporting_end) -> list:
+    """The recorded ledger entries a saving uses: dated from the baseline start to the reporting
+    end (0.107, #206). ``camber mv run`` and ``camber mv report`` share this window, so an entry
+    dated between the baseline end and the reporting start restates both alike."""
+    lo = None if baseline_start is None else _day(baseline_start)
+    hi = _day(reporting_end)
+    return [a for a in ledger or () if (lo is None or _day(a.start) >= lo) and _day(a.start) <= hi]
 
 
 def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
@@ -470,6 +491,7 @@ def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
         ledger=store.ledger(rec),
         next_version_start=None if nxt is None else nxt.period_start,
         intermediate_period=inter,
+        extrapolation=_extrapolation(entry),
     )
     return trig, pol, events, statics
 
@@ -596,7 +618,12 @@ def plan_rebaseline(
                 continue
         if period is None:
             prop = new_baseline_window(
-                daily, after=anchor.date, policy=pol, as_of=as_of, event=event_phrase(anchor)
+                daily,
+                after=anchor.date,
+                policy=pol,
+                as_of=as_of,
+                event=event_phrase(anchor),
+                extrapolation=_extrapolation(ms.entry),
             )
             if not prop.ok:
                 plan.refused.append(
@@ -660,7 +687,9 @@ def plan_rebaseline(
         from .mandv.coverage import assess_coverage
 
         cov = assess_coverage(
-            fit["model"], _mvform.design_rows(fit.get("frame", ms.daily), fit["model"])
+            fit["model"],
+            _mvform.design_rows(fit.get("frame", ms.daily), fit["model"]),
+            policy=_extrapolation(ms.entry),
         )
         if cov.tier == "severe":
             plan.refused.append(
@@ -946,6 +975,7 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
                     if rec.provenance.get("method") == "chaining"
                     else None
                 ),
+                extrapolation=_extrapolation(ms.entry),
             )
             row["rebaseline"] = prop.as_dict()
             sub = _window(ms.daily, [rec.period_start, rec.period_end])
@@ -1084,6 +1114,9 @@ class MeterChain:
     #: ``bases``, the ``calendarized`` months (PM method) and the ``avoided_cost`` per link;
     #: ``None`` for a trended meter. The CUSUM frame's rows are then bills (energy per bill).
     billing: dict | None = None
+    #: 0.107 (#210): the meter's own energy unit (a billing meter's bill unit, or the energy a
+    #: trended meter's ``mv[].units`` rate integrates to); ``None`` when the entry names none.
+    meter_unit: str | None = None
 
     def as_dict(self) -> dict:
         """JSON-safe summary (the per-day CUSUM frame stays out). Under a unit system (``units``)
@@ -1238,6 +1271,7 @@ def chained_report(
                 seg["period"] = [_ds(a), _ds(b)] if b >= a else None
         links, adjusted, frames, trig_all, caveats, wins = [], [], [], [], [], []
         costs: list = []
+        xpol = _extrapolation(ms.entry)  # 0.107 (#205): the run path's policy
         for rec, seg in zip(vs, segs):
             label = version_label(rec)
             if seg["period"] is None:
@@ -1296,6 +1330,7 @@ def chained_report(
                 rho=st.rho_lag1,
                 kernel=rec.provenance.get("kernel") or "g14",
                 baseline_version=label,
+                extrapolation=xpol,
                 **({"days": d_r} if ms.billing else {}),
             )
             if rec.provenance.get("method") not in (None, "forecast"):
@@ -1307,7 +1342,9 @@ def chained_report(
             wins.append(
                 {"period": [_ds(s0), _ds(s1)], "model_window": [rec.period_start, rec.period_end]}
             )
-            adjusted.append(_adjust_link(plan.store, rec, res, rep, model, ms.entry, caveats))
+            adjusted.append(
+                _adjust_link(plan.store, rec, res, rep, model, ms.entry, caveats, rep_end=s1)
+            )
             proj = pd.Series(model.predict(_mvform.design_rows(rep, model)), index=rep.index)
             act = rep["energy"]
             if ms.billing:  # a bill's projected and actual energy (per day x days)
@@ -1351,9 +1388,25 @@ def chained_report(
                 caveats,
                 units,
                 billing,
+                _meter_unit(ms),
             )
         )
     return out
+
+
+def _meter_unit(ms: MeterSeries) -> str | None:
+    """The energy unit the meter's figures are in, or ``None`` when unknown (0.107, #210)."""
+    if ms.billing:
+        return getattr(ms.bills, "units", None) or None
+    rate = ms.entry.get("units")
+    if not rate:
+        return None
+    from .energy_units import quantity_of_rate
+
+    try:
+        return quantity_of_rate(rate)[1]
+    except ValueError:
+        return None
 
 
 def _monthly() -> float:
@@ -1425,7 +1478,7 @@ def _chain_billing(ms: MeterSeries, vs, costs) -> dict:
     return out
 
 
-def _adjust_link(store, rec, res, rep, model, entry, caveats):
+def _adjust_link(store, rec, res, rep, model, entry, caveats, *, rep_end):
     """The version's recorded ledger applied to one link (``None`` when there is none)."""
     from .mandv import _mvform
     from .mandv.adjustments import EcmSchedule, apply_adjustments
@@ -1433,8 +1486,7 @@ def _adjust_link(store, rec, res, rep, model, entry, caveats):
     led = store.ledger(rec)
     if not led or res.declined:
         return None
-    lo, hi = rep.index.min(), rep.index.max()
-    mine = [a for a in led if lo <= _day(a.start) <= hi]
+    mine = _ledger_window(led, rec.period_start, rep_end)
     if not mine:
         return None
     rows = _mvform.ledger_rows(rep, model)  # 0.94 (#72): bills expand to their days

@@ -21,6 +21,7 @@ finding-like objects.
 
 from __future__ import annotations
 
+import statistics
 from bisect import bisect_left
 from collections import Counter
 from dataclasses import dataclass, field
@@ -220,7 +221,7 @@ def build_fleet_report(
     else:
         eui_factor(eui_unit, "kBtu/ft2/yr")  # validated
     euis = sorted(b["eui"] for b in buildings if b.get("eui") is not None)
-    fleet_median = euis[len(euis) // 2] if euis else None
+    fleet_median = statistics.median(euis) if euis else None  # 0.107 (#211): a true median
     median = peer_median_eui if peer_median_eui is not None else fleet_median
 
     rule_buildings: Counter = Counter()  # rule -> number of buildings it appears in

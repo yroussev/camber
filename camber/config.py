@@ -1842,6 +1842,7 @@ def _mv_versioned_findings(
 
     from .mandv import _mvform
     from .mandv.models import N_PARAMS
+    from .mandv.names import model_label  # 0.107 (#209): the registry's label in the summary
     from .mandv.rebaseline import (
         RebaselinePolicy,
         assess_triggers,
@@ -1927,7 +1928,7 @@ def _mv_versioned_findings(
                 **({} if bills is None else bills.get("metrics", {})),
             },
             summary=(
-                f"{equip}: frozen M&V baseline {label} ({getattr(model, 'kind', '')}, "
+                f"{equip}: frozen M&V baseline {label} ({model_label(model)}, "
                 f"{live_rec.period_start}..{live_rec.period_end}), R2 {st.r2:.2f}, CV(RMSE) "
                 f"{st.cv_rmse:.1%} -- read from the versioned store, not refitted"
             ),
@@ -2174,13 +2175,15 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
                 )
             else:
                 ledger.append(adjustment_from_dict(d))
-        # the ledger recorded on the stored baseline version (`camber mv adjust`), dated inside
-        # the rows this saving covers
-        lo = pd.Timestamp(ctx["period"][0]) if ctx.get("period") else None
-        hi = pd.Timestamp(reporting[1])
-        for a in ctx.get("stored_ledger") or ():
-            if (lo is None or pd.Timestamp(a.start) >= lo) and pd.Timestamp(a.start) <= hi:
-                ledger.append(a)
+        # the ledger recorded on the stored baseline version (`camber mv adjust`), dated from the
+        # baseline start to the reporting end -- the window `camber mv report` uses (#206)
+        from .mvrun import _ledger_window
+
+        ledger += _ledger_window(
+            ctx.get("stored_ledger"),
+            ctx["period"][0] if ctx.get("period") else None,
+            reporting[1],
+        )
         entry = ctx["entry"]
         adj = apply_adjustments(
             res,

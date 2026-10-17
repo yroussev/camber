@@ -72,6 +72,9 @@ class NormalizedSavings:
     caveats: list = field(default_factory=list)
     fsu_extrapolation_factor: float | None = None
     kernel: str = "g14"  # "g14" (CV*sqrt(p/n) per model) | "exact" (OLS g'Ag per model)
+    #: 0.107 (#208): normal-year periods left out because either model had no finite projection
+    #: there (a missing or implausible temperature); ``n_normal_periods`` counts those used
+    n_excluded: int = 0
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
@@ -135,7 +138,11 @@ def normalized_savings(
     """
     _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
-    temps = np.asarray(normal_temps, dtype=float)
+    temps, n_given, n_excluded = _finite_projection_rows(
+        baseline_model, reporting_model, normal_temps
+    )
+    if n_given and not len(temps):
+        return _declined_no_rows(n_given, confidence, kernel)
     m = int(len(temps))
     nac_b = normalized_annual_consumption(baseline_model, temps)
     nac_r = normalized_annual_consumption(reporting_model, temps)
@@ -171,7 +178,8 @@ def normalized_savings(
 
     cov_b = assess_coverage(baseline_model, temps, policy=pol)
     cov_r = assess_coverage(reporting_model, temps, policy=pol)
-    caveats = [f"baseline model: {c}" for c in cov_b.caveats]
+    caveats = [] if not n_excluded else [_excluded_caveat(n_excluded, n_given)]
+    caveats += [f"baseline model: {c}" for c in cov_b.caveats]
     caveats += [f"reporting model: {c}" for c in cov_r.caveats]
     caveats += rho_notes
     if kernel == "g14":
@@ -219,6 +227,7 @@ def normalized_savings(
         caveats=caveats,
         fsu_extrapolation_factor=None if factor is None else round(factor, 4),
         kernel=kernel,
+        n_excluded=n_excluded,
     )
     if tier == "severe" and pol.decline:
         reasons = [
@@ -235,6 +244,55 @@ def normalized_savings(
         if cov_r.tier == "severe":
             res.nac_reporting = None
     return res
+
+
+def _finite_projection_rows(baseline_model, reporting_model, normal_temps) -> tuple:
+    """``(rows, n_given, n_excluded)``: the normal-year rows both models project to a finite value
+    (0.107, #208). A missing or implausible temperature (a model predicts NaN outside its plausible
+    range, 0.105 #168) is left out and counted, as :func:`~camber.mandv.stats.
+    avoided_energy_savings` does for reporting rows, never summed into a NaN. Clean rows come back
+    unchanged (the same array)."""
+    temps = np.asarray(normal_temps, dtype=float)
+    n = int(len(temps))
+    if not n:
+        return temps, 0, 0
+    pb = np.asarray(baseline_model.predict(temps), dtype=float)
+    pr = np.asarray(reporting_model.predict(temps), dtype=float)
+    ok = np.isfinite(pb) & np.isfinite(pr)
+    if ok.all():
+        return temps, n, 0
+    return temps[ok], n, int(n - ok.sum())
+
+
+def _excluded_caveat(n_excluded: int, n_given: int) -> str:
+    return (
+        f"{n_excluded} of {n_given} normal-year periods were excluded from both projections (no "
+        "finite projection from the baseline or the reporting model: a missing or implausible "
+        "temperature)"
+    )
+
+
+def _declined_no_rows(n_given: int, confidence: float, kernel: str) -> NormalizedSavings:
+    """No normal-year period has a finite projection from both models: declined, never NaN."""
+    why = (
+        f"no normal-year period could be projected by both models ({n_given} period(s) without a "
+        "finite projection; a missing or implausible temperature has no projection)"
+    )
+    return NormalizedSavings(
+        nac_baseline=None,
+        nac_reporting=None,
+        normalized_savings=None,
+        savings_pct=None,
+        fractional_uncertainty=None,
+        abs_uncertainty=None,
+        confidence=confidence,
+        n_normal_periods=0,
+        declined=True,
+        declined_reason=why,
+        caveats=[_excluded_caveat(n_given, n_given)],
+        kernel=kernel,
+        n_excluded=n_given,
+    )
 
 
 def _finite(x) -> float | None:

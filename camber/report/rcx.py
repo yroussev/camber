@@ -2348,7 +2348,7 @@ def _sec_mv(S) -> dict | None:
                 [
                     f.equip,
                     "declined" if m.get("declined") else f.severity,
-                    m.get("model", "—"),
+                    _mv_model_label(m),
                     "—" if m.get("r2") is None else f"{m['r2']:.2f}",
                     "—" if m.get("cv_rmse") is None else f"{m['cv_rmse']:.1%}",
                     f.summary,
@@ -2359,6 +2359,17 @@ def _sec_mv(S) -> dict | None:
     if not blocks:
         return None
     return _section("mv", "M&V and drift", blocks)
+
+
+def _mv_model_label(m: dict) -> str:
+    """The registry's label for an ``mv_baseline`` finding's model (0.107, #209); the metrics keep
+    the code. A 5P / 5PZ fit with no change points is the 2P fallback it is."""
+    from ..mandv.names import model_label
+
+    code = m.get("model")
+    if not code:
+        return "—"
+    return model_label({"type": code, "kind": code, "change_points": m.get("change_points")})
 
 
 def _mv_data_needed(findings) -> list:

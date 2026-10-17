@@ -2511,7 +2511,8 @@ def _print_plan(plan, apply: bool) -> None:
             bits.append(f"window {ch['window'][0]}..{ch['window'][1]}")
         if ch.get("model"):
             bits.append(
-                f"{ch['model']} R2 {ch['r2']:.3f} CV(RMSE) {ch['cv_rmse']:.1%} "
+                f"{ch.get('model_label') or ch['model']} R2 {ch['r2']:.3f} "
+                f"CV(RMSE) {ch['cv_rmse']:.1%} "
                 f"G14 {'ok' if ch['g14_accept'] else 'fail'} SEP "
                 f"{'valid' if ch['sep_valid'] else 'invalid'}"
             )
@@ -2710,7 +2711,8 @@ def _cmd_mv_list(args) -> int:
             ok = "" if row["verified"] else "  PROVENANCE MISMATCH"
             print(
                 f"  {row['version']:4s} [{row['window'][0]}..{row['window'][1]}] "
-                f"{row['model'] or '-':4s} method={row['method']} frozen_at={row['frozen_at']} "
+                f"{row.get('model_label') or row['model'] or '-'} method={row['method']} "
+                f"frozen_at={row['frozen_at']} "
                 f"by={row['accepted_by'] or '-'}{trig}{adj}  {row['reason']}{ok}"
             )
     if args.json:
