@@ -686,10 +686,15 @@ def test_ingest_into_a_portfolio_workspace_is_audited(ahu):
     entry, opener, tmp = ahu
     _ops.fetch_dataset(entry, opener=opener)
     pf = Portfolio.init(tmp / "ws")
-    _ingest.ingest_dataset(entry, pf.store_root)
+    with pytest.raises(ValueError, match="needs a reason"):  # 0.107 (#212): audited, so a reason
+        _ingest.ingest_dataset(entry, pf.store_root)
+    assert pf.facilities() == {}
+    _ingest.ingest_dataset(entry, pf.store_root, reason="course exercise")
     assert pf.facility("ds-test-ahu")["state"] == "active"
     rec = pf.audit_log(facility_id="ds-test-ahu")
-    assert [r["action"] for r in rec] == ["facility.register"] and rec[0]["to_state"] == "active"
+    assert [r["action"] for r in rec] == ["facility.register", "datasets.ingest"]
+    assert rec[0]["to_state"] == "active" and rec[1]["reason"] == "course exercise"
+    assert rec[1]["details"]["dataset_id"] == "test-ahu" and rec[1]["details"]["rows"] > 0
 
 
 # --------------------------------------------------------------------------- BDG2 adapter

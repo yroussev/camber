@@ -107,7 +107,16 @@ def read_config_file(path) -> dict:
         if not isinstance(data, dict):
             raise ValueError(f"{os.fspath(path)}: a config must be a mapping at the top level")
         return data
-    return json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:  # 0.107 (#214): name the file, keep the position
+        raise ValueError(f"{os.fspath(path)}: invalid JSON: {e}") from None
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{os.fspath(path)}: a config must be a JSON object at the top level, not "
+            f"{type(data).__name__}"
+        )
+    return data
 
 
 # --------------------------------------------------------------------------- writing

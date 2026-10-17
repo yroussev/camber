@@ -164,6 +164,55 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   cause stays on the box's own row, and the air handler's cause heads its chain. `link_findings`
   judges sensor precedence for each member on that member's own equipment, which gives the same
   result for a single-equipment issue.
+- **Dataset writes follow the facility lifecycle on every path (#212).** `camber datasets
+  ingest` and `remove --purge-store` (and `camber.datasets.ingest` / `remove`) now apply the
+  rules `camber lab` already applied, from one shared module (`camber.datasets._lifecycle`).
+  Inside a portfolio workspace, new refusals:
+  - an ingest into a facility that is not `provisioning` or `active` (suspended, offboarding,
+    archived) is refused before anything is written;
+  - a purge of a facility under a legal hold, or not `provisioning` / `active`, is refused
+    before anything is deleted, the dataset cache included; so is an ingest that would drop such
+    a facility because its subset no longer produces it;
+  - both need `--reason` (`reason=` in the API), and a purge also needs `--yes` or
+    `--confirm ID`. They are audited as `datasets.ingest`, `datasets.remove` and
+    `datasets.purge`.
+
+  Every ingest swap now passes the registry's write guard, so no ingest, in a workspace or not,
+  writes into an archived facility. Plain stores need no reason or confirmation, as before.
+  `camber lab` behaves as before.
+- **`camber store verify` reports interrupted ingests (#213).** It lists leftover swap and
+  staging directories, and registered facilities with no part files in a state that should have
+  some. A facility whose data is stranded outside its partition fails verify even without
+  `--strict`; `--strict` also fails on any leftover or empty facility. The JSON report gains
+  `leftovers` and `empty_facilities`.
+- **The store commands refuse a path that is not a store (#215).** `store verify`, `normalize`
+  and `migrate-partitions` exit 1 with "not a ParquetStore" for a missing path, a file, or a
+  directory with no partitions, registry or workspace marker, and create nothing (normalize no
+  longer creates the directory and its `_lock`). `--facility` must name a facility the store
+  knows, and `retention apply --facility` one the workspace knows. `store verify --limit`
+  must be 0 or more.
+- **`camber datasets config --out` refuses a dataset that is not ingested in the store (#218)**,
+  or a `--facility` that is not one of its ingested facilities, and names the ingest command to
+  run. Printing the template without `--out` still works, with a warning.
+- **Config mistakes are one-line errors (#214).** Any command that hits a missing or unreadable
+  file, invalid JSON or YAML, or a bad value now prints `error: <message>` and exits 1 instead of
+  a traceback. Set `CAMBER_DEBUG=1` for the traceback. A config is checked when it loads:
+  - the top level must be an object;
+  - `rules` must be a list of names or `{"name": ...}` entries;
+  - `equipment` must be a list of `{"class": ...}` entries;
+  - `resample` must be a pandas frequency.
+
+  An unknown rule name lists close matches and every valid rule.
+
+### Fixed
+- **A crash during an ingest's partition swap no longer empties the facility (#213).** The swap
+  (also used by the open-fdd ingest) now uses the store's crash-recoverable replace
+  (`camber.store._swap`). A crash at any point leaves the old or the new partition once recovered.
+  Every ingest first finishes or rolls back an interrupted swap. It also puts back a partition
+  that a pre-0.107 swap left in `_staging/<fid>.old-<pid>`, and removes the staging directories
+  of ingests whose process is gone.
+- Catalog errors print their message, not a quoted `KeyError` repr (#214).
+- `"rules": "filter_fouling"` was iterated one character at a time; it is now refused (#214).
 
 
 ## [0.106.0] — 2026-10-17

@@ -342,20 +342,83 @@ def _counts(rows) -> dict:
     return c
 
 
+def _require_known_facility(main: str, stores, facility_id: str) -> None:
+    """``ValueError`` unless ``facility_id`` is registered in the store at ``main`` or has a
+    partition in one of ``stores`` (0.107, #215: a typo is an error, not an empty success)."""
+    reg = FacilityRegistry(main)
+    if facility_id in reg.all():
+        return
+    for _label, sroot in stores:
+        if os.path.isdir(os.path.join(sroot, f"{_FACILITY}={facility_id}")):
+            return
+    tomb = reg.tombstones().get(facility_id)
+    if tomb is not None:
+        raise ValueError(f"facility {facility_id!r} was removed (tombstoned) and has no data left")
+    raise ValueError(f"unknown facility {facility_id!r} in store {main}")
+
+
+_EMPTY_OK = ("provisioning", "archived")  # states in which a facility may hold no parts
+
+
+def _health(main: str, facility_id) -> dict:
+    """``{"leftovers", "empty_facilities"}`` of the store at ``main`` (0.107, #213).
+
+    ``leftovers``: what interrupted ingests and swaps left behind
+    (:func:`camber.store._leftovers.staging_leftovers`), each with ``stranded`` true when it
+    holds a facility's data outside its partition. ``empty_facilities``: registered facilities
+    with no part file, in a state that should have some (not ``provisioning`` / ``archived``).
+    """
+    from ._leftovers import staging_leftovers
+
+    leftovers = []
+    for item in staging_leftovers(main):
+        if facility_id is not None and item["facility_id"] not in (None, facility_id):
+            continue
+        stranded = item["kind"] in ("swap", "aside") and not os.path.isdir(
+            os.path.join(main, f"{_FACILITY}={item['facility_id']}")
+        )
+        leftovers.append(
+            {**item, "path": os.path.relpath(item["path"], main), "stranded": stranded}
+        )
+    with_parts = {fid for fid, *_ in _parts(main, facility_id)}
+    empty = []
+    for fid, e in sorted(FacilityRegistry(main).all().items()):
+        if facility_id is not None and fid != facility_id:
+            continue
+        state = str(e.get("state") or "active")
+        if fid not in with_parts and state not in _EMPTY_OK:
+            empty.append({"facility_id": fid, "state": state})
+    return {"leftovers": leftovers, "empty_facilities": empty}
+
+
 def verify(root, *, facility_id=None) -> dict:
     """Report which parts of the store at ``root`` are in the canonical layout (read-only; no
     lock). A workspace's store includes its rollup stores.
 
-    Returns ``{"store", "workspace", "stores", "facility_id", "counts", "parts", "ok"}``. ``counts``
-    has ``parts`` = ``canonical`` + ``noncanonical`` + ``unreadable``, and by origin ``edge``
-    (edge forwarder parts), ``rollup`` (retention rollup parts) and ``legacy`` (other parts with no
-    ``camber.layout`` marker: written before 0.103). ``ok`` is whether every part is readable.
+    Returns ``{"store", "workspace", "stores", "facility_id", "counts", "parts", "leftovers",
+    "empty_facilities", "ok"}``. ``counts`` has ``parts`` = ``canonical`` + ``noncanonical`` +
+    ``unreadable``, and by origin ``edge`` (edge forwarder parts), ``rollup`` (retention rollup
+    parts) and ``legacy`` (other parts with no ``camber.layout`` marker: written before 0.103).
+    ``ok`` is whether every part is readable and no facility's data is stranded outside its
+    partition by an interrupted swap.
+
+    0.107: ``root`` must be a store (``FileNotFoundError`` otherwise, #215) and ``facility_id``
+    one it knows (``ValueError``); ``leftovers`` lists what interrupted ingests left (#213; the
+    next ingest recovers them) and ``empty_facilities`` the registered facilities with no part
+    file in a state that should have some.
     """
+    from .facilities import _require_store_dir
+
+    _require_store_dir(root)
     if facility_id is not None:
         require_facility_id(facility_id)
-    ws, _main, stores = _targets(root)
+    ws, main, stores = _targets(root)
+    if facility_id is not None:
+        _require_known_facility(main, stores, facility_id)
     rows, _todo, _skipped = _scan(stores, facility_id, None)
     counts = _counts(rows)
+    health = _health(main, facility_id)
+    stranded = any(x["stranded"] for x in health["leftovers"])
     return {
         "store": os.path.abspath(os.fspath(root)),
         "workspace": ws,
@@ -363,7 +426,8 @@ def verify(root, *, facility_id=None) -> dict:
         "facility_id": facility_id,
         "counts": counts,
         "parts": rows,
-        "ok": counts["unreadable"] == 0,
+        **health,
+        "ok": counts["unreadable"] == 0 and not stranded,
     }
 
 
@@ -459,9 +523,14 @@ def normalize(
     "parts", "rows", "bytes_before", "bytes_after", "skipped": [{store, facility_id, parts,
     reason}], "counts"}`` (``bytes_after`` is ``None`` in a dry run).
     """
+    from .facilities import _require_store_dir
+
+    _require_store_dir(root)  # 0.107 (#215): before the lock, which would create the directory
     if facility_id is not None:
         require_facility_id(facility_id)
     ws, main, stores = _targets(root)
+    if facility_id is not None:
+        _require_known_facility(main, stores, facility_id)
     if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
         raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
     if apply:

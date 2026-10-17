@@ -593,6 +593,74 @@ def _prepare_bare(config: dict, base_dir: str) -> _Prepared:
     return _Prepared(ctx.site, resample, _identity_mapping(), shared, [], {}, None, [], ctx)
 
 
+def _check_config_shape(config, where: str = "config") -> dict:
+    """``config`` if its top level, ``rules`` and ``equipment`` have the right shapes, else a
+    ``ValueError`` saying what is wrong (0.107, #214).
+
+    A config is a mapping; ``rules`` is a list of rule names or ``{"name": ..., "params": {...}}``
+    entries; ``equipment`` is a list of ``{"class": ..., ...}`` entries. A bare string in either
+    place (``"rules": "filter_fouling"``) is the usual slip, and is named as such instead of being
+    iterated character by character.
+    """
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"{where}: a config must be a JSON object / YAML mapping at the top level, not "
+            f"{type(config).__name__}"
+        )
+    for key, item, example in (
+        ("rules", "rule names", '["{v}"]'),
+        ("equipment", '{"class": ...} objects', '[{{"class": "{v}"}}]'),
+    ):
+        if key not in config or config[key] is None:
+            continue
+        val = config[key]
+        if not isinstance(val, list):
+            hint = f" (write {example.format(v=val)})" if isinstance(val, str) else ""
+            raise ValueError(
+                f"{where}: {key!r} must be a list of {item}, not {type(val).__name__}{hint}"
+            )
+    for i, entry in enumerate(config.get("rules") or []):
+        if isinstance(entry, str):
+            continue
+        if not (isinstance(entry, dict) and isinstance(entry.get("name"), str)):
+            raise ValueError(
+                f'{where}: rules[{i}] must be a rule name or an object with a "name", not {entry!r}'
+            )
+        if entry.get("params") is not None and not isinstance(entry["params"], dict):
+            raise ValueError(f"{where}: rules[{i}] ({entry['name']}): 'params' must be an object")
+    rs = config.get("resample")
+    if rs is not None:
+        from pandas.tseries.frequencies import to_offset
+
+        try:
+            to_offset(rs)
+        except (ValueError, TypeError):
+            raise ValueError(
+                f'{where}: \'resample\' {rs!r} is not a pandas frequency (e.g. "15min", "1h")'
+            ) from None
+    for i, eq in enumerate(config.get("equipment") or []):
+        if not (isinstance(eq, dict) and isinstance(eq.get("class"), str)):
+            raise ValueError(
+                f'{where}: equipment[{i}] must be an object with a "class" (e.g. '
+                f'{{"class": "AHU"}}), not {eq!r}'
+            )
+    return config
+
+
+def _unknown_rule(name, known) -> KeyError:
+    """The ``KeyError`` for a config naming a rule that does not exist: close matches first,
+    then every valid name (0.107, #214)."""
+    import difflib
+
+    known = sorted(known)
+    close = difflib.get_close_matches(str(name), known, n=3)
+    hint = f" (did you mean {', '.join(close)}?)" if close else ""
+    return KeyError(
+        f"unknown rule {name!r}{hint}; valid rules: {', '.join(known)} "
+        "(`camber rules params` describes their parameters)"
+    )
+
+
 def _prepare(config: dict, base_dir: str) -> _Prepared:
     """Resolve a config's source, mapping, shared points and discovered equipment.
 
@@ -600,6 +668,8 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
     from .energy_units import UnitSystem
+
+    _check_config_shape(config)
 
     units = UnitSystem.from_config(config)  # 0.92 (#69): a bad units block fails up front
     prep = _prepare_sources(config, base_dir)
@@ -2457,9 +2527,11 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         params, basis = _inherit(name, params, basis, inherited)
         # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
         params = _with_site_elevation(name, params, site_elev)
+        if name not in reg.names():
+            raise _unknown_rule(name, reg.names())  # KeyError, naming the valid ones
         if params:
             reg.register(make_rule(name, **params))  # override the default instance
-        rule = reg.get(name)  # KeyError on unknown name
+        rule = reg.get(name)
         n_skip = len(skipped)
         n_before = len(findings)
         if is_fleet(rule):
@@ -2953,7 +3025,7 @@ def load_config(path: str) -> dict:
     """
     from ._yaml import read_config_file
 
-    return read_config_file(path)
+    return _check_config_shape(read_config_file(path), where=os.fspath(path))
 
 
 def run_config_file(path: str) -> RunResult:

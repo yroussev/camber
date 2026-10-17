@@ -476,13 +476,26 @@ camber datasets info  <id> [--json]                  # summary, licence, citatio
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
                         [--lock-timeout SECONDS]
 camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
-                        [--from-dir DIR] [--accept-noncommercial] [--lock-timeout SECONDS]
+                        [--from-dir DIR] [--accept-noncommercial] [--reason R]
+                        [--lock-timeout SECONDS]
 camber datasets status [--dir D] [--store DIR] [--json]
-camber datasets remove <id> [--dir D] [--store DIR --purge-store] [--lock-timeout SECONDS]
+camber datasets remove <id> [--dir D] [--store DIR --purge-store [--reason R --yes|--confirm ID]]
+                        [--lock-timeout SECONDS]
 camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
                         [--facility ID] [--exercise EX]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
+
+**Workspace stores** (0.107, #212). When `--store` belongs to a portfolio workspace, `ingest` and
+`remove --purge-store` follow the facility lifecycle, as `camber lab` does. `ingest` needs
+`--reason`, and it refuses a facility that is not `provisioning` or `active`. `remove
+--purge-store` needs `--reason` and `--yes` (or `--confirm ID`). It refuses, before anything is
+deleted, while a facility of the dataset is under a legal hold or not `provisioning` /
+`active`. Both are audited (`datasets.ingest`, `datasets.remove`, `datasets.purge`). A plain store
+needs neither flag.
+
+`config --out` (0.107, #218) writes a config only for a dataset ingested in `--store`; without
+`--out` it prints the template with a warning.
 
 `config --exercise <exercise-id>` (0.97) writes a [workbook](workbook/index.md) exercise's tuned
 template instead of the dataset's own; the template names the dataset it was tuned for, and any
@@ -697,9 +710,16 @@ See [PORTFOLIO.md](PORTFOLIO.md#retention).
 `camber.layout` marker, no pandas metadata, one row group, rows sorted by the canonical key, the
 store columns first) and which parts fail to read, with counts by origin: `legacy` (no marker:
 written before 0.103), `edge` (an edge forwarder's part) and `rollup`. A workspace's store includes
-its rollup stores. It reads every part, takes no lock and changes nothing. Exit code 0 when every
-part is readable, canonical or not; 1 when a part fails to read, or, with `--strict`, when a part
-is not canonical.
+its rollup stores. It reads every part, takes no lock and changes nothing. Since 0.107 (#213) it
+also lists what an interrupted ingest left behind (a partition swap, a moved-aside partition, a
+staging directory; the next ingest recovers them) and registered facilities with no part files
+in a state that should have some. Exit code 0 when every part is readable, canonical or not; 1
+when a part fails to read or a facility's data is stranded outside its partition, or, with
+`--strict`, when a part is not canonical or anything is left over.
+
+`store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
+store: missing, a file, or a directory with no partitions, registry or workspace marker. They
+exit 1 and create nothing. `--facility` must name a facility the store knows.
 
 `store normalize` (0.104) rewrites the non-canonical parts in the canonical layout. It is a dry run
 unless `--apply --yes` (and `--reason`, audited as `store.normalize`, inside a workspace), holds

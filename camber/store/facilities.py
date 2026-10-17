@@ -393,6 +393,38 @@ def _workspace_of_store(root: str):
     return ws if os.path.isfile(os.path.join(ws, "_portfolio.json")) else None
 
 
+_STORE_MARKERS = (_FACILITIES, _TOMBSTONES, _WORKSPACE_MARKER, "_catalog.json")
+
+
+def _is_store_dir(root) -> bool:
+    """Whether ``root`` is a ParquetStore directory: it exists and holds a facility partition,
+    a registry, a tombstone list, a workspace marker or a point catalog (0.107, #215). An empty
+    or unrelated directory is not one."""
+    root = os.fspath(root)
+    if not os.path.isdir(root):
+        return False
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return False
+    return any(n in _STORE_MARKERS or n.startswith(("facility_id=", "site=")) for n in names)
+
+
+def _require_store_dir(root) -> str:
+    """``root`` (absolute) if it is a ParquetStore directory (:func:`_is_store_dir`), else
+    ``FileNotFoundError`` -- checked before anything is created or locked (0.107, #215)."""
+    root = os.path.abspath(os.fspath(root))
+    if not os.path.isdir(root):
+        why = "it is not a directory" if os.path.exists(root) else "it does not exist"
+        raise FileNotFoundError(f"{root} is not a ParquetStore: {why}")
+    if not _is_store_dir(root):
+        raise FileNotFoundError(
+            f"{root} is not a ParquetStore: it holds no facility partitions, registry "
+            f"({_FACILITIES}) or workspace marker ({_WORKSPACE_MARKER})"
+        )
+    return root
+
+
 def _utc_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

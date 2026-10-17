@@ -993,7 +993,9 @@ class ParquetStore:
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
         """
         from . import _swap
+        from .facilities import _require_store_dir
 
+        _require_store_dir(self.root)  # 0.107 (#215): a typo'd path is an error, nothing created
         reg = self._registry()
         ws = reg._workspace()
         if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):

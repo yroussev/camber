@@ -448,9 +448,15 @@ class Portfolio:
         A dry run (the default) returns the plan. ``apply=True`` needs a ``reason``, takes the
         lock, recovers interrupted work first, and is idempotent. Provisional (0.95).
         """
+        from ._retention import _facility_ids
         from ._retention import apply as _apply
         from ._retention import plan as _plan
 
+        if facility_id is not None and facility_id not in _facility_ids(self):
+            # 0.107 (#215): a typo is an error ("nothing to do" would read as success), as for
+            # `retention hold` / `override`; KeyError names a tombstoned id as such
+            self.facility(facility_id)
+            raise KeyError(f"facility {facility_id!r} has nothing retention could touch")
         if not apply:
             return _plan(self, facility_id=facility_id, now=now)
         _need_reason(reason)

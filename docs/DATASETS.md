@@ -84,7 +84,7 @@ remove` does: after you type the dataset id, a job deletes the dataset's downloa
 extractions from the cache, and, when you tick it, drops its facilities from the store
 (`--purge-store`). In a workspace the purge respects the facility lifecycle: a facility under a
 legal hold, or one that is suspended, offboarding or archived, is not purged, and the dialog says
-why. A manual entry's **From a folder…** does what `camber datasets ingest --from-dir` does. It
+why. Since 0.107 the CLI applies the same rules (see [CLI.md](CLI.md#open-datasets)). A manual entry's **From a folder…** does what `camber datasets ingest --from-dir` does. It
 takes the absolute path of a folder with the files you downloaded. The lab checks that the folder
 exists and refuses a file that links outside it. It only reads the folder, then verifies the
 files, copies them into the cache and ingests them. [Using the lab](LAB.md#cleaning-up) shows
