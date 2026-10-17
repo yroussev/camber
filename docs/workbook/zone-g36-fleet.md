@@ -88,10 +88,10 @@ camber run g36_heatcool.json --out g36_heatcool_out
    with its space temperature, cooling setpoint, damper and airflow.
 2. **Run the exercise's config** (the commands above). Read `sat_reset_effectiveness` and
    `static_reset_effectiveness` for each air handler: the severity, `reason`,
-   `actual_sp_range`, `expected_sp_range` and `pct_high_demand_unresponsive`.
+   `failure_modes`, `actual_sp_range`, `expected_sp_range` and `pct_high_demand_unresponsive`.
 3. **The rogue zones.** Read the two rogue-zone censuses on `<fleet>`: `rogue_by_group`,
-   `worst_zone`, `worst_zone_share`, and each box's `zone_request_share` and
-   `zone_binding_frac`.
+   `worst_zone`, `worst_zone_share`, the static census's `overloaded_zones`, and each box's
+   `zone_request_share` and `zone_binding_frac`.
 4. **The starved cohorts.** Read the two cohort-starvation censuses: `starved_groups`,
    `worst_group` and `group_sustained_frac`.
 5. **Peers.** Read `cohort_airflow` and `cohort_space_temp`: their `outliers` and `z`.
@@ -107,7 +107,8 @@ camber run g36_heatcool.json --out g36_heatcool_out
    reasons for its SAT and its static reset?
 2. `AHU__rogue_sat`'s SAT reset is effective and its setpoint spends the afternoons at 55 °F.
    Is the reset at fault? Which zone drives it, and what share of the requests does it send?
-3. Which boxes does the static-pressure census flag, and why is one of them also the SAT rogue?
+3. Which box does the static-pressure census flag, and which box does it list as overloaded
+   instead? Why is that one not a static rogue?
 4. Which air handlers does each cohort-starvation census name? How do the reset findings tell
    `AHU__starved` and `AHU__not_responding` apart, and what would you check first on each?
 5. Which boxes run unlike their peers on airflow, and on space temperature? Why does
@@ -116,8 +117,8 @@ camber run g36_heatcool.json --out g36_heatcool_out
    the `reheat` boxes alone, and about the `heat_cool` boxes alone? What setpoint would you look
    at on `heat_cool`?
 7. What does the label score say, and which of the faults can it not score at all?
-8. On the healthy fleet alone, which rule flags something? Is it a fault? What separates the
-   near miss's zone 1 from a rogue?
+8. On the healthy fleet alone, does any rule flag something? Why does `cohort_space_temp` let
+   the north zone pass? What separates the near miss's zone 1 from a rogue?
 
 ## What CAMBER shows
 
@@ -126,23 +127,30 @@ camber run g36_heatcool.json --out g36_heatcool_out
 - **Resets.** `sat_reset_effectiveness` and `static_reset_effectiveness` rebuild the setpoint a
   trim-and-respond reset should have reached from the air handler's own request counts and
   compare it with the trended setpoint. They warn when it is `stuck` (flat while the requests
-  would have moved it), `not_responding` (at its energy-saving end under demand),
-  `not_trimming` (at its demand end with no demand) or `diverges` (moving the wrong way).
+  would have moved it), `not_responding` (at its energy-saving end where the requests had moved
+  the rebuilt setpoint away from it), `not_trimming` (at its demand end where the rebuilt
+  setpoint had trimmed away) or `diverges` (moving the wrong way). `reason` is the first of
+  these and `failure_modes` lists every one that holds.
 - **Rogue zones.** The rogue-zone censuses rebuild each box's reset requests from its trends
   (SAT: 3 or 5 °F above the cooling setpoint; static: the damper over 95 % open, and the airflow
   below 70 % or 50 % of its setpoint) and flag a box that holds the largest request on at least
   half the cycles with any request **and** sends a large share of its air handler's requests
   (at least 30 %, and at least two boxes' worth). They count only cycles with the fan on and the
-  building occupied.
+  building occupied. The static census lists a flagged box that sits 3 °F or more above its
+  cooling setpoint on at least half its static requests under `overloaded_zones` instead: it is
+  short of cooling, not of air.
 - **Starved cohorts.** The cohort-starvation censuses flag an air handler when at least 75 % of
   its boxes request at once on at least half the cycles with any request.
 - **Peers.** `cohort_airflow` and `cohort_space_temp` flag a box whose mean lies more than 3.5
-  robust standard deviations from the others' median.
+  robust standard deviations from the others' median; `cohort_space_temp` also needs the mean
+  to differ from the median by 1 °F or more.
 - **Reheat.** `reheat_minimization_g36` faults a box when, of its occupied hours with the
-  reheat valve open, 40 % or more have its airflow over 1.2 times its airflow setpoint (warn at
-  15 %). `zones_heat_cool_census` counts, for each occupied hour, the boxes whose valve is open
-  while their airflow is over 1.1 times its setpoint, and faults when 75 % of the hours have at
-  least one (warn at 25 %).
+  reheat valve open, 40 % or more have its airflow over 1.2 times its minimum outside Guideline
+  36's high heating loop (warn at 15 %). Without a heating-loop point, an hour with the valve at
+  90 % or more counts as high heating loop, where a dual-maximum box raises its airflow by
+  design. `zones_heat_cool_census` counts the occupied hours with one box heating (its valve
+  open) while another cools (its valve shut, its airflow over 1.1 times its minimum), and faults
+  when 75 % of the hours have one (warn at 25 %). Both read the trended occupancy point.
 - **Score.** `camber datasets score` scores only the rules that judge one piece of equipment.
 
 ![Each of the 48 boxes placed by its share of its air handler's SAT reset requests and by how often it holds the largest request; only the equipment room of AHU__rogue_sat lies in the rogue corner, with the near miss's zone 1 and the healthy fleet's zone 1 just outside it](../img/workbook/zone-g36-fleet.png)
@@ -160,12 +168,16 @@ camber run g36_heatcool.json --out g36_heatcool_out
 - The fleet rules write one finding for everything they see. To judge one air handler, keep
   only its equipment (the variants do), and declare the served-by topology: without one, the
   censuses guess the grouping from the equipment names.
-- `ZN{n}_FLOW_MIN`, the box's minimum airflow setpoint, is the airflow setpoint every rule here
-  reads. The reheat rules mean the minimum; Guideline 36's static-pressure requests compare the
-  airflow with the box's active setpoint, so the static census counts fewer 2- and 3-request
-  cycles than the air handler did.
+- `ZN{n}_FLOW_MIN`, the box's minimum airflow setpoint, is mapped to `airflow_sp`, the role of
+  the box's active airflow setpoint: this data has no active setpoint. The reheat rules read it
+  as the minimum, as they do whenever no `airflow_min_sp` is mapped. Guideline 36's
+  static-pressure requests compare the airflow with the box's active setpoint, so the static
+  census counts fewer 2- and 3-request cycles than the air handler did.
 - The SAT census cannot count a box's 1-request cycles (its cooling loop over 95 %): no box
-  trends its cooling loop.
+  trends its cooling loop (`zone_cool_loop`).
+- No box trends its heating loop either, so `reheat_minimization_g36` reads a wide-open valve
+  as the high heating loop. A single-maximum box with its valve wide open looks the same, and
+  the finding says so.
 
 ## Going further
 

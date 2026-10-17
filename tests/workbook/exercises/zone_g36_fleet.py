@@ -15,7 +15,9 @@ so their answers are read from the finding's metrics. Figures were recorded from
         --findings g36_out/findings.json
 
 plus the ``zone-g36-fleet--healthy``, ``--near-miss``, ``--reheat`` and ``--heat-cool`` variants
-(CAMBER 0.105.0-dev, 2026-10-13).
+(CAMBER 0.105.0-dev, 2026-10-13; re-recorded on CAMBER 0.106.0-dev, 2026-10-16, after #186:
+the static census lists the equipment room as overloaded, the reheat rule reads the trended
+occupancy and excuses the high heating loop, cohort_space_temp has a 1 °F floor).
 """
 
 from __future__ import annotations
@@ -67,25 +69,32 @@ def _resets(ctx) -> None:
             assert f is not None and f.severity == want, (rule, ahu, f)
     assert ctx.finding(_SAT_RE, "AHU__not_responding").metrics["reason"] == "stuck"
     assert ctx.finding(_DSP_RE, "AHU__not_responding").metrics["reason"] == "not_responding"
+    sat = ctx.finding(_SAT_RE, "AHU__not_responding").metrics["failure_modes"]
+    assert sat == ["stuck", "not_responding"], sat
+    dsp = ctx.finding(_DSP_RE, "AHU__not_responding").metrics["failure_modes"]
+    assert dsp == ["not_responding"], dsp
 
 
 def _rogues(ctx) -> None:
-    """Each census names its rogue by air handler; the equipment room is in both."""
+    """Each census names its rogue by air handler; the static census lists the equipment room
+    apart, as overloaded (short of cooling, not a starved inlet)."""
     sat = _metrics(ctx, _SAT_ROGUE)
     assert sat["grouping_provenance"] == "explicit" and sat["n_groups"] == 8, sat
     assert sat["rogue_by_group"] == {"AHU__rogue_sat": ["VAV1__rogue_sat"]}, sat["rogue_by_group"]
     assert sat["worst_zone"] == "VAV1__rogue_sat", sat["worst_zone"]
     dsp = _metrics(ctx, _DSP_ROGUE)
-    assert dsp["rogue_by_group"] == {
-        "AHU__rogue_sat": ["VAV1__rogue_sat"],
-        "AHU__rogue_static": ["VAV5__rogue_static"],
-    }, dsp["rogue_by_group"]
+    assert dsp["rogue_by_group"] == {"AHU__rogue_static": ["VAV5__rogue_static"]}, dsp[
+        "rogue_by_group"
+    ]
+    assert dsp["overloaded_zones"] == ["VAV1__rogue_sat"], dsp["overloaded_zones"]
+    assert dsp["overloaded_share"] == {"VAV1__rogue_sat": 1.0}, dsp["overloaded_share"]
     assert dsp["worst_zone"] == "VAV5__rogue_static", dsp["worst_zone"]
     assert dsp["zone_request_share"]["VAV1__rogue_sat"] == 0.486, dsp["zone_request_share"]
 
 
 def _cohorts(ctx) -> None:
-    """The cohort rules name the starved air handlers; the summary names only the worst."""
+    """The cohort rules name the starved air handlers; the summary names them all, worst
+    first."""
     sat = _metrics(ctx, _SAT_COHORT)
     assert sat["starved_groups"] == ["AHU__not_responding"], sat["starved_groups"]
     assert sat["group_sustained_frac"]["AHU__starved"] == 0.085, sat["group_sustained_frac"]
@@ -93,6 +102,8 @@ def _cohorts(ctx) -> None:
     assert dsp["starved_groups"] == ["AHU__not_responding", "AHU__starved"], dsp["starved_groups"]
     assert dsp["worst_group"] == "AHU__starved", dsp["worst_group"]
     assert dsp["group_sustained_frac"]["AHU__not_responding"] == 0.711, dsp
+    summary = ctx.finding(_DSP_COHORT, _FLEET).summary
+    assert summary.index("AHU__starved") < summary.index("AHU__not_responding"), summary
 
 
 def _peers(ctx) -> None:
@@ -119,12 +130,14 @@ def _reheat_faults(ctx) -> None:
 
 
 def _healthy_cohort(ctx) -> None:
-    """On the healthy six alone, cohort_space_temp flags the north zone: its mean is 0.8 °F
-    below the six's median, against a spread (MAD) of 0.07 °F."""
+    """On the healthy six alone every rule passes. cohort_space_temp does not flag the north
+    zone: its mean is 0.8 °F below the six's median, a z of -7.6 against a spread (MAD) of
+    0.07 °F, but under the rule's 1 °F floor."""
     m = _metrics(ctx, _TEMP, "healthy")
-    assert m["outliers"] == ["VAV4__healthy"], m["outliers"]
+    assert m["outliers"] == [], m["outliers"]
     assert round(m["mad"], 2) == 0.07, m["mad"]
-    for rule in (_SAT_ROGUE, _DSP_ROGUE, _SAT_COHORT, _DSP_COHORT, _AIRFLOW, _CENSUS):
+    assert round(m["z"]["VAV4__healthy"], 1) == -7.6, m["z"]
+    for rule in (_SAT_ROGUE, _DSP_ROGUE, _SAT_COHORT, _DSP_COHORT, _AIRFLOW, _TEMP, _CENSUS):
         f = ctx.finding(rule, _FLEET, "healthy")
         assert f is not None and f.severity == "ok", (rule, f)
 
@@ -179,7 +192,7 @@ EXERCISE = Exercise(
         Metric(_DSP_RE, "AHU__not_responding", "actual_sp_range", 0.35, 0.005, quote="0.35"),
         Metric(_DSP_RE, "AHU__not_responding", "pct_high_demand_unresponsive", 100.0, 0.05),
         Metric(_SAT_RE, "AHU__healthy", "actual_sp_range", 5.15, 0.005, quote="5.15"),
-        Metric(_SAT_RE, "AHU__healthy", "pct_high_demand_unresponsive", 14.6, 0.05, quote="14.6"),
+        Metric(_SAT_RE, "AHU__healthy", "pct_high_demand_unresponsive", 0.0, 0.05, quote="0.0 %"),
         Metric(_SAT_RE, "AHU__rogue_sat", "actual_sp_range", 10.06, 0.005, quote="10.06"),
         Metric(_DSP_RE, "AHU__rogue_static", "actual_sp_range", 1.4, 0.005, quote="1.4"),
         Metric(_DSP_RE, "AHU__starved", "actual_sp_range", 1.4, 0.005),
@@ -188,7 +201,7 @@ EXERCISE = Exercise(
         Finding(_DSP_ROGUE, _FLEET, severity=("warn",)),
         Metric(_SAT_ROGUE, _FLEET, "worst_zone_share", 0.989, 0.0005, quote="98.9%"),
         Metric(_DSP_ROGUE, _FLEET, "worst_zone_share", 0.959, 0.0005, quote="95.9%"),
-        Check("the rogues by air handler", _rogues, quote="48.6%"),
+        Check("the rogues by air handler", _rogues, quote="48.6 %"),
         # 3. the starved cohorts
         Finding(_SAT_COHORT, _FLEET, severity=("warn",)),
         Finding(_DSP_COHORT, _FLEET, severity=("warn",)),
@@ -204,18 +217,23 @@ EXERCISE = Exercise(
         Finding(_REHEAT, "VAV2__reheat", severity=("fault",)),
         Finding(_REHEAT, "VAV4__reheat", severity=("fault",)),
         Finding(_REHEAT, "VAV2__healthy", severity=("ok",)),
-        Metric(_REHEAT, "VAV2__reheat", "reheat_hours_pct", 10.9, 0.05, quote="10.9%"),
-        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 100.0, 0.05),
-        Metric(_REHEAT, "VAV2__healthy", "reheat_hours_pct", 9.7, 0.05, quote="9.7%"),
+        Metric(_REHEAT, "VAV2__reheat", "reheat_hours_pct", 18.3, 0.05, quote="18.3 %"),
+        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 93.9, 0.05, quote="93.9 %"),
+        Metric(_REHEAT, "VAV4__reheat", "reheat_hours_pct", 16.1, 0.05, quote="16.1 %"),
+        Metric(_REHEAT, "VAV2__healthy", "reheat_hours_pct", 17.2, 0.05, quote="17.2 %"),
         Metric(_REHEAT, "VAV2__healthy", "reheat_above_min_pct", 0.0, 0.05),
+        Metric(_REHEAT, "VAV2__healthy", "reheat_high_loop_pct", 9.7, 0.05, quote="9.7 %"),
         Finding(_CENSUS, _FLEET, severity=("fault",)),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 98.3, 0.05, quote="98.3%"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 98.3, 0.05, quote="98.3 %"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 98.3, 0.05),
         Finding(_CENSUS, _FLEET, severity=("ok",), run="reheat"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 18.3, 0.05, run="reheat", quote="18.3%"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 18.3, 0.05, run="reheat", quote="18.3 %"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 18.3, 0.05, run="reheat"),
         Finding(_CENSUS, _FLEET, severity=("fault",), run="heat-cool"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 93.3, 0.05, run="heat-cool", quote="93.3%"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 98.3, 0.05, run="heat-cool"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 93.3, 0.05, run="heat-cool", quote="93.3 %"),
         Metric(_CENSUS, _FLEET, "avg_zones_both", 2.44, 0.005, run="heat-cool", quote="2.44"),
-        Metric(_REHEAT, "VAV4__heat_cool", "reheat_hours_pct", 98.2, 0.05, run="heat-cool"),
+        Metric(_REHEAT, "VAV4__heat_cool", "reheat_hours_pct", 98.3, 0.05, run="heat-cool"),
         # 6. the label score (the per-equipment rules only)
         Score(_SAT_RE, tpr=1.0, fpr=0.0),
         Score(_DSP_RE, tpr=1.0, fpr=0.0),
@@ -224,7 +242,8 @@ EXERCISE = Exercise(
         # 7. the healthy fleet and the near miss
         Check("the healthy fleet", _healthy_cohort, quote="0.07"),
         Metric(_TEMP, _FLEET, "median", 72.44, 0.005, run="healthy"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 2.2, 0.05, run="healthy", quote="2.2%"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 17.2, 0.05, run="healthy", quote="17.2 %"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 2.2, 0.05, run="healthy", quote="2.2 %"),
         Finding(_SAT_ROGUE, _FLEET, severity=("ok",), run="near-miss"),
         Check("the near miss", _near_miss, quote="46.8%"),
     ),
