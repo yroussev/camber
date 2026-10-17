@@ -45,6 +45,29 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   names the extra. On conda-forge, install `weasyprint` from conda-forge or with pip. Only the
   rcx layout writes PDF: `--layout audit` with a `.pdf` path exits 2. A separate CI job installs
   Pango and runs the PDF tests; the core matrix skips them.
+- **The RCx report costs excess outside air (#195).** A new estimator in
+  `camber.fault_economics` prices `outdoor_air_fraction` and `economizer_high_limit`
+  findings. It costs only the outside air above the declared minimum, on occupied fan-on
+  hours. Cooling is `4.5 × cfm × e × (h_OA − h_RA)` when outdoor and return humidity are
+  trended, else `1.08 × cfm × e × (OAT − RAT)`, at `cool_cop`. Heating is
+  `1.08 × cfm × e × (RAT − OAT)` while the unit heats, at `boiler_efficiency`, or at
+  `heat_pump_cop` when that is set. Excess while economizing costs nothing. The airflow is the
+  trended supply airflow, else the new `EquipmentLoad.supply_airflow_cfm`, else
+  `design_oa_cfm / (min_oa_pct / 100)`. When an input is missing the estimator names it
+  (`uncosted — needs supply_airflow_cfm or design_oa_cfm`, or `needs min_oa_pct`). Appendix B
+  lists each unit's minimum and its source, the airflow source, the cooling and heating bases,
+  and the estimate. In the `econ` chain the issue still shows the larger member, not the sum.
+  See docs/RCX-REPORT.md.
+- Both rules report the estimator's inputs as new `oa_cost_*` metrics. These are the period's
+  excess energy per cfm of supply air (or in kBtu with a trended airflow), the cooling,
+  heating, economizing and unjudged hours, and the bases used. `outdoor_air_fraction` also
+  reports `min_oa_source`. Severities do not change.
+- `camber.oafraction` gains `excess_oa_penalty`, `humidity_ratio`, `moist_air_enthalpy` and the
+  standard-air constants `SENSIBLE_BTUH_PER_CFM_F` (1.08) and `ENTHALPY_BTUH_PER_CFM` (4.5), plus the
+  heating thresholds `HEATING_RISE_F` (2 °F) and `HEATING_VALVE_PCT` (5 %).
+- A rule may declare `roles_cost`: roles it reads only to price its finding. They load like
+  optional roles, but they never gate the rule, are not reported as missing and do not make the
+  finding conditional.
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
@@ -60,6 +83,9 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   forwarder that must keep sending to an older landing can set `part_layout: legacy`. Batches
   already in a spool keep their bytes and key. Uploads signed straight into the store's layout
   get no row check.
+- `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
+  rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
+  the default, and only a configured one is priced.
 
 
 ## [0.106.0] — 2026-10-17

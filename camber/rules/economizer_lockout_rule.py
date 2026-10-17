@@ -31,6 +31,15 @@ a typical, not universal, building; e.g. CA Title 24 sets it by climate zone.
 Distinct from :mod:`camber.rules.oafraction_rule` (`outdoor_air_fraction`), which flags excess OA
 across cooling weather generally; this rule is specifically the *lockout above the high limit*.
 numpy/pandas.
+
+**Cost inputs (0.107, #195).** On an OA-fraction basis with ``min_oa_pct`` configured, the finding
+also carries the ``oa_cost_*`` metrics the excess-OA cost estimator prices: the excess above the
+minimum on the judged samples that fall in occupied hours (the trended ``occupancy`` point, else the
+assumed weekday schedule), read by :func:`camber.oafraction.excess_oa_penalty`. The supply air,
+heating valve, humidities and occupancy it reads are cost-only inputs (``roles_cost``); with
+``differential=False`` an excess below return-air temperature on a unit that is not heating is
+economizing and priced at zero. On a damper basis, or with the minimum
+unknown, ``oa_cost_declined`` names the missing input instead.
 """
 
 from __future__ import annotations
@@ -38,9 +47,23 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..schedules import FAN_GATE_NONE, fan_on_mask
+from ..oafraction import _observed_hours, excess_oa_penalty
+from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask, occupied_mask
 from ..units import normalize_percent
 from .base import Finding
+
+# cost-only inputs (0.107, #195): role -> the column name camber.oafraction.excess_oa_penalty reads
+_COST_COLS = {
+    Role.OAT: "OAT",
+    Role.RETURN_AIR_TEMP: "ReturnAir",
+    Role.MIXED_AIR_TEMP: "MixedAir",
+    Role.SUPPLY_AIR_TEMP: "SupplyAir",
+    Role.HEAT_VALVE: "HeatValve",
+    Role.OUTDOOR_RH: "OAT_RH",
+    Role.RETURN_AIR_HUMIDITY: "RA_RH",
+    Role.RETURN_AIR_DEWPOINT_TEMP: "RA_DP",
+    Role.AIRFLOW: "SupplyCFM",
+}
 
 
 class EconomizerHighLimit:
@@ -58,6 +81,15 @@ class EconomizerHighLimit:
         # fan-on gate: status, else speed (airflow, above, is the last resort)
         Role.SUPPLY_FAN_STATUS,
         Role.SUPPLY_FAN_SPEED,
+    )
+    # read only to price the excess (never the verdict): see camber.oafraction.excess_oa_penalty
+    roles_cost = (
+        Role.SUPPLY_AIR_TEMP,
+        Role.HEAT_VALVE,
+        Role.OUTDOOR_RH,
+        Role.RETURN_AIR_HUMIDITY,
+        Role.RETURN_AIR_DEWPOINT_TEMP,
+        Role.OCCUPANCY,
     )
 
     def __init__(
@@ -176,6 +208,45 @@ class EconomizerHighLimit:
             "masked": masked,
         }
 
+    def _cost_metrics(self, frame: pd.DataFrame, j: dict) -> dict:
+        """The ``oa_cost_*`` metrics on the occupied judged samples, or ``oa_cost_declined``."""
+        if j["basis"] == "damper position":
+            return {
+                "oa_cost_declined": "needs mixed_air_temp and return_air_temp (judged on damper "
+                "position, no OA fraction)"
+            }
+        if self.min_oa_pct is None:
+            return {"oa_cost_declined": "needs min_oa_pct (the unit's design minimum OA)"}
+        if Role.RETURN_AIR_TEMP not in frame.columns:
+            return {"oa_cost_declined": "needs return_air_temp"}
+        idx = frame.index
+        if Role.OCCUPANCY in frame.columns and frame[Role.OCCUPANCY].notna().any():
+            occ = effective_occupied_mask(idx, occ=frame[Role.OCCUPANCY])
+        else:
+            occ = occupied_mask(idx)
+        occ = pd.Series(pd.Series(occ).to_numpy(dtype=bool), index=idx)
+        keep = (j["valid"] & occ).to_numpy(dtype=bool)
+        cond = pd.DataFrame(
+            {n: pd.to_numeric(frame[r], errors="coerce") for r, n in _COST_COLS.items()
+             if r in frame.columns},
+            index=idx,
+        )  # fmt: skip
+        oaf = j["y"][keep]
+        cond = cond[keep]
+        cond = cond[~cond.index.duplicated()]
+        oaf = oaf[~oaf.index.duplicated()]
+        mins = pd.Series(float(self.min_oa_pct), index=oaf.index)
+        return excess_oa_penalty(
+            cond,
+            oaf,
+            mins,
+            margin_pct=self.oa_margin_pct,
+            observed_h=_observed_hours(
+                pd.DataFrame({"OAT": frame[Role.OAT], "RAT": frame[Role.RETURN_AIR_TEMP]}),
+                ("OAT", "RAT"),
+            ),
+        )
+
     def excess_threshold(self, basis: str) -> float:
         """The value of the judged quantity above which a sample counts as *not locked out*.
 
@@ -235,6 +306,7 @@ class EconomizerHighLimit:
             "min_damper": self.min_damper,
             "n_above_limit": n,
             **gate_metrics,
+            **self._cost_metrics(frame, j),
         }
         if oaf is None:  # damper fallback
             not_locked = valid & (damper > self.min_damper + 0.05)
@@ -284,6 +356,7 @@ class EconomizerHighLimit:
                     f"{lo:g}% (generic); excess OA stayed below both"
                 )
         metrics["not_locked_out_pct"] = round(pct, 2)
+        metrics["oa_cost_flagged"] = sev != "ok"  # 0.107 (#195): only a verdict is priced
         return Finding(
             rule=self.name,
             equip=equip,

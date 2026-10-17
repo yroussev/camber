@@ -119,6 +119,10 @@ class EquipmentLoad:
     fan_kw: float | None = None  # supply-fan motor power
     pump_kw: float | None = None  # loop-pump motor power
     annual_hours: float = 8760.0  # operating hours per year for this equipment
+    # 0.107 (#195): the excess-outside-air estimator's airflow and heating source
+    supply_airflow_cfm: float | None = None  # typical supply airflow when the unit runs
+    design_oa_cfm: float | None = None  # design minimum outdoor airflow (the min OA fraction's cfm)
+    heat_pump_cop: float | None = None  # set when a heat pump, not a boiler, heats this unit
 
 
 @dataclass(frozen=True)
@@ -448,6 +452,111 @@ def _est_cohort_starvation(m, load, price, P):
     return 0.0, 0.0, f"cohort starvation (unknown reset {reset!r}) -- uncosted", {}
 
 
+def _est_excess_oa(m, load, price, P):
+    """Excess outside air above the declared minimum: the cooling and heating it costs (#195).
+
+    The rule measures, on its judged occupied fan-on samples, the excess OA fraction above the
+    declared minimum (``e = (OAF - min) / 100`` where OAF exceeds ``min`` + the rule's margin) and
+    what it does there (:func:`camber.oafraction.excess_oa_penalty`): with outdoor air hotter than
+    return air (by enthalpy when both humidities are trended, else by dry bulb) the coil removes
+    ``4.5 x cfm x e x (h_OA - h_RA)`` (or ``1.08 x cfm x e x (OAT - RAT)``) Btu/h; with colder
+    outdoor air while the unit heats the coil adds ``1.08 x cfm x e x (RAT - OAT)`` Btu/h; colder
+    outdoor air on a unit that is not heating is free cooling (economizing) and costs nothing.
+    1.08 and 4.5 are the standard-air factors (:data:`camber.oafraction.SENSIBLE_BTUH_PER_CFM_F`).
+
+    The airflow is the trended supply airflow when the unit has one, else
+    ``EquipmentLoad.supply_airflow_cfm``, else ``design_oa_cfm / (min_oa_pct / 100)`` (the supply
+    airflow the declared minimum fraction implies). The period's energy is annualised by
+    ``annual_hours / observed hours`` and priced at ``cool_cop`` (electricity) and
+    ``boiler_efficiency`` (gas) -- or ``heat_pump_cop`` (electricity) when the unit's load or the
+    cost parameters set one. Declines, naming the input, when the minimum is not declared or no
+    airflow is known.
+    """
+    declined = m.get("oa_cost_declined")
+    if declined:
+        return 0.0, 0.0, str(declined), {}
+    obs = _num(m, "oa_cost_observed_h")
+    if obs is None:
+        return 0.0, 0.0, "needs the rule's excess-OA cost metrics (MAT/RAT/OAT samples)", {}
+    if m.get("min_oa_source") not in (None, "configured") or _num(m, "min_oa_pct") is None:
+        return (
+            0.0,
+            0.0,
+            "needs min_oa_pct (the unit's design minimum OA; the rule's generic 20% is not priced)",
+            {},
+        )
+    min_pct = _num(m, "min_oa_pct")
+    if m.get("oa_cost_flagged") is False:
+        return 0.0, 0.0, "no excess-OA verdict (nothing priced)", {}
+    cool_pc = _num(m, "oa_cost_excess_cool_btu_per_cfm") or 0.0
+    heat_pc = _num(m, "oa_cost_excess_heat_btu_per_cfm") or 0.0
+    if cool_pc <= 0 and heat_pc <= 0:
+        note = "no excess OA outside economizing hours (no penalty)"
+        if (_num(m, "oa_cost_heat_unjudged_h") or 0.0) > 0:
+            note += f"; cold-weather excess not judged -- {m.get('oa_cost_heat_basis')}"
+        return 0.0, 0.0, note, {"min_oa_pct": min_pct, "min_oa_source": "configured"}
+    if obs <= 0:
+        return 0.0, 0.0, "needs observed hours of data (none)", {}
+    used = {"min_oa_pct": min_pct, "min_oa_source": "configured"}
+    if m.get("min_oa_pct_by_month"):
+        used["min_oa_pct_by_month"] = m.get("min_oa_pct_by_month")
+    cool_k, heat_k = _num(m, "oa_cost_excess_cool_kbtu"), _num(m, "oa_cost_excess_heat_kbtu")
+    if cool_k is not None and heat_k is not None:
+        used["airflow_source"] = str(m.get("oa_cost_airflow") or "trended supply airflow")
+    else:
+        cfm = load.supply_airflow_cfm
+        if cfm:
+            used["airflow_source"] = "EquipmentLoad.supply_airflow_cfm"
+        elif load.design_oa_cfm and min_pct and min_pct > 0:
+            if m.get("min_oa_pct_by_month"):
+                return (
+                    0.0,
+                    0.0,
+                    "needs EquipmentLoad.supply_airflow_cfm (design_oa_cfm is ambiguous under a "
+                    "seasonal minimum)",
+                    {},
+                )
+            cfm = load.design_oa_cfm / (min_pct / 100.0)
+            used["airflow_source"] = "EquipmentLoad.design_oa_cfm / min OA fraction"
+            used["design_oa_cfm"] = load.design_oa_cfm
+        else:
+            return (
+                0.0,
+                0.0,
+                "needs EquipmentLoad.supply_airflow_cfm or EquipmentLoad.design_oa_cfm",
+                {},
+            )
+        used["supply_airflow_cfm"] = round(float(cfm), 1)
+        cool_k, heat_k = cool_pc * cfm / 1e3, heat_pc * cfm / 1e3
+    scale = load.annual_hours / obs
+    cool_yr, heat_yr = cool_k * scale, heat_k * scale
+    cop = P["cool_cop"]
+    elec = cool_yr / _KBTU_PER_KWH / cop
+    gas = 0.0
+    used.update(
+        {
+            "observed_h": round(obs, 1),
+            "annual_hours": load.annual_hours,
+            "excess_cool_kbtu_yr": round(cool_yr, 1),
+            "excess_heat_kbtu_yr": round(heat_yr, 1),
+            "cooling_basis": m.get("oa_cost_cool_basis"),
+            "heating_basis": m.get("oa_cost_heat_basis"),
+            "cool_cop": cop,
+            "air_factors": "1.08 Btu/h per cfm per F, 4.5 Btu/h per cfm per Btu/lb (standard air)",
+        }
+    )
+    if heat_yr > 0:
+        hp = load.heat_pump_cop or P.get("heat_pump_cop")
+        if hp:
+            elec += heat_yr / _KBTU_PER_KWH / float(hp)
+            used["heat_pump_cop"] = float(hp)
+        else:
+            gas = heat_yr / _KBTU_PER_THERM / P["boiler_efficiency"]
+            used["boiler_efficiency"] = P["boiler_efficiency"]
+    parts = [p for p, v in (("cooling", cool_yr), ("heating", heat_yr)) if v > 0]
+    return elec, gas, "excess-OA->" + "+".join(parts), used
+
+
 # rule name -> estimator
 DEFAULT_MODELS = {
     "simultaneous_heat_cool": _est_simultaneous,
@@ -467,6 +576,8 @@ DEFAULT_MODELS = {
     "duct_static_high": _est_static,  # alias if a static rule emits this name
     "damper_census": _est_static,
     "boiler_short_cycle": _est_boiler_cycle,
+    "outdoor_air_fraction": _est_excess_oa,  # 0.107 (#195)
+    "economizer_high_limit": _est_excess_oa,
 }
 
 

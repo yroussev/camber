@@ -963,6 +963,53 @@ def _plt():
 # ============================================================================ builder helpers
 
 
+_EXCESS_OA_RULES = ("outdoor_air_fraction", "economizer_high_limit")
+
+
+def _excess_oa_rows(S) -> list:
+    """Appendix B rows for the excess-outside-air estimates of the actionable OA findings (0.107,
+    #195): the minimum and its source, the airflow source, the cooling and heating bases and
+    efficiencies, and the estimate or the input it needs."""
+    from ..rules.triage import _uncosted_note
+
+    rows = []
+    for f, c in zip(S["findings"], S["costs"]):
+        rule = getattr(f, "rule", "")
+        if rule not in _EXCESS_OA_RULES or getattr(f, "severity", "") not in ("warn", "fault"):
+            continue
+        m = getattr(f, "metrics", None) or {}
+        a = c.assumptions or {}
+        mn = m.get("min_oa_pct")
+        src = m.get("min_oa_source") or ("configured" if mn is not None else "unknown")
+        minimum = f"{mn:g}% ({src})" if isinstance(mn, (int, float)) else f"— ({src})"
+        airflow = a.get("airflow_source") or "—"
+        if a.get("supply_airflow_cfm"):
+            airflow += f" ({a['supply_airflow_cfm']:,.0f} cfm)"
+        cool_h, heat_h = m.get("oa_cost_cool_h") or 0, m.get("oa_cost_heat_h") or 0
+        cooling = heating = "—"
+        if cool_h:
+            cooling = f"{m.get('oa_cost_cool_basis')}, {cool_h:,.0f} h"
+            if a.get("cool_cop"):
+                cooling += f", COP {a['cool_cop']:g}"
+        if heat_h:
+            heating = f"{m.get('oa_cost_heat_basis')}, {heat_h:,.0f} h"
+            if a.get("heat_pump_cop"):
+                heating += f", heat pump COP {a['heat_pump_cop']:g}"
+            elif a.get("boiler_efficiency"):
+                heating += f", boiler efficiency {a['boiler_efficiency']:g}"
+        elif m.get("oa_cost_heat_unjudged_h"):
+            heating = str(m.get("oa_cost_heat_basis") or "not judged")
+        if c.costed:
+            est = (
+                f"{_fmt_usd(c.annual_cost_usd)}/yr from {a.get('observed_h', 0):,.0f} observed h "
+                f"x {a.get('annual_hours', 8760):,.0f}/yr"
+            )
+        else:
+            est = _uncosted_note(c.basis)
+        rows.append([getattr(f, "equip", ""), rule, minimum, airflow, cooling, heating, est])
+    return rows
+
+
 def _p(text: str) -> dict:
     return {"kind": "p", "text": str(text)}
 
@@ -2836,6 +2883,24 @@ def _sec_appendices(S) -> list:
         blocks.append(_p("Equipment sizing supplied for: " + ", ".join(sorted(o.loads))))
     else:
         blocks.append(_p("No equipment sizing supplied: sizing-dependent issues stay uncosted."))
+    oa_rows = _excess_oa_rows(S)
+    if oa_rows:
+        blocks.append(
+            _p(
+                "Excess outside air (0.107): only the excess above the declared minimum OA is "
+                "priced, on occupied fan-on hours outside economizing — cooling at 4.5 x cfm x "
+                "(h_OA - h_RA), or 1.08 x cfm x (OAT - RAT) without humidity, over cool_cop; "
+                "heating at 1.08 x cfm x (RAT - OAT) over boiler_efficiency (or heat_pump_cop); "
+                "1.08 and 4.5 are the standard-air factors. The period is annualised by "
+                "annual_hours / observed hours."
+            )
+        )
+        blocks.append(
+            _table(
+                ["Equipment", "Rule", "Minimum OA", "Airflow", "Cooling", "Heating", "Estimate"],
+                oa_rows,
+            )
+        )
     rows = [
         [e, S["gate_src"].get(e, FAN_GATE_NONE), S["occ_src"].get(e, "")]
         for e in sorted(S["gate_src"])

@@ -906,7 +906,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `min_oa_pct` | `20.0` | % of supply airflow (OA fraction) | 0.0 to 100.0 | CAMBER judgment: a generic assumed design minimum; the real one is the unit's own |
+| `min_oa_pct` | `null` | % of supply airflow (OA fraction) | 0.0 to 100.0 | CAMBER judgment: a generic assumed design minimum; the real one is the unit's own |
 | `cooling_cutoff_f` | `70.0` | °F | 55.0 to 80.0 | public source: PNNL Re-tuning Ch.5 with CAMBER judgment (camber/oafraction.py) |
 | `denom_min_f` | `5.0` | °F | 2.0 to 15.0 | public source: PNNL Re-tuning Ch.5 (a stability guard on the temperature balance) |
 | `fan_gate` | `true` | flag | `false`, `true` | CAMBER judgment: with the fan stopped the air temperatures describe still air, not the unit at work |
@@ -914,7 +914,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `min_oa_pct`: Take it from the ventilation design or sequence, or measure the OA fraction at the unit's minimum damper position on a fan-on period with |OAT - RAT| of 10 °F or more; a 10 % minimum damper position can be a 1.6 % OA fraction. *Note:* Excess OA is OAF above min + 5 %; under-ventilation is a median OAF below min - 5 % (warn) or below half the minimum (fault).
+- `min_oa_pct`: Take it from the ventilation design or sequence, or measure the OA fraction at the unit's minimum damper position on a fan-on period with |OAT - RAT| of 10 °F or more; a 10 % minimum damper position can be a 1.6 % OA fraction. *Note:* None = the generic 20 % assumption (min_oa_source 'default'): judged the same, but the excess-OA cost estimator declines it (needs min_oa_pct; 0.107, #195). Excess OA is OAF above min + 5 %; under-ventilation is a median OAF below min - 5 % (warn) or below half the minimum (fault).
 - `cooling_cutoff_f`: Set it to the economizer high limit of the sequence: above it outdoor air is a cooling penalty, not free cooling.
 - `denom_min_f`: Raise it when OA fractions scatter widely on mild days (n_masked_small_delta_t shows how many samples it drops); about 2-3 times the combined OAT/RAT sensor error.
 - `fan_gate`: Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a speed point that reads 0 while running) and every trended sample is a running sample. *Note:* The fan is read from supply-fan status, else speed, else airflow; a unit with none of them is judged ungated and the finding says so (the fan_gate metric).

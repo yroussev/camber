@@ -60,6 +60,10 @@ stays the same from run to run.
   Different issues add up.
 - **Uncosted is explicit.** An issue with no costed member shows what the estimator needs
   (`uncosted — needs heating_capacity_kbtuh`). Sizing comes from `report.loads`.
+- **Excess outside air is costed (0.107, #195).** `outdoor_air_fraction` and
+  `economizer_high_limit` findings are priced by the excess-outside-air estimator (see
+  [below](#excess-outside-air-cost)). Both sit in the `econ` chain, so the issue shows the larger
+  of the two.
 - **Rank**: severity tier; then non-conditional before conditional; then costed before uncosted;
   then $/yr, largest first. Uncosted issues of one tier then rank by confidence, H before M
   before L (0.102, #112), so the issue with the most trustworthy evidence leads when no dollars
@@ -257,6 +261,52 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
 ```
 
 - `report.loads` (or `report.rcx.loads`) sizes equipment for the existing cost estimators.
+  For the excess-outside-air estimator a unit takes `supply_airflow_cfm` (or `design_oa_cfm`,
+  the design minimum outdoor airflow) and, when a heat pump heats it, `heat_pump_cop`. A
+  site-wide `heat_pump_cop` can go in `report.rcx.cost_params` instead.
+
+### Excess outside air cost
+
+The estimator (`camber.fault_economics`, 0.107, #195) prices only the outside air **above the
+declared minimum**, on the samples the rule judged: occupied, fan-on and with a stable mixing
+balance. A sample is priced when its OA fraction is above `min_oa_pct` plus the rule's 5-point
+margin. The excess priced is `e = (OAF - min) / 100` of the supply air. Each priced sample is then
+classed by what the extra outside air does:
+
+| Condition | Read as | Rate (Btu/h) |
+|---|---|---|
+| OA enthalpy above return-air enthalpy (outdoor RH and return RH or dew point trended) | cooling | `4.5 × cfm × e × (h_OA − h_RA)` |
+| OAT above RAT, no humidity trended | cooling | `1.08 × cfm × e × (OAT − RAT)` |
+| OAT below RAT while the unit heats (heating valve above 5 %, else SAT more than 2 °F above MAT) | heating | `1.08 × cfm × e × (RAT − OAT)`, capped at the coil's `1.08 × cfm × (SAT − MAT)` |
+| OAT below RAT and the unit not heating | economizing | 0 (free cooling is not a penalty) |
+| OAT below RAT, no heating valve and no SAT | not judged | 0, and the reason is reported |
+
+1.08 and 4.5 are the standard-air factors: 0.075 lb/ft³ × 60 min/h × 0.24 Btu/lb·°F = 1.08, and
+0.075 × 60 = 4.5 lb/h per cfm. Enthalpy is `h = 0.240 t + W (1061 + 0.444 t)`. The humidity ratio
+`W` comes from RH (or dew point) with the Hyland-Wexler saturation pressure at 14.696 psia. These
+are the ASHRAE Handbook—Fundamentals psychrometric relations. The method follows the PNNL
+re-tuning guides on minimum outdoor air and economizer operation (`pnnl-guide-min-oa`,
+`pnnl-guide-economizer`).
+
+- **Airflow:** the trended supply airflow when the unit has a plausible one (a 95th percentile
+  above 100 cfm, present on at least 90 % of the priced samples). Otherwise
+  `loads.<unit>.supply_airflow_cfm`, otherwise `design_oa_cfm / (min_oa_pct / 100)`.
+- **Annualised:** the period's energy × `annual_hours` (8760 by default) / the hours of data
+  observed.
+- **Priced:** cooling as electricity at `cool_cop` (3.5); heating as gas at `boiler_efficiency`
+  (0.80), or as electricity at `heat_pump_cop` when it is set.
+- **Verdict first:** only a warn or fault excess-OA verdict is priced. An `ok` or
+  under-ventilated unit costs nothing.
+- **Declines name the input:** `uncosted — needs supply_airflow_cfm or design_oa_cfm`, or
+  `needs min_oa_pct` when the rule's minimum is its generic 20 % (`min_oa_source: "default"`) or
+  the lockout rule has none. The lockout rule also declines when it judged on damper position
+  (`needs mixed_air_temp and return_air_temp`).
+
+Appendix B lists each actionable OA finding's minimum and its source, the airflow source, the
+cooling and heating bases with their hours and efficiencies, and the estimate or the input it
+needs. The finding's `oa_cost_*` metrics carry the period's sums. The humidity, supply-air,
+heating-valve and occupancy points they read are cost-only inputs (`roles_cost`): they never change
+a verdict, and they are not listed as missing inputs.
 - `oat_reference` is offline by default (a CSV of time and °F). To fetch NASA POWER instead, opt in
   with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
   Every distinct OAT source is compared (0.91): units reading one sensor
