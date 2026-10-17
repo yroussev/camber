@@ -13,6 +13,38 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.107.0] — Unreleased
+
+### Added
+- **The RCx report costs excess outside air (#195).** A new estimator in
+  `camber.fault_economics` prices `outdoor_air_fraction` and `economizer_high_limit`
+  findings. It costs only the outside air above the declared minimum, on occupied fan-on
+  hours. Cooling is `4.5 × cfm × e × (h_OA − h_RA)` when outdoor and return humidity are
+  trended, else `1.08 × cfm × e × (OAT − RAT)`, at `cool_cop`. Heating is
+  `1.08 × cfm × e × (RAT − OAT)` while the unit heats, at `boiler_efficiency`, or at
+  `heat_pump_cop` when that is set. Excess while economizing costs nothing. The airflow is the
+  trended supply airflow, else the new `EquipmentLoad.supply_airflow_cfm`, else
+  `design_oa_cfm / (min_oa_pct / 100)`. When an input is missing the estimator names it
+  (`uncosted — needs supply_airflow_cfm or design_oa_cfm`, or `needs min_oa_pct`). Appendix B
+  lists each unit's minimum and its source, the airflow source, the cooling and heating bases,
+  and the estimate. In the `econ` chain the issue still shows the larger member, not the sum.
+  See docs/RCX-REPORT.md.
+- Both rules report the estimator's inputs as new `oa_cost_*` metrics. These are the period's
+  excess energy per cfm of supply air (or in kBtu with a trended airflow), the cooling,
+  heating, economizing and unjudged hours, and the bases used. `outdoor_air_fraction` also
+  reports `min_oa_source`. Severities do not change.
+- `camber.oafraction` gains `excess_oa_penalty`, `humidity_ratio`, `moist_air_enthalpy` and the
+  standard-air constants `SENSIBLE_BTUH_PER_CFM_F` (1.08) and `ENTHALPY_BTUH_PER_CFM` (4.5), plus the
+  heating thresholds `HEATING_RISE_F` (2 °F) and `HEATING_VALVE_PCT` (5 %).
+- A rule may declare `roles_cost`: roles it reads only to price its finding. They load like
+  optional roles, but they never gate the rule, are not reported as missing and do not make the
+  finding conditional.
+
+### Changed
+- `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
+  rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
+  the default, and only a configured one is priced.
+
 ## [0.106.0] — 2026-10-17
 
 **0.106: rule fixes found while building the synthetic lab cases, for air-side maintenance, chiller plants, heat pumps and G36 zone fleets, and drift findings whose wording matches their verdict (#181–#190).** **Breaking (#183):** `chiller_staging_fleet`'s `n_running_hours` and `n_multi_hours` were sample counts and are renamed `n_running_samples` and `n_multi_samples`, with no aliases; the hours are new metrics beside them. **Scoring change (#184):** `camber datasets score` now scores each rule only on the equipment it applies to, so per-rule false-positive rates move on mixed-equipment entries; the overall confusion is unchanged. `filter_fouling` and `control_hunting` judge fan-on samples, and an unreachable hunting threshold no longer reads as a pass (#181, #182). `chiller_staging_fleet` counts only chillers and takes a declared `capacity_kw` (#183). A new `cw_flow` role lets tower drift match on heat rejected; chilled-water loops are gated on their pumps, and approach checks read running samples only (#184). Heat-pump rules handle coarse trends, no longer read a defrost as the wrong mode, and count stage changes only while running (#185). The G36 zone-fleet rules read `airflow_min_sp`, stop counting G36's high heating loop as a violation, and rate mixed heating and cooling by hours (#186). An `ok` drift finding now says the signal holds near its baseline instead of naming a fault, the drift reference declines only the detectors it could run, and the tower-approach and head-pressure detectors say which way the signal moved (#187–#190). The two synthetic entries publish the new points (generator version 2); the `air-maintenance`, `plant-chiller-multi`, `plant-heat-pump` and `zone-g36-fleet` workbook answers are re-recorded.

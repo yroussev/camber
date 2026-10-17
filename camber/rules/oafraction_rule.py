@@ -13,6 +13,14 @@ point when it has one, else an assumed weekday schedule. **The design minimum is
 own:** ``min_oa_pct`` (and, for a sequence with a seasonal minimum, ``min_oa_pct_by_month``) must
 be set from the sequence or measured at the unit's minimum damper position -- a 10 % minimum
 *damper position* can be a 1.6 % OA *fraction*.
+
+**Cost inputs (0.107, #195).** The finding also carries the ``oa_cost_*`` metrics the excess-OA
+cost estimator (:mod:`camber.fault_economics`) prices: the excess above the declared minimum on the
+judged (occupied, fan-on) samples, read as a cooling or heating penalty or as economizing by
+:func:`camber.oafraction.excess_oa_penalty`. The heating valve, supply air, humidities and supply
+airflow it reads are cost-only inputs (``roles_cost``): they never change the verdict.
+``min_oa_source`` says whether ``min_oa_pct`` was configured (``"configured"``) or is the generic
+20 % (``"default"``); only a configured minimum is priced.
 """
 
 from __future__ import annotations
@@ -20,7 +28,13 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..oafraction import analyze_oa_fraction
+from ..oafraction import (
+    _oaf_samples,
+    _observed_hours,
+    _sample_minima,
+    analyze_oa_fraction,
+    excess_oa_penalty,
+)
 from ..schedules import FAN_GATE_NONE, fan_on_mask
 from .base import Finding
 
@@ -30,6 +44,28 @@ _ROLE_TO_COL = {
     Role.RETURN_AIR_TEMP: "ReturnAir",
     Role.OA_DAMPER: "OA_Damper",
 }
+
+# cost-only inputs (0.107, #195): role -> the column name camber.oafraction.excess_oa_penalty reads
+_COST_COLS = {
+    Role.SUPPLY_AIR_TEMP: "SupplyAir",
+    Role.HEAT_VALVE: "HeatValve",
+    Role.OUTDOOR_RH: "OAT_RH",
+    Role.RETURN_AIR_HUMIDITY: "RA_RH",
+    Role.RETURN_AIR_DEWPOINT_TEMP: "RA_DP",
+    Role.AIRFLOW: "SupplyCFM",
+}
+_DEFAULT_MIN_OA_PCT = 20.0
+
+
+def _cost_conditions(frame: pd.DataFrame, legacy: pd.DataFrame) -> pd.DataFrame:
+    """The judged samples' conditions for :func:`camber.oafraction.excess_oa_penalty`: the mixing
+    temperatures of ``legacy`` plus the cost-only roles of ``frame`` under their helper names."""
+    cols = {c: legacy[c] for c in ("OAT", "MixedAir", "ReturnAir") if c in legacy.columns}
+    for role, name in _COST_COLS.items():
+        if role in frame.columns:
+            cols[name] = pd.to_numeric(frame[role], errors="coerce")
+    out = pd.DataFrame(cols, index=frame.index)
+    return out[~out.index.duplicated()]
 
 
 class OutdoorAirFraction:
@@ -46,18 +82,28 @@ class OutdoorAirFraction:
         Role.AIRFLOW,
         Role.OCCUPANCY,
     )
+    # read only to price the excess (never the verdict): see camber.oafraction.excess_oa_penalty
+    roles_cost = (
+        Role.SUPPLY_AIR_TEMP,
+        Role.HEAT_VALVE,
+        Role.OUTDOOR_RH,
+        Role.RETURN_AIR_HUMIDITY,
+        Role.RETURN_AIR_DEWPOINT_TEMP,
+    )
 
     def __init__(
         self,
-        min_oa_pct: float = 20.0,
+        min_oa_pct: float | None = None,
         cooling_cutoff_f: float = 70.0,
         *,
         denom_min_f: float = 5.0,
         fan_gate: bool = True,
         min_oa_pct_by_month: dict | None = None,
     ):
-        # min OA is building-specific (sequence); cooling cutoff is climate-ish
-        self.min_oa_pct = min_oa_pct
+        # min OA is building-specific (sequence); cooling cutoff is climate-ish. None = the generic
+        # 20 % assumption, judged as before but never priced (0.107, #195: min_oa_source)
+        self.min_oa_source = "default" if min_oa_pct is None else "configured"
+        self.min_oa_pct = _DEFAULT_MIN_OA_PCT if min_oa_pct is None else float(min_oa_pct)
         self.cooling_cutoff_f = cooling_cutoff_f
         # |RAT-OAT| below this makes the temperature balance divide by ~0 (PNNL Ch.5 guard)
         self.denom_min_f = denom_min_f
@@ -174,11 +220,29 @@ class OutdoorAirFraction:
                 "n_masked_small_delta_t": res.masked.get("small_delta_t", 0),
                 "n_masked_out_of_range": res.masked.get("out_of_range", 0),
                 "_missing_optional": self._missing(frame, fan_src),
+                "min_oa_source": self.min_oa_source,
+                **self._cost_metrics(frame, legacy, gate, occ),
+                # only an excess-OA verdict is priced (an ok or under-ventilated unit costs nothing)
+                "oa_cost_flagged": sev_excess != "ok",
             },
             summary=(
                 f"{equip}: OAF median {res.oaf_median_pct:.0f}% "
                 f"({res.median_oaf_cooling:.0f}% in cooling weather); {tail}"
             ),
+        )
+
+    def _cost_metrics(self, frame, legacy, gate, occ) -> dict:
+        """The ``oa_cost_*`` metrics on the samples the verdict judged (0.107, #195)."""
+        w = _oaf_samples(legacy, denom_min_f=self.denom_min_f, gate=gate, occ=occ)
+        if w is None or w.empty:
+            return {}
+        mins = _sample_minima(w.index, self.min_oa_pct, self.min_oa_pct_by_month)
+        return excess_oa_penalty(
+            _cost_conditions(frame, legacy),
+            w["oaf"],
+            mins,
+            margin_pct=self.excess_margin_pct,
+            observed_h=_observed_hours(legacy, ("OAT", "MixedAir", "ReturnAir")),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):

@@ -340,8 +340,10 @@ PARAM_DOCS["outdoor_air_fraction"] = {
         "unit's minimum damper position on a fan-on period with |OAT - RAT| of 10 °F or more; a "
         "10 % minimum damper position can be a 1.6 % OA fraction.",
         (0.0, 100.0),
-        "Excess OA is OAF above min + 5 %; under-ventilation is a median OAF below min - 5 % "
-        "(warn) or below half the minimum (fault).",
+        "None = the generic 20 % assumption (min_oa_source 'default'): judged the same, but the "
+        "excess-OA cost estimator declines it (needs min_oa_pct; 0.107, #195). Excess OA is OAF "
+        "above min + 5 %; under-ventilation is a median OAF below min - 5 % (warn) or below half "
+        "the minimum (fault).",
     ),
     "cooling_cutoff_f": _P(
         "°F",

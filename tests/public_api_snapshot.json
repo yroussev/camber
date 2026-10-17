@@ -1596,8 +1596,15 @@
     "versioned_rows"
   ],
   "camber.oafraction": [
+    "ENTHALPY_BTUH_PER_CFM",
+    "HEATING_RISE_F",
+    "HEATING_VALVE_PCT",
     "OAFractionResult",
-    "analyze_oa_fraction"
+    "SENSIBLE_BTUH_PER_CFM_F",
+    "analyze_oa_fraction",
+    "excess_oa_penalty",
+    "humidity_ratio",
+    "moist_air_enthalpy"
   ],
   "camber.overcooling": [
     "OVERCOOL_MEASURES",

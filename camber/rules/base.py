@@ -78,6 +78,12 @@ class Rule(Protocol):
     required role
     (:func:`camber.model.entities.missing_inputs` is the one test the runners and
     :func:`camber.model.entities.runnable_rules` share).
+
+    0.107 (#195): a rule may declare ``roles_cost`` (optional), roles it reads only to price its
+    finding (e.g. the humidity behind an excess-outside-air enthalpy penalty). They are loaded when
+    present, like ``roles_optional``, but never gate the rule, are not reported as missing optional
+    inputs and do not make the finding conditional on their sensor health: the verdict does not
+    read them.
     """
 
     name: str
@@ -133,9 +139,11 @@ class PeriodRule(Protocol):
 
 
 def _roles_to_load(rule) -> tuple:
-    """Required + optional (+ any-of) roles a rule wants resolved (only required must exist)."""
+    """Required + optional (+ any-of, + cost-only) roles a rule wants resolved (only required must
+    exist)."""
     load = tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
     extra = [r for g in roles_any_of(rule) for r in g if r not in load]
+    extra += [r for r in getattr(rule, "roles_cost", ()) if r not in load]  # 0.107 (#195)
     return load + tuple(dict.fromkeys(extra)) if extra else load
 
 
