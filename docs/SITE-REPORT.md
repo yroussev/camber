@@ -24,6 +24,7 @@ flowchart LR
 ```
 *One `build_site_report` call fuses scorecard, action plan, dashboard sections and evidence into one HTML page.*
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.report import build_site_report
 

@@ -1436,7 +1436,7 @@ Not thresholds: `store` (the injected baseline store); `site` (identity); `run_i
 | `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
 | `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
 | `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
-| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
+| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (its pump-speed and loop-DP topics): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
 | `constant_speed_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's speed varies well under 2 %, a VFD pump's by tens of % (the lbnl-chiller secondary pump: 38 %) |
 
 How to calibrate:
@@ -1468,7 +1468,7 @@ Not thresholds: `store` (the injected baseline store); `site` (identity); `run_i
 | `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
 | `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
 | `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
-| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
+| `min_speed` | `null` | % speed | 5.0 to 60.0 | public source: PNNL Re-tuning Ch.8 (its pump-speed and loop-DP topics): a variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback |
 | `constant_speed_cv` | `0.02` | fraction (std / mean) | 0.0 to 0.1 | CAMBER judgment: as constant_flow_cv (chw_plant_reset) -- a constant-speed pump's speed varies well under 2 %, a VFD pump's by tens of % (the lbnl-chiller secondary pump: 38 %) |
 
 How to calibrate:

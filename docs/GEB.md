@@ -26,6 +26,7 @@ flowchart LR
 
 Quantify a DR event against an expected baseline:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.geb import demand_response
 
@@ -45,6 +46,7 @@ baseline in the `rebound_hours` after (the snap-back that erodes net benefit).
 
 ## Flexibility headroom — `flexibility`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.geb import flexibility
 
@@ -57,6 +59,7 @@ sheddable fraction and peak-to-average ratio mean more DR/shift potential.
 
 ## Carbon-aware shifting — `carbon_aware_shift`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.geb import carbon_aware_shift
 
@@ -72,6 +75,7 @@ value of flexibility.
 
 How well is load *timed* against a cost or carbon signal?
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.geb import operation_score
 
@@ -96,6 +100,7 @@ supplied grid signal. They are advisory, not control: CAMBER stays read-only tow
 
 Hand a measured DR event to a demand-response program in a shape it recognizes:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.interop.openadr import to_openadr_report
 

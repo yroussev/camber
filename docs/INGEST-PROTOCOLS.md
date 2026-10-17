@@ -107,6 +107,7 @@ Like `BacnetSource`, the network I/O is an **injected** `DiscoveryClient` (core 
 app), so discovery is testable without a network. A deployment implements three read methods
 (`who_is`, `read_object_list`, `read_object_metadata`) over bacpypes3:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.ingest.bacnet_discovery import discover, discovery_to_points, discovery_to_inventory
 from camber.interop.bacnet import mapping_from_bacnet, review_bacnet
@@ -139,6 +140,7 @@ Rather than hand-write the `DiscoveryClient` / read client, use the bundled bacp
 `read_property` / `read_property_multiple` / `read_range` (asserted by the ingest read-only AST guard)
 — and implements **both** roles:
 
+<!-- fence: skip (needs the bacnet extra) -->
 ```python
 from camber.ingest.bacnet import BacnetSource, BacnetPoint, BacnetTarget
 from camber.ingest.bacnet_client import BacnetClientConfig, bacnet_read_client, discover_default

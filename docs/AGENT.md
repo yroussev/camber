@@ -35,6 +35,7 @@ object. Its `text` comes straight from that object's template surface (`Finding.
 Ids are **order-stable and deterministic** (`F1`, `C1`, `R1`, `G1`, … per kind) so citations are
 reproducible.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.agent import build_context
 
@@ -56,6 +57,7 @@ missing input ("No dollar figure — no cost model for rule 'unmet_setpoint_hour
 
 ## Explain a finding — `explain`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.agent import explain
 
@@ -70,6 +72,7 @@ grounded, no LLM. This is also the regression oracle the LLM path is verified ag
 
 ## Ask a question — `ask`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.agent import ask
 
@@ -86,6 +89,7 @@ or builds one from `findings` / `run` / `read_api` / `scorecard` / `completeness
 CAMBER ships **no** provider. You wrap *your* SDK in a callable and inject it — exactly as
 `ingest.haystack` takes an injected `his_read` transport:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.agent import client_from_callable, explain
 

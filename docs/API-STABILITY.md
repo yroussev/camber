@@ -6,8 +6,8 @@ behind the `1.0` release.
 
 Until `1.0`, CAMBER is in the `0.x` range, where [Semantic Versioning](https://semver.org)
 explicitly allows anything to change between releases. This policy describes the guarantees
-that **take effect at `1.0`** — the `0.9.x` hardening series exists to make them true before
-they are promised.
+that **take effect at `1.0`**; the releases before it work to make them true before they are
+promised.
 
 ## What is public
 
@@ -730,6 +730,92 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   that end; a static rogue that is short of cooling moves from `rogues` to `overloaded_zones`;
   `cohort_space_temp` needs a 1 °F difference from the median, and `cohort_airflow` reads `info`
   instead of `ok` when its cohort spreads past 0.3.
+- **TOWT reference settings, unseen bins, clipping and fit errors** (0.105; #154, #155, #160,
+  #162, #172, #175), additive and provisional: the `fit_towt` keywords `knots=`,
+  `knot_min_obs=` and `weights=`; `mandv.towt.towt_lbnl_config()`, its `TOWTReferenceConfig`
+  and `mandv.towt.lbnl_time_weights`; the `TOWTModel.predict` keywords `unseen=` (`"raise"`, the
+  default, or `"fallback"`; `mandv.towt.UNSEEN_MODES`), `clip_negative=` and `return_counts=`, carried by `TOWTAtIndex`,
+  `towt_savings_hourly` and `ChangePointModel.predict` (`clip_negative=`), and the counts they
+  return; and `mandv.models.ModelFitError`, the `ValueError` subclass a fit with no usable points
+  raises, whose message names what the fit saw. The message text is not API.
+- **TOWT (LBNL RMV2.0 variant)** (0.105; #165, #176, #177, #178), additive and provisional: the
+  module `mandv.towt_rmv2` and every public name in it (`fit_towt_rmv2`, `TOWTRMV2Model` with
+  `predict`, `as_dict` and `from_dict`, `RMV2_UNSEEN_MODES`, `interval_of_week`,
+  `rmv2_centres`, `rmv2_occupied_intervals`); the registry row `towt_rmv2` and the reference
+  `lbnl-rmv2`. Its defaults follow RMV2.0 1.1.0 and may change, with a CHANGELOG entry, if that
+  reference is found to differ.
+- **Condenser-water flow, chilled-water loops and chiller capacity** (0.106; #183, #184),
+  additive and provisional: the role `cw_flow`; `camber.model.equipclass.is_chw_loop`; the
+  `chiller_staging_fleet` parameter `capacity_kw` (a number or an `{equip: kW}` map) and its
+  metrics `capacity_source`, `n_loops_excluded`, `running_hours`, `multi_hours` and
+  `sample_interval_min`; the `load_source` value `cw_heat_rejection` of
+  `cooling_tower_fan_effort_drift` and the metric `tower_approach_load_source` of
+  `cooling_tower_approach_drift`; the `run_source` and `n_judged` metrics of
+  `chiller_approach_fouling`; and the optional `scored` key of a benchmark record, which
+  `camber.eval.benchmark` reads. **Breaking (#183):** `chiller_staging_fleet`'s
+  `n_running_hours` and `n_multi_hours` are renamed `n_running_samples` and `n_multi_samples`,
+  with no aliases. **Behaviour changes:** `camber datasets score` scores each rule only on the
+  equipment it ran on; a chilled-water loop runs by its pumps.
+- **Fan-gated filter and hunting rules** (0.106; #181, #182), additive and provisional: the
+  `fan_gate` parameter of `filter_fouling` and `control_hunting` (default on) and their metric
+  `fan_gate`; `filter_fouling`'s `fault_factor` parameter and its metrics `n_judged`,
+  `n_masked_fan_off` and `fault_dp_inwc`; `control_hunting`'s `resolution_margin` parameter and
+  its metrics `fan_on_hours` and `fault_reachable`. **Behaviour change:** both judge fan-on
+  samples, and `control_hunting` declines (`info`) a threshold the trend cannot reach.
+- **Heat-pump trend interval and defrost** (0.106; #185), additive and provisional: the
+  `max_interval_min` parameter of `heatpump_defrost` and `compressor_staging` and their metrics
+  `interval_min` and `n_partial`; the `max_defrost_min` parameter of `hp_mode_vs_need`,
+  `hp_capacity_shortfall` and `hp_room_imbalance` (`heatpump_ops_rule.MAX_DEFROST_MIN`, 15
+  minutes) and `hp_mode_vs_need`'s metric `defrost_hours`; `hp_capacity_shortfall`'s verdict `room_fight` and its metrics
+  `verdict_alone`, `deferred_to`, `room`, `heating_opposite_pct` and `cooling_opposite_pct`.
+- **Edge row digests and the upload inbox** (0.107; #142), additive and provisional: the module
+  `camber.edge.row_digest` (`rows_digest`, `file_rows_digest`, `PartitionRows`,
+  `DIGEST_VERSION`, `INDEX_NAME`); the quarantine reason `duplicate`; the `inbox=` keyword of
+  `camber.edge.landing.route_key`; the edge config key `part_layout` (`canonical` or `legacy`;
+  env `CAMBER_EDGE_PART_LAYOUT`), the forwarder's `part_layout=` and
+  `camber.edge.forwarder.PART_LAYOUTS`; and the manifest fields `part_layout` and
+  `rows_sha256`. The partition cache `_edge_rows.json` is a private file. **Behaviour change:**
+  the forwarder writes canonical parts, and the landing quarantines a re-sent month whose rows
+  it already holds.
+- **RCx report as PDF** (0.107; #197), additive and provisional: `RcxReport.to_pdf(path=None)`,
+  the `pdf` extra and `camber report --layout rcx --out FILE.pdf`. The PDF's layout follows the
+  HTML and may change with it.
+- **Excess outside-air cost** (0.107; #195), additive and provisional: the `fault_economics`
+  estimate for `outdoor_air_fraction` and `economizer_high_limit` findings; the
+  `EquipmentLoad` fields `supply_airflow_cfm`, `design_oa_cfm` and `heat_pump_cop`; the rules'
+  `oa_cost_*` metrics and `outdoor_air_fraction`'s `min_oa_source`; in `camber.oafraction`,
+  `excess_oa_penalty`, `humidity_ratio`, `moist_air_enthalpy`, `SENSIBLE_BTUH_PER_CFM_F`,
+  `ENTHALPY_BTUH_PER_CFM`, `HEATING_RISE_F` and `HEATING_VALVE_PCT`; and the rule attribute
+  `roles_cost`. **Behaviour change:** `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`
+  (the generic 20 %, judged as before, but not priced).
+- **RCx zone chains** (0.107; #196), additive and provisional: `camber.rules.triage.ZONE_CHAINS`,
+  `ZONE_ROGUE_LINKS`, `ZoneLink`, `zone_chain_gaps`, `Issue.zone_links` and the `zone_chains`
+  key of `Issue.to_dict()`. The chain pairs may change in a minor release. **Behaviour change:**
+  with a declared served-by topology, box findings join their air handler's issue.
+- **Gates for valves, DX units and towers** (0.107; #199, #201, #202), additive and provisional:
+  `simultaneous_heat_cool`'s metric `valve_coverage_pct` and
+  `camber.rules.simul_hc.VALVE_COVERAGE_CAVEAT_PCT`; the decline reasons `no_valve_data`,
+  `no_run_gate`, `no_operating_signal` and `never_running`; `cooling_tower_approach`'s metric
+  `run_gate` and the `run_mask=` keyword of `analyze_cooling_tower_approach`. **Behaviour
+  changes:** each rule declines (`info`) where it used to judge every sample.
+- **Air-side gates and occupancy** (0.107; #198, #200), additive and provisional:
+  `airflow_tracking`'s `abs_tol` parameter (cfm, default 0: off) and its metrics `fan_gate` and
+  `occupancy_gate`; the `occupied=` keyword of `camber.iaq.analyze_co2_ventilation` and the
+  `occupancy_basis` metric of `co2_ventilation` and `co2_ventilation_system`. **Behaviour
+  changes:** `airflow_tracking` judges fan-on samples (and occupied ones when occupancy is
+  trended); the CO2 rules use a trended occupancy point in place of the assumed schedule.
+- **Dataset writes in a workspace** (0.107; #212, #213, #218), additive and provisional: the
+  `reason=` keyword of `camber.datasets.ingest` and `remove`, the CLI flags `datasets ingest
+  --reason` and `datasets remove --reason`, `--yes` and `--confirm ID`, and the audit actions
+  `datasets.ingest`, `datasets.remove` and `datasets.purge`; the `leftovers` and
+  `empty_facilities` keys of the `store verify` report. `camber.datasets._lifecycle` and
+  `camber.store._swap` are private. **Behaviour changes:** inside a workspace an ingest or a
+  purge follows the facility lifecycle and refuses a facility under a legal hold or not
+  `provisioning` / `active`, a forced re-ingest included; `datasets config --out` refuses a
+  dataset that is not ingested.
+- **M&V report fixes** (0.107; #208, #209, #210), additive and provisional:
+  `NormalizedSavings.n_excluded`, `MeterChain.meter_unit` and the `model_label` field of the
+  freeze and rebaseline plan rows.
 
 ### The read API server: `camber.api.server`
 

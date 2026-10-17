@@ -6,6 +6,11 @@ site_name: CAMBER
 site_description: Vendor-neutral building-automation-system trend analysis — FDD, M&V, RCx.
 repo_url: https://github.com/yroussev/camber
 docs_dir: docs
+# a link to a heading that does not exist is a warning, so `mkdocs build --strict` fails on it
+# (#220); the heading ids are the docs site's (Python-Markdown toc slugs), not GitHub's
+validation:
+  links:
+    anchors: warn
 theme:
   name: material
   palette:

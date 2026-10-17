@@ -111,6 +111,44 @@ def test_references_doc_lists_every_mapped_rule():
         assert f"`{rule}`" in doc, rule
 
 
+def _pnnl_ids_cited(text: str) -> set:
+    """The PNNL reference ids a basis names: an explicit id, or "Re-tuning Ch.N"."""
+    ids = set(re.findall(r"pnnl-[a-z0-9-]*[a-z0-9]", text))
+    for n in re.findall(r"(?i)re-?tuning\s+ch(?:apter|\.)?\s*(\d+)", text):
+        ids.add(f"pnnl-retuning-ch{n}")
+    return ids
+
+
+def test_a_pnnl_reference_a_parameter_basis_cites_is_mapped_to_its_rule():
+    """#222: a basis that cites a PNNL guide or chapter gives the rule its Learn-more link."""
+    from camber.rules.param_docs import DRIFT_PARAM_DOCS, PARAM_DOCS
+
+    assert _pnnl_ids_cited("PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling)") == {
+        "pnnl-retuning-ch8",
+        "pnnl-guide-plant-cooling",
+    }
+    missing = []
+    for docs in (PARAM_DOCS, DRIFT_PARAM_DOCS):
+        for rule, params in docs.items():
+            for param, doc in params.items():
+                cited = _pnnl_ids_cited(doc.basis)
+                assert cited <= set(R.REFERENCES), (rule, param, cited)
+                gap = cited - set(R.RULE_REFERENCES.get(rule, ()))
+                if gap:
+                    missing.append((rule, param, sorted(gap)))
+    assert not missing, f"bases cite PNNL references their rule is not mapped to: {missing}"
+
+
+def test_references_doc_lists_every_mv_reference():
+    """#222: the M&V table on the references page has a row for every MV_REFERENCES id."""
+    with open(os.path.join(_ROOT, "docs", "REFERENCES.md"), encoding="utf-8") as fh:
+        doc = fh.read()
+    rows = re.findall(r"^\| `([a-z0-9-]+)` \|", doc, flags=re.M)
+    assert sorted(rows) == sorted(R.MV_REFERENCES)
+    for rid in R.MV_REFERENCES:
+        assert f"]({R.REFERENCES[rid].url})" in doc, rid
+
+
 def test_helpers_and_link_policy():
     assert R.reference_ids_for("economizer_high_limit")[0] == "pnnl-guide-economizer"
     assert R.references_for("no_such_rule") == []

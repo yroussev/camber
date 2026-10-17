@@ -76,6 +76,7 @@ Dependency-light and always on. It scores every `Role` from three signals:
   correctly named °C temperature failed its bounds and landed on `wetbulb_temp`. The same unit-aware
   check gates `MLSuggester` and `LLMSuggester`.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mapping_assist import suggest_roles
 
@@ -161,6 +162,7 @@ point. `FeatureSuggester(use_timeseries=True)` also reads **what the data says**
   to 0.1 once the best lexical score reaches 0.6 (`INFORMATIVE_NAME`), so an informative name
   still dominates and the data only breaks its ties.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mapping_assist import FeatureSuggester, suggest_roles
 
@@ -687,6 +689,7 @@ naming.*
 The front door for a whole tag set. It reuses `mapping_confidence.review()` to find the tags that
 **don't** resolve, attaches ranked suggestions to each, and returns a human-confirm artifact:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mapping_assist import review_unmapped
 
@@ -721,6 +724,7 @@ Behind the `[ml]` extra (`pip install camber-toolkit[ml]`), imported lazily so t
 character-n-gram `scikit-learn` classifier. It ships **no pretrained weights** (clean-room); you train
 it on your own labels or bootstrap from an existing mapping:
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mapping_assist import MLSuggester
 
@@ -743,6 +747,7 @@ roles. Then the deterministic layer disposes:
 - every surviving proposal is **re-scored** through `mapping_confidence.score_token`, so a
   physically-inconsistent suggestion can't outrank a good one.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.mapping_assist import LLMSuggester
 from camber.agent import client_from_callable

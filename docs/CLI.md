@@ -7,13 +7,16 @@ analysis pipeline and the grounded agent as subcommands.
 camber run     <config.json> [--out DIR]        # run a config, print/write findings
 camber report  <config.json> --out site.html    # run + write an HTML audit report
                [--layout audit|rcx|<plugin>]    # rcx: the printable retro-commissioning layout
-camber explain <config.json> [--llm-cmd CMD]    # grounded plain-language explanation of findings
-camber ask "<question>" --config <config.json>  # grounded natural-language Q&A over the run
-camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
-camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
+camber explain <config.json> [--llm-cmd CMD] [--no-strict]   # grounded explanation of findings
+camber ask "<question>" --config <config.json> [--llm-cmd CMD] [--no-strict]   # grounded Q&A
+camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] [--no-strict]   # rollup + triage
+camber charts  (--csv F | --demo none|reheat) [--ahu N] [--timestamp-col COL] [--resample R]
+               [--occupied-only] [--threshold PCT] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
 camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth token|none]   # read-only API + live /ui
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
+camber mv      run|freeze|list|propose|rebaseline|adjust|report <config.json>   # M&V baselines
+camber bacnet-discover [--config bacnet.yml] [--device ADDR]... [--out inventory.json]   # read-only
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
@@ -204,7 +207,9 @@ camber ask "which zones are uncomfortable and why?" --config site.json \
 This is deliberately **vendor-neutral**: CAMBER names and imports no provider. The subprocess wrapper
 lives in the CLI, not in `camber.agent`, so the agent package stays free of I/O (enforced by
 `tests/test_agent_readonly_guard.py`). Every answer is verified against the fact whitelist; ungrounded
-claims are repaired (or the answer falls back to the template).
+claims are repaired (or the answer falls back to the template). `--no-strict` (on `explain`, `ask`
+and `fleet`) turns the repair off: the check still flags ungrounded sentences and unknown
+citations, but the model's text is printed as written, which helps when debugging a model.
 
 ## Portfolio triage
 
@@ -255,6 +260,23 @@ When a fix lands, the reference *should* move — on someone's say-so:
 ```sh
 camber drift accept config.json --equip AHU_1 --by "A. Engineer" --reason "filter replaced"
 ```
+
+Every option:
+
+```
+camber drift run    <config.json> [--out DIR] [--run-id ID]
+camber drift report <config.json> --out drift.html [--charts] [--run-id ID]
+camber drift freeze <config.json> [--reason R] [--dry-run] [--run-id ID]
+camber drift list   <config.json> [--equip E]... [--kind K]... [--json FILE]
+camber drift accept <config.json> --equip E... --by NAME --reason R [--kind K]...
+                    [--period START END] [--dry-run] [--run-id ID]
+```
+
+`--run-id` stamps an id of your choosing (a scheduler's run id, say) on the results of `run` and
+`report`, and as the `frozen_at` of what `freeze` and `accept` write (default: now, UTC).
+`--dry-run` shows what `freeze` or `accept` would write without writing it. `--kind` narrows
+`list` and `accept` to one model kind (repeatable). `accept --period` re-fits over that window
+instead of the config's `drift.current`.
 
 ### The write policy is a verb, not a setting
 
@@ -380,15 +402,28 @@ years, with every version kept and every move attributed. See
 [MANDV.md](MANDV.md#versioned-baselines-and-rebaselining) for the triggers and the window rule.
 
 ```sh
-camber mv freeze     config.json --reason "2016 baseline" [--by NAME] [--apply]
+camber mv freeze     config.json --reason "2016 baseline" [--by NAME] [--apply] [--allow-short]
 camber mv list       config.json [--json versions.json]
 camber mv run        config.json [--out d/]              # read-only
 camber mv propose    config.json [--as-of 2018-12-31] [--json proposal.json]
 camber mv rebaseline config.json --equip METER --by NAME --reason "wing closed" \
-                     [--period START END | --from-proposal proposal.json] [--trigger T2] [--apply]
-camber mv adjust     config.json --equip METER --spec ledger.json --by NAME --reason R [--apply]
+                     [--period START END | --from-proposal proposal.json] [--trigger T2] \
+                     [--as-of DATE] [--apply]
+camber mv adjust     config.json --equip METER --spec ledger.json --by NAME --reason R \
+                     [--as-of DATE] [--apply]
 camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [--no-charts]
 ```
+
+Every `mv` command takes `--store FILE` (the baseline store; see below). All but `run` take
+`--equip METER` (repeatable) to act on those meters only; `rebaseline` and `adjust` require it.
+The writers (`freeze`, `rebaseline`, `adjust`) take `--run-id ID`, stamped as the new version's
+`frozen_at` (default: now, UTC).
+
+**`freeze --allow-short`** is the only way past the baseline-length rule. A baseline window must
+span `min_baseline_days` (365) consecutive days with at most `max_missing_frac` (10 %) of them
+missing (SEP 2019 §4.2, IPMVP §4.5.2, CalTRACK §3.1.3); `freeze` refuses a shorter or gappier
+window and names the override. With `--allow-short` the version is frozen with a caveat that
+records the shortfall, and the SEP methods are still declined on it.
 
 - **`run`**, **`list`**, **`propose`** and **`report`** only read the store. `run` measures each
   meter against its version in force and prints the `mv_savings` and `mv_trigger` findings.
@@ -437,6 +472,29 @@ finding reports the days dropped as `n_days_dropped`, with a caveat. Temperature
 Outside a workspace, name the store with the config's top-level `"mv_store"` (or `--store`).
 `camber portfolio migrate` moves it, every version included, to `state/<fid>/mv_baselines.json`.
 
+## BACnet discovery
+
+`camber bacnet-discover` walks a BACnet/IP network read-only (Who-Is, then each device's
+`object-list` and its objects' names, units and descriptions) and bootstraps a role mapping
+from what it finds. It needs the `bacnet` extra (`pip install "camber-toolkit[bacnet]"`). See
+[INGEST-PROTOCOLS.md](INGEST-PROTOCOLS.md#discovery-camberingestbacnet_discovery).
+
+```
+camber bacnet-discover [--config bacnet.yml] [--local-address IP[:PORT]] [--instance N]
+                       [--timeout S] [--range-low N --range-high N] [--device ADDR]...
+                       [--out inventory.json]
+```
+
+- **`--config`** reads a `BacnetClientConfig` YAML or JSON file; the other flags override it.
+- **`--local-address`** is the interface to bind on a multi-homed host, **`--instance`** this
+  host's BACnet device instance, and **`--timeout`** the per-request timeout in seconds.
+- **`--range-low` / `--range-high`** (both together) limit the Who-Is to that device-instance
+  window.
+- **`--device ADDR`** (repeatable) names a known device address: discovery goes to those devices
+  by unicast and skips the broadcast Who-Is, for networks a broadcast does not cross.
+- It prints the count of devices, objects and mapped roles; **`--out`** writes the inventory and
+  the roles as JSON. It only reads: no property on a device is ever written.
+
 ## open-fdd interop (provisional, 0.99)
 
 `camber interop openfdd` reads open-fdd building packages (`openfdd_package_v1`, a folder or a
@@ -450,7 +508,8 @@ camber interop openfdd ingest PKG --timezone TZ --units ip|si (--store DIR | --w
                         [--resample 15min|native] [--equip-types FILE] [--reason TEXT]
                         [--force] [--config-out run.json] [--json result.json]
                         [--lock-timeout SECONDS]
-camber interop openfdd inspect PKG --timezone TZ --units ip|si [--building B] [--json FILE]
+camber interop openfdd inspect PKG --timezone TZ --units ip|si [--building B]
+                        [--resample 15min|native] [--equip-types FILE] [--json FILE]
 camber interop openfdd crosswalk [--json]           # the open-fdd -> CAMBER role table
 camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-' = stdout)
 ```
@@ -474,17 +533,20 @@ them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DA
 camber datasets list [--licence commercial|all] [--kind simulated|real|lab|synthetic] [--labeled] [--json]
 camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
-                        [--lock-timeout SECONDS]
-camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
+                        [--quiet] [--lock-timeout SECONDS]
+camber datasets ingest <id>... | --all --store DIR [--subset S] [--dir D] [--force] [--no-corrections]
                         [--from-dir DIR] [--accept-noncommercial] [--reason R]
-                        [--lock-timeout SECONDS]
+                        [--quiet] [--lock-timeout SECONDS]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store [--reason R --yes|--confirm ID]]
                         [--lock-timeout SECONDS]
 camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
                         [--facility ID] [--exercise EX]
-camber datasets score  <id> --store DIR [--findings findings.json] [--json]
+camber datasets score  <id> --store DIR [--findings findings.json] [--facility ID] [--json]
 ```
+
+`--dir` names the dataset cache (default: `$CAMBER_DATA_DIR`, else `~/.cache`); `--quiet`
+turns off the progress output of `fetch` and `ingest`.
 
 **Workspace stores** (0.107, #212). When `--store` belongs to a portfolio workspace, `ingest` and
 `remove --purge-store` follow the facility lifecycle, as `camber lab` does. `ingest` needs
@@ -627,7 +689,8 @@ A second writer waits, then exits 1 naming the holder:
 `store <path> is locked by <pid>@<host> since <time>`. The wait is:
 
 - `--lock-timeout SECONDS` on `datasets fetch|ingest|remove`, `lab`, `interop openfdd ingest`,
-  `store migrate-partitions` and `store normalize`. `0` fails at once; a negative or non-numeric value is a usage error
+  `store migrate-partitions` and `store normalize`, and on `retention apply` (see below). `0`
+  fails at once; a negative or non-numeric value is a usage error
   (exit 2);
 - else the `CAMBER_LOCK_TIMEOUT` environment variable (same rules; a bad value exits 2 before
   anything runs);
@@ -670,11 +733,11 @@ camber retention show [--facility ID] [--json]          # 0.95: policy, override
 camber retention set CLASS KEY=VALUE... --reason R      # e.g. set raw_trends keep_months=36
 camber retention override ID CLASS (KEY=VALUE... | --clear) --reason R
 camber retention hold|release ID --reason R              # legal hold
-camber retention apply [--facility ID] [--now DATE] [--json]            # dry run: the plan
-camber retention apply --apply --reason R --yes [--lock-timeout S]      # roll up, verify, prune
-camber store migrate-partitions STORE [--apply --yes] [--reason R] [--lock-timeout S]
+camber retention apply [--facility ID] [--now DATE] [--dry-run] [--json]  # dry run: the plan
+camber retention apply --apply --reason R (--yes | --confirm WORD) [--lock-timeout S]   # prune
+camber store migrate-partitions STORE [--apply --yes] [--dry-run] [--reason R] [--lock-timeout S] [--json]
 camber store verify STORE [--facility ID] [--strict] [--limit N] [--json]   # read-only, no lock
-camber store normalize STORE [--facility ID] [--apply --yes] [--reason R] [--lock-timeout S] [--json]
+camber store normalize STORE [--facility ID] [--apply --yes] [--dry-run] [--reason R] [--lock-timeout S] [--json]
 ```
 
 Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
@@ -762,7 +825,8 @@ central side, where uploads land (see
 
 ```
 # on the edge device
-camber edge compact <edge.json> [--dry-run] [--json]          # shrink the spool journal (loss-free)
+camber edge compact <edge.json> [--dry-run] [--lock-timeout S] [--json]   # shrink the spool journal
+                                     # (--lock-timeout: wait for a busy spool, default 30 s)
 camber edge decommission <edge.json> [--device ID] [--wait S]  # dry run: what would be flushed
 camber edge decommission <edge.json> --apply (--yes | --confirm FACILITY_ID) --reason R
                          [--force] [--workspace W] [--json]    # flush, wait for acks, retire

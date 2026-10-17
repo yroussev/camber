@@ -81,6 +81,14 @@ No code needed — add a tag→role mapping (a JSON file like the ones under
 
 - Docs live in `docs/` and build with **MkDocs (Material)**; add new pages to the `nav` in
   `mkdocs.yml`.
+- **Python examples run.** `tests/test_docs_fences.py` runs every `python` fence in README.md
+  and docs/, each page's fences in order in one interpreter, offline. Write an example that runs
+  as shown. When it cannot (a fragment of a longer flow, or one that needs a dataset, a store, a
+  file, an optional extra or the network), put `<!-- fence: skip (reason) -->` on the line just
+  above the fence; the comment renders on neither GitHub nor the docs site.
+- **The CLI reference is checked.** `tests/test_cli_reference.py` fails when docs/CLI.md does not
+  name a command or option of the parser. Document a new flag there, or list it with a reason in
+  the test's `HIDDEN`.
 - Diagrams are **inline Mermaid** — a fenced ` ```mermaid ` block, rendered client-side by
   mkdocs-material (enabled via the `pymdownx.superfences` custom fence). No external tool or
   image assets; a diagram is authored where it belongs, in the page. Conventions:

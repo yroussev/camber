@@ -35,6 +35,7 @@ Scope-2 footprint. Factors are user-supplied (from a grid-signal provider); no h
 
 ### Emissions against a time-varying factor — `hourly_emissions`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.carbon_hourly import hourly_emissions
 
@@ -49,6 +50,7 @@ accepts a g/kWh factor.
 
 ### Average vs marginal — `marginal_vs_average`
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.carbon_hourly import marginal_vs_average
 

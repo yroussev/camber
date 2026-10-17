@@ -3157,8 +3157,8 @@ _PUMP_CUSUM = {
 }
 _MIN_SPEED = _P(
     "% speed",
-    "public source: PNNL Re-tuning Ch.8 (pnnl-guide-plant-cooling, pnnl-guide-plant-heating): a "
-    "variable-speed pump parks at its drive minimum at part load -- the pump minimum speed that "
+    "public source: PNNL Re-tuning Ch.8 (its pump-speed and loop-DP topics): a variable-speed "
+    "pump parks at its drive minimum at part load -- the pump minimum speed that "
     "ASHRAE Guideline 36 has the TAB contractor set -- and samples held there by the drive say "
     "nothing about flow or head at a speed; CAMBER judgment for the 2-point tolerance (the "
     "learned floor's 1-point plateau plus a point of drive jitter) and the 15 % fallback",

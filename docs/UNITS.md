@@ -331,6 +331,7 @@ evidence, combines it by a fixed rule and returns a `UnitScaleCheck`: the most l
 confidence (`high`, `medium`, `low`), a status and a readable explanation. **It never corrects
 anything.** A correction is an explicit `scale_override` with a reason, recorded on every result.
 
+<!-- fence: skip (fragment) -->
 ```python
 from camber.unit_scale import check_bills
 

@@ -102,6 +102,7 @@ camber run covid.json --out covid_out
 
 **Part 4, bills only.** Save this as `make_bills.py` next to `lab_store`:
 
+<!-- fence: skip (needs a store) -->
 ```python
 import sys
 

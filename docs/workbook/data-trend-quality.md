@@ -77,6 +77,7 @@ camber report irish.json --layout rcx --out irish_rcx.html
 The report's trust table covers the air-handler points. For the others (a zone's CO2, a
 meter) and for the screens the report does not run, read the same store in Python:
 
+<!-- fence: skip (needs a store) -->
 ```python
 from camber.model.roles import Role
 from camber.sensorhealth import frame_sensor_health, gapfill_signature, sensor_trust

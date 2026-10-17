@@ -540,6 +540,7 @@ legal hold (its `rules` read `keep: legal_hold`, `min_age_days: null`).
 
 ## Library use
 
+<!-- fence: skip (needs a file) -->
 ```python
 from camber.portfolio import Portfolio
 
@@ -564,6 +565,7 @@ lc.update(findings, run_id="2026-09-26T06:00", site="any label")  # keyed by fid
 `camber.portfolio.transition(state, action, legal_hold=False)` is the pure state machine, with no
 I/O. `allowed_actions(state)` lists what may follow.
 
+<!-- fence: skip (fragment) -->
 ```python
 pf.offboard(fid, reason="contract ended")  # the plan (a dry run)
 pf.offboard(fid, reason="contract ended", apply=True)  # bundle, then offboarding
@@ -577,6 +579,7 @@ pf.recover()  # finish whatever a crash interrupted (every command runs it first
 `Portfolio.transition(fid, "offboard" | "archive" | "restore", reason=...)` runs the same
 cascade with `apply=True`; `purge` must go through `Portfolio.purge(..., confirm=fid)`.
 
+<!-- fence: skip (fragment) -->
 ```python
 pf.set_retention("raw_trends", {"keep_months": 36}, reason="board decision")
 pf.set_retention_override(fid, "reports", {"keep_last": 24}, reason="contract")

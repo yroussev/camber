@@ -489,9 +489,15 @@ _CH4, _CH5, _CH6, _CH7, _CH8 = (f"pnnl-retuning-ch{n}" for n in (4, 5, 6, 7, 8))
 #: rule name -> reference ids, most specific first. A rule with no clear match is absent.
 RULE_REFERENCES: dict = {
     # air-side economizer and outdoor air
-    "outdoor_air_fraction": ("pnnl-guide-economizer", "pnnl-guide-min-oa", _CH6),
-    "economizer_high_limit": ("pnnl-guide-economizer", _CH6),
+    # ch. 5's minimum outdoor-air section gives the OA fraction from the mixing-box temperatures,
+    # which both rules compute and guard (0.107, #222)
+    "outdoor_air_fraction": ("pnnl-guide-economizer", "pnnl-guide-min-oa", _CH6, _CH5),
+    "economizer_high_limit": ("pnnl-guide-economizer", _CH6, _CH5),
     "free_cooling_missed": ("pnnl-guide-economizer", _CH6),
+    # 0.107 (#222): ch. 6's damper checks (a mixed-air temperature that does not follow the damper
+    # command: a failed actuator, loose linkage or broken seals) and ch. 5's OA fraction. The
+    # economizer guide's headings judge the sequence, not the damper's delivery: not linked.
+    "economizer_damper_drift": (_CH6, _CH5),
     # ventilation: minimum outdoor air, DCV and 62.1
     "dcv_verification": ("pnnl-guide-min-oa", _CH5),
     "dcv_system_verification": ("pnnl-guide-min-oa", _CH5),
@@ -509,6 +515,8 @@ RULE_REFERENCES: dict = {
     "supply_air_control": ("pnnl-guide-discharge-air-temp", _CH5),
     "simultaneous_heat_cool": ("pnnl-guide-ahu-heat-cool", _CH5),
     "leaking_valve": ("pnnl-guide-ahu-heat-cool", _CH5),
+    # 0.107 (#222): ch. 5's leaking cooling and heating valve checks
+    "coil_leak_drift": (_CH5,),
     "control_hunting": (_CH5,),
     # BEGIN slot #146 (AHU maintenance): rule mappings
     # the walk-down chapter's air-handler inspection list names "missing, dirty, plugged or
@@ -543,7 +551,7 @@ RULE_REFERENCES: dict = {
     #   G36 sequence the guides predate) and g36_afdd (cites Guideline 36 itself);
     # - the DX rules other than compressor_short_cycle and compressor_staging (the course covers
     #   built-up air handlers and central plants; the heat-pump rules map to slot #147's guides);
-    # - the drift detectors other than the two plant ones mapped below.
+    # - the air-side drift detectors other than economizer_damper_drift and coil_leak_drift.
     # packaged units (0.103, #125): the small-building course's measures chapter covers packaged
     # units and the thermostats that cycle them
     "compressor_short_cycle": ("pnnl-small-retuning-ch3",),
@@ -572,6 +580,14 @@ RULE_REFERENCES: dict = {
     "chiller_approach_fouling": (_CH8,),
     "chiller_staging_fleet": (_CH8,),
     "cooling_tower_fan_effort_drift": (_CH8,),
+    # the pump family's drift detectors (0.107, #222): ch. 8's pump speed, loop DP and delta-T
+    # topics. Only loop delta-T has a guide heading ("Is the loop delta-T low?"); the guides' DP
+    # headings ask about resetting the setpoint, which these detectors do not judge.
+    "pump_flow_drift": (_CH8,),
+    "pump_head_drift": (_CH8,),
+    "loop_deltat_drift": ("pnnl-guide-plant-cooling", _CH8),
+    "loop_dp_drift": (_CH8,),
+    "pump_power_drift": (_CH8,),
     # central plant, heating
     "hw_plant_deltat": ("pnnl-guide-plant-heating", _CH8),
     "hw_pump_dp_reset": ("pnnl-guide-plant-heating", _CH8),
@@ -580,6 +596,12 @@ RULE_REFERENCES: dict = {
     # 0.103 (#132): the heating guide's warm-weather shutdown and ch. 8's pump lockout
     "hw_pump_summer_lockout": ("pnnl-guide-plant-heating", _CH8),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
+    # the hot-water twins of the pump family's drift detectors (0.107, #222), as above
+    "hw_pump_flow_drift": (_CH8,),
+    "hw_pump_head_drift": (_CH8,),
+    "hw_loop_deltat_drift": ("pnnl-guide-plant-heating", _CH8),
+    "hw_loop_dp_drift": (_CH8,),
+    "hw_pump_power_drift": (_CH8,),
 }
 
 
