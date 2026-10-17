@@ -99,6 +99,45 @@ economizer hours no longer count as plant symptoms; `UpstreamCause.unit_hours` r
 (`Issue.downstream`). A config `topology` ([TOPOLOGY.md](TOPOLOGY.md)) decides which plant
 serves which unit; without one the site's plant is assumed and the line says so.
 
+**AHU-to-VAV cause chains (0.107, #196).** A high supply-air temperature at an air handler and
+widespread "zone can't cool" findings at its boxes are one problem, so they are one issue. When
+the config declares a served-by `topology`, an AHU finding roots an issue, and the matching
+findings on the boxes the topology says it serves become its members. The page opens with a
+"Cause chain" banner ("supply air too warm at AHU-1 → zones can't cool on 14 of 22 boxes it
+serves"), and the member table marks each box row with its box. The Equipment cell, on the page
+and in the summary, reads "AHU-1 + 14 of 22 boxes". The count is out of every box the topology
+lists under the air handler. Only the first two box members get evidence charts, and the table
+lists all of them. The pairs are a small, explicit table (`camber.rules.triage.ZONE_CHAINS`), and
+each test reads the rules' own metrics:
+
+| Chain | AHU-side root | Box-side symptom |
+|---|---|---|
+| `sat_high` | `supply_air_control` with too-warm leading; `g36_afdd` FC13; `sat_reset_effectiveness` not responding (parked warm under demand) | `unmet_setpoint_hours` with too-hot leading |
+| `sat_low` | `supply_air_control` with too-cold leading; `supply_air_reset` (warns only when SAT is held cold); `supply_air_reset_compliance`; `sat_reset_effectiveness` not trimming (and not also parked warm) | `overcooling_min_flow`, `overcooling_severity`, `reheat_penalty`, `reheat_minimization_g36` |
+| `static_low` | `g36_afdd` FC1 (duct static too low at full fan); `static_reset_effectiveness` not responding | `airflow_tracking` with under-setpoint leading; `unmet_setpoint_hours` with too-hot leading (a starved box can't cool) |
+
+A box finding joins the first chain, in table order, whose root sits on an air handler that
+serves the box. The chain's dollars and hours follow the rules above: its cost is the largest
+member, never the sum, so boxes that were priced one by one count once, and its hours are the
+union of the members' masks. A box symptom joins only when its hours coincide with the root's.
+Each side's mask must cover at least a quarter of the other's, and a G36 root is read on its own
+FC13 or FC1 hours. When a side has no mask, the box joins and the "why" line says the overlap was
+not assessed. Some symptoms stay their own issues and are counted on the link: a symptom out of
+the root's hours, and a symptom that leans on a distrusted sensor. An AHU finding that leans on
+one roots no chain. A SAT or static reset that does not reset also links to the rogue zones a
+fleet rogue-zone census names (`ZONE_ROGUE_LINKS`). The census is one finding over many air
+handlers, so it is listed on each air handler whose boxes it names, and it stays its own issue.
+
+Nothing is guessed. Without a declared topology, nothing is linked. A naming guess (provenance
+`heuristic`) is not used. A box the topology does not cover is not linked either, and Appendix A
+names those boxes ("AHU-to-VAV cause chains not linked (missing topology)"). A box served by
+another air handler stays separate. `Issue.zone_links` holds the links (`ZoneLink`: the chain,
+the air handler, the boxes, the boxes served, and the boxes kept out), and `to_dict()` issues
+carry them as `zone_chains`. The `synthetic-g36-vav-fleet` run template declares its topology,
+but its rules form no chain. The air handler whose resets fail (`not_responding`) has no box
+symptom among the template's rules, and the rogue boxes sit under air handlers whose resets are
+effective.
+
 **G36 advice needs a declared G36 sequence.** A recommended action that prescribes a Guideline 36
 sequence is given as the fix only when the config declares one for the unit: a `soo` entry with a
 `g36_*` library for its class (a terminal unit counts when its air handler's class, `AHU`, has one).

@@ -2361,6 +2361,7 @@
     "FaultRegister",
     "G36_SAT_HIGH_FCS",
     "Issue",
+    "OVERCOOL_REHEAT_RULES",
     "PLANT_CAPACITY_RULES",
     "Ranked",
     "RootCauseGroup",
@@ -2369,6 +2370,9 @@
     "SHARED_ROLES",
     "SensorCause",
     "UpstreamCause",
+    "ZONE_CHAINS",
+    "ZONE_ROGUE_LINKS",
+    "ZoneLink",
     "finding_confidence",
     "group_findings",
     "impact_score",
@@ -2376,7 +2380,8 @@
     "issue_totals",
     "link_findings",
     "rank_findings",
-    "sensor_causes"
+    "sensor_causes",
+    "zone_chain_gaps"
   ],
   "camber.rules.unmet_rule": [
     "UnmetHours"
