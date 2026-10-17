@@ -175,3 +175,28 @@ def test_the_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("AHU_1", worse, worse)
     assert store.get("SITE", "AHU_1", "economizer_damper").coefficients == coeffs
     assert f.severity == "fault"
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_pct": 1e6, "fault_pct": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_move_short_of_the_floors_names_no_cause():
+    """An OA-fraction move under the floors keeps its sign, names no cause (0.106, #189)."""
+    for drift, sign in ((24.0, "+"), (-24.0, "-")):
+        f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods("AHU_1", *_base_and(drift_pp=drift))
+        assert f.severity == "ok"
+        assert f.summary.startswith(
+            f"AHU_1: economizer OA fraction holds near its baseline ({sign}"
+        )
+        assert "pp, " in f.summary and "at matched damper command)" in f.summary
+        for word in ("leaking", "stuck", "slipping", "delivering", "free cooling", "excess"):
+            assert word not in f.summary
+
+
+def test_flagged_moves_keep_the_cause():
+    up = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and(drift_pp=24.0))
+    down = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and(drift_pp=-24.0))
+    assert up.severity in ("warn", "fault") and "damper leaking / stuck" in up.summary
+    assert down.severity in ("warn", "fault") and "damper stuck or slipping" in down.summary

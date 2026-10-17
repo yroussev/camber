@@ -353,3 +353,29 @@ def test_a_noiseless_baseline_falls_back_to_degF_and_says_so():
     assert any("could not run the sustained-shift alarm" in c for c in f.caveats)
     assert "temporal_threshold_confidence" not in f.metrics
     assert f.metrics["magnitude_threshold_confidence"] == MAGNITUDE_CONFIDENCE
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_f": 1e6, "fault_f": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_move_short_of_the_floors_names_no_cause():
+    """A range move under the floors keeps its sign but names no cause (0.106, #189)."""
+    for factor, sign in ((0.72, "+"), (1.65, "-")):
+        f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+            "CH_1", *_base_and({"flow_factor": factor})
+        )
+        assert f.severity == "ok"
+        assert f.summary.startswith(f"CH_1: condenser-water range holds near its baseline ({sign}")
+        for word in ("flow", "bypass", "widened", "narrowed"):
+            assert word not in f.summary
+
+
+def test_flagged_range_keeps_the_cause():
+    up = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"flow_factor": 0.72}))
+    down = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"flow_factor": 1.65}))
+    assert up.severity == "fault" and up.summary.endswith("— less condenser-water flow")
+    assert down.severity == "fault" and down.summary.endswith(
+        "— more flow, or flow bypassing the condenser"
+    )

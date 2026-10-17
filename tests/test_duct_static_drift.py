@@ -131,3 +131,38 @@ def test_the_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("AHU_1", worse, worse)
     assert store.get("SITE", "AHU_1", "duct_static").coefficients == coeffs
     assert f.severity == "fault"
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn": 1e6, "fault": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_move_short_of_the_floors_names_no_cause():
+    """A static move under the floors keeps its sign but names no cause (0.106, #189)."""
+    for offset, sign in ((-0.4, "-"), (0.4, "+")):
+        f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+            "AHU_1", *_base_and({"static_off": offset})
+        )
+        assert f.severity == "ok"
+        assert f.summary.startswith(f"AHU_1: duct static holds near its baseline ({sign}0.")
+        assert "inH2O" in f.summary and "vs frozen baseline at matched airflow" in f.summary
+        for word in ("over-pressurization", "stuck damper", "cannot hold", "leakage", "rose"):
+            assert word not in f.summary
+
+
+def test_a_reset_driven_ok_says_the_reset_explains_it():
+    f = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and({"sp_off": 0.3}))
+    assert f.severity == "ok" and f.metrics["duct_static_setpoint_driven"] is True
+    assert f.summary.startswith("AHU_1: duct static rose 0.")
+    assert f.summary.endswith("-- explained by the static setpoint reset")
+    assert "over-pressurization" not in f.summary
+
+
+def test_flagged_static_keeps_the_cause():
+    up = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and({"static_off": 0.4}))
+    down = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and({"static_off": -0.4}))
+    assert up.severity == "fault" and up.summary.endswith(
+        "-- over-pressurization / sensor-low / stuck damper"
+    )
+    assert down.severity == "fault" and "the fan cannot hold setpoint" in down.summary

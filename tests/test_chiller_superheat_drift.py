@@ -212,3 +212,26 @@ def test_the_baseline_fit_is_load_normalized():
         load_col="tons",
     )
     assert indep is not None
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_f": 1e6, "fault_f": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_move_short_of_the_floors_names_no_cause():
+    """A superheat move under the floors keeps its sign but names no cause (0.106, #189)."""
+    for offset, sign in ((-5.0, "-"), (5.0, "+")):
+        f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+            "CH_1", *_base_and({"offset_f": offset})
+        )
+        assert f.severity == "ok"
+        assert f.summary.startswith(f"CH_1: suction superheat holds near its baseline ({sign}5.")
+        assert "starving" not in f.summary and "overfeeding" not in f.summary
+
+
+def test_flagged_superheat_keeps_the_cause():
+    up = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_f": 5.0}))
+    down = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_f": -5.0}))
+    assert up.severity in ("warn", "fault") and up.summary.endswith("-- evaporator starving")
+    assert down.severity in ("warn", "fault") and down.summary.endswith("-- evaporator overfeeding")

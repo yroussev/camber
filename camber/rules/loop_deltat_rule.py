@@ -44,6 +44,7 @@ from ..chillerdrift import (
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _pumpgates as G
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "loop_deltat"
@@ -361,11 +362,14 @@ class LoopDeltaTDrift:
 
         if severity == "ok":
             # 0.105 (#153): an ok finding names no fault -- the cause belongs to warn and fault
-            shift = f"{drift.drift_f:+.1f}"
-            shift = "0.0" if shift in ("+0.0", "-0.0") else shift
-            summary = (
-                f"{equip}: loop ΔT holds near its baseline ({shift}°F, "
-                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched flow)"
+            summary = holds_near_baseline(
+                equip,
+                "loop ΔT",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="°F",
+                matched="matched flow",
             )
         else:
             arrow = "widened" if direction == "up" else "collapsed"

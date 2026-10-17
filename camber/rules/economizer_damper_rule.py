@@ -53,6 +53,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "economizer_damper"
@@ -348,7 +349,18 @@ class EconomizerDamperDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "up":
+        if severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            headline = holds_near_baseline(
+                equip,
+                "economizer OA fraction",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=0,
+                unit="pp",
+                matched="matched damper command",
+            )
+        elif direction == "up":
             headline = (
                 f"{equip}: economizer over-delivering OA {drift.drift_f:+.0f}pp "
                 f"({drift.drift_sigma:.1f}σ) at matched damper command -- damper leaking / stuck "

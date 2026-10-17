@@ -53,6 +53,7 @@ from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from ..sensorhealth import PHYSICAL_BOUNDS
 from . import _chillerfit
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -307,17 +308,30 @@ class ChillerSuperheatDrift:
         # add a temporal claim that rests on the weaker, untuned parameters -- label both.
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        # up = starved (underfeed); down = overfed (floodback risk)
-        feed = "starving" if direction == "up" else "overfeeding"
+        if severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            summary = holds_near_baseline(
+                equip,
+                "suction superheat",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="°F",
+                matched="matched load",
+            )
+        else:
+            # up = starved (underfeed); down = overfed (floodback risk)
+            feed = "starving" if direction == "up" else "overfeeding"
+            summary = (
+                f"{equip}: suction superheat {'rose' if direction == 'up' else 'fell'} "
+                f"{abs(drift.drift_f):.1f}°F ({abs(drift.drift_sigma):.1f}σ) vs frozen baseline "
+                f"at matched load -- evaporator {feed}"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
             severity=severity,
             metrics=metrics,
-            summary=(
-                f"{equip}: suction superheat {'rose' if direction == 'up' else 'fell'} "
-                f"{abs(drift.drift_f):.1f}°F ({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at "
-                f"matched load -- evaporator {feed}"
-            ),
+            summary=summary,
             caveats=caveats,
         )

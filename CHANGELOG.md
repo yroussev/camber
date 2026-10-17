@@ -171,6 +171,21 @@ Releases before 0.98.0 are archived under [`docs/changelog/`](docs/changelog/ind
   "mostly idle" (#185).** The summary gives the split (in the needed mode, the other mode, idle),
   and a new metric per side, `heating_opposite_pct` / `cooling_opposite_pct`, holds the share in
   the other mode.
+- **An `ok` air-side, coil or chiller drift finding names no fault (#189).** The #187 fix now
+  covers the other drift detectors that named a cause for any move, even one under the floors.
+  `duct_static_drift` named "over-pressurization" or "the fan cannot hold setpoint",
+  `chiller_cw_range_drift` "less condenser-water flow" or "more flow",
+  `chiller_superheat_drift` an evaporator "starving" or "overfeeding", and
+  `economizer_damper_drift` a damper "leaking / stuck" or "slipping closed". On a rise,
+  `coil_valve_drift`, `vav_airflow_drift` and `vav_reheat_valve_drift` reported a "creep" with a
+  cause, `filter_loading_drift` called it "loading" and `fan_efficiency_drift` an "excess".
+  `coil_leak_drift` named "a leaking or passing valve" for a shift in the leak direction. An `ok`
+  finding now says the signal "holds near its baseline", with the signed shift and its σ. An `ok`
+  duct-static move that the static setpoint reset explains keeps its size and says so. All
+  `warn` and `fault` wording is unchanged, and so is the wording that says a fall is not a
+  fault. The pump and loop detectors now use the same helper, and their text is unchanged. Only
+  the text moves: no golden file quotes these summaries, and no severity, metric, caveat or
+  benchmark figure changes.
 
 ## [0.105.0] — Unreleased
 

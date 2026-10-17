@@ -55,6 +55,7 @@ from ..chillerdrift import (
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from ..schedules import effective_occupied_mask
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _RISE = "leak_rise_f"  # the coil's valve-shut air rise (leaving minus mixed air), degF
@@ -483,7 +484,18 @@ class CoilLeakDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if toward:
+        if toward and severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            headline = holds_near_baseline(
+                equip,
+                f"{self._label}-coil valve-shut air rise",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit="°F",
+                matched="matched mixed air",
+            )
+        elif toward:
             headline = (
                 f"{equip}: {self._label}-coil valve-shut air rise {drift.drift_f:+.1f}°F "
                 f"({drift.drift_sigma:+.1f}σ) vs frozen baseline at matched mixed air -- "

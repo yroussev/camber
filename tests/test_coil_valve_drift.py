@@ -223,3 +223,23 @@ def test_the_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("AHU_1", worse, worse)
     assert store.get("SITE", "AHU_1", "coil_valve_cool").coefficients == coeffs
     assert f.severity == "fault"
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_pct": 1e6, "fault_pct": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_rise_short_of_the_floors_names_no_cause():
+    """A valve rise under the floors is not called creep and names no cause (0.106, #189)."""
+    f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods("AHU_1", *_base_and({"foul_pct": 16.0}))
+    assert f.severity == "ok"
+    assert f.summary.startswith("AHU_1: cooling-coil valve holds near its baseline (+")
+    for word in ("creep", "fouling", "starvation", "authority"):
+        assert word not in f.summary
+
+
+def test_a_flagged_rise_keeps_the_cause():
+    f = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and({"foul_pct": 16.0}))
+    assert f.severity in ("warn", "fault") and "cooling-coil valve creep" in f.summary
+    assert f.summary.endswith("-- coil fouling / waterside starvation / valve-authority loss")

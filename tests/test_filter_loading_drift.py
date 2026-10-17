@@ -130,3 +130,23 @@ def test_the_clean_baseline_is_frozen_and_not_refit():
     f = rule.analyze_periods("AHU_1", worse, worse)
     assert store.get("SITE", "AHU_1", "filter_loading").coefficients == coeffs
     assert f.severity == "fault"
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_inwc": 1e6, "fault_inwc": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_rise_short_of_the_floors_is_not_called_loading():
+    """A filter-DP rise under the floors names no loading (0.106, #189)."""
+    f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+        "AHU_1", *_base_and({"loading_inwc": 0.4})
+    )
+    assert f.severity == "ok"
+    assert f.summary.startswith("AHU_1: filter DP holds near its baseline (+0.")
+    assert "loading" not in f.summary and "rose" not in f.summary
+
+
+def test_a_flagged_rise_keeps_loading():
+    f = _rule(BaselineStore()).analyze_periods("AHU_1", *_base_and({"loading_inwc": 0.4}))
+    assert f.severity in ("warn", "fault") and f.summary.endswith("-- loading")

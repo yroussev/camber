@@ -231,3 +231,25 @@ def test_it_declines_when_the_current_period_is_all_no_reheat():
     f = rule.analyze_periods("VAV_1", dead, dead)
     assert f.severity == "info" and f.metrics.get("declined") is True
     assert "nothing scoreable" in f.summary
+
+
+# --------------------------------------------------------------------------- ok wording (#189)
+
+_NO_FLOOR = {"warn_pct": 1e6, "fault_pct": 2e6, "warn_sigma": 1e6, "fault_sigma": 2e6}
+
+
+def test_an_ok_rise_short_of_the_floors_names_no_cause():
+    """A reheat-valve rise under the floors is not called creep, names no cause (0.106, #189)."""
+    f = _rule(BaselineStore(), **_NO_FLOOR).analyze_periods(
+        "VAV_1", *_base_and({"creep_pct": 16.0})
+    )
+    assert f.severity == "ok"
+    assert f.summary.startswith("VAV_1: VAV reheat valve holds near its baseline (+")
+    for word in ("creep", "fouling", "starvation", "authority", "reheat_penalty"):
+        assert word not in f.summary
+
+
+def test_a_flagged_rise_keeps_the_cause():
+    f = _rule(BaselineStore()).analyze_periods("VAV_1", *_base_and({"creep_pct": 16.0}))
+    assert f.severity in ("warn", "fault") and "VAV reheat-valve creep" in f.summary
+    assert "reheat coil fouling / HW starvation / valve-authority loss" in f.summary

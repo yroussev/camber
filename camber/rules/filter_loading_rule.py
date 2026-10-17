@@ -35,6 +35,7 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "filter_loading"
@@ -267,7 +268,18 @@ class FilterLoadingDrift:
             )
         metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
-        if direction == "up":
+        if direction == "up" and severity == "ok":
+            # 0.106 (#189): an ok finding names no cause -- the cause belongs to warn and fault
+            headline = holds_near_baseline(
+                equip,
+                "filter DP",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=2,
+                unit=" inH2O",
+                matched="matched airflow",
+            )
+        elif direction == "up":
             headline = (
                 f"{equip}: filter DP rose {drift.drift_f:+.2f} inH2O "
                 f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched airflow -- loading"

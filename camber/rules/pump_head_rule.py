@@ -47,6 +47,7 @@ from ..chillerdrift import (
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from . import _pumpgates as G
+from ._driftwording import holds_near_baseline
 from .base import Finding
 
 _KIND = "pump_head"
@@ -383,9 +384,14 @@ class PumpHeadDrift:
 
         if direction == "down" and severity == "ok":
             # 0.106 (#187): an ok finding names no deficit -- that belongs to warn and fault
-            headline = (
-                f"{equip}: pump head holds near its baseline ({G.signed(drift.drift_f, 1)} psi, "
-                f"{abs(drift.drift_sigma):.1f}σ vs frozen baseline at matched speed)"
+            headline = holds_near_baseline(
+                equip,
+                "pump head",
+                drift.drift_f,
+                drift.drift_sigma,
+                decimals=1,
+                unit=" psi",
+                matched="matched speed",
             )
         elif direction == "down":
             headline = (

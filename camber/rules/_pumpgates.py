@@ -181,9 +181,3 @@ def constant_flow_caveat(signal: str, cv: float, lo: float, hi: float, unit: str
         f"{100.0 * cv:.2f} %), so {signal} is compared as a flat level valid for "
         f"{lo:.4g}-{hi:.4g} {unit}, not along a curve; samples outside that band are not scored"
     )
-
-
-def signed(value: float, decimals: int) -> str:
-    """``value`` with its sign, as an ``ok`` summary prints it; a shift that rounds to zero is 0."""
-    text = f"{value:+.{decimals}f}"
-    return text[1:] if float(text) == 0.0 else text
