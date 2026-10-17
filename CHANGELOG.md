@@ -98,6 +98,31 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   `to_dict()` issues gain `zone_chains`. The `synthetic-g36-vav-fleet` template declares its
   topology, but its rules form no chain: the one air handler whose resets fail has no box
   symptom among the template's rules.
+- **The RCx report can carry grounded generated prose (#194).** Two kinds of prose slot: one
+  paragraph in the executive summary (`exec_summary`), and a "what we found / why it matters"
+  paragraph on each issue page (`issue:<key>`). These are the slot ids the engineer notes use.
+  Prose is off by default, and the report stays the deterministic one. It comes from a JSON file
+  keyed by slot (`--prose prose.json`, or `report.rcx.prose`), which runs offline and
+  reproducibly, or from a model you wire. On the CLI that is `--llm-cmd`, the same seam as
+  `camber explain` and `camber ask`; in Python it is an `AgentClient` passed as
+  `build_rcx_report(client=...)`. A slot is shown only when every sentence cites the report's
+  fact index and every figure in the sentence is in a fact that sentence cites. Otherwise the
+  page keeps its standard text, and Appendix A lists the slot and the reason. An engineer note on
+  a slot overrides its prose. Shown prose carries a marker and the list of the facts it cites.
+  `--prose-prompts out.json` (`camber.report.rcx.prose_prompts`) writes each slot's prompt, with
+  its facts, for offline generation. `camber.report.rcx.load_prose` reads a prose file. The PDF
+  output renders the prose too.
+- **The RCx fact index (#194).** `RcxReport.facts` is built from the same objects the tables
+  render: the KPIs, each issue's headline, cost, member costs, uncosted reason, hours, members,
+  action, confidence reasons, caveats, sensor dependencies and AHU-to-VAV chain counts, plus the
+  declines, missing inputs, caveats and chain gaps of Appendix A and the assumptions of Appendix
+  B. Its ids are context-qualified: `K1@summary`, `X1@appA`, `A3@appB`, `C1@<issue key>`. An
+  issue's ids follow its key, so the same inputs give the same ids. With prose on, Appendix D
+  lists the whole index; with prose off it is unchanged. `to_dict()` gains `facts` and `prose`.
+- `camber.agent.verify.check(..., require_cite_each_sentence=True)`: a sentence without a
+  resolving `[id]` is dropped (flagged `uncited-sentence`), and a sentence's figures must be in
+  the facts it cites itself. Citations may be context-qualified (`[F1@ctx]`); plain `[F1]` ids
+  work as before.
 
 ### Changed
 - **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout

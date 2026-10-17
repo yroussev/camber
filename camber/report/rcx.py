@@ -42,6 +42,7 @@ from ..model.roles import Role
 from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
 
 if TYPE_CHECKING:  # pragma: no cover
+    from ..agent.context import Context
     from ..fault_economics import EnergyPrice
 
 __all__ = [
@@ -57,6 +58,8 @@ __all__ = [
     "WEEK_MODES",
     "MissingPdfExtra",
     "PDF_INSTALL_HINT",
+    "load_prose",
+    "prose_prompts",
 ]
 
 #: Representative-week panels: one unit family each, never normalized onto a shared axis.
@@ -165,6 +168,7 @@ class RcxOptions:
     lifecycle: bool = False
     title: str = ""
     weather: object = None  # 0.94 (#73): the config's WeatherContext (privacy guardrails)
+    prose: str | None = None  # 0.107 (#194): a pre-generated prose file (``{slot: text}``)
 
     @classmethod
     def from_config(cls, report: dict | None, *, base_dir: str = ".") -> RcxOptions:
@@ -186,6 +190,9 @@ class RcxOptions:
         for key in ("g36_reference", "corroboration", "lifecycle"):
             if key in spec:
                 setattr(opts, key, bool(spec[key]))
+        if spec.get("prose"):  # 0.107 (#194): relative to the config's folder
+            p = str(spec["prose"])
+            opts.prose = p if os.path.isabs(p) else os.path.join(base_dir, p)
         ref = spec.get("oat_reference")
         if ref:
             ref = dict(ref)
@@ -799,6 +806,23 @@ def notes_template(report) -> dict:
     return {slot: {"text": "", "author": "", "date": ""} for slot in report.slots()}
 
 
+def load_prose(path) -> dict:
+    """Load a pre-generated prose file (``{slot: text}``) for the prose slots (0.107, #194).
+
+    See :func:`camber.report.rcx_prose.load_prose`."""
+    from .rcx_prose import load_prose as _load
+
+    return _load(path)
+
+
+def prose_prompts(report) -> dict:
+    """``{slot: prompt}`` for each prose slot of ``report``, fact block included (0.107, #194):
+    send them to a model offline and save the answers as a prose file."""
+    from .rcx_prose import prose_prompts as _prompts
+
+    return _prompts(report)
+
+
 # ============================================================================ report object
 
 
@@ -810,7 +834,11 @@ class RcxReport:
     is ``{"kind": "p" | "banner" | "kpis" | "table" | "figure" | "list" | "html", ...}`` (``html``
     only for trusted, internally generated fragments -- the data-source block, the drift report,
     evidence figures). ``notes`` maps a slot id to its normalized engineer notes and ``orphans``
-    lists notes whose slot does not exist in this report (appendix E).
+    lists notes whose slot does not exist in this report (appendix E). ``facts`` (0.107, #194) is
+    the report's fact index (a :class:`camber.agent.Context` of context-qualified ids such as
+    ``C1@<issue key>``) and ``prose`` maps each prose slot that was attempted to its outcome
+    (``status`` ``rendered`` / ``fallback`` / ``overridden``, ``source``, ``reason``, ``text``,
+    ``cited``); ``prose_enabled`` is True when a prose file or a wired client was given.
     """
 
     title: str
@@ -826,6 +854,9 @@ class RcxReport:
     notes: dict = field(default_factory=dict)
     orphans: dict = field(default_factory=dict)
     version: str = ""
+    facts: Context | None = None  # 0.107 (#194): the fact index
+    prose: dict = field(default_factory=dict)
+    prose_enabled: bool = False
 
     def slots(self) -> list:
         """Every engineer-note slot id in this report, in page order."""
@@ -866,6 +897,8 @@ class RcxReport:
             "notes": {k: list(v) for k, v in self.notes.items()},
             "orphans": {k: list(v) for k, v in self.orphans.items()},
             "slots": self.slots(),
+            "facts": [f.as_dict() for f in self.facts.facts] if self.facts is not None else [],
+            "prose": {k: dict(v) for k, v in self.prose.items()},
         }
 
     def to_html(self) -> str:
@@ -1284,13 +1317,16 @@ def _occupancy_mask(frame, occupancy: dict | None):
 
 
 def build_rcx_report(
-    run, *, options: RcxOptions | None = None, notes=None, client=None
+    run, *, options: RcxOptions | None = None, notes=None, client=None, prose=None
 ) -> RcxReport:
     """Build the RCx report for a config-driven run (:class:`camber.config.RunResult`).
 
     ``options`` defaults to the config's ``report.rcx`` section. ``notes`` is an engineer-notes dict
-    (see :func:`load_notes`). ``client`` is reserved for the grounded AI prose slot (phase C); it
-    is accepted and unused, so the slot renders nothing yet.
+    (see :func:`load_notes`). 0.107 (#194): ``prose`` is a pre-generated prose dict
+    (``{slot: text}``, see :func:`load_prose`; default: ``options.prose``'s file) and ``client`` a
+    :class:`camber.agent.AgentClient` asked for the slots ``prose`` does not cover. Prose is shown
+    only when every sentence cites the fact index and every figure traces to a cited fact; with
+    neither given, the report is the deterministic one.
     """
     from .. import __version__
     from ..fault_economics import DEFAULTS, cost_findings
@@ -1640,6 +1676,14 @@ def build_rcx_report(
         for s in rep.sections:
             if s["id"] == "appendix-e":
                 s["blocks"] = _orphan_blocks(rep.orphans)
+
+    # ---- 0.107 (#194): the fact index, and grounded prose when a source is given
+    from .rcx_prose import _apply_prose, _build_fact_index
+
+    rep.facts = _build_fact_index(S)
+    if prose is None and o.prose:
+        prose = load_prose(o.prose)
+    _apply_prose(rep, prose=prose, client=client)
     return rep
 
 
@@ -2693,9 +2737,6 @@ def _sec_issue(S, iss) -> dict:
     if caveats:
         blocks.append(_p("Caveats:"))
         blocks.append({"kind": "list", "items": caveats})
-    ai = _ai_prose(iss, None)
-    if ai:
-        blocks.append(_p(ai))
     sec = _section(
         f"issue-{iss.key}", f"Issue {iss.rank}: {_heading(rec, title, lead)}", blocks, kind="issue"
     )
@@ -2865,11 +2906,6 @@ def _sec_verify(S) -> dict | None:
             tbl["link_col"] = 0  # the first column carries an internally built anchor
             blocks += [_p(lead), tbl]
     return _section("verify", "Verify on site", blocks)
-
-
-def _ai_prose(issue, client) -> str:
-    """Phase-C hook for grounded AI prose on an issue page; renders nothing in phase B."""
-    return ""
 
 
 _SKIP_EQUIP_CAP = 6  # equipment named per "Checks not evaluated" row before "and N more"
@@ -3209,6 +3245,10 @@ def _block_html(b: dict) -> str:
         return f"<p class='refs'>{_esc(b.get('lead', ''))} {links}</p>" if links else ""
     if k == "html":
         return b["html"]
+    if k == "prose":  # 0.107 (#194): verified generated prose, marked, with its cited facts
+        from .rcx_prose import _prose_html
+
+        return _prose_html(b, _esc)
     return ""
 
 
@@ -3243,6 +3283,15 @@ def _blocks_html(blocks: list) -> list:
     return out
 
 
+def _prose_css(rep: RcxReport) -> str:
+    """The prose blocks' style rules, only when the report shows one (0.107, #194)."""
+    if not any(b.get("kind") == "prose" for s in rep.sections for b in s["blocks"]):
+        return ""
+    from .rcx_prose import _PROSE_CSS
+
+    return _PROSE_CSS
+
+
 def _render_html(rep: RcxReport, *, head: str = "") -> str:
     from .audit import data_sources_html
 
@@ -3257,7 +3306,7 @@ def _render_html(rep: RcxReport, *, head: str = "") -> str:
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
         f"<title>{_esc(rep.title)}</title>{head}",
-        f"<style>{_page_css(rep.options.paper, nc=nc)}{_CSS}</style></head>",
+        f"<style>{_page_css(rep.options.paper, nc=nc)}{_CSS}{_prose_css(rep)}</style></head>",
         f"<body class='{'nc' if nc else ''}'>",
     ]
     if nc:

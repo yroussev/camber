@@ -12,6 +12,15 @@ state an untraceable number and stripping unknown ``[id]`` tokens — so a partl
 answer degrades to its grounded subset instead of misleading. In non-strict mode the same problems
 are recorded in ``flagged`` but the text is left intact.
 
+``require_cite_each_sentence=True`` (0.107, #194) is the stricter mode the RCx report's prose slots
+use: every sentence must carry at least one ``[id]`` that resolves, and each number it states must
+trace to a fact *that sentence* cites. A sentence that fails either is flagged (``uncited-sentence``
+or ``uncited-number``) and, in ``strict`` mode, dropped.
+
+A fact id may be context-qualified, ``[F1@ctx]`` (0.107, #194): the part after ``@`` names where the
+fact lives (the RCx report uses ``summary``, ``appA``, ``appB`` and an issue's key), so ids from
+several contexts can share one whitelist. Plain ``[F1]`` ids work as before.
+
 Pure: regex + the fact whitelist, no LLM, no I/O.
 """
 
@@ -20,7 +29,9 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 
-_CITE = re.compile(r"\[([A-Za-z]+\d+)\]")
+#: a citation: ``[F1]``, or context-qualified ``[F1@ctx]`` (0.107, #194); ``ctx`` is letters,
+#: digits, ``_`` and ``-``
+_CITE = re.compile(r"\[([A-Za-z]+\d+(?:@[A-Za-z0-9_\-]+)?)\]")
 #: a numeric figure: number with optional $, thousands commas, decimals, trailing %. The lookbehind
 #: excludes digits glued to letters/hyphens so equip tokens (AHU-1, Z-2) and refs (G36) aren't
 #: numbers.
@@ -89,8 +100,20 @@ def _sentences(text: str) -> list:
     return [s for s in (p.strip() for p in _SENT_SPLIT.split(text or "")) if s]
 
 
-def check(text: str, context, *, strict: bool = True, source: str = "llm") -> Grounded:
-    """Verify (and in ``strict`` mode repair) ``text`` against ``context``'s fact whitelist."""
+def check(
+    text: str,
+    context,
+    *,
+    strict: bool = True,
+    source: str = "llm",
+    require_cite_each_sentence: bool = False,
+) -> Grounded:
+    """Verify (and in ``strict`` mode repair) ``text`` against ``context``'s fact whitelist.
+
+    ``require_cite_each_sentence`` (0.107, #194): a sentence without a resolving ``[id]`` is
+    flagged ``uncited-sentence`` (and dropped in ``strict`` mode), and a sentence's numbers must
+    trace to the facts it cites itself rather than to any fact cited anywhere in ``text``.
+    """
     all_ids = set(context.ids())
     cited_all = extract_cites(text)
     unknown = [c for c in cited_all if c not in all_ids]
@@ -105,7 +128,17 @@ def check(text: str, context, *, strict: bool = True, source: str = "llm") -> Gr
 
     kept: list = []
     for sent in _sentences(text):
-        untraceable = _numbers(sent) - grounded_nums
+        nums = grounded_nums
+        if require_cite_each_sentence:
+            own = [c for c in extract_cites(sent) if c in all_ids]
+            if not own:
+                flagged.append({"reason": "uncited-sentence", "text": sent})
+                if strict:
+                    continue
+            nums = set()
+            for c in own:
+                nums |= _fact_numbers(context.by_id(c))
+        untraceable = _numbers(sent) - nums
         if untraceable:
             flagged.append({"reason": "uncited-number", "text": sent})
             if strict:
@@ -117,10 +150,13 @@ def check(text: str, context, *, strict: bool = True, source: str = "llm") -> Gr
         for c in unknown:
             out_text = out_text.replace(f"[{c}]", "")
         out_text = re.sub(r"\s{2,}", " ", out_text).strip()
+        if require_cite_each_sentence:  # "found [X9]." -> "found." (plain mode left as it was)
+            out_text = re.sub(r"\s+([.,;:!?])", r"\1", out_text)
 
     cited = [c for c in extract_cites(out_text if strict else text) if c in all_ids]
     facts = [context.by_id(c) for c in cited]
-    grounded = not unknown and not any(f["reason"] == "uncited-number" for f in flagged)
+    bad = ("uncited-number", "uncited-sentence")
+    grounded = not unknown and not any(f["reason"] in bad for f in flagged)
     return Grounded(
         text=out_text.strip(),
         cited=cited,
