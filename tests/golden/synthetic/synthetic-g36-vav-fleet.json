@@ -1,8 +1,8 @@
 {
- "_comment": "0.105 (#144); version 2 in 0.106 (#186): what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "_comment": "0.105 (#144); version 2 in 0.106 (#186), version 3 in 0.108 (#226): what the entry generates; tests/test_datasets_synthetic.py checks it",
  "generator": "g36_vav_fleet",
  "seed": 144,
- "version": 2,
+ "version": 3,
  "header": [
   "Timestamp",
   "scenario",

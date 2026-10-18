@@ -86,6 +86,7 @@ nav:
       # BEGIN slot #144 (G36 VAV fleet)
       - "Terminal units: a G36 fleet, rogue zones and resets": workbook/zone-g36-fleet.md
       # END slot #144 (G36 VAV fleet)
+      - "Terminal units: RCx cause chains from an air handler": workbook/rcx-cause-chains.md
       # END workbook-zone (#81)
       #
       # BEGIN workbook-plant (#82)

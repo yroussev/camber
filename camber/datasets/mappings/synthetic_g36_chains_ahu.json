@@ -1,0 +1,16 @@
+{
+  "_comment": "Synthetic G36 RCx cause-chain fleet (generator g36_rcx_chains, camber/datasets/_synthetic_g36_rcx_chains.py; 0.108) -> CAMBER Role mapping for one air handler: the columns of synthetic_g36_fleet_ahu.json (OAT, SF_STS, OCC, SAT, SAT_SP, SAT_REQ, DSP, DSP_SP, DSP_REQ, all CAMBER's own) plus SF_SPD, the supply fan's speed in %, and CLG_VLV, the cooling valve in %. The scenario column selects one air handler per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy",
+    "SAT": "supply_air_temp",
+    "SAT_SP": "supply_air_temp_sp",
+    "SAT_REQ": "sat_reset_requests",
+    "DSP": "duct_static",
+    "DSP_SP": "duct_static_sp",
+    "DSP_REQ": "static_pressure_requests",
+    "SF_SPD": "supply_fan_speed",
+    "CLG_VLV": "cool_valve"
+  }
+}

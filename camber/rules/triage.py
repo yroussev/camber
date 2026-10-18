@@ -1184,15 +1184,36 @@ def _sat_warm(f) -> bool:
 def _sat_cold(f) -> bool:
     """AHU supply air too cold: ``supply_air_control`` with its too-cold share leading, a SAT
     held cold with no upward reset (``supply_air_reset``, which warns only when supply air is below
-    58 F on most cooling hours), SAT colder than the G36 map (``supply_air_reset_compliance``), or
+    58 F on most cooling hours), SAT colder than the G36 map (``supply_air_reset_compliance`` on its
+    below-target side, 0.108; it also warns when supply air runs above the target), or
     a SAT reset that does not trim back while zones are idle (not when it is also parked warm)."""
     rule = _attr(f, "rule", "")
     if rule == "supply_air_control":
         return _leads(f, "too_cold_pct", "too_warm_pct", ties=False)
-    if rule in ("supply_air_reset", "supply_air_reset_compliance"):
+    if rule == "supply_air_reset":
         return True
+    if rule == "supply_air_reset_compliance":
+        # 0.108: the compliance rule also warns when supply air runs ABOVE the target (a cooling
+        # shortfall); only its below-target side is supply air too cold
+        return _below_target(f)
     modes = _reset_modes(f, "sat")
     return "not_trimming" in modes and "not_responding" not in modes
+
+
+def _below_target(f) -> bool:
+    """True when a ``supply_air_reset_compliance`` finding reports its below-target (reheat)
+    side: supply air colder than the G36 target on at least its warn share of hours, by at least
+    its gap floor. An older finding without the thresholds counts on a positive gap."""
+    m = _metrics(f)
+
+    def num(key, default=None):
+        v = m.get(key)
+        return float(v) if _num(v) else default
+
+    pct, gap = num("pct_below_g36_target"), num("mean_gap_f")
+    if pct is None or gap is None:
+        return False
+    return pct >= num("warn_pct_threshold", 0.0) and gap >= num("warn_gap_floor_f", 1e-9)
 
 
 def _static_low(f) -> bool:

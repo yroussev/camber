@@ -13,6 +13,68 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Added
+- **A synthetic fleet whose faults reach the boxes, and the `rcx-cause-chains` exercise
+  (0.108, C1).** The new catalog entry `synthetic-g36-rcx-chains` (generator `g36_rcx_chains`)
+  runs the G36 fleet model with each air handler's supply fan speed and cooling valve, as five
+  air handlers: a healthy one, a healthy one with one stuck box damper, a cooling coil that
+  cannot make supply air below 63 °F, a weak fan that cannot make more than 0.35 in. w.c., and
+  a SAT reset disabled at 55 °F with two single-maximum reheat boxes. Its run template declares
+  the served-by topology and the reheat-coil sizes, so the RCx report shows the #196 cause
+  chains: supply air too warm (5 of 6 boxes), duct static too low (5 of 6 boxes) and supply air
+  too cold (2 of 6 boxes, costed at its largest member), while the stuck box stays its own
+  issue. Without the topology the same run ranks 22 issues instead of 5 and counts the reheat
+  twice. The workbook exercise `rcx-cause-chains` walks through it, with an instructor key and a
+  figure. The answer key is pending maintainer sign-off.
+- **`unmet_setpoint_hours` and `airflow_tracking` on the G36 fleet (#226).** The
+  `synthetic-g36-vav-fleet` run template and the `zone-g36-fleet` exercise configs run both
+  rules, and the entry labels the boxes behind `AHU__starved` and `AHU__not_responding`
+  (`starved_by_air_handler`) so `camber datasets score` scores them. With the boxes' symptoms in
+  the run, the RCx report links them to `AHU__not_responding`'s reset findings (6 of 6 boxes,
+  for both resets).
+- `reheat_minimization_g36`'s `min_reheat_hours` parameter (default 2 h) and its metric
+  `n_reheat_samples` (#238). `cohort_starvation`'s `min_present_frac` parameter and the
+  `group_skipped_cycles` metric and result field (#239). `zones_heat_cool_census`'s
+  `min_heating_frac`, `max_driver_zones` and `persistent_frac` parameters and its metrics
+  `heating_frac_when_mixed`, `persistent_heating_zones`, `driver_zones`,
+  `pct_hours_mixed_without_drivers` and `severity_capped` (#241).
+
+### Changed
+- **The G36 fleet generator is at version 3 (#226).** On version 2, `unmet_setpoint_hours` and
+  `airflow_tracking` flagged the healthy air handler's boxes: its zones sat 3-5 °F above their
+  cooling setpoint for up to 28 % of occupied hours, with dampers wide open at 40-56 % of their
+  airflow setpoint. The rules were right and their defaults stand: an unmet tolerance of 4 °F
+  still left a healthy box 18 % unmet, and `airflow_tracking` needed half the setpoint. The generator was the cause: each perimeter zone
+  peaked alone, and a correct reset that ignores two requests (G36's I = 2) left that zone
+  warm. One trim-and-respond cycle an hour could not follow the morning load, and the duct
+  static trimmed to its minimum overnight. Version 3 gives the zones loads that rise and fall
+  together, takes three reset cycles per trended hour, holds both resets at their start value
+  while the fan is off (G36 §5.1.14), and holds a tier-1 request until the loop or the damper
+  falls below 85 % (G36's hysteresis). The blocked inlet of `rogue_static` moves from box 5 to
+  the north box 4, and the near miss's extra load drops from 0.06 to 0.01. Every labelled fault
+  is still detected and the label scores hold. **Workbook:** the `zone-g36-fleet` answers move.
+  Their keys and instructor text are unchanged here and are drafted for sign-off, so the
+  exercise's answer test fails until then.
+- **Behaviour change (#238):** `reheat_minimization_g36` reports `info`, with a caveat, below
+  `min_reheat_hours` of occupied reheat, so one sample no longer decides the verdict.
+  `n_reheat_hours` now counts hours (samples × the sample interval), and heating-loop samples
+  that read nothing are left out instead of read as a low loop.
+- **Behaviour change (#239):** `sat_` and `static_cohort_starvation` judge a cycle only when at
+  least `min_present_frac` (default `cohort_frac`) of the group's zones have data, and say how
+  many cycles they skipped. One box reporting through the others' outage is no longer a starved
+  cohort.
+- **Behaviour change (#241):** `zones_heat_cool_census` faults only when a meaningful share of
+  the fleet heats in the mixed hours (`min_heating_frac`, 10 %), and is at most `warn` when one
+  or two boxes drive the result in a larger fleet. It names the zones that heat persistently.
+
+### Fixed
+- **The RCx report no longer reads supply air above its target as supply air too cold.**
+  `supply_air_reset_compliance` warns on both sides of the G36 target. The "supply air too
+  cold" cause chain took either one, so a coil that could not cool would root a chain of reheat
+  findings. It now takes only the below-target side.
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).

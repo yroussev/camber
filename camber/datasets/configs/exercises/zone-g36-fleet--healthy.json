@@ -53,7 +53,9 @@
     },
     "cohort_space_temp",
     "reheat_minimization_g36",
-    "zones_heat_cool_census"
+    "zones_heat_cool_census",
+    "unmet_setpoint_hours",
+    "airflow_tracking"
   ],
   "report": {
     "level": 2

@@ -23,8 +23,9 @@ airflow above its minimum (``pct_hours_any_both``, still reported), which is
 one. A fleet ``fault`` now also needs a meaningful share of the zones heating in the mixed hours
 (``min_heating_frac`` of the fleet on average), and the severity is capped at ``warn`` when one or
 two boxes drive the result (in a fleet of more than three times ``max_driver_zones`` zones,
-without the ``max_driver_zones`` most-heating zones the mixed share falls below the warn level). The finding names the zones heating on at least
-``persistent_frac`` of the mixed hours (``persistent_heating_zones``).
+without the ``max_driver_zones`` most-heating zones the mixed share falls below the warn level).
+The finding names the zones heating on at least ``persistent_frac`` of the mixed hours
+(``persistent_heating_zones``).
 """
 
 from __future__ import annotations
@@ -149,7 +150,9 @@ class ZonesHeatCoolCensus:
         mixed = occ["mixed"].astype(bool)
         n_mixed = int(mixed.sum())
         heat_share = (
-            heating[mixed].mean().sort_values(ascending=False) if n_mixed else pd.Series(dtype=float)
+            heating[mixed].mean().sort_values(ascending=False)
+            if n_mixed
+            else pd.Series(dtype=float)
         )
         persistent = sorted(str(e) for e, v in heat_share.items() if v >= self.persistent_frac)
         heating_frac_mixed = (
