@@ -1982,6 +1982,13 @@ def _print_reconcile(rep: dict, limit: int) -> None:
         print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
     if len(rows) > limit:
         print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+    # 0.108 (#229): parts of one facility holding identical rows under different keys
+    for g in rep.get("row_duplicates", [])[:limit]:
+        act = f"-> {g['action']} {len(g['extra'])}" if g["action"] else f"left alone: {g['detail']}"
+        print(f"  row duplicates {g['facility_id']} ({g['rows']} rows) {act}")
+        for p in g["parts"]:
+            mark = "keep  " if p["key"] == g["keep"] else "extra "
+            print(f"    {mark}{p['key']}  {p['bytes']} bytes, {p['landed_at']}")
 
 
 @_pf_errors
@@ -1989,8 +1996,15 @@ def _cmd_edge_reconcile(args) -> int:
     from .edge.landing import reconcile
 
     pf = _portfolio(args)
+    if args.yes and not args.apply:
+        raise ValueError("--yes confirms --apply; pass both to remove row-duplicate parts")
+    if args.yes and (args.keys or args.landing):
+        raise ValueError(
+            "--yes removes row-duplicate parts from the workspace store; drop --keys / --landing"
+        )
+    dedupe = None
     if args.apply:
-        from .edge.quarantine import quarantine_reconciled
+        from .edge.quarantine import quarantine_reconciled, remove_row_duplicates
 
         if args.keys:
             raise ValueError(
@@ -1998,6 +2012,11 @@ def _cmd_edge_reconcile(args) -> int:
                 "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
             )
         rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+        if args.yes:
+            dedupe = remove_row_duplicates(pf, reason=args.reason, apply=True, yes=True)
+            rep["row_duplicates"] = dedupe["groups"]
+            rep["duplicate_copies"] = dedupe["copies"]
+            rep["duplicates_removed"] = dedupe["copies"]
     else:
         rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
     if args.json:
@@ -2006,9 +2025,22 @@ def _cmd_edge_reconcile(args) -> int:
     _print_reconcile(rep, args.limit)
     if args.apply:
         print(f"  quarantined {rep['quarantined']} object(s) (audited)")
-    elif rep["to_quarantine"]:
-        hint = "" if args.keys else " (--apply --reason R to move them)"
-        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if dedupe is not None:
+            print(
+                f"  removed {dedupe['copies']} row-duplicate copy(ies), {dedupe['bytes']} bytes "
+                "(audited; a facility under a legal hold keeps them in quarantine)"
+            )
+        elif rep.get("duplicate_copies"):
+            print(f"  {rep['duplicate_copies']} row-duplicate copy(ies) kept (add --yes)")
+    else:
+        if rep["to_quarantine"]:
+            hint = "" if args.keys else " (--apply --reason R to move them)"
+            print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if rep.get("duplicate_copies"):
+            print(
+                f"  {rep['duplicate_copies']} row-duplicate copy(ies) beside the oldest "
+                "(--apply --yes --reason R to remove them)"
+            )
     return 0
 
 
@@ -2029,6 +2061,8 @@ def _cmd_edge_land(args) -> int:
     for r in rep["objects"][: args.limit]:
         if r["to"] != "store":
             print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+        elif r.get("replaces"):
+            print(f"  {'store':10s} {'replaces':16s} {r['key']}  ({', '.join(r['replaces'])})")
     return 0
 
 
@@ -3197,6 +3231,11 @@ def _build_parser() -> argparse.ArgumentParser:
     erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
     erc.add_argument(
         "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument(
+        "--yes",
+        action="store_true",
+        help="with --apply: also remove row-duplicate parts, keeping the oldest copy",
     )
     erc.add_argument("--reason", help="why (audited; required with --apply)")
     erc.add_argument("--json", action="store_true")

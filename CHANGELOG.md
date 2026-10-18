@@ -13,6 +13,56 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Added
+- **`camber edge reconcile` finds and removes row duplicates already in the store (#229).** A
+  store reconciliation lists the groups of parts of one facility that hold identical rows under
+  different keys (left by a landing before 0.107, which had no row check), with their keys,
+  sizes and landing times and the copy it keeps, the oldest (`row_duplicates` and
+  `duplicate_copies` in the report; `camber.edge.landing.row_duplicates`). `edge reconcile
+  --apply --yes --reason R` deletes the other copies under the store lock, audited as
+  `edge.reconcile.dedupe` before anything is deleted (`camber.edge.quarantine.remove_row_duplicates`).
+  A facility under a legal hold has its extra copies moved to quarantine instead, and facilities
+  that do not accept data are left alone.
+- `camber.edge.row_digest.PartitionView` and `read_rows`, the row comparisons behind the landing,
+  and a timestamp span (`ts_min`, `ts_max`) in each `_edge_rows.json` entry.
+
+### Changed
+- **Behaviour change: the upload inbox is the default (#233).** `route_key(portfolio, key)` now
+  signs an accepted upload into the bucket's `_inbox/` prefix, so every upload passes the
+  landing's row checks before it reaches the store; `inbox=False` keeps the straight-to-store
+  layout of 0.107. Upgrade the cloud landing first (with `camber edge land <bucket>/_inbox
+  --apply` scheduled), then the brokers; forwarders need no change. docs/EDGE-DEPLOY.md gives the
+  order.
+- **Behaviour change: a growing month replaces its earlier part (#228).** The forwarder re-sends
+  the month in progress on every poll with more rows. When a landed object holds every row of
+  the stored parts it overlaps, `camber edge land` replaces them instead of storing it beside
+  them, so a month keeps one part and reads never see a row twice. The partition is swapped in
+  whole (a reader or a crash sees the old partition or the new one), the replacement is audited
+  in the `edge.land` records and recorded in the row-digest cache, and under a legal hold the
+  replaced part is copied into quarantine first. The last observation of each series in the
+  stored part may differ: that is the hour still in progress when it was polled (a resampled mean
+  of the samples so far), which the next poll revises. An object whose rows are all stored
+  already (a late, smaller poll) is a `duplicate`.
+- **Behaviour change: a conflicting overlap is quarantined (#228).** An object that shares an
+  observation (timestamp, equipment and role) with a stored part without holding all of its
+  rows, such as a month whose history changed at the source, goes to quarantine as a `conflict`
+  with the parts it overlaps, instead of landing beside them. Releasing it stores it beside them.
+- **Behaviour change: an empty folder is an empty store everywhere (#233).** `camber store
+  verify` reports 0 parts and exits 0 on an empty directory, and `store normalize` and
+  `migrate-partitions` do nothing and create nothing there, not even a lock file, as `camber
+  serve` already accepted it. A missing path, a file or a directory of other things is still
+  refused. `camber serve` and the store commands now share one definition of a store directory.
+
+### Fixed
+- **A year-only part re-sent in new bytes after its year was migrated is caught (#230).** The
+  landing compares a year-only object's rows with the month partitions of its year and
+  quarantines it as a `duplicate` when they already hold every row, instead of storing the year
+  again beside the migrated months.
+- `camber edge land` now invalidates the store's point catalog after it stores parts, so new
+  equipment and points show up without a manual `rebuild_catalog`.
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).

@@ -139,19 +139,20 @@ def test_catalog_key_errors_print_the_message_not_the_repr(capsys):
         ["store", "migrate-partitions", "{p}"],
     ],
 )
-@pytest.mark.parametrize("kind", ["missing", "empty", "file"])
+@pytest.mark.parametrize("kind", ["missing", "file", "junk"])
 def test_store_commands_refuse_a_path_that_is_not_a_store(tmp_path, capsys, argv, kind):
     p = tmp_path / "not-a-store"
-    if kind == "empty":
-        p.mkdir()
-    elif kind == "file":
+    if kind == "file":
         p.write_text("x")
+    elif kind == "junk":
+        p.mkdir()
+        (p / "notes.txt").write_text("x")
     before = sorted(os.listdir(tmp_path))
     assert main([a.format(p=p) for a in argv]) == 1
     assert "is not a ParquetStore" in capsys.readouterr().err
     assert sorted(os.listdir(tmp_path)) == before  # nothing created
-    if kind == "empty":
-        assert os.listdir(p) == []  # not even a _lock
+    if kind == "junk":
+        assert os.listdir(p) == ["notes.txt"]  # not even a _lock
 
 
 def test_store_verify_and_normalize_refuse_an_unknown_facility(site, capsys):
