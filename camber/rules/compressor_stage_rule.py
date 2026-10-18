@@ -16,6 +16,10 @@ to one level). On a trend coarser than ``max_interval_min`` the count is a floor
 above the limit stands with a caveat; below it, samples between two stages (a mean that is not a
 whole number) show the interval hid changes, so the verdict declines to ``info`` instead of
 ``ok``.
+
+**Short trends (0.108, #240).** The rate is read over at least one day (``_RATE_MIN_DAYS``), as
+``boiler_short_cycle`` reads its starts: one stage excursion in a two-hour trend is two changes in
+a day, not 24 a day, and a caveat says the window is short.
 """
 
 from __future__ import annotations
@@ -31,8 +35,29 @@ from .base import Finding
 _LEVEL_EPS = 1e-6
 
 
+#: A rate per day is read over at least this many days (0.108, #240), as ``boiler_short_cycle``
+#: does: a two-hour trend with one change is one change in a day, not 12 a day.
+_RATE_MIN_DAYS = 1.0
+
+
 def _span_days(s: pd.Series) -> float:
     return max((s.index[-1] - s.index[0]).total_seconds() / 86400.0, 1e-9)
+
+
+def _per_day(n: int, span_days: float) -> float:
+    """``n`` changes per day over ``span_days``, the span floored at ``_RATE_MIN_DAYS``."""
+    return n / max(span_days, _RATE_MIN_DAYS)
+
+
+def _short_trend_caveat(span_days: float, counted: str) -> list:
+    """A caveat when the trend spans under ``_RATE_MIN_DAYS`` (0.108, #240), else ``[]``."""
+    if span_days >= _RATE_MIN_DAYS:
+        return []
+    return [
+        f"the trend spans only {span_days * 24:.1f} h: the {counted} are read per day over one "
+        "day, not extrapolated from the short window, so the rate is a floor until a full day "
+        "is trended"
+    ]
 
 
 def _changes_per_day(series: pd.Series) -> tuple:
@@ -42,7 +67,7 @@ def _changes_per_day(series: pd.Series) -> tuple:
         return 0, 0.0, 0.0
     changes = int((s.round().diff().fillna(0) != 0).sum())
     span_days = _span_days(s)
-    return changes, changes / span_days, span_days
+    return changes, _per_day(changes, span_days), span_days
 
 
 def _n_partial(s: pd.Series) -> int:
@@ -63,7 +88,7 @@ def _running_stage_changes(series: pd.Series) -> tuple:
     prev = lvl.shift()
     changed = (lvl != prev) & (lvl > 0) & (prev > 0)
     n = int(changed.sum())
-    return n, n / _span_days(s), _span_days(s), _n_partial(s)
+    return n, _per_day(n, _span_days(s)), _span_days(s), _n_partial(s)
 
 
 def _binary_changes(series: pd.Series) -> tuple:
@@ -99,7 +124,7 @@ def _binary_changes(series: pd.Series) -> tuple:
         last, pending = state[i], False
     if pending:
         n += 1
-    return n, n / _span_days(s), _span_days(s), int((~whole).sum())
+    return n, _per_day(n, _span_days(s)), _span_days(s), int((~whole).sum())
 
 
 def _coarse_trend_check(
@@ -193,6 +218,7 @@ class CompressorStaging:
         )
         if declined:
             summary += f"; cannot confirm on a {interval:g}-minute trend"
+        caveats += _short_trend_caveat(span, "stage changes")  # 0.108 (#240)
         return Finding(
             rule=self.name,
             equip=equip,

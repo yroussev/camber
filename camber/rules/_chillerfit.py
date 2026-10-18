@@ -55,13 +55,15 @@ def freeze_baseline(
     covariate_sign: int = 1,
     min_covariate_span: float = COVARIATE_MIN_SPAN_F,
     level_fallback: bool = True,
+    load_source: str = "",
 ):
     """The frozen baseline for ``kind``, freezing one from ``base_t`` if none exists yet.
 
     ``covariates`` are tried in order (only those present in ``base_t``); the first that is
     identified with the physically expected sign (``covariate_sign``) is used, otherwise the fit
     falls back to load only and a caveat says why. A flat ``level`` fit (no load spread) is
-    reported as such.
+    reported as such. ``load_source`` (0.108, #234) is recorded on a newly frozen fit, for a rule
+    whose load can be read more than one way (see :func:`load_source_mismatch`).
     """
     frozen = rule.store.model_for(rule.site, equip, kind)
     if frozen is not None:
@@ -119,6 +121,8 @@ def freeze_baseline(
             f"could not evaluate {kind}: the baseline period would not support a fit -- {why}"
         )
         return None
+    if load_source:
+        fit.load_source = load_source
     idx = base_t.index
     rule.store.freeze(
         fit,
@@ -130,6 +134,42 @@ def freeze_baseline(
         reason="initial baseline frozen from the supplied baseline period",
     )
     return fit
+
+
+#: how a recorded load source reads in a caveat (0.108, #234)
+LOAD_SOURCE_WORDS = {
+    "chw_tons": "chilled-water tons (chw_tons)",
+    "cw_heat_rejection": "condenser heat rejected (cw_heat_rejection)",
+    "cw_range": "the tower's range (cw_range)",
+}
+
+
+def load_source_mismatch(frozen, source: str, caveats: list, *, kind: str) -> str | None:
+    """Whether ``frozen`` was fitted on a different load than ``source`` (0.108, #234).
+
+    A rule that reads its load more than one way (the tower drift rules: chilled-water tons,
+    condenser heat rejected or the tower's range) must score against a baseline fitted on the same
+    one: a tons line read against a range in degF is meaningless. Returns ``None`` when the
+    sources agree, else the decline summary text, with the caveat appended. A record frozen
+    before 0.108 has no load source; it is assumed to match, and a caveat says so.
+    """
+    stored = getattr(frozen, "load_source", "") or ""
+    words = LOAD_SOURCE_WORDS.get(source, source)
+    if not stored:
+        caveats.append(
+            f"the frozen {kind} baseline does not record which load it was fitted on (frozen "
+            f"before 0.108), so it is read as fitted on {words}; if it was fitted on another "
+            "load, refreeze it (camber drift accept)"
+        )
+        return None
+    if stored == source:
+        return None
+    caveats.append(
+        f"could not evaluate {kind}: the frozen baseline was fitted on "
+        f"{LOAD_SOURCE_WORDS.get(stored, stored)}, but the current load is {words}; refreeze "
+        "the baseline on the current load (camber drift accept) to score it"
+    )
+    return f"baseline fitted on {stored}, current load is {source}; refreeze"
 
 
 def _cov_reason(frame: pd.DataFrame, cov, min_span: float) -> str:

@@ -13,6 +13,64 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Changed
+- **Chiller run gate in `analyze_chiller_staging` and `analyze_chiller_staging_fleet` (#235).**
+  Their `min_power_kw` keyword now defaults to `None`, which reads a chiller as running above a
+  tenth of its own 95th-percentile power (the new `run_frac` keyword,
+  `camber.schedules.CHILLER_POWER_RUN_FRAC`), or by a `Status` column when one is present. Pass
+  `min_power_kw=2.0` for the fixed 2 kW gate used before 0.108.
+- **Tower drift baselines record their load (#234).** A `cooling_tower_approach_drift` or
+  `cooling_tower_fan_effort_drift` baseline frozen from 0.108 records the load it was fitted on
+  (`load_source` in the stored coefficients). A baseline frozen earlier has no `load_source`: it
+  is still scored, as fitted on the current load, with a caveat that asks for a refreeze if the
+  load has changed since.
+
+### Fixed
+- **Tower drift rules no longer score against a baseline fitted on another load (#234).**
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift` match on chilled-water
+  tons, condenser heat rejected or the tower's range. The frozen baseline did not record which,
+  so mapping `cw_flow` after the range caveat asked for it, or running a tower as its own
+  equipment after running it with its chiller's points, scored tons against degrees. A healthy
+  tower then read "approach narrowed 116.5°F" or "fan speed -2436.2%-pts", and a fresh baseline
+  on the same input read 0.0°F. Both rules now decline (`info`, reason
+  `load_source_mismatch`, metrics for the current and the baseline's load) with "baseline fitted
+  on X, current load is Y; refreeze", and a caveat that names `camber drift accept`.
+- **`chiller_staging` and `chiller_staging_fleet` no longer read standby draw as running (#235).**
+  A chiller ran above a fixed 2 kW, but a stopped chiller draws 5 to 15 kW for its controls, oil
+  heater and crankcase heater. A chiller cycling an hour on and an hour off over an 8 kW standby
+  read 0.1 starts a day and 100 % runtime; it now reads 12 starts a day (fault) and 50 %. A
+  chiller runs by its `compressor_status` when that is mapped, else above `run_frac` (0.10) of
+  its own 95th-percentile power, taken over the samples that draw any power so that a lag chiller
+  at 0 kW most of the time still runs. Both rules take `min_power_kw` (default `None`) and
+  `run_frac` parameters and report the metric `run_source`; `chiller_staging` also reports
+  `run_threshold_kw`.
+- **`control_hunting` checks resolution per signal (#236).** The resolution ceiling was the
+  lowest across all modulating signals, so one 15-minute OA damper made the rule decline and hid
+  a cooling valve sampled every minute and hunting at 20 reversals an hour. Its caveat also read
+  "observed reversals on 500% of the resolvable maximum". Now a signal whose sampling cannot show
+  the warn threshold is not evaluated: its rate is `None`, it is listed in the new metric
+  `not_evaluated_signals`, and a caveat names it. The verdict is the worst signal that can be
+  evaluated, judged against that signal's own ceiling. The rule declines only when no signal can
+  be evaluated.
+- **`boiler_short_cycle` and `compressor_short_cycle` count starts per observed day (#237).**
+  Starts were divided by the span from the first sample to the last, so a logger gap counted as
+  days with no starts. Two days cycling 24 times a day, a 28-day gap and a day off read 1.6
+  starts a day. The rate is now divided by the observed days: the sum of the sample steps no
+  longer than three median intervals, as `control_hunting` measures its observed time. The same
+  trend reads 16 a day (boiler fault, compressor warn). The new metric `n_days_observed` sits
+  beside `n_days` (the span), and a caveat is added when fewer than half the span's days are
+  observed.
+- **`heatpump_defrost` and `compressor_staging` read a short trend over one day (#240).** The
+  span was floored at 1e-9 days, so one defrost in two hours read 24.2 reversing-valve cycles a
+  day (warn), and one stage excursion read 24.2 stage changes a day. The span is now floored at
+  one day, as `boiler_short_cycle` does: those trends read 2.0 a day (ok), with a caveat that the
+  trend spans under a day. `n_days` still reports the real span.
+- **The `heatpump_defrost` ok summary names no cause (#240).** It ended "— check defrost
+  termination" even with no reversals. That cause now appears only on warn and fault, as for the
+  drift rules (#189).
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).

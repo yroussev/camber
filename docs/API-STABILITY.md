@@ -824,6 +824,20 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V report fixes** (0.107; #208, #209, #210), additive and provisional:
   `NormalizedSavings.n_excluded`, `MeterChain.meter_unit` and the `model_label` field of the
   freeze and rebaseline plan rows.
+- **Plant rule fixes** (0.108; #234, #235, #236, #237, #240), additive and provisional:
+  `camber.chillerstaging.chiller_power_running`; the `run_frac` keyword of
+  `analyze_chiller_staging` and `analyze_chiller_staging_fleet` and the `run_source` and
+  `run_threshold_kw` fields of their results (`run_threshold_kw` on `ChillerStagingResult` only);
+  the `min_power_kw` and `run_frac` parameters of `chiller_staging` and `chiller_staging_fleet`
+  and their `run_source` metric (`run_threshold_kw` too on `chiller_staging`);
+  `LoadBaseline.load_source`; the decline reason `load_source_mismatch` of
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`, and their metrics
+  `tower_approach_baseline_load_source` and `baseline_load_source`; `control_hunting`'s metric
+  `not_evaluated_signals`; `BoilerCyclingResult.n_days_observed`, the `gap_factor=` keyword of
+  `analyze_boiler_cycling`, and the `n_days_observed` metric of `boiler_short_cycle` and
+  `compressor_short_cycle`. **Behaviour changes:** `min_power_kw` defaults to `None` (size
+  relative) in place of 2 kW; the short-cycle rates are per observed day; `heatpump_defrost`
+  and `compressor_staging` read a rate over at least one day.
 
 ### The read API server: `camber.api.server`
 
