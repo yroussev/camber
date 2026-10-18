@@ -541,7 +541,8 @@
     "parse_landed_key",
     "read_key_listing",
     "reconcile",
-    "route_key"
+    "route_key",
+    "row_duplicates"
   ],
   "camber.edge.quarantine": [
     "QUARANTINE_DIR",
@@ -551,13 +552,16 @@
     "list_quarantine",
     "quarantine_reconciled",
     "quarantine_root",
-    "release"
+    "release",
+    "remove_row_duplicates"
   ],
   "camber.edge.row_digest": [
     "DIGEST_VERSION",
     "INDEX_NAME",
     "PartitionRows",
+    "PartitionView",
     "file_rows_digest",
+    "read_rows",
     "rows_digest"
   ],
   "camber.edge.sink": [

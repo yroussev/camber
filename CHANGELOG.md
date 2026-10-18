@@ -27,6 +27,17 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **Docs screenshots from per-entry modules.** A module under `scripts/docs_figures.d/` can
   register a browser screenshot with `df.screenshot(path, what)`; `--screenshots --only <path>`
   takes just those. Dev tooling, not packaged.
+- **`camber edge reconcile` finds and removes row duplicates already in the store (#229).** A
+  store reconciliation lists the groups of parts of one facility that hold identical rows under
+  different keys (left by a landing before 0.107, which had no row check), with their keys,
+  sizes and landing times and the copy it keeps, the oldest (`row_duplicates` and
+  `duplicate_copies` in the report; `camber.edge.landing.row_duplicates`). `edge reconcile
+  --apply --yes --reason R` deletes the other copies under the store lock, audited as
+  `edge.reconcile.dedupe` before anything is deleted (`camber.edge.quarantine.remove_row_duplicates`).
+  A facility under a legal hold has its extra copies moved to quarantine instead, and facilities
+  that do not accept data are left alone.
+- `camber.edge.row_digest.PartitionView` and `read_rows`, the row comparisons behind the landing,
+  and a timestamp span (`ts_min`, `ts_max`) in each `_edge_rows.json` entry.
 
 ### Changed
 - **A rule's docstring citations are checked against its references (#232).**
@@ -35,6 +46,31 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   `zones_heat_cool_census` now also links chapter 5, whose discharge-air temperature section lists
   reheating in the cooler zones among the effects of a low discharge-air temperature. Its
   Learn-more links gain that chapter. docs/REFERENCES.md explains both changes.
+- **Behaviour change: the upload inbox is the default (#233).** `route_key(portfolio, key)` now
+  signs an accepted upload into the bucket's `_inbox/` prefix, so every upload passes the
+  landing's row checks before it reaches the store; `inbox=False` keeps the straight-to-store
+  layout of 0.107. Upgrade the cloud landing first (with `camber edge land <bucket>/_inbox
+  --apply` scheduled), then the brokers; forwarders need no change. docs/EDGE-DEPLOY.md gives the
+  order.
+- **Behaviour change: a growing month replaces its earlier part (#228).** The forwarder re-sends
+  the month in progress on every poll with more rows. When a landed object holds every row of
+  the stored parts it overlaps, `camber edge land` replaces them instead of storing it beside
+  them, so a month keeps one part and reads never see a row twice. The partition is swapped in
+  whole (a reader or a crash sees the old partition or the new one), the replacement is audited
+  in the `edge.land` records and recorded in the row-digest cache, and under a legal hold the
+  replaced part is copied into quarantine first. The last observation of each series in the
+  stored part may differ: that is the hour still in progress when it was polled (a resampled mean
+  of the samples so far), which the next poll revises. An object whose rows are all stored
+  already (a late, smaller poll) is a `duplicate`.
+- **Behaviour change: a conflicting overlap is quarantined (#228).** An object that shares an
+  observation (timestamp, equipment and role) with a stored part without holding all of its
+  rows, such as a month whose history changed at the source, goes to quarantine as a `conflict`
+  with the parts it overlaps, instead of landing beside them. Releasing it stores it beside them.
+- **Behaviour change: an empty folder is an empty store everywhere (#233).** `camber store
+  verify` reports 0 parts and exits 0 on an empty directory, and `store normalize` and
+  `migrate-partitions` do nothing and create nothing there, not even a lock file, as `camber
+  serve` already accepted it. A missing path, a file or a directory of other things is still
+  refused. `camber serve` and the store commands now share one definition of a store directory.
 
 ### Fixed
 - **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
@@ -81,6 +117,12 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   A dashboard or site report on a frame with a text column (a mode point) no longer fails: the
   data-quality section, the default trend and the scatter skip non-numeric columns. A zero-row
   frame builds.
+- **A year-only part re-sent in new bytes after its year was migrated is caught (#230).** The
+  landing compares a year-only object's rows with the month partitions of its year and
+  quarantines it as a `duplicate` when they already hold every row, instead of storing the year
+  again beside the migrated months.
+- `camber edge land` now invalidates the store's point catalog after it stores parts, so new
+  equipment and points show up without a manual `rebuild_catalog`.
 
 
 ## [0.107.0] — 2026-10-17

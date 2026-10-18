@@ -993,15 +993,17 @@ class ParquetStore:
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
         """
         from . import _swap
-        from .facilities import _require_store_dir
+        from .facilities import _is_empty_store, _require_store_dir
 
         _require_store_dir(self.root)  # 0.107 (#215): a typo'd path is an error, nothing created
+        # 0.108 (#233): an empty folder is an empty store -- nothing to migrate, no lock file
+        locking = apply and not _is_empty_store(self.root)
         reg = self._registry()
         ws = reg._workspace()
         if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
             raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
-        with self._write_lock(create=False) if apply else _nullcontext():
-            if apply:
+        with self._write_lock(create=False) if locking else _nullcontext():
+            if locking:
                 _swap.recover_tree(self.root, max_depth=3)
             todo = [p for p in self.partitions() if p["legacy"]]
             report = {

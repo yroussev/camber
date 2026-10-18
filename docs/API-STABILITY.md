@@ -824,6 +824,16 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V report fixes** (0.107; #208, #209, #210), additive and provisional:
   `NormalizedSavings.n_excluded`, `MeterChain.meter_unit` and the `model_label` field of the
   freeze and rebaseline plan rows.
+- **Edge landing row checks and store dedupe** (0.108; #228, #229, #230, #233), additive and
+  provisional: `camber.edge.row_digest.PartitionView` and `read_rows`;
+  `camber.edge.landing.row_duplicates` and the `row_duplicates` and `duplicate_copies` keys of
+  the `reconcile` report; `camber.edge.quarantine.remove_row_duplicates` and the audit action
+  `edge.reconcile.dedupe`; the CLI flag `edge reconcile --yes`; the landing category `conflict`
+  and the `replaces`, `replaced`, `revised` and `conflicts_with` fields of a `land` row; the `replaces` key
+  of the `land` report. **Behaviour changes:** `route_key` signs accepted uploads into `_inbox/`
+  by default (`inbox=False` keeps the old layout); the landing replaces a stored part whose rows
+  a new part holds in full and quarantines a conflicting overlap; an empty directory is an empty
+  store for `store verify`, `normalize` and `migrate-partitions`, as for `camber serve`.
 
 ### The read API server: `camber.api.server`
 

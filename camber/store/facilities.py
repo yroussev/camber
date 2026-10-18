@@ -393,36 +393,75 @@ def _workspace_of_store(root: str):
     return ws if os.path.isfile(os.path.join(ws, "_portfolio.json")) else None
 
 
-_STORE_MARKERS = (_FACILITIES, _TOMBSTONES, _WORKSPACE_MARKER, "_catalog.json")
+# What a ParquetStore root holds besides its ``facility_id=`` partitions (0.107, #215, #217): the
+# registry, the tombstones, the workspace marker, the point catalog and its generation, and the
+# single-writer lock file. One list for `camber serve` and the store commands (0.108, #233).
+_STORE_MARKERS = (
+    _FACILITIES,
+    _TOMBSTONES,
+    _WORKSPACE_MARKER,
+    "_catalog.json",
+    "_catalog.gen",
+    "_migrated.json",
+    "_lock",
+)
+
+
+def _store_entries(root):
+    """The names in ``root`` that count (dot-files such as ``.DS_Store`` do not), or ``None``."""
+    try:
+        return [n for n in os.listdir(root) if not n.startswith(".")]
+    except OSError:
+        return None
+
+
+def _store_dir_problem(root) -> str | None:
+    """Why ``root`` is not a ParquetStore directory, or ``None`` when it is (0.108, #233).
+
+    A store is a directory holding ``facility_id=`` (or legacy ``site=``) partitions or the
+    store's own files (:data:`_STORE_MARKERS`); an **empty directory is an empty store**, one
+    nothing was written to yet. A missing path, a file, or a directory of other things is not
+    one, so a mistyped path is never read as an empty store. The one definition `camber serve`
+    and `camber store verify` / `normalize` / `migrate-partitions` share.
+    """
+    root = os.path.abspath(os.fspath(root))
+    if not os.path.exists(root):
+        return f"{root} is not a ParquetStore: it does not exist"
+    if not os.path.isdir(root):
+        return f"{root} is not a ParquetStore: it is not a directory"
+    names = _store_entries(root)
+    if names is None:
+        return f"{root} is not a ParquetStore: it cannot be listed"
+    if not names or any(
+        n in _STORE_MARKERS or n.startswith(("facility_id=", "site=")) for n in names
+    ):
+        return None
+    return (
+        f"{root} is not a ParquetStore: it holds no facility partitions, registry "
+        f"({_FACILITIES}) or workspace marker ({_WORKSPACE_MARKER})"
+    )
 
 
 def _is_store_dir(root) -> bool:
-    """Whether ``root`` is a ParquetStore directory: it exists and holds a facility partition,
-    a registry, a tombstone list, a workspace marker or a point catalog (0.107, #215). An empty
-    or unrelated directory is not one."""
+    """Whether ``root`` is a ParquetStore directory (:func:`_store_dir_problem`): it holds a
+    facility partition or store files, or is empty (0.108, #233: an empty store)."""
+    return _store_dir_problem(root) is None
+
+
+def _is_empty_store(root) -> bool:
+    """Whether ``root`` is an existing directory with nothing in it (dot-files aside)."""
     root = os.fspath(root)
-    if not os.path.isdir(root):
-        return False
-    try:
-        names = os.listdir(root)
-    except OSError:
-        return False
-    return any(n in _STORE_MARKERS or n.startswith(("facility_id=", "site=")) for n in names)
+    return os.path.isdir(root) and _store_entries(root) == []
 
 
 def _require_store_dir(root) -> str:
-    """``root`` (absolute) if it is a ParquetStore directory (:func:`_is_store_dir`), else
-    ``FileNotFoundError`` -- checked before anything is created or locked (0.107, #215)."""
-    root = os.path.abspath(os.fspath(root))
-    if not os.path.isdir(root):
-        why = "it is not a directory" if os.path.exists(root) else "it does not exist"
-        raise FileNotFoundError(f"{root} is not a ParquetStore: {why}")
-    if not _is_store_dir(root):
-        raise FileNotFoundError(
-            f"{root} is not a ParquetStore: it holds no facility partitions, registry "
-            f"({_FACILITIES}) or workspace marker ({_WORKSPACE_MARKER})"
-        )
-    return root
+    """``root`` (absolute) if it is a ParquetStore directory (:func:`_store_dir_problem`; an empty
+    directory is an empty store, 0.108), else ``FileNotFoundError`` -- checked before anything is
+    created or locked (0.107, #215)."""
+    problem = _store_dir_problem(root)
+    if problem is not None:
+        raise FileNotFoundError(problem)
+    return os.path.abspath(os.fspath(root))
 
 
 def _utc_now() -> str:

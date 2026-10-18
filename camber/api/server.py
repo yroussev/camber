@@ -365,42 +365,20 @@ class _ReadHTTPServer6(_ReadHTTPServer):
     address_family = socket.AF_INET6
 
 
-#: what a ParquetStore root holds besides the ``facility_id=`` partitions (its metadata files)
-_STORE_MARKERS = (
-    "_catalog.json",
-    "_catalog.gen",
-    "_facilities.json",
-    "_tombstones.json",
-    "_workspace.json",
-    "_migrated.json",
-    "_lock",
-)
-
-
 def _store_problem(root) -> str | None:
     """Why ``root`` cannot be served as a ParquetStore, or ``None`` when it can (0.107, #217).
 
-    A store is a directory holding ``facility_id=`` partitions or the store's metadata files; an
-    empty directory is a store with nothing written yet. A missing path, a file, or a directory
-    of other things is refused, so a mistyped path is not served as an empty store.
+    The store commands' definition (0.108, #233; ``camber.store.facilities._store_dir_problem``):
+    a directory holding ``facility_id=`` partitions or the store's own files, or an empty
+    directory (a store with nothing written yet). A missing path, a file, or a directory of other
+    things is refused, so a mistyped path is not served as an empty store.
     """
-    root = os.fspath(root)
-    if not os.path.exists(root):
-        return f"{root} is not a ParquetStore: no such directory"
-    if not os.path.isdir(root):
-        return f"{root} is not a ParquetStore: not a directory"
-    try:
-        names = os.listdir(root)
-    except OSError as exc:
-        return f"{root} is not a ParquetStore: cannot list it ({exc.strerror or exc})"
-    if not names:
-        return None
-    if any(n.startswith("facility_id=") or n in _STORE_MARKERS for n in names):
-        return None
-    return (
-        f"{root} is not a ParquetStore: it holds no facility_id= partitions or store files "
-        "(point camber serve at the store directory, e.g. a workspace's store/)"
-    )
+    from ..store.facilities import _store_dir_problem
+
+    problem = _store_dir_problem(root)
+    if problem is not None and os.path.isdir(os.fspath(root)):
+        problem += " (point camber serve at the store directory, e.g. a workspace's store/)"
+    return problem
 
 
 def _resolve_allowed_hosts(allowed_hosts) -> list:
