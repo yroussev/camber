@@ -38,6 +38,20 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   that do not accept data are left alone.
 - `camber.edge.row_digest.PartitionView` and `read_rows`, the row comparisons behind the landing,
   and a timestamp span (`ts_min`, `ts_max`) in each `_edge_rows.json` entry.
+- **`camber edge requeue` and the spool's dead-letter folder (#245).** A batch the sink refuses
+  permanently is kept in `<spool>/dead/` with a record of why (see Changed);
+  `camber edge requeue <edge.json> [--key K] --apply` queues it again once the cause is fixed
+  (`Spool.dead_letters`, `Spool.requeue_dead`, `Spool.stuck`). `camber edge status` shows the
+  stuck and dead batches, and `--json` prints them. The forwarder's poll result counts
+  `already_spooled`, `rejected` and `dead` batches.
+- **Edge config: `timezone` and `dead_letter_after` (#245, #249).** `timezone` (or
+  `CAMBER_EDGE_TIMEZONE`) is the site's IANA zone, passed to the file sources (`source.timezone`
+  overrides it); `dead_letter_after` (default 5) is how many permanent rejections a batch gets.
+- **BACnet: the trend-log read count is configurable (#243)** (`Bacpypes3Client(trend_records=)`,
+  `BacnetClientConfig.trend_records`, `read_trend_log(max_records=)`), and a `BacnetPoint`
+  carries its device's `device_instance` and `address` (#248).
+- **Haystack: `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
+  strict_timezone=)` and `haystack_tz` (#244).**
 
 ### Changed
 - **A rule's docstring citations are checked against its references (#232).**
@@ -81,6 +95,53 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   (`load_source` in the stored coefficients). A baseline frozen earlier has no `load_source`: it
   is still scored, as fitted on the current load, with a caveat that asks for a refreeze if the
   load has changed since.
+- **Behaviour change: a rolling window merges with the part it overlaps.** A source that holds
+  only a window (a BACnet trend log is a ring buffer, a Haystack range can roll) sends a later
+  poll that lacks the oldest rows of the stored part; that landed as a `conflict`. Now, when
+  every observation the new object shares with the stored parts it overlaps carries the same row
+  (the stored part's last observation of each series may still be revised), `camber edge land`
+  stores the union of their rows as one canonical part named by its own bytes, swapped in with
+  the same crash-safe partition swap as a replacement. It is audited in `edge.land` as `merges` /
+  `merged`, with the stored key and the counts of stored rows kept, new rows and revised rows.
+  Any disagreement in the overlap is still a `conflict`, an exact superset is still a
+  replacement, duplicates are still quarantined, and under a legal hold the parts a merge
+  supersedes are copied into quarantine first (`camber.edge.row_digest.merge_parts`).
+- **Behaviour change: a permanently refused batch is dead-lettered and no longer blocks the spool
+  (#245).** A 4xx answer other than 408, 425 and 429, or a validation error, is permanent: the
+  drain counts it and goes on with the batches behind it (it used to retry the head batch
+  forever and send nothing else). After `dead_letter_after` rejections the batch moves to
+  `<spool>/dead/` with a `<file>.json` record, a `dead` journal record and a WARNING. Transient
+  errors still stop the cycle and back off. Dead letters count toward the disk cap, and
+  `edge decommission` counts them as unacknowledged
+  (`camber.edge.sink.is_permanent_error`, `is_permanent_status`, `PermanentSinkError`).
+- **Behaviour change: SDK sinks send a compact metadata subset (#245).** The S3, Azure and GCS
+  sinks send `sha256`, `rows`, `rows_sha256`, `schema_version`, `year` and `month`,
+  JSON-encoded and ASCII-safe (`camber.edge.sink.sink_metadata`), instead of the whole manifest as
+  Python reprs, which exceeded S3's 2 KB metadata limit for a site with a few hundred equipment
+  and broke on non-ASCII names. The full manifest stays in the spool journal.
+- **Behaviour change: the spool keeps one copy of each batch (#246).** `Spool.enqueue` skips a
+  batch whose key and content sha256 are already pending or dead-lettered, so a forwarder that
+  re-reads its window while offline no longer queues a copy per poll.
+- **Behaviour change: the edge config is validated (#249).** `load_config` refuses an unknown key
+  (with the closest known one), a non-boolean `quality`, an `interval`, `spool_max_bytes` or
+  `sink.timeout` of 0 or less, an unknown `wire_format`, `part_layout`, sink kind, `resample`
+  or `timezone`, and, as secrets, any value with a signature or credential in it whatever its
+  scheme (an Azure SAS `sig=`, `X-Goog-Signature`, `signature=` / `token=` parameters,
+  `AccountKey=`) and any URL with a password in its userinfo. Keys starting with `_`, and `note`,
+  `comment`, `description`, are comments. `Spool` refuses a `max_bytes` of 0 or less.
+- **Behaviour change: duplicate BACnet point names are refused (#248).** `BacnetSource` raises
+  instead of silently keeping one of two points with one name, and `discovery_to_points` names
+  objects that share a name on different devices `<device name>_<object name>` (then
+  `_<type><instance>`), with a warning.
+- **Behaviour change: Haystack history is on the site's wall clock (#244).** `parse_his_grid`
+  returns a tz-naive index through `parse_timestamps`, like every other adapter, using the
+  adapter's `timezone`, else the Haystack tz name on the timestamps (`New_York`), instead of a
+  fixed-offset aware index.
+- **Behaviour change: `edge land` isolates per-object errors (#247).** One object that fails is
+  reported in the report's `errors` and the `done` audit record, the run goes on, and `land
+  --apply` exits 1. `edge reconcile --apply` does the same.
+
+
 
 ### Fixed
 - **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
@@ -175,6 +236,29 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The `heatpump_defrost` ok summary names no cause (#240).** It ended "— check defrost
   termination" even with no reversals. That cause now appears only on warn and fault, as for the
   drift rules (#189).
+- **`camber edge selftest` no longer drains the real spool (#242).** It ran the forwarder on the
+  configured spool, so a backlog queued during an outage was "sent" to the in-memory sink and
+  acknowledged, then deleted. It now runs on a temporary spool and never reads, creates or writes
+  the configured one, and a retired spool gives an error and exit 1 instead of a traceback.
+- **BACnet trend-log reads return the newest records (#243).** `read_trend_log` read 1000 records
+  from position 1, the oldest in the ring buffer, so once a log held more than 1000 records a
+  polling forwarder never saw new data. It now reads `record-count` and the newest records.
+- **A Haystack hisRead across a DST change parses, and units are kept (#244).** A range whose UTC
+  offset changed raised "Tz-aware datetime.datetime cannot be converted"; `units()` was always
+  empty and now holds each point's unit from the grid.
+- **A quarantine key collision no longer corrupts the record or aborts the landing (#247).** A
+  second, different upload at a key quarantine already held overwrote the record with its own
+  hash, then failed the move, and the exception stopped the run, so every later object stayed in
+  the inbox on every run. The record is never overwritten: the upload stays in the inbox as a
+  `quarantine_collision`, and the run goes on. `quarantine release` hashes each held object again
+  and refuses one that matches neither its name nor its record, record or not.
+- **BACnet objects with one name on two devices are both kept and read at their devices (#248).**
+  Discovery dropped each object's device; two controllers with a `ZN-T TREND` gave one point, and
+  every read went to the single target address.
+- **The edge config's secret scan catches SAS URLs and DSN passwords (#249)**, and file sources
+  get the config's `timezone` (it was dropped).
+
+
 
 
 ## [0.107.0] — 2026-10-17

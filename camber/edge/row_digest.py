@@ -48,6 +48,7 @@ __all__ = [
     "PartitionRows",
     "PartitionView",
     "read_rows",
+    "merge_parts",
 ]
 
 DIGEST_VERSION = 1
@@ -190,11 +191,15 @@ def read_rows(path: str):
     pattern of its float64 (``-0.0`` read as ``0.0``, one NaN), so equal rows compare equal
     whatever bytes held them. ``None`` when the part has no digest.
     """
+    return _rows_frame(_read_table(path))
+
+
+def _rows_frame(table):
+    """:func:`read_rows` of an Arrow table already in memory (``None`` when it has no digest)."""
     import numpy as np
     import pandas as pd
     import pyarrow.compute as pc
 
-    table = _read_table(path)
     if table is None:
         return None
     try:
@@ -263,6 +268,79 @@ def _tail_covered(big, small):
     if not bool((tail["ts"] == tail["_last"]).all()):
         return None
     return int(missing[_KEY].drop_duplicates().shape[0])
+
+
+def _agrees(new, old):
+    """How many observations of ``old`` the part ``new`` revises, when every observation the two
+    share carries the same row but for a revised last observation of each series of ``old``;
+    ``None`` when any other shared observation differs (0.108: the merge of a rolling window)."""
+    if new is None or old is None:
+        return None
+    if len(new) == 0 or len(old) == 0:
+        return 0
+    m = old.drop_duplicates().merge(new.drop_duplicates(), on=_KEY, suffixes=("", "_n"))
+    if m.empty:
+        return 0
+    diff = m.loc[(m["value"] != m["value_n"]) | (m["equip_class"] != m["equip_class_n"]), _KEY]
+    if diff.empty:
+        return 0
+    last = old.groupby(["equip", "role"], sort=False)["ts"].max().rename("_last").reset_index()
+    tail = diff.drop_duplicates().merge(last, on=["equip", "role"], how="left")
+    if not bool((tail["ts"] == tail["_last"]).all()):
+        return None
+    return int(len(tail))
+
+
+def merge_parts(new_path: str, old_paths) -> dict | None:
+    """The union of a new part and the stored parts it overlaps, as a canonical table (0.108).
+
+    Every row of ``new_path`` is kept; a stored row is kept unless the new part holds an
+    observation with its ``(ts, equip, role)`` (the overlap, which agrees, or a revised last
+    observation). ``{"table", "kept_old_rows", "new_rows"}``, or ``None`` when a part has no
+    digest or the parts mix tz-aware and naive timestamps (they are then not merged)."""
+    import pandas as pd
+
+    from ..store.parquet_store import _canonical_table
+
+    def norm(path):
+        t = _read_table(path)
+        if t is None:
+            return None, None, None
+        n, aware = _norm_table(t)
+        return n, aware, (t.column("ts").type.tz if aware else None)
+
+    new, aware, tz = norm(new_path)
+    if new is None:
+        return None
+    olds = []
+    for p in old_paths:
+        o, a, _tz = norm(p)
+        if o is None or a != aware:
+            return None
+        olds.append(o.to_pandas())
+    new_df = new.to_pandas()
+    old_df = pd.concat(olds, ignore_index=True) if olds else new_df.iloc[0:0]
+    keys = new_df[_KEY].drop_duplicates()
+    m = old_df.merge(keys, on=_KEY, how="left", indicator=True)
+    kept = old_df.loc[(m["_merge"] == "left_only").to_numpy()]
+    union = pd.concat([kept, new_df], ignore_index=True)
+    ts = pd.to_datetime(union["ts"].astype("int64"), unit="ns")
+    if aware:
+        ts = ts.dt.tz_localize("UTC").dt.tz_convert(tz)
+    out = pd.DataFrame(
+        {
+            "ts": ts,
+            "equip": union["equip"].astype(object),
+            "equip_class": union["equip_class"].astype(object),
+            "role": union["role"].astype(object),
+            "value": union["value"].astype("float64"),
+        }
+    )
+    return {
+        "table": _canonical_table(out),
+        "kept_old_rows": int(len(kept)),
+        "new_rows": int(len(new_df)),
+    }
 
 
 def _differing(a, b) -> int:
@@ -515,6 +593,11 @@ class PartitionView:
             it holds every row of each member it overlaps -- a month that grew since its last
             send -- or every row but the last observation of each series in that member, which
             it revises (the hour that was still in progress; ``revised`` counts them);
+        ``merges``
+            (0.108) it lacks rows of a member it overlaps, but every observation they share
+            carries the same row (but for a revised last observation of each series of the
+            member): a rolling window such as a trend-log ring buffer, polled again after its
+            oldest records dropped out. The partition keeps the union of the two;
         ``conflict``
             it overlaps a member any other way (``differing`` counts the shared observations
             whose rows differ).
@@ -531,4 +614,7 @@ class PartitionView:
             return {**out, "verdict": "supersedes", "revised": sum(revised)}
         if _tail_covered(union, frame) is not None:
             return {**out, "verdict": "duplicate"}
+        agree = [_agrees(frame, self.rows(n)) for n in names]
+        if all(a is not None for a in agree):
+            return {**out, "verdict": "merges", "revised": sum(agree)}
         return {**out, "verdict": "conflict", "differing": _differing(frame, union)}

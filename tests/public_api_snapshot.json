@@ -515,6 +515,7 @@
     "rule_days"
   ],
   "camber.edge.config": [
+    "CONFIG_KEYS",
     "EdgeConfig",
     "build_forwarder",
     "load_config"
@@ -547,6 +548,7 @@
   ],
   "camber.edge.quarantine": [
     "QUARANTINE_DIR",
+    "QuarantineCollision",
     "RECORD_SUFFIX",
     "discard",
     "land",
@@ -562,23 +564,30 @@
     "PartitionRows",
     "PartitionView",
     "file_rows_digest",
+    "merge_parts",
     "read_rows",
     "rows_digest"
   ],
   "camber.edge.sink": [
     "AzureBlobSink",
     "GcsSink",
+    "PermanentSinkError",
     "PresignedHttpsSink",
     "S3Sink",
+    "SINK_METADATA_KEYS",
     "Sink",
-    "collect_sink"
+    "collect_sink",
+    "is_permanent_error",
+    "is_permanent_status",
+    "sink_metadata"
   ],
   "camber.edge.spool": [
     "CompactResult",
     "DrainResult",
     "Spool",
     "SpoolEntry",
-    "SpoolRetired"
+    "SpoolRetired",
+    "read_retirement"
   ],
   "camber.energy_factors": [
     "Conversion",
@@ -864,6 +873,7 @@
   "camber.ingest.haystack": [
     "HaystackAdapter",
     "client_transport",
+    "haystack_tz",
     "http_json_transport",
     "parse_his_grid",
     "phable_transport"

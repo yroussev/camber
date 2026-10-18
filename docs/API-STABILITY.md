@@ -848,6 +848,33 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `compressor_short_cycle`. **Behaviour changes:** `min_power_kw` defaults to `None` (size
   relative) in place of 2 kW; the short-cycle rates are per observed day; `heatpump_defrost`
   and `compressor_staging` read a rate over at least one day.
+- **Edge forwarder, spool, sinks and ingest protocols** (0.108; #242–#249 and the rolling-window
+  merge), additive and provisional: `camber.edge.sink.sink_metadata`, `SINK_METADATA_KEYS`,
+  `is_permanent_error`, `is_permanent_status` and `PermanentSinkError`;
+  `camber.edge.spool.read_retirement`, `Spool(dead_letter_after=)`, `Spool.stuck`,
+  `Spool.dead_letters`, `Spool.requeue_dead`, the `SpoolEntry` fields `rejects` and
+  `last_error`, the `DrainResult` fields `rejected` and `dead`, and the journal ops `dead` and
+  `requeue`; the `BatchResult` fields `already_spooled`, `rejected` and `dead`;
+  `camber.edge.config.CONFIG_KEYS`, the `EdgeConfig` fields `timezone` and `dead_letter_after`,
+  the config keys `timezone`, `dead_letter_after`, `sink.timeout`, `source.timezone` and
+  `source.strict_timezone`, and `CAMBER_EDGE_TIMEZONE`; `camber.edge.row_digest.merge_parts`;
+  `camber.edge.quarantine.QuarantineCollision`, the landing category `quarantine_collision`,
+  the `merged` field of a `land` row, the `merges` and `errors` keys of the `land` report and
+  the `merges` / `merged` / `errors` details of the `edge.land` audit records, and the `errors`
+  key of the `reconcile --apply` report; the CLI command `edge requeue` (`--key`, `--apply`)
+  and the flags `edge status --json` and `--limit`; `Bacpypes3Client(trend_records=)`,
+  `BacnetClientConfig.trend_records`, `read_trend_log(address=, max_records=)`,
+  `read_present_value(address=)`, and the `BacnetPoint` fields `device_instance` and
+  `address`; `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
+  strict_timezone=)`, `Series.attrs["unit"]` on its result, and
+  `camber.ingest.haystack.haystack_tz`. **Behaviour changes:** a landed part that agrees with
+  the stored parts it overlaps is merged with them; a permanent sink rejection is counted and
+  dead-lettered instead of blocking the spool; SDK sinks send a compact metadata subset; the
+  spool skips a batch already pending; the edge config refuses unknown keys, bad values and
+  more secret shapes; `BacnetSource` refuses duplicate point names and `discovery_to_points`
+  renames objects that share a name; `parse_his_grid` returns a tz-naive wall-clock index;
+  `edge land` isolates per-object errors and exits 1 when one failed; `edge selftest` uses a
+  temporary spool.
 
 ### The read API server: `camber.api.server`
 
