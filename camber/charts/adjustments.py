@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ._labels import mpl_text
+
 __all__ = ["adjustment_waterfall"]
 
 _TOTAL = "#6b7280"
@@ -59,9 +61,9 @@ def adjustment_waterfall(adjusted, *, ax=None, title: str | None = None, ylabel:
             )
         running += v
     ax.set_xticks(range(len(steps)))
-    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+    ax.set_xticklabels([mpl_text(t) for t in labels], rotation=30, ha="right", fontsize=8)
     ax.axhline(0.0, color="#999999", lw=0.8)
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(mpl_text(ylabel))
     pct = adjusted.savings_pct
     band = adjusted.abs_uncertainty
     head = f"adjusted savings {adjusted.savings:,.0f}"
@@ -69,7 +71,7 @@ def adjustment_waterfall(adjusted, *, ax=None, title: str | None = None, ylabel:
         head += f" ± {band:,.0f} at {adjusted.confidence:.0%}"
     if pct is not None:
         head += f" ({pct:.1%} of adjusted baseline)"
-    ax.set_title(title or f"M&V adjustment waterfall — {head}", fontsize=10)
+    ax.set_title(mpl_text(title or f"M&V adjustment waterfall — {head}"), fontsize=10)
     if any(material.values()):
         ax.text(
             0.99,

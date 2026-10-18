@@ -12,12 +12,17 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from ._labels import mpl_text
+
 
 def carpet_matrix(load: pd.Series, *, agg: str = "mean"):
     """Reshape a datetime-indexed Series into an (hour x date) matrix.
 
     Returns ``(matrix, hours, dates)`` where ``matrix[h, d]`` aggregates all samples in hour
     ``h`` of day ``d`` (rows 0..23 ascending). Missing hour/day cells are NaN.
+
+    The columns are every calendar day from the first to the last sample (0.108, #263), so a day
+    with no data is a blank column and the date axis stays linear: an outage shows as a gap.
     """
     s = pd.Series(load).dropna()
     if s.empty:
@@ -25,6 +30,8 @@ def carpet_matrix(load: pd.Series, *, agg: str = "mean"):
     idx = pd.DatetimeIndex(s.index)
     dates = idx.normalize()
     pivot = s.groupby([idx.hour, dates]).agg(agg).unstack().reindex(range(24)).sort_index()
+    days = pd.date_range(dates.min(), dates.max(), freq="D")
+    pivot = pivot.reindex(columns=days)
     return pivot.to_numpy(dtype=float), pivot.index.to_numpy(), pivot.columns
 
 
@@ -45,7 +52,7 @@ def load_carpet(
     if ax is None:
         _, ax = plt.subplots(figsize=(13, 4))
     if mat.size == 0:
-        ax.set_title(title or "Load carpet — no data")
+        ax.set_title(mpl_text(title or "Load carpet — no data"))
         return ax
 
     im = ax.imshow(
@@ -56,7 +63,7 @@ def load_carpet(
         extent=(0, mat.shape[1], 0, 24),
         interpolation="nearest",
     )
-    ax.figure.colorbar(im, ax=ax, label=label)
+    ax.figure.colorbar(im, ax=ax, label=mpl_text(label))
     ax.set_ylabel("Hour of day")
     ax.set_yticks(range(0, 25, 6))
     ax.set_xlabel("Date")
@@ -71,5 +78,5 @@ def load_carpet(
         ha="right",
         fontsize=8,
     )
-    ax.set_title(title or f"Load carpet — {n} days, hourly {agg}")
+    ax.set_title(mpl_text(title or f"Load carpet — {n} days, hourly {agg}"))
     return ax

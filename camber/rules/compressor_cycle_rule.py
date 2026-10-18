@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..boilercycle import _resolution_check, analyze_boiler_cycling
+from ..boilercycle import _coverage_caveat, _resolution_check, analyze_boiler_cycling
 from ..model.roles import Role
 from .base import Finding
 
@@ -27,8 +27,8 @@ class CompressorShortCycle:
 
     def __init__(self, max_starts_per_day: float = 12.0, max_interval_min: float = 15.0):
         # Not derived from the DX minimum off-time: a ~5 min timer alone would permit ~12 starts
-        # an HOUR. 12 starts a day (about one every 2 h, averaged over the trend span including
-        # idle days) is a CAMBER screening ceiling.
+        # an HOUR. 12 starts a day (about one every 2 h, averaged over the observed days, idle
+        # ones included; 0.108, #237: data gaps are left out) is a CAMBER screening ceiling.
         self.max_starts_per_day = max_starts_per_day
         # 0.104 (#143): the coarsest trend interval whose count can vouch for "ok"
         self.max_interval_min = max_interval_min
@@ -83,9 +83,10 @@ class CompressorShortCycle:
                 "runtime_pct": res.runtime_pct,
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
+                "n_days_observed": res.n_days_observed,  # 0.108 (#237)
                 "interval_min": res.interval_min,  # 0.104 (#143)
                 "n_partial": res.n_partial,  # 0.104 (#143)
             },
             summary=summary,
-            caveats=caveats,
+            caveats=caveats + _coverage_caveat(res, "compressor"),  # 0.108 (#237)
         )

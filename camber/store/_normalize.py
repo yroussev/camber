@@ -402,8 +402,9 @@ def verify(root, *, facility_id=None) -> dict:
     ``ok`` is whether every part is readable and no facility's data is stranded outside its
     partition by an interrupted swap.
 
-    0.107: ``root`` must be a store (``FileNotFoundError`` otherwise, #215) and ``facility_id``
-    one it knows (``ValueError``); ``leftovers`` lists what interrupted ingests left (#213; the
+    0.107: ``root`` must be a store (``FileNotFoundError`` otherwise, #215; an empty directory is
+    an empty store since 0.108, #233: 0 parts, ``ok``) and ``facility_id`` one it knows
+    (``ValueError``); ``leftovers`` lists what interrupted ingests left (#213; the
     next ingest recovers them) and ``empty_facilities`` the registered facilities with no part
     file in a state that should have some.
     """
@@ -523,9 +524,11 @@ def normalize(
     "parts", "rows", "bytes_before", "bytes_after", "skipped": [{store, facility_id, parts,
     reason}], "counts"}`` (``bytes_after`` is ``None`` in a dry run).
     """
-    from .facilities import _require_store_dir
+    from .facilities import _is_empty_store, _require_store_dir
 
     _require_store_dir(root)  # 0.107 (#215): before the lock, which would create the directory
+    # 0.108 (#233): an empty folder is an empty store -- nothing to rewrite, and no lock file
+    locking = apply and not _is_empty_store(root)
     if facility_id is not None:
         require_facility_id(facility_id)
     ws, main, stores = _targets(root)
@@ -533,7 +536,7 @@ def normalize(
         _require_known_facility(main, stores, facility_id)
     if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
         raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
-    if apply:
+    if locking:
         from ._lock import store_lock  # lazy: it imports the portfolio, which imports the store
 
         lock = store_lock(main, timeout=lock_timeout)
@@ -545,7 +548,7 @@ def normalize(
             refused = why(facility_id)
             if refused is not None:
                 raise ValueError(f"facility {facility_id!r} is not normalized: {refused}")
-        if apply:
+        if locking:
             for _label, sroot in stores:
                 _swap.recover_tree(sroot, max_depth=3)
         rows, todo, skipped = _scan(stores, facility_id, why)

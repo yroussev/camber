@@ -830,12 +830,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `store.drop_facility`, `store.prune` and `store.drop_partition`; the `recover` action
   `archive_blocked_legal_hold`; the `deletes` list of a restore plan from `archived`.
   **Behaviour changes**, inside a portfolio workspace only: those four primitives need a reason
-  and refuse a facility under a legal hold (`LifecycleError`); `FacilityRegistry.register` (and
+  and refuse a facility under a legal hold (`LifecycleError`), and `drop_facility` and `remove`
+  also one that is not `provisioning` / `active`; `FacilityRegistry.register` (and
   so a store write's metadata) refuses to change `private`, `display_name`, `archive`,
   `offboarding` or `edge_devices`; `interop.openfdd.ingest_package` refuses a changed or forced
   re-ingest of a held facility, and its state refusal is now a `LifecycleError` (still a
   `ValueError`); a config run with a `faults` fold, and a drift or M&V baseline write, refuse an
-  archived, purged or held facility, whose report outputs are no longer recorded in its manifest;
+  archived or purged facility (a hold alone does not), whose report outputs are no longer
+  recorded in its manifest;
   `restore` empties the live trees its bundle does not list and, under a hold, refuses one that
   would delete a live file; `Portfolio.rename` refuses another facility's id, name or past
   display name; `recover` leaves a held facility's hot data. A plain store is unchanged.
@@ -845,6 +847,30 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   part nodes are per equipment (`bldg:<equip>.Cooling_Coil`). The Brick and 223P readers decode
   percent-encoded local names. `roles_from_haystack` and `topology_from_haystack` read Haystack
   JSON v3 and Hayson markers and refs.
+- **Edge landing row checks and store dedupe** (0.108; #228, #229, #230, #233), additive and
+  provisional: `camber.edge.row_digest.PartitionView` and `read_rows`;
+  `camber.edge.landing.row_duplicates` and the `row_duplicates` and `duplicate_copies` keys of
+  the `reconcile` report; `camber.edge.quarantine.remove_row_duplicates` and the audit action
+  `edge.reconcile.dedupe`; the CLI flag `edge reconcile --yes`; the landing category `conflict`
+  and the `replaces`, `replaced`, `revised` and `conflicts_with` fields of a `land` row; the `replaces` key
+  of the `land` report. **Behaviour changes:** `route_key` signs accepted uploads into `_inbox/`
+  by default (`inbox=False` keeps the old layout); the landing replaces a stored part whose rows
+  a new part holds in full and quarantines a conflicting overlap; an empty directory is an empty
+  store for `store verify`, `normalize` and `migrate-partitions`, as for `camber serve`.
+- **Plant rule fixes** (0.108; #234, #235, #236, #237, #240), additive and provisional:
+  `camber.chillerstaging.chiller_power_running`; the `run_frac` keyword of
+  `analyze_chiller_staging` and `analyze_chiller_staging_fleet` and the `run_source` and
+  `run_threshold_kw` fields of their results (`run_threshold_kw` on `ChillerStagingResult` only);
+  the `min_power_kw` and `run_frac` parameters of `chiller_staging` and `chiller_staging_fleet`
+  and their `run_source` metric (`run_threshold_kw` too on `chiller_staging`);
+  `LoadBaseline.load_source`; the decline reason `load_source_mismatch` of
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`, and their metrics
+  `tower_approach_baseline_load_source` and `baseline_load_source`; `control_hunting`'s metric
+  `not_evaluated_signals`; `BoilerCyclingResult.n_days_observed`, the `gap_factor=` keyword of
+  `analyze_boiler_cycling`, and the `n_days_observed` metric of `boiler_short_cycle` and
+  `compressor_short_cycle`. **Behaviour changes:** `min_power_kw` defaults to `None` (size
+  relative) in place of 2 kW; the short-cycle rates are per observed day; `heatpump_defrost`
+  and `compressor_staging` read a rate over at least one day.
 
 ### The read API server: `camber.api.server`
 

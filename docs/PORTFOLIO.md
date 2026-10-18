@@ -153,9 +153,19 @@ anything is deleted, and names the hold:
 | `camber interop openfdd ingest` | 0.108 | a re-ingest that replaces its partition (an unchanged one is still skipped) |
 | `ParquetStore.drop_facility`, `prune`, `drop_partition` | 0.108 | the deletion |
 | `FacilityRegistry.remove` | 0.108 | the tombstoning |
-| a config run with a `faults` fold, `camber drift freeze` / `accept`, `camber mv freeze` / `rebaseline` / `adjust` | 0.108 | the state write |
 | `camber facility restore` from `archived` | 0.108 | a restore that would delete or change a live file |
 | `camber portfolio recover` (run first by every lifecycle command) | 0.108 | finishing an interrupted archive (`archive_blocked_legal_hold`) |
+
+A hold blocks only deleting or replacing data. The non-destructive state writes of an active (or
+provisioning) facility stay allowed under a hold: a config run's `faults` fold, and `camber drift
+freeze` / `accept` and `camber mv freeze` / `rebaseline` / `adjust`, which add versions. An
+archived or purged facility's state is frozen whether it is held or not (see
+[Per-facility state](#per-facility-state)).
+
+`ParquetStore.drop_facility` and `FacilityRegistry.remove` also refuse, inside a workspace, a
+facility that is not `provisioning` or `active` (suspended, offboarding, archived), as a dataset
+purge does: its data belongs to its lifecycle, and an archived facility leaves through `camber
+facility purge`.
 
 Inside a workspace the store and registry primitives in this table also need a `reason`
 (`ValueError` without one) and are audited: `store.drop_facility`, `store.prune` (one line per
@@ -229,9 +239,8 @@ folder config names one with `"workspace": "<root>"`. Then:
   a store elsewhere (top-level `"mv_store"`) is migrated like a drift store: `camber portfolio
   migrate` moves every version into `state/<fid>/` and leaves a redirect stub.
 
-**Frozen state (0.108).** An archived facility's state lives in its export bundle, a purged one
-has none, and a facility under a legal hold keeps its state as it is. For these three, nothing
-writes `state/<fid>/`:
+**Frozen state (0.108).** An archived facility's state lives in its export bundle and a purged one
+has none, so for these two, held or not, nothing writes `state/<fid>/`:
 
 - a config run with a `faults` section is refused up front (`LifecycleError`), before any rule
   runs;
@@ -241,7 +250,8 @@ writes `state/<fid>/`:
   is not recorded in the facility manifest (a warning says so).
 
 A run without a `faults` section only reads, so it still runs (an archived facility is skipped
-unless `include_inactive` is set, as before).
+unless `include_inactive` is set, as before). A legal hold on its own does not freeze the state:
+these writes add to it, and a hold blocks only deleting or replacing data.
 
 `camber facility show <id>` prints the manifest. Outside a workspace nothing changes: stores stay
 keyed by the site string, and folder configs do not warn about a missing `facility_id`.

@@ -869,7 +869,7 @@ class ParquetStore:
                     )
             return removed
 
-    def _delete_gate(self, fids, reason, by: str, what: str = "delete its data"):
+    def _delete_gate(self, fids, reason, by: str, what: str = "delete its data", states=False):
         """``(portfolio, reason)`` for a delete primitive: the workspace's hold, reason and audit
         rule (:func:`camber.datasets._lifecycle.store_delete_gate`); ``(None, reason)`` for a
         plain store or a scratch one."""
@@ -877,7 +877,7 @@ class ParquetStore:
             return None, reason
         from ..datasets._lifecycle import store_delete_gate  # lazy: datasets imports the store
 
-        return store_delete_gate(self.root, fids, reason=reason, by=by, what=what)
+        return store_delete_gate(self.root, fids, reason=reason, by=by, what=what, states=states)
 
     def _prune_targets(self, before_year: int, facility_id) -> list:
         """``[(facility_id, year)]`` of the year partitions :meth:`prune` would remove."""
@@ -1048,15 +1048,17 @@ class ParquetStore:
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
         """
         from . import _swap
-        from .facilities import _require_store_dir
+        from .facilities import _is_empty_store, _require_store_dir
 
         _require_store_dir(self.root)  # 0.107 (#215): a typo'd path is an error, nothing created
+        # 0.108 (#233): an empty folder is an empty store -- nothing to migrate, no lock file
+        locking = apply and not _is_empty_store(self.root)
         reg = self._registry()
         ws = reg._workspace()
         if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
             raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
-        with self._write_lock(create=False) if apply else _nullcontext():
-            if apply:
+        with self._write_lock(create=False) if locking else _nullcontext():
+            if locking:
                 _swap.recover_tree(self.root, max_depth=3)
             todo = [p for p in self.partitions() if p["legacy"]]
             report = {
@@ -1211,13 +1213,16 @@ class ParquetStore:
 
         Inside a portfolio workspace (0.108, #250) it needs a ``reason``, is refused
         (:class:`~camber.portfolio.LifecycleError`, nothing deleted) for a facility under a legal
-        hold, and is audited as ``store.drop_facility`` (plus ``facility.remove`` with the same
-        reason when ``forget``). The lifecycle's own deletions (``camber facility archive|purge``)
-        do not come through here.
+        hold or one that is not ``provisioning`` / ``active`` (an archived facility goes through
+        ``camber facility purge``), and is audited as ``store.drop_facility`` (plus
+        ``facility.remove`` with the same reason when ``forget``). The lifecycle's own deletions
+        (``camber facility archive|purge``) do not come through here.
         """
         require_facility_id(facility_id)
         with self._write_lock(create=forget):
-            pf, reason = self._delete_gate([facility_id], reason, "`ParquetStore.drop_facility`")
+            pf, reason = self._delete_gate(
+                [facility_id], reason, "`ParquetStore.drop_facility`", states=True
+            )
             rows = self._drop_facility(
                 facility_id, forget, reason=reason or "drop_facility(forget=True)"
             )

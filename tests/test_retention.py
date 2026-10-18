@@ -363,15 +363,15 @@ def _ws(tmp_path):
         {"fingerprint": "new-closed", "status": "resolved", "resolved_at": "2026-01-01"},
         {"fingerprint": "odd-date", "status": "suppressed", "last_seen": "run-17"},
     ]  # fmt: skip
-    json.dump({"faults": faults}, open(os.path.join(sdir, "faults.json"), "w"))
+    json.dump({"faults": faults}, open(os.path.join(sdir, "faults.json"), "w", encoding="utf-8"))
     hist = [{"frozen_at": f"2020-01-{i + 1:02d}", "coefficients": {}} for i in range(14)]
     json.dump(
         {"baselines": [{"fingerprint": "b1", "kind": "pump_flow", "history": hist}]},
-        open(os.path.join(sdir, "baselines.json"), "w"),
+        open(os.path.join(sdir, "baselines.json"), "w", encoding="utf-8"),
     )
     mv = {"schema": 1, "mv_baselines": [{"kind": "mv_bills", "history": hist}]}
-    json.dump(mv, open(os.path.join(sdir, "mv_baselines.json"), "w"))
-    with open(os.path.join(sdir, "weather_audit.ndjson"), "w") as fh:
+    json.dump(mv, open(os.path.join(sdir, "mv_baselines.json"), "w", encoding="utf-8"))
+    with open(os.path.join(sdir, "weather_audit.ndjson"), "w", encoding="utf-8") as fh:
         for ts in ("2019-05-01T00:00:00Z", "2026-05-01T00:00:00Z"):
             fh.write(json.dumps({"ts": ts, "service": "isd", "sent": True}) + "\n")
     from camber.portfolio._state import record_outputs
@@ -379,7 +379,7 @@ def _ws(tmp_path):
     paths = {}
     for i in range(14):
         p = os.path.join(sdir, "reports", f"r{i:02d}.html")
-        open(p, "w").write(str(i))
+        open(p, "w", encoding="utf-8").write(str(i))
         os.utime(p, (1_700_000_000 + i, 1_700_000_000 + i))
         paths[p] = "report"
     record_outputs(pf.root, fid, paths)

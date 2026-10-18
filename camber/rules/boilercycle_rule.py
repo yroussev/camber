@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..boilercycle import _resolution_check, analyze_boiler_cycling
+from ..boilercycle import _coverage_caveat, _resolution_check, analyze_boiler_cycling
 from ..model.roles import Role
 from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
@@ -83,12 +83,15 @@ class BoilerShortCycle:
                 "runtime_pct": res.runtime_pct,
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
+                "n_days_observed": res.n_days_observed,  # 0.108 (#237)
                 "interval_min": res.interval_min,  # 0.104 (#143)
                 "n_partial": res.n_partial,  # 0.104 (#143)
                 **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
             summary=summary,
-            caveats=([GAS_RUN_CAVEAT] if run_source else []) + res_caveats,
+            caveats=([GAS_RUN_CAVEAT] if run_source else [])
+            + res_caveats
+            + _coverage_caveat(res, "boiler"),  # 0.108 (#237)
         )
 
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:

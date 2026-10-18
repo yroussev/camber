@@ -22,8 +22,13 @@ those facilities follow the 0.95 lifecycle, and these checks are the one place i
 - **delete** -- the store and registry primitives (``ParquetStore.drop_facility`` / ``prune`` /
   ``drop_partition``, ``FacilityRegistry.remove``) refuse a held facility inside a workspace,
   need a reason and audit (:func:`store_delete_gate`, :func:`delete_blockers`);
+  ``drop_facility`` and ``remove`` also refuse a facility that has left ``provisioning`` /
+  ``active``, as a purge does (:func:`purge_blockers`): an archived one goes through the
+  lifecycle purge;
 - **state writes** -- a config run never writes ``state/<fid>/`` (faults, baselines, the manifest)
-  of an archived, purged or held facility (:func:`state_write_blockers`).
+  of an archived or purged facility (:func:`state_write_blockers`). A legal hold blocks only
+  deleting or replacing data, so the non-destructive writes (a faults fold, a baseline freeze or
+  accept, which add versions) stay allowed for a held facility that is not archived.
 
 Outside a workspace there are no states to follow and no holds: nothing here refuses anything,
 and the store's own guard (:meth:`camber.store.FacilityRegistry._guard_write`: tombstoned ids,
@@ -157,20 +162,26 @@ def replace_blockers(pf, store_root, fids, *, by: str = "CAMBER") -> list:
     )
 
 
-def store_delete_gate(store_root, fids, *, reason, by: str, what: str = "delete its data"):
+def store_delete_gate(
+    store_root, fids, *, reason, by: str, what: str = "delete its data", states: bool = False
+):
     """The workspace rule for a store or registry delete primitive (0.108, #250).
 
     Outside a workspace: ``(None, reason)``, nothing refused (a plain store keeps its behaviour).
     Inside one: ``reason`` is required (``ValueError``), a facility of ``fids`` under a legal hold
     refuses the call (:class:`~camber.portfolio.LifecycleError`) and ``(portfolio, reason)`` comes
-    back, so the caller audits its deletion with that reason. There is no override flag: release
-    the hold first.
+    back, so the caller audits its deletion with that reason. ``states=True`` (removing a whole
+    facility) also refuses one that is not ``provisioning`` / ``active``, by the
+    :func:`purge_blockers` rule. There is no override flag: release the hold first.
     """
     pf = workspace_of(store_root)
     if pf is None:
         return None, reason
     text = require_reason(reason, what=by)
-    why = delete_blockers(pf, fids, by=by, what=what)
+    if states:
+        why = purge_blockers(pf, "", fids=fids, by=by)
+    else:
+        why = delete_blockers(pf, fids, by=by, what=what)
     if why:
         from ..portfolio import LifecycleError
 
@@ -186,8 +197,9 @@ def state_write_blockers(pf, facility_id, *, by: str = "a config run") -> list:
     manifest) of ``facility_id`` in workspace ``pf`` (``[]``: it may; ``[]`` outside one).
 
     0.108 (#252): an archived facility's state lives in its export bundle (a write would never be
-    in the bundle, and the next restore could not reconcile it), a purged one has none, and a
-    facility under a legal hold keeps its state exactly as it is.
+    in the bundle, and the next restore could not reconcile it), and a purged one has none -- held
+    or not. A legal hold alone does not block these writes: it blocks deleting or replacing data,
+    and a faults fold or a baseline freeze adds to the state.
     """
     if pf is None or not facility_id:
         return []
@@ -201,9 +213,6 @@ def state_write_blockers(pf, facility_id, *, by: str = "a config run") -> list:
             f"facility {facility_id} is {state}: {by} writes no state for it (its state lives in "
             "its export bundle; `camber facility restore` it first)"
         )
-    out += delete_blockers(
-        pf, [facility_id], by=by, what="write its state (faults, baselines, the manifest)"
-    )
     return out
 
 

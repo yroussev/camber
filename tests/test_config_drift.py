@@ -56,7 +56,7 @@ def _make_site(root, **drift_overrides):
         "drift": drift,
     }
     path = os.path.join(root, "config.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return path
 
 

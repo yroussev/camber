@@ -79,11 +79,16 @@ def test_per_entry_figure_modules_register_their_figures(tmp_path):
     shipped = sorted(f[:-3] for f in os.listdir(mod.FIGURES_DIR) if f.endswith(".py"))
     assert {"plant_lockout", "plant_boiler_cycling", "plant_chiller_staging"} <= set(shipped)
     assert "workbook/plant-lockout.png" in mod.FIGURES
+    # 0.108 (#231): a module can register a browser screenshot too
+    assert "shots/rcx-prose.png" in mod.SCREENSHOTS and "shots/rcx-prose.png" in mod.SHOT_BUILDERS
     (tmp_path / "probe.py").write_text(
         "def register(df):\n"
         "    assert df.WIDE and callable(df._evidence_fig)\n"
         "    @df.figure('workbook/probe.png')\n"
         "    def _probe():\n"
+        "        return None\n"
+        "    @df.screenshot('shots/probe.png', 'a probe page')\n"
+        "    def _shot(out):\n"
         "        return None\n",
         encoding="utf-8",
     )
@@ -91,4 +96,8 @@ def test_per_entry_figure_modules_register_their_figures(tmp_path):
     (tmp_path / "notes.txt").write_text("not a module\n", encoding="utf-8")
     assert mod.load_figure_modules(str(tmp_path)) == ["probe"]
     assert "workbook/probe.png" in mod.FIGURES
+    assert (
+        mod.SCREENSHOTS["shots/probe.png"] == "a probe page"
+        and "shots/probe.png" in mod.SHOT_BUILDERS
+    )
     assert mod.load_figure_modules(str(tmp_path / "missing")) == []

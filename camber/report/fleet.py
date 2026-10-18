@@ -105,8 +105,14 @@ class FleetReport:
                 L.append(f"  {rule}  ({n} buildings)")
         return "\n".join(L)
 
+    def to_html_document(self) -> str:
+        """:meth:`to_html` as a standalone HTML document with its charset (0.108, #259)."""
+        from .audit import html_document
+
+        return html_document(self.to_html(), title="CAMBER fleet summary")
+
     def to_html(self) -> str:
-        """Render the fleet rollup as an HTML fragment."""
+        """Render the fleet rollup as an HTML fragment (:meth:`to_html_document` for a file)."""
         import html as _h
 
         e = _h.escape
@@ -235,7 +241,7 @@ def build_fleet_report(
         n_warn = sum(1 for f in acts if _attr(f, "severity") == "warn")
         rule_counts = Counter(_attr(f, "rule", "") for f in acts)
         top_rules = [r for r, _ in rule_counts.most_common(3) if r]
-        for r in set(rule_counts):
+        for r in rule_counts:  # 0.108 (#261): first-seen order, never a set's hash order
             if r:
                 rule_buildings[r] += 1
         pctile = None
@@ -270,7 +276,8 @@ def build_fleet_report(
     return FleetReport(
         buildings=summaries,
         peer_median_eui=median,
-        fleet_top_rules=rule_buildings.most_common(top_n),
+        # 0.108 (#261): ties break by rule name, so the list is the same on every run
+        fleet_top_rules=sorted(rule_buildings.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n],
         total_annual_cost_usd=total,
         cost_estimated=price is not None or any_cost,
         eui_unit=eui_unit,

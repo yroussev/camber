@@ -781,9 +781,11 @@ def main(argv=None) -> int:
     m = metrics_dict(sample=args.sample, jobs=max(1, args.jobs), progress=args.progress)
     _print_summary(m)
     if args.json:
-        json.dump(m, open(args.json, "w"), indent=2, sort_keys=True)
+        json.dump(m, open(args.json, "w", encoding="utf-8"), indent=2, sort_keys=True)
     if args.update_baseline:
-        json.dump(gated(m), open(args.update_baseline, "w"), indent=2, sort_keys=True)
+        json.dump(
+            gated(m), open(args.update_baseline, "w", encoding="utf-8"), indent=2, sort_keys=True
+        )
         print(f"wrote baseline -> {args.update_baseline}")
     status = 0
     if m["forecast_identity_error"] != 0.0:

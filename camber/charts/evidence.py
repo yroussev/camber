@@ -49,7 +49,7 @@ class Evidence:
     masks: object = None
     # 0.102 (#119): min-max scale each multitrend series to 0-1, for roles in unlike units (CO2 in
     # ppm against an OA flow in cfm) that would otherwise flatten one another
-    normalize: bool = False
+    normalize: bool | str = False  # 0.108 (#258): "unit" scales same-unit series together
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):

@@ -6,6 +6,11 @@ costing efficiency and compressor life. Adapts
 :func:`camber.chillerstaging.analyze_chiller_staging` to the role-frame interface.
 ``max_starts_per_day`` is the cycling threshold (manufacturer minimum-cycle-time
 dependent), so it is a constructor parameter, not a baked constant.
+
+0.108 (#235): the chiller reads as running by its run status / command (``compressor_status``)
+when mapped, else by power above ``run_frac`` (a tenth) of its own 95th-percentile draw, else above
+an explicit ``min_power_kw``. Before 0.108 it was a fixed 2 kW, so a stopped chiller's standby draw
+(controls, oil and crankcase heaters) read as running and its starts went uncounted.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ import pandas as pd
 from ..boilercycle import _interval_min
 from ..chillerstaging import analyze_chiller_staging
 from ..model.roles import Role
+from ..schedules import CHILLER_POWER_RUN_FRAC
 from .base import Finding
 
 #: 0.105 (#148): running tons whose 10th-90th percentile spread is within this share (%) of the
@@ -26,6 +32,7 @@ _ROLE_TO_COL = {
     Role.CHW_SUPPLY_TEMP: "CHWS_Temp",
     Role.CHW_RETURN_TEMP: "CHWR_Temp",
     Role.CHW_FLOW: "CHW_Flow",
+    Role.COMPRESSOR_STATUS: "Status",  # 0.108 (#235): the run gate
 }
 
 
@@ -34,13 +41,20 @@ class ChillerStaging:
 
     name = "chiller_staging"
     roles_required = (Role.POWER,)
-    roles_optional = (Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP, Role.CHW_FLOW)
+    roles_optional = (
+        Role.CHW_SUPPLY_TEMP,
+        Role.CHW_RETURN_TEMP,
+        Role.CHW_FLOW,
+        Role.COMPRESSOR_STATUS,  # 0.108 (#235): the run gate
+    )
 
     def __init__(
         self,
         max_starts_per_day: float = 6.0,
         low_load_pct: float = 40.0,
         max_interval_min: float = 15.0,
+        min_power_kw: float | None = None,
+        run_frac: float = CHILLER_POWER_RUN_FRAC,
     ):
         # Cycling threshold is manufacturer/min-cycle-time dependent; low_load_pct is
         # the "idling" judgment for the optional load-factor metric.
@@ -48,12 +62,21 @@ class ChillerStaging:
         self.low_load_pct = low_load_pct
         # 0.104 (#143): coarser than this, the start count is caveated as a floor
         self.max_interval_min = max_interval_min
+        # 0.108 (#235): the power run gate -- an explicit kW floor, else run_frac x p95 power
+        self.min_power_kw = min_power_kw
+        self.run_frac = run_frac
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_chiller_staging(legacy, equip, min_load_pct=self.low_load_pct)
+        res = analyze_chiller_staging(
+            legacy,
+            equip,
+            min_load_pct=self.low_load_pct,
+            min_power_kw=self.min_power_kw,
+            run_frac=self.run_frac,
+        )
         if res is None:
             return Finding(
                 rule=self.name,
@@ -109,6 +132,8 @@ class ChillerStaging:
                 "low_load_pct": res.low_load_pct,
                 "load_spread_pct": res.load_spread_pct,  # 0.105 (#148)
                 "n_days": res.n_days,
+                "run_source": res.run_source,  # 0.108 (#235)
+                "run_threshold_kw": res.run_threshold_kw,
             },
             summary=(
                 f"{equip}: {res.starts_per_day:.1f} starts/day "

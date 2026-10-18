@@ -800,8 +800,11 @@ when a part fails to read or a facility's data is stranded outside its partition
 `--strict`, when a part is not canonical or anything is left over.
 
 `store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
-store: missing, a file, or a directory with no partitions, registry or workspace marker. They
-exit 1 and create nothing. `--facility` must name a facility the store knows.
+store: missing, a file, or a directory of other things (no partitions, registry or workspace
+marker). They exit 1 and create nothing. `--facility` must name a facility the store knows. An
+**empty directory is an empty store** (0.108, #233), as it is for `camber serve`: `store verify`
+reports 0 parts and exits 0, and `normalize` and `migrate-partitions` do nothing and create
+nothing, not even a lock file (dot-files such as `.DS_Store` do not count).
 
 `store normalize` (0.104) rewrites the non-canonical parts in the canonical layout. It is a dry run
 unless `--apply --yes` (and `--reason`, audited as `store.normalize`, inside a workspace), holds
@@ -853,6 +856,7 @@ camber edge decommission <edge.json> --apply (--yes | --confirm FACILITY_ID) --r
 # central, in the portfolio workspace (--workspace, else $CAMBER_PORTFOLIO, else the current dir)
 camber edge reconcile [--landing DIR | --keys LISTING] [--prefix P] [--json]   # read-only
 camber edge reconcile [--landing DIR] --apply --reason R       # quarantine what it flags
+camber edge reconcile --apply --yes --reason R                 # ... and remove row duplicates
 camber edge land <inbox> [--apply --reason R] [--json]        # route uploads: store or quarantine
 camber edge quarantine list [--facility ID] [--json]
 camber edge quarantine release (--facility ID | --key K...) [--apply] --reason R
@@ -867,6 +871,22 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
   OS user and host). `discard` and `decommission` also need `--yes` or the typed facility id
   (`--confirm`). Each takes the portfolio lock (and, on the device, the spool lock).
 - **Legal holds** refuse `quarantine discard` and a forced `decommission`.
+- **Row checks at landing (0.107, #142; 0.108, #228, #230).** `land` quarantines a part whose
+  rows its partition already holds (a `duplicate`, whatever its bytes), replaces a stored part
+  whose rows the new part holds in full (the month in progress, re-sent bigger on every poll, its
+  last hour revised; the partition is swapped in whole, so a reader sees the old part or the new
+  one, never both), and
+  quarantines a `conflict`: a part that overlaps a stored one (the same timestamp, equipment and
+  role) without holding all of its rows. A year-only part from a pre-0.95 forwarder is also
+  compared with the month partitions of its year. Under a legal hold the replaced part is copied
+  into quarantine first. `quarantine release` of a conflict stores it beside the other part.
+- **Row duplicates already in the store (0.108, #229).** A store `reconcile` lists the groups of
+  parts of one facility that hold identical rows under different keys (landed before the row
+  check), with their keys, sizes and landing times. `--apply --yes` (with `--reason`) keeps the
+  oldest copy of each group and deletes the others, under the store lock, audited as
+  `edge.reconcile.dedupe` before anything is deleted. A facility under a legal hold has its extra
+  copies moved to quarantine instead; facilities that do not accept data are left alone. A store
+  reconcile reads every part once to digest it (the digests are cached by `--apply`).
 - **Exit codes:** 0 on success or a dry run; 1 for a refusal (a busy lock, a missing reason or
   confirmation, an unacknowledged spool without `--force`, every selected object refused).
 - `decommission` without a reachable workspace retires the device and tells you to copy the spool's

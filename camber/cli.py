@@ -101,7 +101,12 @@ def _cmd_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         path = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(path, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(path, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {path}")
         _record(res, {path: "report"})
     if res.faults is not None:
@@ -161,7 +166,7 @@ def _cmd_report(args) -> int:
         html = _plugin_report(layout, res)
         if html is None:
             return 2
-    with open(args.out, "w") as fh:
+    with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(html)
     print(f"wrote {args.out}  ({len(res.findings)} findings, layout {layout})")
     _record(res, {args.out: "report"})
@@ -242,7 +247,7 @@ def _report_rcx(args, cfg, base) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
     else:
-        with open(args.out, "w") as fh:
+        with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(rep.to_html())
     k = rep.kpis
     dollars = f"${k['annual_cost_usd']:,.0f}/yr costed" if k["n_costed"] else "no costed issues"
@@ -264,12 +269,12 @@ def _report_rcx(args, cfg, base) -> int:
         from .report.rcx import prose_prompts
 
         prompts = prose_prompts(rep)
-        with open(args.prose_prompts, "w") as fh:
+        with open(args.prose_prompts, "w", encoding="utf-8") as fh:
             json.dump(prompts, fh, indent=2)
         print(f"wrote {args.prose_prompts}  ({len(prompts)} prose slots)")
         written[args.prose_prompts] = "report"
     if args.notes_template:
-        with open(args.notes_template, "w") as fh:
+        with open(args.notes_template, "w", encoding="utf-8") as fh:
             json.dump(notes_template(rep), fh, indent=2)
         print(f"wrote {args.notes_template}  ({len(rep.slots())} note slots)")
         written[args.notes_template] = "report"
@@ -283,10 +288,10 @@ def _cmd_validate(args) -> int:
     dossier = build_dossier(full=args.full)
     print(dossier.to_text())
     if args.json:
-        json.dump(dossier.as_dict(), open(args.json, "w"), indent=2)
+        json.dump(dossier.as_dict(), open(args.json, "w", encoding="utf-8"), indent=2)
         print(f"wrote {args.json}")
     if args.html:
-        open(args.html, "w").write(dossier.to_html())
+        open(args.html, "w", encoding="utf-8").write(dossier.to_html())
         print(f"wrote {args.html}")
     return 0
 
@@ -385,7 +390,7 @@ def _cmd_fleet(args) -> int:
     fr = build_fleet_report(buildings, units=units)
     print(fr.to_text())
     if args.out:
-        open(args.out, "w").write(fr.to_html())
+        open(args.out, "w", encoding="utf-8").write(fr.to_html_document())
         print(f"\nwrote {args.out}")
     if args.ask:
         from .agent import ask, build_context
@@ -446,7 +451,7 @@ def _cmd_charts(args) -> int:
             f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F), n={m.n_considered}"
         )
 
-    with open(os.path.join(args.out, "hec_summary.json"), "w") as f:
+    with open(os.path.join(args.out, "hec_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Wrote {len(ids) * 2} charts + hec_summary.json to {args.out}/")
     return 0
@@ -1982,6 +1987,13 @@ def _print_reconcile(rep: dict, limit: int) -> None:
         print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
     if len(rows) > limit:
         print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+    # 0.108 (#229): parts of one facility holding identical rows under different keys
+    for g in rep.get("row_duplicates", [])[:limit]:
+        act = f"-> {g['action']} {len(g['extra'])}" if g["action"] else f"left alone: {g['detail']}"
+        print(f"  row duplicates {g['facility_id']} ({g['rows']} rows) {act}")
+        for p in g["parts"]:
+            mark = "keep  " if p["key"] == g["keep"] else "extra "
+            print(f"    {mark}{p['key']}  {p['bytes']} bytes, {p['landed_at']}")
 
 
 @_pf_errors
@@ -1989,8 +2001,15 @@ def _cmd_edge_reconcile(args) -> int:
     from .edge.landing import reconcile
 
     pf = _portfolio(args)
+    if args.yes and not args.apply:
+        raise ValueError("--yes confirms --apply; pass both to remove row-duplicate parts")
+    if args.yes and (args.keys or args.landing):
+        raise ValueError(
+            "--yes removes row-duplicate parts from the workspace store; drop --keys / --landing"
+        )
+    dedupe = None
     if args.apply:
-        from .edge.quarantine import quarantine_reconciled
+        from .edge.quarantine import quarantine_reconciled, remove_row_duplicates
 
         if args.keys:
             raise ValueError(
@@ -1998,6 +2017,11 @@ def _cmd_edge_reconcile(args) -> int:
                 "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
             )
         rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+        if args.yes:
+            dedupe = remove_row_duplicates(pf, reason=args.reason, apply=True, yes=True)
+            rep["row_duplicates"] = dedupe["groups"]
+            rep["duplicate_copies"] = dedupe["copies"]
+            rep["duplicates_removed"] = dedupe["copies"]
     else:
         rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
     if args.json:
@@ -2006,9 +2030,22 @@ def _cmd_edge_reconcile(args) -> int:
     _print_reconcile(rep, args.limit)
     if args.apply:
         print(f"  quarantined {rep['quarantined']} object(s) (audited)")
-    elif rep["to_quarantine"]:
-        hint = "" if args.keys else " (--apply --reason R to move them)"
-        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if dedupe is not None:
+            print(
+                f"  removed {dedupe['copies']} row-duplicate copy(ies), {dedupe['bytes']} bytes "
+                "(audited; a facility under a legal hold keeps them in quarantine)"
+            )
+        elif rep.get("duplicate_copies"):
+            print(f"  {rep['duplicate_copies']} row-duplicate copy(ies) kept (add --yes)")
+    else:
+        if rep["to_quarantine"]:
+            hint = "" if args.keys else " (--apply --reason R to move them)"
+            print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if rep.get("duplicate_copies"):
+            print(
+                f"  {rep['duplicate_copies']} row-duplicate copy(ies) beside the oldest "
+                "(--apply --yes --reason R to remove them)"
+            )
     return 0
 
 
@@ -2029,6 +2066,8 @@ def _cmd_edge_land(args) -> int:
     for r in rep["objects"][: args.limit]:
         if r["to"] != "store":
             print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+        elif r.get("replaces"):
+            print(f"  {'store':10s} {'replaces':16s} {r['key']}  ({', '.join(r['replaces'])})")
     return 0
 
 
@@ -2237,7 +2276,7 @@ def _state_lock(ctx, *, write: bool = True):
 
     if not ctx.workspace or not write:
         return contextlib.nullcontext()
-    # 0.108 (#252): no baseline write for an archived, purged or legally held facility
+    # 0.108 (#252): no baseline write for an archived or purged facility
     ctx.require_writable("this baseline write")
     from .portfolio._lock import portfolio_lock
 
@@ -2308,9 +2347,14 @@ def _cmd_drift_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         dpath = os.path.join(args.out, "drift.json")
-        json.dump(res.as_dict(), open(dpath, "w"), indent=2, default=str)
+        json.dump(res.as_dict(), open(dpath, "w", encoding="utf-8"), indent=2, default=str)
         fpath = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {dpath}\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2332,7 +2376,7 @@ def _cmd_drift_report(args) -> int:
     html = drift_report_html(
         res, charts=bool(args.charts), data_sources=data_sources(cfg, base_dir=base)
     )
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     from .config import _record_outputs
 
     _record_outputs(_drift_ctx(cfg, base), {args.out: "report"})
@@ -2428,7 +2472,12 @@ def _cmd_drift_list(args) -> int:
             f"{who}{sup}{hist}  {r.reason}"
         )
     if args.json:
-        json.dump([r.as_dict() for r in recs], open(args.json, "w"), indent=2, default=str)
+        json.dump(
+            [r.as_dict() for r in recs],
+            open(args.json, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {args.json}")
     return 0
 
@@ -2711,7 +2760,12 @@ def _cmd_mv_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         fpath = os.path.join(args.out, "mv_findings.json")
-        json.dump([f.as_dict() for f in findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2746,7 +2800,7 @@ def _cmd_mv_list(args) -> int:
                 f"by={row['accepted_by'] or '-'}{trig}{adj}  {row['reason']}{ok}"
             )
     if args.json:
-        json.dump(rows, open(args.json, "w"), indent=2, default=str)
+        json.dump(rows, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2795,7 +2849,7 @@ def _cmd_mv_propose(args) -> int:
             print(f"  SEP method proposal: {mp['error']}")
     print("\nnothing written: `camber mv rebaseline` / `camber mv adjust` apply a decision")
     if args.json:
-        json.dump(doc, open(args.json, "w"), indent=2, default=str)
+        json.dump(doc, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2811,12 +2865,12 @@ def _cmd_mv_report(args) -> int:
     if _mv_suspended(rep["skipped_state"] or "", ctx):
         return 0
     html = mv_report_html(rep, charts=not args.no_charts)
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     outs = {args.out: "report"}
     if args.json:
         json.dump(
             {**rep, "meters": [m.as_dict() for m in rep["meters"]]},
-            open(args.json, "w"),
+            open(args.json, "w", encoding="utf-8"),
             indent=2,
             default=str,
         )
@@ -3199,6 +3253,11 @@ def _build_parser() -> argparse.ArgumentParser:
     erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
     erc.add_argument(
         "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument(
+        "--yes",
+        action="store_true",
+        help="with --apply: also remove row-duplicate parts, keeping the oldest copy",
     )
     erc.add_argument("--reason", help="why (audited; required with --apply)")
     erc.add_argument("--json", action="store_true")

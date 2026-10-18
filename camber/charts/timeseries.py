@@ -7,6 +7,7 @@ high OAT (the clearest reheat fault). See ``spec-ahu-hec-scatter.md``.
 
 from __future__ import annotations
 
+from ._labels import mpl_text
 from .scatter import _resolve
 
 
@@ -35,6 +36,8 @@ def ahu_hec_timeseries(df, ahu_id, *, threshold=5.0, oat_col=None, cooling_cutof
         )
 
     pct = 100.0 * overlap.mean() if len(df) else 0.0
-    ax.set_title(f"AHU{ahu_id} heating / cooling / OAT — {pct:.1f}% of intervals simultaneous H/C")
+    ax.set_title(
+        mpl_text(f"AHU{ahu_id} heating / cooling / OAT — {pct:.1f}% of intervals simultaneous H/C")
+    )
     ax.legend(loc="upper left", fontsize=8)
     return ax

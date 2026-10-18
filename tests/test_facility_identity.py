@@ -59,7 +59,7 @@ def _legacy_faults(path, site="North Campus", **extra):
         "notes": ["called the contractor"],
         **extra,
     }
-    open(path, "w").write(json.dumps({"faults": [rec]}))
+    open(path, "w", encoding="utf-8").write(json.dumps({"faults": [rec]}))
     return fp
 
 

@@ -45,9 +45,36 @@ def fig_to_base64(fig, *, dpi: int = 90) -> str:
 
 
 def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize) -> str:
+    """One section's PNG data URI; ``""`` when the chart fails to draw (0.108, #264).
+
+    A failed chart closes only its own figure, so one bad column (a point name matplotlib cannot
+    lay out, an unplottable series) costs that section's image, never the whole report.
+    """
     import matplotlib.pyplot as plt
 
+    if letter not in _SECTION_TITLES:
+        raise ValueError(f"unknown section {letter!r}; use A/B/E/I")
     fig, ax = plt.subplots(figsize=(13, 4))
+    try:
+        _draw_section(letter, df, ax, spans, carpet_col, multitrend_cols, normalize)
+        return fig_to_base64(fig)  # closes fig on success
+    except Exception:  # noqa: BLE001 - the section degrades to a note, the report still builds
+        plt.close(fig)
+        return ""
+
+
+def _section_block(letter, img: str) -> str:
+    """A section's heading and image, or a note in place of an image that failed to draw."""
+    title = _SECTION_TITLES.get(letter, letter)
+    if img:
+        return f"<h2>{letter}. {title}</h2><img src='{img}' alt='{title}'>"
+    return (
+        f"<h2>{letter}. {title}</h2><p class='chart-missing'>This chart could not be drawn from "
+        "the data supplied; the rest of the report is unaffected.</p>"
+    )
+
+
+def _draw_section(letter, df, ax, spans, carpet_col, multitrend_cols, normalize) -> None:
     if letter == "A":
         readiness_ribbon(df, ax=ax)
     elif letter == "B":
@@ -67,9 +94,6 @@ def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize)
             load_carpet(df[col], ax=ax, title=f"Load carpet — {col}", label=role_label(col))
     elif letter == "I":
         quality_dashboard(df, ax=ax)
-    else:
-        raise ValueError(f"unknown section {letter!r}; use A/B/E/I")
-    return fig_to_base64(fig)
 
 
 def _rules_map(rules) -> dict:
@@ -164,7 +188,7 @@ _STYLE = (
 def _pick_link_cols(df, link_x, link_y):
     """Choose the (x, y) columns for the interactive scatter: default x to an OAT-like column,
     y to the first other column."""
-    cols = list(df.columns)
+    cols = _numeric_cols(df)  # 0.108 (#265): a text column cannot be scattered
     if not cols:
         return None, None
     x = link_x
@@ -282,7 +306,7 @@ def build_dashboard(
                 multitrend_cols=multitrend_cols,
                 normalize=normalize,
             )
-            parts.append(f"<h2>{letter}. {title}</h2><img src='{img}' alt='{title}'>")
+            parts.append(_section_block(letter, img))
     if interactive:
         parts.append(_interactive_section(df, link_x, link_y))
     if findings is not None:

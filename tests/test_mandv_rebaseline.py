@@ -533,7 +533,7 @@ def _workspace(tmp_path, *, end="2019-06-30"):
         ],
     }
     path = str(tmp_path / "config.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return ws, path, os.path.join(ws, "state", "f1", "mv_baselines.json")
 
 
@@ -650,7 +650,7 @@ def test_the_whole_flow(site, capsys, tmp_path):
                 "evidence": "invoice",
             }
         ],
-        open(spec, "w"),
+        open(spec, "w", encoding="utf-8"),
     )
     assert (
         main(
@@ -774,7 +774,7 @@ def test_mv_store_outside_a_workspace_and_migration(tmp_path, capsys):
     c = json.load(open(cfg))
     c["mv_store"] = "legacy_mv.json"
     c["mv"][0]["period"] = ["2016-01-01", "2016-06-30"]
-    open(cfg, "w").write(json.dumps(c))
+    open(cfg, "w", encoding="utf-8").write(json.dumps(c))
     assert main(["mv", "freeze", cfg, "--reason", "init", "--apply", "--allow-short"]) == 0
     legacy = str(tmp_path / "legacy_mv.json")
     rec = MVBaselineStore.load(legacy, facility_id="f1").records()[0]

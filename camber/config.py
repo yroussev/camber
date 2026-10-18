@@ -335,7 +335,8 @@ class _FacilityCtx:
 
     def write_blockers(self) -> list:
         """Why the facility's workspace state (``state/<fid>/``) may not be written now: it is
-        archived, purged or under a legal hold (0.108, #252; ``[]`` outside a workspace). See
+        archived or purged (0.108, #252; a legal hold alone does not block these non-destructive
+        writes; ``[]`` outside a workspace). See
         :func:`camber.datasets._lifecycle.state_write_blockers`."""
         if not (self.workspace and self.facility_id):
             return []
@@ -2523,7 +2524,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     Inside a portfolio workspace a run with a ``faults`` fold (which writes the facility's
     state) is refused up front (:class:`~camber.portfolio.LifecycleError`, nothing written) for
-    an archived, purged or legally held facility; such a facility's report outputs are written
+    an archived or purged facility (held or not); such a facility's report outputs are written
     but not recorded in its manifest (a warning says so) (0.108, #252).
     """
     if config.get("faults") is not None:
@@ -2696,7 +2697,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 findings.append(sf)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
         if rep.get("out_text"):
-            with open(_path(base_dir, rep["out_text"]), "w") as fh:
+            with open(_path(base_dir, rep["out_text"]), "w", encoding="utf-8") as fh:
                 fh.write(report.to_text())
             outputs[_path(base_dir, rep["out_text"])] = "report"
         if rep.get("out_html"):
@@ -2710,7 +2711,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             if drift is not None:
                 # the audit body already carries the data-source block; don't repeat it
                 body += "\n" + drift_report_html(drift, standalone=False)
-            with open(_path(base_dir, rep["out_html"]), "w") as fh:
+            with open(_path(base_dir, rep["out_html"]), "w", encoding="utf-8") as fh:
                 fh.write(html_document(body, title=report.display_title()))
             outputs[_path(base_dir, rep["out_html"])] = "report"
     if outputs:

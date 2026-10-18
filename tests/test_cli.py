@@ -49,7 +49,7 @@ def _make_config(root, site="Demo"):
         "rules": ["simultaneous_heat_cool", "reheat_penalty"],
     }
     path = os.path.join(root, "config.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return path
 
 

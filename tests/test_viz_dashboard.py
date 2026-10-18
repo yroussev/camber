@@ -66,7 +66,8 @@ def test_mask_to_spans_contiguous():
     idx = pd.date_range("2024-01-01", periods=6, freq="h")
     mask = pd.Series([False, True, True, False, True, False], index=idx)
     spans = mask_to_spans(mask)
-    assert len(spans) == 2 and spans[0] == (idx[1], idx[2]) and spans[1] == (idx[4], idx[4])
+    # 0.108 (#262): each flagged sample is shaded over its own interval, to the next sample
+    assert len(spans) == 2 and spans[0] == (idx[1], idx[3]) and spans[1] == (idx[4], idx[5])
 
 
 def test_fault_multitrend_shades_spans():

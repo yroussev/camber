@@ -160,7 +160,7 @@ def test_rebuild_catalog_for_legacy_store(tmp_path):
 
 def test_corrupt_catalog_falls_back_to_scan(tmp_path):
     store = _multi_year_store(str(tmp_path / "store"))
-    with open(os.path.join(store.root, "_catalog.json"), "w") as fh:
+    with open(os.path.join(store.root, "_catalog.json"), "w", encoding="utf-8") as fh:
         fh.write("{ not valid json")
     # a corrupt catalog is treated as absent -> scan still returns the right keys
     assert {(p.facility_id, p.equip, p.role) for p in store.points()} == {

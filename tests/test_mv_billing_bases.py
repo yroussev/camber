@@ -420,7 +420,7 @@ def test_versioned_billing_baselines(tmp_path, capsys):
     cfg["mv"][0]["bills"]["cost"] = "cost"
     cfg["mv_store"] = "store.json"
     path = str(tmp_path / "cfg.json")
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     store = tmp_path / "store.json"
 
     rc, out = _mv(["mv", "freeze", path, "--reason", "initial", "--by", "ana", "--apply"], capsys)
@@ -459,7 +459,7 @@ def test_versioned_billing_baselines(tmp_path, capsys):
     spec = str(tmp_path / "adj.json")
     nra = {"kind": "nra", "method": "engineering", "start": "2021-06-01", "amount": 300.0,
            "se": 30.0, "reason": "rental", "evidence": "invoice"}  # fmt: skip
-    json.dump([nra], open(spec, "w"))
+    json.dump([nra], open(spec, "w", encoding="utf-8"))
     rc, out = _mv(["mv", "adjust", path, "--equip", "Elec", "--spec", spec, "--by", "ana",
                    "--reason", "rental", "--apply"], capsys)  # fmt: skip
     assert rc == 0 and "adjusted v1" in out
@@ -497,7 +497,7 @@ def test_versioned_numeric_base_and_refusals(tmp_path, capsys):
     cfg = _cfg()
     cfg["mv_store"] = "store.json"
     path = str(tmp_path / "cfg.json")
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     rc, out = _mv(["mv", "freeze", path, "--reason", "r", "--apply"], capsys)
     assert "froze v1" in out
     prov = json.load(open(tmp_path / "store.json"))["mv_baselines"][0]["provenance"]
@@ -509,6 +509,6 @@ def test_versioned_numeric_base_and_refusals(tmp_path, capsys):
     # a short window is refused
     cfg["mv"][0]["period"] = ["2019-01-01", "2019-06-30"]
     cfg["mv_store"] = "store2.json"
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     rc, out = _mv(["mv", "freeze", path, "--reason", "r", "--apply"], capsys)
     assert "not freezed" in out or "not frozen" in out or "allow-short" in out

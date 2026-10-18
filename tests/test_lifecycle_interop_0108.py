@@ -113,6 +113,20 @@ def test_delete_primitives_refuse_a_held_facility(tmp_path):
     assert _actions(pf, n0) == []  # nothing deleted, nothing audited
 
 
+@pytest.mark.parametrize("stage", ["offboarding", "archived"])
+def test_removing_a_facility_that_left_active_is_refused(tmp_path, stage):
+    pf, fid = _workspace(tmp_path)
+    pf.offboard(fid, reason="leaving", apply=True)
+    if stage == "archived":
+        pf.archive(fid, reason="done", apply=True, skip_grace=True)
+    st = ParquetStore(pf.store_root)
+    with pytest.raises(LifecycleError, match=f"{stage}: its lifecycle owns its data"):
+        st.drop_facility(fid, forget=True, reason="x")
+    with pytest.raises(LifecycleError, match=stage):
+        pf.registry.remove(fid, reason="x")
+    assert pf.facility(fid)["state"] == stage and not pf.registry.tombstones()
+
+
 def test_delete_primitives_need_a_reason_and_audit_it(tmp_path):
     pf = _held_ws(tmp_path)
     st = ParquetStore(pf.store_root)
@@ -191,7 +205,7 @@ def test_config_run_writes_no_state_for_an_archived_held_facility(tmp_path):
     del c["faults"]["store"], c["drift"]["store"]
     json.dump(c, open(cfg, "w"))
     n0 = len(pf.audit_log())
-    with pytest.raises(LifecycleError, match="archived.*legal hold"):
+    with pytest.raises(LifecycleError, match="archived"):
         _run(cfg)
     assert not os.path.isdir(pf.state_dir(fid)) and _actions(pf, n0) == []
     pf.release_hold(fid, reason="over")
@@ -199,21 +213,36 @@ def test_config_run_writes_no_state_for_an_archived_held_facility(tmp_path):
         _run(cfg)
 
 
-def test_config_run_refuses_faults_for_a_held_active_facility(tmp_path, recwarn):
+def test_a_hold_allows_non_destructive_state_writes_on_an_active_facility(tmp_path, monkeypatch):
+    from camber.cli import main
+
     pf, fid = _workspace(tmp_path)
+    monkeypatch.setenv("CAMBER_PORTFOLIO", pf.root)
     cfg = _store_config(tmp_path, fid)
-    _run(cfg)
-    before = open(os.path.join(pf.state_dir(fid), "faults.json")).read()
     pf.hold(fid, reason="litigation")
-    with pytest.raises(LifecycleError, match="legal hold"):
-        _run(cfg)
-    assert open(os.path.join(pf.state_dir(fid), "faults.json")).read() == before
-    # a run without a fault fold still analyses; its report is not recorded in the manifest
-    plain = _store_config(tmp_path, fid, faults=None)
-    man = pf.manifest(fid)
+    # a hold blocks deleting or replacing data only: the faults fold and a baseline freeze
+    # (which add to the state) still run, and the run's report is recorded
+    assert main(["drift", "freeze", cfg, "--reason", "commissioning baseline"]) == 0
+    res = _run(cfg)
+    assert res.faults is not None
+    assert os.path.isfile(os.path.join(pf.state_dir(fid), "faults.json"))
+    assert any(e.get("kind") == "report" for e in pf.manifest(fid)["external"].values())
+
+
+@pytest.mark.filterwarnings("ignore:facility .* is archived; skipping it")
+def test_an_archived_facility_records_no_run_outputs(tmp_path):
+    pf, fid = _workspace(tmp_path)
+    (tmp_path / "f").mkdir()
+    cfg = _folder_config(tmp_path / "f", facility_id=fid, workspace=str(tmp_path / "ws"))
+    c = json.load(open(cfg))
+    del c["faults"], c["drift"]
+    c["report"] = {"out_html": "report.html"}
+    json.dump(c, open(cfg, "w"))
+    _archive(pf, fid)
     with pytest.warns(UserWarning, match="not recorded in the facility manifest"):
-        res = _run(plain)
-    assert res.equipment and pf.manifest(fid) == man
+        _run(cfg)
+    assert not os.path.isdir(pf.state_dir(fid))
+    assert os.path.isfile(tmp_path / "f" / "report.html")
 
 
 def test_restore_discards_live_trees_the_bundle_does_not_list(tmp_path):

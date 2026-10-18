@@ -15,13 +15,81 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 
 ## [0.108.0] — Unreleased
 
+### Added
+- **A worked example of the RCx report's generated prose (#231).**
+  `examples/rcx_prose/prose.json` is a prose file for the synthetic RCx demo (the golden report's
+  store and config). It fills the executive summary, which is shown boxed with its cited facts,
+  and one issue slot whose last sentence cites nothing, so that slot falls back and Appendix A
+  records it. docs/RCX-REPORT.md walks through it ("A worked example") with a screenshot,
+  `docs/img/shots/rcx-prose.png`. `tests/test_rcx_prose_example_231.py` renders the example and
+  checks the prose box, the cited facts, the fallback and its Appendix A row against the docs. The
+  default golden report is unchanged.
+- **Docs screenshots from per-entry modules.** A module under `scripts/docs_figures.d/` can
+  register a browser screenshot with `df.screenshot(path, what)`; `--screenshots --only <path>`
+  takes just those. Dev tooling, not packaged.
+- **`camber edge reconcile` finds and removes row duplicates already in the store (#229).** A
+  store reconciliation lists the groups of parts of one facility that hold identical rows under
+  different keys (left by a landing before 0.107, which had no row check), with their keys,
+  sizes and landing times and the copy it keeps, the oldest (`row_duplicates` and
+  `duplicate_copies` in the report; `camber.edge.landing.row_duplicates`). `edge reconcile
+  --apply --yes --reason R` deletes the other copies under the store lock, audited as
+  `edge.reconcile.dedupe` before anything is deleted (`camber.edge.quarantine.remove_row_duplicates`).
+  A facility under a legal hold has its extra copies moved to quarantine instead, and facilities
+  that do not accept data are left alone.
+- `camber.edge.row_digest.PartitionView` and `read_rows`, the row comparisons behind the landing,
+  and a timestamp span (`ts_min`, `ts_max`) in each `_edge_rows.json` entry.
+
 ### Changed
+- **A rule's docstring citations are checked against its references (#232).**
+  `tests/test_references.py` now checks that every PNNL guide or Re-tuning chapter a rule's class
+  docstring cites ("PNNL Re-tuning Ch.5/7") is in that rule's `RULE_REFERENCES` entry.
+  `zones_heat_cool_census` now also links chapter 5, whose discharge-air temperature section lists
+  reheating in the cooler zones among the effects of a low discharge-air temperature. Its
+  Learn-more links gain that chapter. docs/REFERENCES.md explains both changes.
+- **Behaviour change: the upload inbox is the default (#233).** `route_key(portfolio, key)` now
+  signs an accepted upload into the bucket's `_inbox/` prefix, so every upload passes the
+  landing's row checks before it reaches the store; `inbox=False` keeps the straight-to-store
+  layout of 0.107. Upgrade the cloud landing first (with `camber edge land <bucket>/_inbox
+  --apply` scheduled), then the brokers; forwarders need no change. docs/EDGE-DEPLOY.md gives the
+  order.
+- **Behaviour change: a growing month replaces its earlier part (#228).** The forwarder re-sends
+  the month in progress on every poll with more rows. When a landed object holds every row of
+  the stored parts it overlaps, `camber edge land` replaces them instead of storing it beside
+  them, so a month keeps one part and reads never see a row twice. The partition is swapped in
+  whole (a reader or a crash sees the old partition or the new one), the replacement is audited
+  in the `edge.land` records and recorded in the row-digest cache, and under a legal hold the
+  replaced part is copied into quarantine first. The last observation of each series in the
+  stored part may differ: that is the hour still in progress when it was polled (a resampled mean
+  of the samples so far), which the next poll revises. An object whose rows are all stored
+  already (a late, smaller poll) is a `duplicate`.
+- **Behaviour change: a conflicting overlap is quarantined (#228).** An object that shares an
+  observation (timestamp, equipment and role) with a stored part without holding all of its
+  rows, such as a month whose history changed at the source, goes to quarantine as a `conflict`
+  with the parts it overlaps, instead of landing beside them. Releasing it stores it beside them.
+- **Behaviour change: an empty folder is an empty store everywhere (#233).** `camber store
+  verify` reports 0 parts and exits 0 on an empty directory, and `store normalize` and
+  `migrate-partitions` do nothing and create nothing there, not even a lock file, as `camber
+  serve` already accepted it. A missing path, a file or a directory of other things is still
+  refused. `camber serve` and the store commands now share one definition of a store directory.
+- **Chiller run gate in `analyze_chiller_staging` and `analyze_chiller_staging_fleet` (#235).**
+  Their `min_power_kw` keyword now defaults to `None`, which reads a chiller as running above a
+  tenth of its own 95th-percentile power (the new `run_frac` keyword,
+  `camber.schedules.CHILLER_POWER_RUN_FRAC`), or by a `Status` column when one is present. Pass
+  `min_power_kw=2.0` for the fixed 2 kW gate used before 0.108.
+- **Tower drift baselines record their load (#234).** A `cooling_tower_approach_drift` or
+  `cooling_tower_fan_effort_drift` baseline frozen from 0.108 records the load it was fitted on
+  (`load_source` in the stored coefficients). A baseline frozen earlier has no `load_source`: it
+  is still scored, as fitted on the current load, with a caveat that asks for a refreeze if the
+  load has changed since.
 - **Behaviour change: a legal hold refuses the store and registry delete primitives inside a
   workspace (#250).** `ParquetStore.drop_facility`, `prune` and `drop_partition` and
   `FacilityRegistry.remove` now refuse a facility under a legal hold (`LifecycleError`, nothing
   deleted). They also need a `reason=` (`ValueError` without one) and are audited as
   `store.drop_facility`, `store.prune` (one line per facility) and `store.drop_partition`, with
-  `facility.remove` carrying the reason given. The rule lives with the 0.107 dataset rules in
+  `facility.remove` carrying the reason given. `drop_facility` and `remove` also refuse a facility
+  that is not `provisioning` or `active` (suspended, offboarding, archived), as a dataset purge
+  does: an archived facility leaves through `camber facility purge`. The rule lives with the 0.107
+  dataset rules in
   `camber.datasets._lifecycle`, so every caller shares it. There is no override flag: release the
   hold first. A plain store outside a workspace is unchanged.
 - **Behaviour change: store writes cannot change a facility's privacy flag or display name inside
@@ -31,11 +99,13 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   renamed it, with no audit line. Use `camber facility private|rename`, which audit the change. A
   facility created by its first write may still start `private` or with a display name; its
   `facility.register` line records them.
-- **Behaviour change: config runs write no state for an archived, purged or held facility
-  (#252).** A run with a `faults` fold is refused up front (`LifecycleError`), and so are
-  `camber drift freeze|accept` and `camber mv freeze|rebaseline|adjust --apply`. A report such a
-  run writes is still written, but it is not recorded in the facility manifest, and a warning
-  says so. A run with no fault fold still runs.
+- **Behaviour change: config runs write no state for an archived or purged facility (#252).** A
+  run with a `faults` fold is refused up front (`LifecycleError`), and so are `camber drift
+  freeze|accept` and `camber mv freeze|rebaseline|adjust --apply`. A report such a run writes is
+  still written, but it is not recorded in the facility manifest, and a warning says so. A run
+  with no fault fold still runs. A legal hold alone does not block these writes: it blocks only
+  deleting or replacing data, so a held active facility keeps folding faults and freezing
+  baselines.
 - **Behaviour change: `facility rename` refuses another facility's labels (#255).** The new name
   may not equal, exactly or loosely, another facility's id, registered name, or current or past
   display name, live or tombstoned.
@@ -46,6 +116,98 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   (`bldg:AHU_1.Cooling_Coil`). Models written by other tools are read as before.
 
 ### Fixed
+- **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
+  Re-tuning chapters 5 and 7, but the rule judges an air handler's coil valves, which chapter 5
+  covers. Chapter 7's reheat-valve leakage is a terminal box's. The docstrings now cite chapter 5,
+  which matches the rule's mapping.
+- **The `overcooling_min_flow` evidence shades the rule's own samples (#258).** It shaded every
+  hour more than 3 °F below the cooling setpoint, occupied or not, so on a box overcooling at its
+  minimum flow it could shade only the nights and none of the flagged hours. `analyze_overcooling`
+  now returns the samples behind its percentages (`masks_out`), and the chart shades the occupied
+  samples the verdict counts: satisfied on cooling, at minimum flow and, when a heating valve is
+  trended, with the valve open. The chart also plots the airflow against its minimum setpoint and
+  the heating valve, scaled 0–1 per unit (`normalize="unit"` in `fault_multitrend`) so each
+  setpoint stays comparable with its point. `OvercoolingMinFlow.violation_masks` exposes both
+  masks.
+- **Reports are written as UTF-8 on every platform (#259).** `camber report`, the RCx and M&V
+  reports, the dossier, `camber fleet`, the drift report, the JSON outputs and the config's
+  `out_text` / `out_html` were written in the locale's encoding: under a cp1252 or Latin-1 locale
+  a report with `≥` in its text failed and left an empty file, and elsewhere the bytes did not
+  match the page's `utf-8` charset. Every text write now names `encoding="utf-8"`.
+  `camber fleet --out` writes a whole HTML document with its charset
+  (`FleetReport.to_html_document`); `to_html` stays a fragment.
+- **The interactive dashboard escapes point names (#260).** The scatter's axis labels and the
+  carpet's title were put into the page as written, so a column name holding HTML became markup
+  in a shareable page.
+- **The fleet report's most common findings are the same on every run (#261).** Ties were ordered
+  by the hash seed; they now break by rule name.
+- **Evidence spans cover every flagged sample and stop at data gaps (#262).** A run of flagged
+  samples was shaded only to its last sample, so two flagged hours shaded one, and a run bridged
+  missing data. Each flagged sample is now shaded over its own interval, to the next sample, and
+  a run splits where a step is longer than 2.5 times the median step. This applies to the
+  evidence charts, the dashboard and the RCx trend charts.
+- **Load carpets keep days with no data (#263).** The static and the interactive carpet had a
+  column only for days with data, so an outage disappeared and the date axis was not linear.
+  Both now have a column for every calendar day from the first sample to the last.
+- **Point names with `$` no longer break charts (#264).** Matplotlib read a `$` in a point or
+  equipment name as math text: the evidence chart was silently dropped, a name such as
+  `VAV $5 to $10` was garbled, and a dashboard with such a column failed. Every data-derived
+  label, legend entry, tick label and title now escapes `$`. A dashboard or site-report section
+  whose chart fails to draw shows a note, and the rest of the report builds.
+- **Dashboard robustness (#265).** In the interactive dashboard, a trend line breaks at missing
+  samples instead of dropping to the series minimum, and an all-NaN column is left out; the
+  scatter's range is computed with a loop, so a year of 1-minute data no longer leaves it blank.
+  A dashboard or site report on a frame with a text column (a mode point) no longer fails: the
+  data-quality section, the default trend and the scatter skip non-numeric columns. A zero-row
+  frame builds.
+- **A year-only part re-sent in new bytes after its year was migrated is caught (#230).** The
+  landing compares a year-only object's rows with the month partitions of its year and
+  quarantines it as a `duplicate` when they already hold every row, instead of storing the year
+  again beside the migrated months.
+- `camber edge land` now invalidates the store's point catalog after it stores parts, so new
+  equipment and points show up without a manual `rebuild_catalog`.
+- **Tower drift rules no longer score against a baseline fitted on another load (#234).**
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift` match on chilled-water
+  tons, condenser heat rejected or the tower's range. The frozen baseline did not record which,
+  so mapping `cw_flow` after the range caveat asked for it, or running a tower as its own
+  equipment after running it with its chiller's points, scored tons against degrees. A healthy
+  tower then read "approach narrowed 116.5°F" or "fan speed -2436.2%-pts", and a fresh baseline
+  on the same input read 0.0°F. Both rules now decline (`info`, reason
+  `load_source_mismatch`, metrics for the current and the baseline's load) with "baseline fitted
+  on X, current load is Y; refreeze", and a caveat that names `camber drift accept`.
+- **`chiller_staging` and `chiller_staging_fleet` no longer read standby draw as running (#235).**
+  A chiller ran above a fixed 2 kW, but a stopped chiller draws 5 to 15 kW for its controls, oil
+  heater and crankcase heater. A chiller cycling an hour on and an hour off over an 8 kW standby
+  read 0.1 starts a day and 100 % runtime; it now reads 12 starts a day (fault) and 50 %. A
+  chiller runs by its `compressor_status` when that is mapped, else above `run_frac` (0.10) of
+  its own 95th-percentile power, taken over the samples that draw any power so that a lag chiller
+  at 0 kW most of the time still runs. Both rules take `min_power_kw` (default `None`) and
+  `run_frac` parameters and report the metric `run_source`; `chiller_staging` also reports
+  `run_threshold_kw`.
+- **`control_hunting` checks resolution per signal (#236).** The resolution ceiling was the
+  lowest across all modulating signals, so one 15-minute OA damper made the rule decline and hid
+  a cooling valve sampled every minute and hunting at 20 reversals an hour. Its caveat also read
+  "observed reversals on 500% of the resolvable maximum". Now a signal whose sampling cannot show
+  the warn threshold is not evaluated: its rate is `None`, it is listed in the new metric
+  `not_evaluated_signals`, and a caveat names it. The verdict is the worst signal that can be
+  evaluated, judged against that signal's own ceiling. The rule declines only when no signal can
+  be evaluated.
+- **`boiler_short_cycle` and `compressor_short_cycle` count starts per observed day (#237).**
+  Starts were divided by the span from the first sample to the last, so a logger gap counted as
+  days with no starts. Two days cycling 24 times a day, a 28-day gap and a day off read 1.6
+  starts a day. The rate is now divided by the observed days: the sum of the sample steps no
+  longer than three median intervals, as `control_hunting` measures its observed time. The same
+  trend reads 16 a day (boiler fault, compressor warn). The new metric `n_days_observed` sits
+  beside `n_days` (the span), and a caveat is added when fewer than half the span's days are
+  observed.
+- **`heatpump_defrost` and `compressor_staging` read a short trend over one day (#240).** The
+  span was floored at 1e-9 days, so one defrost in two hours read 24.2 reversing-valve cycles a
+  day (warn), and one stage excursion read 24.2 stage changes a day. The span is now floored at
+  one day, as `boiler_short_cycle` does: those trends read 2.0 a day (ok), with a caveat that the
+  trend spans under a day. `n_days` still reports the real span.
+- **The `heatpump_defrost` ok summary names no cause (#240).** It ended "— check defrost
+  termination" even with no reversals. That cause now appears only on warn and fault, as for the
+  drift rules (#189).
 - **The store and registry primitives bypassed legal holds and the audit log (#250).** With a
   facility under a hold, `drop_facility` deleted every row, `registry.remove` tombstoned it and
   left the hold pointing at a removed id, and `prune` and `drop_partition` deleted partitions,
@@ -88,6 +250,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   They now read v3 markers (`"m:"`) and refs (`"r:<id> <dis>"`) and Hayson markers
   (`{"_kind": "marker"}`) and refs (`{"_kind": "ref", "val": ...}`), for point ids, `ahuRef` and
   `equipRef`. Fixtures in both encodings are under `tests/golden/haystack/`.
+
 
 ## [0.107.0] — 2026-10-17
 

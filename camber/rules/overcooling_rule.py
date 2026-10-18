@@ -65,8 +65,8 @@ class OvercoolingMinFlow:
         self.end_hour = end_hour
         self.occupied_days = tuple(occupied_days)
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the diagnostic on an equipment role-frame; return a Finding."""
+    def _run(self, equip: str, frame: pd.DataFrame, masks_out: dict | None = None):
+        """``(OvercoolResult | None, valve_signal)`` over the role-frame."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         # 0.98 (#85): the reheat overlap reads the measured position when it is mapped
         valve_role, valve_signal = _reheat_valve_role(frame)
@@ -77,7 +77,25 @@ class OvercoolingMinFlow:
             start_hour=self.start_hour,
             end_hour=self.end_hour,
             occupied_days=self.occupied_days,
+            masks_out=masks_out,
         )
+        return res, valve_signal
+
+    def violation_masks(self, frame: pd.DataFrame) -> dict:
+        """``{"overcooling at min flow": mask, "with reheat": mask}`` (0.108, #258): the occupied
+        samples counted in ``overcool_at_minflow_pct`` and ``overcool_with_reheat_pct``, boolean
+        Series on ``frame``'s index (all False when the rule judges nothing)."""
+        out: dict = {}
+        self._run("", frame, masks_out=out)
+        none = pd.Series(False, index=frame.index)
+        return {
+            "overcooling at min flow": out.get("overcool", none),
+            "with reheat": out.get("with_reheat", none),
+        }
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the diagnostic on an equipment role-frame; return a Finding."""
+        res, valve_signal = self._run(equip, frame)
         if res is None:
             return Finding(
                 rule=self.name,
@@ -166,20 +184,33 @@ class OvercoolingMinFlow:
         return _valve_divergence(frame, pd.Series(keep, index=frame.index))
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint
-        shaded."""
+        """Pattern J: space temp vs cooling setpoint, airflow vs its minimum setpoint and the
+        heating valve, with the rule's own flagged samples shaded (0.108, #258).
+
+        The shaded samples are the ones the verdict counts: occupied, satisfied on cooling, at
+        minimum flow -- and, when a heating valve is trended (the severity then reads the reheat
+        overlap), with the valve open. Series are scaled 0-1 per unit, so the space temperature
+        and its setpoint stay comparable, as do the airflow and its setpoint.
+        """
         from ..charts.evidence import Evidence
 
-        if Role.SPACE_TEMP in frame.columns and Role.COOL_SP in frame.columns:
-            # a comfortable space normally sits below the cooling setpoint; only shade where it
-            # runs well below it (overcooled past the deadband), not routine operation
-            margin = 3.0
-            mask = ((frame[Role.COOL_SP] - frame[Role.SPACE_TEMP]) > margin).fillna(False)
-            return Evidence(
-                renderer="multitrend",
-                roles=[Role.SPACE_TEMP, Role.COOL_SP],
-                mask=mask,
-                label="overcooled (>3F below SP)",
-                title=f"{equip}: overcooling",
-            )
-        return None
+        if Role.SPACE_TEMP not in frame.columns or Role.COOL_SP not in frame.columns:
+            return None
+        flow_sp = Role.AIRFLOW_MIN_SP if Role.AIRFLOW_MIN_SP in frame.columns else Role.AIRFLOW_SP
+        valve_role, _ = _reheat_valve_role(frame)
+        wanted = (Role.SPACE_TEMP, Role.COOL_SP, Role.AIRFLOW, flow_sp, valve_role)
+        roles = [r for r in wanted if r is not None and r in frame.columns]
+        masks = self.violation_masks(frame)
+        if valve_role is not None:
+            mask, label = masks["with reheat"], "overcooled at min flow, reheat open"
+        else:
+            mask, label = masks["overcooling at min flow"], "overcooled at min flow"
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=mask,
+            masks=masks,
+            label=label,
+            title=f"{equip}: overcooling at minimum flow",
+            normalize="unit" if len(roles) > 2 else False,
+        )

@@ -223,6 +223,8 @@ def test_the_cache_is_only_a_cache(ws, tmp_path):
 
 
 def test_a_genuinely_changed_month_is_not_deduplicated(ws, tmp_path):
+    """The same observations with other values: not a duplicate, and since 0.108 (#228) not
+    stacked beside the first either -- a conflict, quarantined, never merged."""
     key, data = _batch(tmp_path, "a", layout="legacy")
     inbox = str(tmp_path / "inbox")
     _put(inbox, key, data)
@@ -233,8 +235,9 @@ def test_a_genuinely_changed_month_is_not_deduplicated(ws, tmp_path):
     _put(inbox, k2, d2)
     rep = land(ws, inbox, apply=True, reason="second")
     (row,) = rep["objects"]
-    assert row["to"] == "store" and row["category"] == "ok"
-    assert _rows(ws) == 2 * n  # the changed month is stored beside the first (as before 0.107)
+    assert row["to"] == "quarantine" and row["category"] == "conflict"
+    assert row["conflicts_with"] == [key.split("/")[-1]]
+    assert _rows(ws) == n
 
 
 def test_two_objects_with_the_same_rows_in_one_run(ws, tmp_path):
@@ -266,7 +269,8 @@ def test_release_refuses_rows_the_store_already_holds(ws, tmp_path):
 
 def test_route_key_can_stage_accepted_uploads_in_an_inbox(ws):
     key = f"facility_id={FID}/year=2024/month=6/part-0123456789abcdef.parquet"
-    assert route_key(ws, key) == key
+    assert route_key(ws, key) == INBOX_PREFIX + key  # the default since 0.108 (#233)
     assert route_key(ws, key, inbox=True) == INBOX_PREFIX + key
+    assert route_key(ws, key, inbox=False) == key
     ghost = "facility_id=ghost-hall-778899/year=2024/month=6/part-0123456789abcdef.parquet"
     assert route_key(ws, ghost, inbox=True) == QUARANTINE_PREFIX + ghost

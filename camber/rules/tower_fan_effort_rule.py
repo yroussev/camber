@@ -22,6 +22,8 @@ from OAT + RH (Stull).
 condenser pump the flow doubles and the range halves for the same heat, so a range-matched fan
 effort reads high -- a plant that over-stages its chillers looks like a working-harder tower. A
 fired finding on the range says so; map the condenser flow (``cw_flow``) to read heat rejection.
+The frozen baseline records which load it was fitted on (0.108, #234): a later run that reads the
+load another way declines and asks for a refreeze.
 
 **A biased leaving-water sensor drives the fan the same way.** A tower controller that reads its
 water 2 F warm cools the real water 2 F further and spends the effort to do it (on the LBNL plant
@@ -54,6 +56,7 @@ from ..coolingtower import stull_wetbulb_f
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from ..units import normalize_percent
+from . import _chillerfit
 from .base import Finding
 
 _KIND = "cooling_tower_fan_effort"
@@ -176,7 +179,7 @@ class CoolingTowerFanEffortDrift:
         return float(d.median()) if len(d) >= _MIN_SAMPLES else None
 
     # ------------------------------------------------------------------ baseline
-    def _freeze(self, equip, base: pd.DataFrame, gate, caveats: list):
+    def _freeze(self, equip, base: pd.DataFrame, gate, caveats: list, load_source: str = ""):
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -221,6 +224,7 @@ class CoolingTowerFanEffortDrift:
                 f"could not evaluate {_KIND}: the baseline would not support a fit: {why}"
             )
             return None
+        fit.load_source = load_source  # 0.108 (#234)
         idx = base.index
         self.store.freeze(
             fit,
@@ -265,9 +269,15 @@ class CoolingTowerFanEffortDrift:
             min_load=0.5 if src_b == "cw_range" else None,
             min_load_span=2.0 if src_b == "cw_range" else None,
         )
-        frozen = self._freeze(equip, base_t, gate, caveats)
+        frozen = self._freeze(equip, base_t, gate, caveats, load_source=src_b)
         if frozen is None:
             return self._decline(equip, "no_baseline", caveats, "no frozen fan-effort baseline")
+        # 0.108 (#234): a baseline fitted on another load is not comparable -- decline
+        why = _chillerfit.load_source_mismatch(frozen, src_b, caveats, kind=_KIND)
+        if why is not None:
+            out = self._decline(equip, "load_source_mismatch", caveats, why)
+            out.metrics.update({"load_source": src_b, "baseline_load_source": frozen.load_source})
+            return out
         cov = _WB if frozen.covariate else None
         if cov is not None and cov not in cur_t.columns:
             caveats.append("the baseline is normalized on wet-bulb, absent from the current period")
