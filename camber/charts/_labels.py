@@ -9,6 +9,7 @@ reads as given.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 
@@ -50,3 +51,20 @@ def role_label(key) -> str:
     unit = _units().get(slug, "")
     name = slug.replace("_", " ")
     return f"{name} ({unit})" if unit else name
+
+
+_UNESCAPED_DOLLAR = re.compile(r"(?<!\\)\$")
+
+
+def mpl_text(text: object) -> str:
+    """``text`` made safe for a matplotlib label or title (0.108, #264).
+
+    Matplotlib reads a ``$`` as the start of math text, so a point or equipment name carrying one
+    (a Niagara-style ``$20`` escape, ``VAV $5 to $10``) renders as garbled math or makes the
+    figure fail to draw. Every data-derived label, legend entry, tick label and title passes
+    through here: each unescaped ``$`` becomes ``\\$``, which matplotlib draws as a plain dollar
+    sign. Idempotent, so a label escaped upstream is not escaped twice. ``None`` reads as ``""``.
+    """
+    if text is None:
+        return ""
+    return _UNESCAPED_DOLLAR.sub(r"\\$", str(text))

@@ -268,7 +268,7 @@ def main(argv=None) -> int:
                 f"with NASA POWER T2M {pw['enpi']:.3f} +/- {pw['enpi_uncertainty']:.3f}"
             )
     if args.json:
-        with open(args.json, "w") as f:
+        with open(args.json, "w", encoding="utf-8") as f:
             json.dump(out, f, indent=1, default=str)
     return 0
 

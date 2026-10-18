@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from ..points import find_column
+from ._labels import mpl_text
 
 
 @dataclass
@@ -130,9 +131,11 @@ def ahu_hec_scatter(
     ax.set_xlabel("Heating-coil valve (% open)")
     ax.set_ylabel("Cooling-coil valve (% open)")
     ax.set_title(
-        f"AHU{ahu_id} simultaneous heating/cooling\n"
-        f"{m.simultaneous_pct:.1f}% of intervals in fault region "
-        f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F)"
+        mpl_text(
+            f"AHU{ahu_id} simultaneous heating/cooling\n"
+            f"{m.simultaneous_pct:.1f}% of intervals in fault region "
+            f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F)"
+        )
     )
     ax.text(
         0.97,

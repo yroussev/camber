@@ -66,7 +66,7 @@ def _write(tmp_path, entry: dict, *, end="2018-12-31"):
         ],
     }
     path = str(tmp_path / "config.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return cfg, path, ws
 
 

@@ -13,6 +13,50 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Fixed
+- **The `overcooling_min_flow` evidence shades the rule's own samples (#258).** It shaded every
+  hour more than 3 °F below the cooling setpoint, occupied or not, so on a box overcooling at its
+  minimum flow it could shade only the nights and none of the flagged hours. `analyze_overcooling`
+  now returns the samples behind its percentages (`masks_out`), and the chart shades the occupied
+  samples the verdict counts: satisfied on cooling, at minimum flow and, when a heating valve is
+  trended, with the valve open. The chart also plots the airflow against its minimum setpoint and
+  the heating valve, scaled 0–1 per unit (`normalize="unit"` in `fault_multitrend`) so each
+  setpoint stays comparable with its point. `OvercoolingMinFlow.violation_masks` exposes both
+  masks.
+- **Reports are written as UTF-8 on every platform (#259).** `camber report`, the RCx and M&V
+  reports, the dossier, `camber fleet`, the drift report, the JSON outputs and the config's
+  `out_text` / `out_html` were written in the locale's encoding: under a cp1252 or Latin-1 locale
+  a report with `≥` in its text failed and left an empty file, and elsewhere the bytes did not
+  match the page's `utf-8` charset. Every text write now names `encoding="utf-8"`.
+  `camber fleet --out` writes a whole HTML document with its charset
+  (`FleetReport.to_html_document`); `to_html` stays a fragment.
+- **The interactive dashboard escapes point names (#260).** The scatter's axis labels and the
+  carpet's title were put into the page as written, so a column name holding HTML became markup
+  in a shareable page.
+- **The fleet report's most common findings are the same on every run (#261).** Ties were ordered
+  by the hash seed; they now break by rule name.
+- **Evidence spans cover every flagged sample and stop at data gaps (#262).** A run of flagged
+  samples was shaded only to its last sample, so two flagged hours shaded one, and a run bridged
+  missing data. Each flagged sample is now shaded over its own interval, to the next sample, and
+  a run splits where a step is longer than 2.5 times the median step. This applies to the
+  evidence charts, the dashboard and the RCx trend charts.
+- **Load carpets keep days with no data (#263).** The static and the interactive carpet had a
+  column only for days with data, so an outage disappeared and the date axis was not linear.
+  Both now have a column for every calendar day from the first sample to the last.
+- **Point names with `$` no longer break charts (#264).** Matplotlib read a `$` in a point or
+  equipment name as math text: the evidence chart was silently dropped, a name such as
+  `VAV $5 to $10` was garbled, and a dashboard with such a column failed. Every data-derived
+  label, legend entry, tick label and title now escapes `$`. A dashboard or site-report section
+  whose chart fails to draw shows a note, and the rest of the report builds.
+- **Dashboard robustness (#265).** In the interactive dashboard, a trend line breaks at missing
+  samples instead of dropping to the series minimum, and an all-NaN column is left out; the
+  scatter's range is computed with a loop, so a year of 1-minute data no longer leaves it blank.
+  A dashboard or site report on a frame with a text column (a mode point) no longer fails: the
+  data-quality section, the default trend and the scatter skip non-numeric columns. A zero-row
+  frame builds.
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).

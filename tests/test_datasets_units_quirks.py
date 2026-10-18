@@ -309,8 +309,8 @@ def test_data_dir_resolution(monkeypatch, tmp_path):
 def test_manifest_and_ledger_tolerate_garbage(tmp_path):
     root = str(tmp_path)
     assert _paths.read_manifest(root) == {} and _paths.read_acknowledgements(root) == []
-    open(os.path.join(root, "manifest.json"), "w").write("[1, 2]")
-    open(os.path.join(root, "acknowledgements.json"), "w").write("{broken")
+    open(os.path.join(root, "manifest.json"), "w", encoding="utf-8").write("[1, 2]")
+    open(os.path.join(root, "acknowledgements.json"), "w", encoding="utf-8").write("{broken")
     assert _paths.read_manifest(root) == {} and _paths.read_acknowledgements(root) == []
     rec = _paths.append_acknowledgement(root, {"dataset_id": "x"})
     assert rec["accepted_at"] and _paths.read_acknowledgements(root) == [rec]

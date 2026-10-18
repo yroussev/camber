@@ -267,9 +267,9 @@ def main(argv=None) -> int:
     print("and reports the honest, messy real-world acceptance rates with confidence intervals.")
 
     if args.json:
-        json.dump(m, open(args.json, "w"), indent=2, sort_keys=True)
+        json.dump(m, open(args.json, "w", encoding="utf-8"), indent=2, sort_keys=True)
     if args.update_baseline:
-        json.dump(m, open(args.update_baseline, "w"), indent=2, sort_keys=True)
+        json.dump(m, open(args.update_baseline, "w", encoding="utf-8"), indent=2, sort_keys=True)
         print(f"wrote baseline -> {args.update_baseline}")
     if args.gate:
         chk = check_against_baseline(m, json.load(open(args.gate)), tol=args.tol, strict_new=True)

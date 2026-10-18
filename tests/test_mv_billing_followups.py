@@ -170,7 +170,7 @@ def _write(tmp_path, cfg, **kw):
         tmp_path / "oat.csv", index=False
     )
     path = str(tmp_path / "cfg.json")
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     return path
 
 
@@ -321,7 +321,7 @@ def test_bill_steps_in_the_run_path(tmp_path, capsys):
     assert "T1:" in out and "proposal: rebaseline" in out
     # a bad block is a config error
     cfg["mv"][0]["rebaseline"] = {"bill_steps": "cusum"}
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     with pytest.raises(ValueError, match="bill_steps"):
         run_config(load_config(path), base_dir=str(tmp_path))
 

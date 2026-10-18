@@ -2658,7 +2658,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 findings.append(sf)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
         if rep.get("out_text"):
-            with open(_path(base_dir, rep["out_text"]), "w") as fh:
+            with open(_path(base_dir, rep["out_text"]), "w", encoding="utf-8") as fh:
                 fh.write(report.to_text())
             outputs[_path(base_dir, rep["out_text"])] = "report"
         if rep.get("out_html"):
@@ -2672,7 +2672,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             if drift is not None:
                 # the audit body already carries the data-source block; don't repeat it
                 body += "\n" + drift_report_html(drift, standalone=False)
-            with open(_path(base_dir, rep["out_html"]), "w") as fh:
+            with open(_path(base_dir, rep["out_html"]), "w", encoding="utf-8") as fh:
                 fh.write(html_document(body, title=report.display_title()))
             outputs[_path(base_dir, rep["out_html"])] = "report"
     if outputs:

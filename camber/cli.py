@@ -101,7 +101,12 @@ def _cmd_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         path = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(path, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(path, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {path}")
         _record(res, {path: "report"})
     if res.faults is not None:
@@ -161,7 +166,7 @@ def _cmd_report(args) -> int:
         html = _plugin_report(layout, res)
         if html is None:
             return 2
-    with open(args.out, "w") as fh:
+    with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(html)
     print(f"wrote {args.out}  ({len(res.findings)} findings, layout {layout})")
     _record(res, {args.out: "report"})
@@ -242,7 +247,7 @@ def _report_rcx(args, cfg, base) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
     else:
-        with open(args.out, "w") as fh:
+        with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(rep.to_html())
     k = rep.kpis
     dollars = f"${k['annual_cost_usd']:,.0f}/yr costed" if k["n_costed"] else "no costed issues"
@@ -264,12 +269,12 @@ def _report_rcx(args, cfg, base) -> int:
         from .report.rcx import prose_prompts
 
         prompts = prose_prompts(rep)
-        with open(args.prose_prompts, "w") as fh:
+        with open(args.prose_prompts, "w", encoding="utf-8") as fh:
             json.dump(prompts, fh, indent=2)
         print(f"wrote {args.prose_prompts}  ({len(prompts)} prose slots)")
         written[args.prose_prompts] = "report"
     if args.notes_template:
-        with open(args.notes_template, "w") as fh:
+        with open(args.notes_template, "w", encoding="utf-8") as fh:
             json.dump(notes_template(rep), fh, indent=2)
         print(f"wrote {args.notes_template}  ({len(rep.slots())} note slots)")
         written[args.notes_template] = "report"
@@ -283,10 +288,10 @@ def _cmd_validate(args) -> int:
     dossier = build_dossier(full=args.full)
     print(dossier.to_text())
     if args.json:
-        json.dump(dossier.as_dict(), open(args.json, "w"), indent=2)
+        json.dump(dossier.as_dict(), open(args.json, "w", encoding="utf-8"), indent=2)
         print(f"wrote {args.json}")
     if args.html:
-        open(args.html, "w").write(dossier.to_html())
+        open(args.html, "w", encoding="utf-8").write(dossier.to_html())
         print(f"wrote {args.html}")
     return 0
 
@@ -385,7 +390,7 @@ def _cmd_fleet(args) -> int:
     fr = build_fleet_report(buildings, units=units)
     print(fr.to_text())
     if args.out:
-        open(args.out, "w").write(fr.to_html())
+        open(args.out, "w", encoding="utf-8").write(fr.to_html_document())
         print(f"\nwrote {args.out}")
     if args.ask:
         from .agent import ask, build_context
@@ -446,7 +451,7 @@ def _cmd_charts(args) -> int:
             f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F), n={m.n_considered}"
         )
 
-    with open(os.path.join(args.out, "hec_summary.json"), "w") as f:
+    with open(os.path.join(args.out, "hec_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Wrote {len(ids) * 2} charts + hec_summary.json to {args.out}/")
     return 0
@@ -2306,9 +2311,14 @@ def _cmd_drift_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         dpath = os.path.join(args.out, "drift.json")
-        json.dump(res.as_dict(), open(dpath, "w"), indent=2, default=str)
+        json.dump(res.as_dict(), open(dpath, "w", encoding="utf-8"), indent=2, default=str)
         fpath = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {dpath}\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2330,7 +2340,7 @@ def _cmd_drift_report(args) -> int:
     html = drift_report_html(
         res, charts=bool(args.charts), data_sources=data_sources(cfg, base_dir=base)
     )
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     from .config import _record_outputs
 
     _record_outputs(_drift_ctx(cfg, base), {args.out: "report"})
@@ -2426,7 +2436,12 @@ def _cmd_drift_list(args) -> int:
             f"{who}{sup}{hist}  {r.reason}"
         )
     if args.json:
-        json.dump([r.as_dict() for r in recs], open(args.json, "w"), indent=2, default=str)
+        json.dump(
+            [r.as_dict() for r in recs],
+            open(args.json, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {args.json}")
     return 0
 
@@ -2709,7 +2724,12 @@ def _cmd_mv_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         fpath = os.path.join(args.out, "mv_findings.json")
-        json.dump([f.as_dict() for f in findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2744,7 +2764,7 @@ def _cmd_mv_list(args) -> int:
                 f"by={row['accepted_by'] or '-'}{trig}{adj}  {row['reason']}{ok}"
             )
     if args.json:
-        json.dump(rows, open(args.json, "w"), indent=2, default=str)
+        json.dump(rows, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2793,7 +2813,7 @@ def _cmd_mv_propose(args) -> int:
             print(f"  SEP method proposal: {mp['error']}")
     print("\nnothing written: `camber mv rebaseline` / `camber mv adjust` apply a decision")
     if args.json:
-        json.dump(doc, open(args.json, "w"), indent=2, default=str)
+        json.dump(doc, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2809,12 +2829,12 @@ def _cmd_mv_report(args) -> int:
     if _mv_suspended(rep["skipped_state"] or "", ctx):
         return 0
     html = mv_report_html(rep, charts=not args.no_charts)
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     outs = {args.out: "report"}
     if args.json:
         json.dump(
             {**rep, "meters": [m.as_dict() for m in rep["meters"]]},
-            open(args.json, "w"),
+            open(args.json, "w", encoding="utf-8"),
             indent=2,
             default=str,
         )

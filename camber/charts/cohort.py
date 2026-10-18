@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+from ._labels import mpl_text
 from .diagnostic import _col
 
 _SUMMARIES = ("mean", "peak", "load_factor", "variability")
@@ -183,7 +184,7 @@ def cohort_small_multiples(
         is_out = equip in res.outliers
         ax.plot(s.index, s.to_numpy(), lw=0.8, color="#d62728" if is_out else "#3366cc")
         zlbl = f"  z={res.z[equip]:+.1f}" if equip in res.z else ""
-        ax.set_title(f"{equip}{zlbl}", fontsize=8, color="#d62728" if is_out else "#222")
+        ax.set_title(mpl_text(f"{equip}{zlbl}"), fontsize=8, color="#d62728" if is_out else "#222")
         ax.tick_params(labelsize=6)
         if isinstance(s.index, pd.DatetimeIndex) and len(s):
             # 0.102 (#117): a small panel fits a few concise date ticks, not overlapping full dates
@@ -193,7 +194,8 @@ def cohort_small_multiples(
     for j in range(n, nrows * ncols):  # hide unused panels
         axes[j // ncols][j % ncols].axis("off")
     fig.suptitle(
-        f"Cohort — {res.role} ({summary}): {len(res.outliers)} outlier(s) of {n}", fontsize=11
+        mpl_text(f"Cohort — {res.role} ({summary}): {len(res.outliers)} outlier(s) of {n}"),
+        fontsize=11,
     )
     fig.tight_layout()
     return fig, res

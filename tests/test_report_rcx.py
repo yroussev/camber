@@ -404,7 +404,7 @@ def test_golden_synthetic_report(run):
     got = _normalize(build_rcx_report(run).to_html())
     if os.environ.get("CAMBER_UPDATE_GOLDEN") == "1" or not os.path.exists(GOLDEN):
         os.makedirs(os.path.dirname(GOLDEN), exist_ok=True)
-        with open(GOLDEN, "w") as fh:
+        with open(GOLDEN, "w", encoding="utf-8") as fh:
             fh.write(got)
         if os.environ.get("CAMBER_UPDATE_GOLDEN") != "1":
             pytest.fail("golden file was missing and has been written; re-run the test")

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import numpy as np
 import pandas as pd
 
 from .schedules import effective_occupied_mask
@@ -90,6 +91,7 @@ def analyze_overcooling(
     start_hour: float = 7,
     end_hour: float = 18,
     occupied_days=(0, 1, 2, 3, 4),
+    masks_out: dict | None = None,
 ) -> OvercoolResult | None:
     """Detect overcooling-at-minimum-flow for one terminal box.
 
@@ -110,10 +112,18 @@ def analyze_overcooling(
                             the correct orientation for an overcooling diagnostic
                             (the old additive ``satisfied_margin_f`` could only widen
                             the band, which over-counts).
+
+    ``masks_out`` (0.108, #258): when a dict is passed, it is filled with the samples behind the
+    percentages, as boolean Series on ``df``'s index (False outside the judged samples):
+    ``"satisfied"``, ``"overcool"`` (satisfied AND at minimum flow, the numerator of
+    ``overcool_at_minflow_pct``) and ``"with_reheat"`` (the numerator of
+    ``overcool_with_reheat_pct``). Evidence charts shade these, so they match the verdict.
     """
     if "SpaceTemp" not in df.columns or "ActCoolSP" not in df.columns:
         return None
     work = df.copy()
+    # each sample's position in ``df`` (0.108, #258): masks_out maps back to it by position
+    work["_camber_pos"] = np.arange(len(df))
     if occupied_only:
         work = work[
             effective_occupied_mask(
@@ -166,6 +176,19 @@ def analyze_overcooling(
         minflow_frac = float((work["ActFlowSP"] / work["ActFlow"].max()).median())
     else:
         minflow_frac = float("nan")
+
+    if masks_out is not None:
+        pos = work["_camber_pos"].to_numpy()
+
+        def _on_df(m):
+            arr = np.zeros(len(df), dtype=bool)
+            arr[pos[m.fillna(False).to_numpy(dtype=bool)]] = True
+            return pd.Series(arr, index=df.index)
+
+        none = pd.Series(np.zeros(len(df), dtype=bool), index=df.index)
+        masks_out["satisfied"] = _on_df(satisfied)
+        masks_out["overcool"] = _on_df(overcool) if minflow_evaluable else none.copy()
+        masks_out["with_reheat"] = _on_df(with_reheat) if minflow_evaluable else none.copy()
 
     return OvercoolResult(
         equip=equip,

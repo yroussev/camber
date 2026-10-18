@@ -58,14 +58,14 @@ def _store_config(tmp_path, fid, **extra):
         else:
             cfg[k] = v
     path = str(tmp_path / "cfg.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return path
 
 
 def _set_run_id(path, rid):
     cfg = load_config(path)
     cfg["faults"]["run_id"] = rid
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
 
 
 def _run(path):
@@ -232,7 +232,7 @@ def _folder_config(tmp_path, **top):
         **top,
     }
     path = str(tmp_path / "cfg.json")
-    open(path, "w").write(json.dumps(cfg))
+    open(path, "w", encoding="utf-8").write(json.dumps(cfg))
     return path
 
 

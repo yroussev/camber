@@ -62,7 +62,7 @@ def _hold(pf, fid):
     p = os.path.join(pf.root, "_portfolio.json")
     doc = json.load(open(p))
     doc["legal_holds"] = {fid: {"reason": "litigation"}}
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
 
 
 def test_dry_run_changes_nothing(tmp_path):
