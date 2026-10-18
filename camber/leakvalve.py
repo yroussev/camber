@@ -1,4 +1,4 @@
-"""Leaking coil-valve detection (PNNL Re-tuning Ch.5/Ch.7).
+"""Leaking coil-valve detection (PNNL Re-tuning Ch.5).
 
 A valve commanded closed that still passes water wastes energy that the
 simultaneous-heat/cool and reheat checks miss (those see *commanded* coil action;

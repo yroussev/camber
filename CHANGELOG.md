@@ -13,6 +13,35 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Added
+- **A worked example of the RCx report's generated prose (#231).**
+  `examples/rcx_prose/prose.json` is a prose file for the synthetic RCx demo (the golden report's
+  store and config). It fills the executive summary, which is shown boxed with its cited facts,
+  and one issue slot whose last sentence cites nothing, so that slot falls back and Appendix A
+  records it. docs/RCX-REPORT.md walks through it ("A worked example") with a screenshot,
+  `docs/img/shots/rcx-prose.png`. `tests/test_rcx_prose_example_231.py` renders the example and
+  checks the prose box, the cited facts, the fallback and its Appendix A row against the docs. The
+  default golden report is unchanged.
+- **Docs screenshots from per-entry modules.** A module under `scripts/docs_figures.d/` can
+  register a browser screenshot with `df.screenshot(path, what)`; `--screenshots --only <path>`
+  takes just those. Dev tooling, not packaged.
+
+### Changed
+- **A rule's docstring citations are checked against its references (#232).**
+  `tests/test_references.py` now checks that every PNNL guide or Re-tuning chapter a rule's class
+  docstring cites ("PNNL Re-tuning Ch.5/7") is in that rule's `RULE_REFERENCES` entry.
+  `zones_heat_cool_census` now also links chapter 5, whose discharge-air temperature section lists
+  reheating in the cooler zones among the effects of a low discharge-air temperature. Its
+  Learn-more links gain that chapter. docs/REFERENCES.md explains both changes.
+
+### Fixed
+- **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
+  Re-tuning chapters 5 and 7, but the rule judges an air handler's coil valves, which chapter 5
+  covers. Chapter 7's reheat-valve leakage is a terminal box's. The docstrings now cite chapter 5,
+  which matches the rule's mapping.
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).
