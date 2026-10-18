@@ -1205,7 +1205,7 @@ def _reference_label(spec: dict) -> str:
     return os.path.basename(str(spec.get("csv")))
 
 
-def _load_point_reference(spec: dict, role: str, run, ctx) -> pd.Series | None:
+def _load_point_reference(spec: dict, role: str, run, ctx) -> pd.Series:
     """The reference series of one point reference (0.108, #267): ``spec["equip"]`` read from the
     run's equipment or its store facility, or ``spec["csv"]``."""
     if spec.get("csv"):
