@@ -893,6 +893,9 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
   (`DEAD`, kept in `<spool>/dead/`); `--json` prints them all, `--limit` caps the dead list
   (default 20). `edge requeue` is a dry run without `--apply`; with it, the dead batches (or
   those named by `--key`) are queued again with a fresh count, and an unknown `--key` exits 1.
+  A 401 or 403 from the sink is not a rejection: it stops the cycle with back-off and `edge
+  status` shows `AUTH FAILING since <time>`. `edge status` and `edge selftest` print a `CONFIG
+  WARNING` for each unknown config key (ignored in 0.108; refused from 0.109).
   `edge selftest` runs on a temporary spool and never touches the configured one (#242).
 - **Row duplicates already in the store (0.108, #229).** A store `reconcile` lists the groups of
   parts of one facility that hold identical rows under different keys (landed before the row

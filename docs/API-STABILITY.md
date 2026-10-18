@@ -893,11 +893,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `camber.ingest.haystack.haystack_tz`. **Behaviour changes:** a landed part that agrees with
   the stored parts it overlaps is merged with them; a permanent sink rejection is counted and
   dead-lettered instead of blocking the spool; SDK sinks send a compact metadata subset; the
-  spool skips a batch already pending; the edge config refuses unknown keys, bad values and
+  spool skips a batch already pending; the edge config warns about unknown keys (refused from
+  0.109, see Deprecated) and refuses bad values and
   more secret shapes; `BacnetSource` refuses duplicate point names and `discovery_to_points`
   renames objects that share a name; `parse_his_grid` returns a tz-naive wall-clock index;
   `edge land` isolates per-object errors and exits 1 when one failed; `edge selftest` uses a
-  temporary spool.
+  temporary spool; a 401 / 403 from the sink is transient, stops the cycle and is never
+  dead-lettered (`camber.edge.sink.AUTH_STATUSES`, `is_auth_status`, `is_auth_error`,
+  `Spool.auth_failing`, `DrainResult.auth_failed`, the `auth_failing` and `config_warnings`
+  keys of `edge status --json`, and `EdgeConfig.warnings`).
 
 ### The read API server: `camber.api.server`
 
@@ -949,6 +953,7 @@ Currently deprecated names and code paths, each with its replacement. Each emits
 | `mandv.caltrack.caltrack_savings_hourly` (a pooled TOWT, not CalTRACK Hourly) | 0.105 | 1.0 | `mandv.caltrack.towt_savings_hourly` (same numbers); for CalTRACK Hourly, `mandv.caltrack_hourly.caltrack_hourly_savings` |
 | `mandv.caltrack.HourlyNMECResult` | 0.105 | 1.0 | `mandv.caltrack.TOWTHourlyResult` |
 | `camber.mandv.degreeday.fit_degree_day` | 0.105 | 1.0 | `fit_mean_temp_degree_day` (same arguments and result) |
+| Unknown keys in an edge config file (`camber.edge.config.load_config`), ignored with a WARNING and a `FutureWarning` (the edge config is provisional, so its window is one minor) | 0.108 | 0.109 (refused) | the known key the warning names, or a `_`-prefixed key for a comment |
 | `camber.mandv.degreeday.DegreeDayModel` | 0.105 | 1.0 | `MeanTempDegreeDayModel` (stored models keep `"type": "DegreeDayModel"` and read back unchanged) |
 
 Stores opened **without** a facility (plain stores outside a portfolio workspace) are not

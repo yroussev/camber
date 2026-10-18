@@ -569,6 +569,7 @@
     "rows_digest"
   ],
   "camber.edge.sink": [
+    "AUTH_STATUSES",
     "AzureBlobSink",
     "GcsSink",
     "PermanentSinkError",
@@ -577,6 +578,8 @@
     "SINK_METADATA_KEYS",
     "Sink",
     "collect_sink",
+    "is_auth_error",
+    "is_auth_status",
     "is_permanent_error",
     "is_permanent_status",
     "sink_metadata"

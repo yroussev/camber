@@ -24,14 +24,16 @@ batches. Every journal write takes the spool's single-writer lock (``<spool>/_lo
 advisory lock a portfolio workspace uses), so a compaction or a decommission never races a running
 forwarder.
 
-**Permanent rejections (0.108, #245).** A send that fails with a 4xx answer (other than 408,
-425 and 429) or a validation error is permanent: retrying will not help. It is counted as a
-rejection, the drain moves on to the next batch instead of stopping, and after
+**Permanent rejections (0.108, #245).** A send that fails with a 4xx answer (other than 401,
+403, 408, 425 and 429) or a validation error is permanent: retrying will not help. It is counted
+as a rejection, the drain moves on to the next batch instead of stopping, and after
 ``dead_letter_after`` rejections (5 by default) the batch moves to ``dead/``: its payload and a
 ``<file>.json`` record (key, metadata, attempts, the last error, the time) are kept, a ``dead``
 journal record and a WARNING log line are written, and :meth:`Spool.requeue_dead` sends it again
 once the cause is fixed. A transient failure (a network error, a 5xx) still stops the cycle and
-backs off.
+backs off. So does a 401 / 403 (0.108): the sink refuses the device's credentials, a fleet-wide
+problem, never a bad batch; it is logged as a loud WARNING and recorded in ``auth_failing.json``
+(:meth:`Spool.auth_failing`) until a batch is delivered again.
 
 **No duplicate copies (0.108, #246).** :meth:`Spool.enqueue` skips a batch whose key and content
 sha256 are already pending (or dead-lettered): a forwarder that re-reads the same window while
@@ -60,6 +62,7 @@ _TMP = "tmp"
 _JOURNAL = "journal.ndjson"
 _COMPACT_TMP = "journal.ndjson.compact"
 _RETIRED = "retired.json"
+_AUTH = "auth_failing.json"  # 0.108: the sink refuses our credentials (401 / 403) since ...
 _DEAD = "dead"
 _DEFAULT_DEAD_LETTER_AFTER = 5
 _ERROR_CHARS = 500
@@ -132,6 +135,7 @@ class DrainResult:
     keys: list = field(default_factory=list)
     rejected: int = 0  # 0.108 (#245): permanent rejections this cycle (the drain went on)
     dead: list = field(default_factory=list)  # keys moved to dead/ this cycle
+    auth_failed: bool = False  # 0.108: the cycle stopped on a 401 / 403 (see Spool.auth_failing)
 
 
 def read_retirement(root: str) -> dict | None:
@@ -554,7 +558,7 @@ class Spool:
         :func:`camber.edge.sink.is_permanent_error`) does not stop the cycle: it is counted, the
         drain goes on with the next batch, and after ``dead_letter_after`` rejections the batch
         moves to ``dead/``."""
-        from .sink import is_permanent_error, is_permanent_status
+        from .sink import is_auth_error, is_auth_status, is_permanent_error, is_permanent_status
 
         backoff = backoff or _default_backoff
         result = DrainResult()
@@ -565,7 +569,7 @@ class Spool:
             payload = self._read_payload(entry)
             if payload is None:
                 continue
-            error, permanent = "", False
+            error, permanent, auth = "", False, False
             try:
                 resp = sink.put(
                     entry.key, payload, content_type=entry.content_type, metadata=entry.metadata
@@ -574,13 +578,15 @@ class Spool:
                 ok = bool(resp.get("ok", True))
                 if not ok:
                     error = f"sink answered status {resp.get('status', '?')}"
-                    permanent = bool(resp.get("permanent")) or is_permanent_status(
-                        resp.get("status")
+                    auth = is_auth_status(resp.get("status"))
+                    permanent = not auth and (
+                        bool(resp.get("permanent")) or is_permanent_status(resp.get("status"))
                     )
             except Exception as exc:  # a network/transport error -- keep the batch, back off
                 ok = False
                 error = f"{type(exc).__name__}: {exc}"[:_ERROR_CHARS]
-                permanent = is_permanent_error(exc)
+                auth = is_auth_error(exc)
+                permanent = not auth and is_permanent_error(exc)
                 _LOG.warning(
                     "edge.spool.drain send failed seq=%d key=%s%s: %s",
                     entry.seq,
@@ -590,6 +596,7 @@ class Spool:
                 )
             if ok:
                 self.ack(entry)
+                self._clear_auth_failing()
                 result.forwarded += 1
                 result.keys.append(entry.key)
                 continue
@@ -605,11 +612,53 @@ class Spool:
                         {"op": "attempt", "seq": entry.seq, "permanent": True, "error": error}
                     )
                 continue  # a rejected batch never blocks the ones behind it
-            self._append_journal({"op": "attempt", "seq": entry.seq, "error": error})
+            rec = {"op": "attempt", "seq": entry.seq, "error": error}
+            if auth:  # 0.108: credentials or configuration, fleet-wide: stop, never dead-letter
+                rec["auth"] = True
+                since = self._note_auth_failing(error)
+                result.auth_failed = True
+                _LOG.warning(
+                    "edge.spool.auth AUTH FAILING since %s: the sink refuses this device's "
+                    "credentials (%s) -- check the presigned URL template, broker or keys; "
+                    "batches stay queued and are retried",
+                    since,
+                    error,
+                )
+            self._append_journal(rec)
             _sleep(backoff(entry.attempts + 1))
             break  # leave the rest queued; the next cycle retries
         result.remaining = self.depth()[0]
         return result
+
+    def auth_failing(self) -> dict | None:
+        """``{"since", "last", "failures", "error"}`` while the sink answers 401 / 403 to this
+        device (0.108), else ``None``; cleared by the next delivered batch."""
+        try:
+            with open(os.path.join(self.root, _AUTH), encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _note_auth_failing(self, error: str) -> str:
+        now = self._clock().isoformat()
+        rec = self.auth_failing() or {"since": now, "failures": 0}
+        rec.update(last=now, failures=int(rec.get("failures", 0)) + 1, error=error)
+        path = os.path.join(self.root, _AUTH)
+        with self.lock():
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(rec, fh, indent=2, sort_keys=True)
+                fh.write("\n")
+            os.replace(tmp, path)
+        return str(rec["since"])
+
+    def _clear_auth_failing(self) -> None:
+        path = os.path.join(self.root, _AUTH)
+        if os.path.exists(path):
+            with self.lock(), contextlib.suppress(FileNotFoundError):
+                os.remove(path)
+            _LOG.info("edge.spool.auth the sink accepts this device's credentials again")
 
     def ack(self, entry: SpoolEntry) -> None:
         """Mark a batch delivered: delete its payload and append an ack record (idempotent)."""

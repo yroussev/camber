@@ -140,13 +140,13 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   replacement, duplicates are still quarantined, and under a legal hold the parts a merge
   supersedes are copied into quarantine first (`camber.edge.row_digest.merge_parts`).
 - **Behaviour change: a permanently refused batch is dead-lettered and no longer blocks the spool
-  (#245).** A 4xx answer other than 408, 425 and 429, or a validation error, is permanent: the
-  drain counts it and goes on with the batches behind it (it used to retry the head batch
+  (#245).** A 4xx answer other than 401, 403, 408, 425 and 429, or a validation error, is permanent:
+  the drain counts it and goes on with the batches behind it (it used to retry the head batch
   forever and send nothing else). After `dead_letter_after` rejections the batch moves to
   `<spool>/dead/` with a `<file>.json` record, a `dead` journal record and a WARNING. Transient
-  errors still stop the cycle and back off. Dead letters count toward the disk cap, and
-  `edge decommission` counts them as unacknowledged
-  (`camber.edge.sink.is_permanent_error`, `is_permanent_status`, `PermanentSinkError`).
+  errors still stop the cycle and back off. Dead letters count toward the disk cap, and `edge
+  decommission` counts them as unacknowledged (`camber.edge.sink.is_permanent_error`,
+  `is_permanent_status`, `PermanentSinkError`).
 - **Behaviour change: SDK sinks send a compact metadata subset (#245).** The S3, Azure and GCS
   sinks send `sha256`, `rows`, `rows_sha256`, `schema_version`, `year` and `month`,
   JSON-encoded and ASCII-safe (`camber.edge.sink.sink_metadata`), instead of the whole manifest as
@@ -155,13 +155,27 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **Behaviour change: the spool keeps one copy of each batch (#246).** `Spool.enqueue` skips a
   batch whose key and content sha256 are already pending or dead-lettered, so a forwarder that
   re-reads its window while offline no longer queues a copy per poll.
-- **Behaviour change: the edge config is validated (#249).** `load_config` refuses an unknown key
-  (with the closest known one), a non-boolean `quality`, an `interval`, `spool_max_bytes` or
-  `sink.timeout` of 0 or less, an unknown `wire_format`, `part_layout`, sink kind, `resample`
-  or `timezone`, and, as secrets, any value with a signature or credential in it whatever its
-  scheme (an Azure SAS `sig=`, `X-Goog-Signature`, `signature=` / `token=` parameters,
-  `AccountKey=`) and any URL with a password in its userinfo. Keys starting with `_`, and `note`,
-  `comment`, `description`, are comments. `Spool` refuses a `max_bytes` of 0 or less.
+- **Behaviour change: the edge config is validated (#249).** `load_config` refuses a non-boolean
+  `quality`, an `interval`, `spool_max_bytes` or `sink.timeout` of 0 or less, an unknown
+  `wire_format`, `part_layout`, sink kind, `resample` or `timezone`, and, as secrets, any value with
+  a signature or credential in it whatever its scheme (an Azure SAS `sig=`, `X-Goog-Signature`,
+  `signature=` / `token=` parameters, `AccountKey=`) and any URL with a password in its userinfo.
+  Keys starting with `_`, and `note`, `comment`, `description`, are comments. `Spool` refuses a
+  `max_bytes` of 0 or less.
+- **Deprecation: unknown edge-config keys warn in 0.108 and will be refused in 0.109.** A key
+  `load_config` does not know, at the top level or in a file source or sink (a typo such as
+  `spool_dri`, which leaves the default in force), is ignored with a WARNING that names the
+  closest known key: logged, raised as a `FutureWarning`, kept in `EdgeConfig.warnings` and shown
+  by `edge status` (`CONFIG WARNING`; `config_warnings` in `--json`) and `edge selftest`. The
+  forwarder keeps running. **CAMBER 0.109 will refuse unknown keys**: fix or remove them now, or
+  prefix a comment key with `_`.
+- **Behaviour change: a 401 or 403 from the sink is transient, never dead-lettered.** An
+  authentication or authorization refusal is a fleet-wide credential or configuration problem
+  (an expired presigned URL template, a revoked key), not a bad batch: the drain stops the cycle
+  and backs off, as for a network error, and logs a loud `edge.spool.auth AUTH FAILING since
+  <time>` WARNING. `edge status` shows `AUTH FAILING since <time>` (`auth_failing` in `--json`;
+  `Spool.auth_failing`) until a batch is delivered again. Other 4xx answers and validation errors
+  stay permanent (`camber.edge.sink.is_auth_error`, `is_auth_status`, `AUTH_STATUSES`).
 - **Behaviour change: duplicate BACnet point names are refused (#248).** `BacnetSource` raises
   instead of silently keeping one of two points with one name, and `discovery_to_points` names
   objects that share a name on different devices `<device name>_<object name>` (then
