@@ -113,7 +113,7 @@ def decommission(
         res.retired = True
         res.receipt = existing
         res.forced = bool(existing.get("forced"))
-        res.pending_before = res.pending_after = spool.depth()[0]
+        res.pending_before = res.pending_after = len(_unacked(spool))
         if existing.get("facility_id") not in (None, facility_id):
             raise ValueError(
                 f"this spool was retired for facility {existing.get('facility_id')!r}, "
@@ -122,10 +122,10 @@ def decommission(
         if apply and portfolio is not None:
             res.registry_noted = record_retirement(portfolio, existing, reason=reason)["noted"]
         return res
-    res.pending_before = spool.depth()[0]
+    res.pending_before = len(_unacked(spool))
     if not apply:
         res.pending_after = res.pending_before
-        res.unacknowledged = [_brief(e) for e in spool.pending()]
+        res.unacknowledged = _unacked(spool)
         if res.pending_before and not force:
             res.refused = (
                 f"{res.pending_before} batch(es) are not acknowledged yet; --apply flushes them "
@@ -140,9 +140,9 @@ def decommission(
             res.forwarded += dr.forwarded
             if dr.remaining == 0 or _monotonic() >= deadline:
                 break
-        pend = spool.pending()
+        pend = _unacked(spool)  # 0.108 (#245): a dead-lettered batch was never acknowledged
         res.pending_after = len(pend)
-        res.unacknowledged = [_brief(e) for e in pend]
+        res.unacknowledged = pend
         if pend and not force:
             res.refused = (
                 f"{len(pend)} batch(es) still unacknowledged after flushing; the landing did "
@@ -183,6 +183,24 @@ def decommission(
 
 def _brief(e) -> dict:
     return {"seq": e.seq, "key": e.key, "bytes": e.bytes, "enqueued": e.enqueued_ts}
+
+
+def _unacked(spool) -> list:
+    """Every batch the landing has not acknowledged: pending ones, then dead-lettered ones (0.108,
+    #245: rejected permanently, kept in ``dead/``, never delivered)."""
+    out = [_brief(e) for e in spool.pending()]
+    for rec in spool.dead_letters():
+        out.append(
+            {
+                "seq": rec.get("seq"),
+                "key": rec.get("key"),
+                "bytes": rec.get("bytes"),
+                "enqueued": rec.get("enqueued_ts"),
+                "dead": True,
+                "error": rec.get("error"),
+            }
+        )
+    return out
 
 
 def record_retirement(portfolio, receipt: dict, *, reason) -> dict:

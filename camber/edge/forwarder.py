@@ -65,6 +65,9 @@ class BatchResult:
     keys: list = field(default_factory=list)
     spooled: int = 0
     forwarded: int = 0
+    already_spooled: int = 0  # 0.108 (#246): batches skipped, the same bytes already queued
+    rejected: int = 0  # 0.108 (#245): permanent rejections this cycle
+    dead: list = field(default_factory=list)  # keys dead-lettered this cycle
 
 
 class Forwarder:
@@ -185,6 +188,10 @@ class Forwarder:
         window = (str(frame.index.min()), str(frame.index.max()))
 
         keys: list = []
+        queued = {e.key for e in self.spool.pending()} | {
+            r.get("key") for r in self.spool.dead_letters()
+        }
+        already = 0
         if not long.empty:
             long = long.copy()
             ts = pd.to_datetime(long["ts"])
@@ -217,6 +224,8 @@ class Forwarder:
                     "schema_version": _SCHEMA_VERSION,
                     "built_at": self._clock().isoformat(),
                 }
+                if key in queued:
+                    already += 1  # 0.108 (#246): the spool skips the second copy
                 self.spool.enqueue(
                     key, data, content_type=_CONTENT_TYPE[self.wire_format], metadata=manifest
                 )
@@ -224,11 +233,15 @@ class Forwarder:
 
         drained = self.spool.drain(self.sink)
         _LOG.info(
-            "edge.forward facility=%s rows=%d parts=%d forwarded=%d spool_remaining=%d",
+            "edge.forward facility=%s rows=%d parts=%d already_spooled=%d forwarded=%d "
+            "rejected=%d dead=%d spool_remaining=%d",
             self.facility_id,
             len(long),
             len(keys),
+            already,
             drained.forwarded,
+            drained.rejected,
+            len(drained.dead),
             drained.remaining,
         )
         return BatchResult(
@@ -237,8 +250,11 @@ class Forwarder:
             window=window,
             quality=quality_summary,
             keys=keys,
-            spooled=len(keys),
+            spooled=len(keys) - already,
             forwarded=drained.forwarded,
+            already_spooled=already,
+            rejected=drained.rejected,
+            dead=list(drained.dead),
         )
 
     def run(self, interval: float, *, iterations: int | None = None, _sleep=None) -> None:

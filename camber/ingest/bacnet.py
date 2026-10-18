@@ -69,11 +69,16 @@ class BacnetTarget:
 @dataclass
 class BacnetPoint:
     """A BACnet object mapped to a point name. ``object_id`` is ``(object_type, instance)``,
-    e.g. ``("trendLog", 3)`` for history or ``("analogInput", 1)`` for present value."""
+    e.g. ``("trendLog", 3)`` for history or ``("analogInput", 1)`` for present value.
+
+    ``device_instance`` and ``address`` (0.108, #248) name the device that holds the object; a
+    point with an ``address`` is read at that address, one without at the source's target."""
 
     name: str
     object_id: tuple
     unit: str = ""
+    device_instance: int | None = None
+    address: str | None = None
 
 
 def trendlog_to_series(
@@ -110,7 +115,9 @@ class BacnetSource:
 
     ``client`` is any object exposing ``read_trend_log(object_id) -> records`` and
     ``read_present_value(object_id) -> value`` — injected for tests, or built lazily from
-    bacpypes3 against the (validated) :class:`BacnetTarget`.
+    bacpypes3 against the (validated) :class:`BacnetTarget`. A point that carries its device's
+    ``address`` (0.108, #248) is read with ``address=`` passed to those methods. Point names must
+    be unique.
     """
 
     def __init__(
@@ -123,6 +130,16 @@ class BacnetSource:
         strict_timezone: bool = False,
     ):
         self.timezone, self.strict_timezone = timezone, strict_timezone
+        points = list(points)
+        seen: dict = {}
+        for p in points:
+            seen[p.name] = seen.get(p.name, 0) + 1
+        dupes = sorted(n for n, c in seen.items() if c > 1)
+        if dupes:  # 0.108 (#248): a second point of the same name would silently replace the first
+            raise ValueError(
+                f"BACnet point names must be unique; repeated: {', '.join(map(repr, dupes))} "
+                "(discovery_to_points names objects that share a name after their device)"
+            )
         self._points = {p.name: p for p in points}
         self._target = target.validate()
         self._client = client
@@ -154,8 +171,13 @@ class BacnetSource:
     def read_trend_log(self, name: str) -> pd.Series:
         """Read a Trend Log point's historical records into a Series (read-only)."""
         client = self._require_client()
+        p = self._points[name]
+        if p.address:  # 0.108 (#248): read the object at its own device
+            records = client.read_trend_log(p.object_id, address=p.address)
+        else:
+            records = client.read_trend_log(p.object_id)
         s = trendlog_to_series(
-            client.read_trend_log(self._points[name].object_id),
+            records,
             timezone=self.timezone,
             strict_timezone=self.strict_timezone,
         )
@@ -166,7 +188,14 @@ class BacnetSource:
         """Read present values for the named points (read-only). ``name -> value``."""
         client = self._require_client()
         sel = list(self._points) if names is None else [n for n in names if n in self._points]
-        return {n: client.read_present_value(self._points[n].object_id) for n in sel}
+        out = {}
+        for n in sel:
+            p = self._points[n]
+            if p.address:
+                out[n] = client.read_present_value(p.object_id, address=p.address)
+            else:
+                out[n] = client.read_present_value(p.object_id)
+        return out
 
     def load_points(self, names, resample=None) -> pd.DataFrame:
         """Load points by reading each one's Trend Log into a DataFrame (one column each)."""

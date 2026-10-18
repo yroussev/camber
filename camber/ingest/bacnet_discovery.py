@@ -212,19 +212,59 @@ def discovery_to_points(devices, *, trend_only: bool = True) -> list:
     :class:`~camber.ingest.bacnet.BacnetSource` reads. Set it ``False`` to also include
     analog/binary/multistate objects for present-value snapshots. Point names use ``object-name``,
     falling back to ``<type>_<instance>``.
+
+    0.108 (#248): each point carries its device's instance and address, so it is read at its own
+    device. Names are unique: objects on different devices that share a name (two VAV controllers
+    that each have a ``ZN-T TREND``) are named ``<device name>_<object name>`` instead (the
+    device name, else ``dev<instance>``), and a name still shared after that gets
+    ``_<type><instance>``. A :class:`UserWarning` lists the renamed objects.
     """
+    import warnings
+
     from .bacnet import BacnetPoint
 
-    points = []
+    found = []
     for dev in devices:
         for obj in dev.objects:
             if trend_only and not obj.is_trend:
                 continue
             otype, oinst = obj.object_id
-            name = obj.object_name or f"{otype}_{oinst}"
-            points.append(
-                BacnetPoint(name=name, object_id=obj.object_id, unit=str(obj.units or ""))
+            found.append((dev, obj, obj.object_name or f"{otype}_{oinst}"))
+    counts: dict = {}
+    for _dev, _obj, name in found:
+        counts[name] = counts.get(name, 0) + 1
+    names = []
+    for dev, _obj, name in found:
+        if counts[name] > 1:
+            name = f"{dev.object_name or f'dev{dev.instance}'}_{name}"
+        names.append(name)
+    again: dict = {}
+    for n in names:
+        again[n] = again.get(n, 0) + 1
+    renamed = []
+    points = []
+    for (dev, obj, base), name in zip(found, names):
+        otype, oinst = obj.object_id
+        if again[name] > 1:
+            name = f"{name}_{otype}{oinst}"
+        if name != base:
+            renamed.append(f"{base!r} on device {dev.instance} -> {name!r}")
+        points.append(
+            BacnetPoint(
+                name=name,
+                object_id=obj.object_id,
+                unit=str(obj.units or ""),
+                device_instance=dev.instance,
+                address=dev.address or None,
             )
+        )
+    if renamed:
+        warnings.warn(
+            "BACnet objects share a name across devices; renamed to keep every point: "
+            + "; ".join(renamed),
+            UserWarning,
+            stacklevel=2,
+        )
     return points
 
 
