@@ -139,6 +139,71 @@ def test_a_pnnl_reference_a_parameter_basis_cites_is_mapped_to_its_rule():
     assert not missing, f"bases cite PNNL references their rule is not mapped to: {missing}"
 
 
+#: "PNNL Re-tuning Ch.5/7", "Re-tuning Ch.8", "PNNL Ch. 5 / Ch. 7", "Re-tuning chapter 6": the
+#: chapter numbers of a PNNL or Re-tuning chapter citation in prose
+_DOC_CHAPTERS = re.compile(
+    r"(?i)(?:pnnl|re-?tuning)[^()\n.]{0,20}?\bch(?:apter|\.)?\s*(\d+(?:\s*/\s*(?:ch\.?\s*)?\d+)*)"
+)
+
+
+def _doc_ids_cited(doc: str) -> set:
+    """The PNNL reference ids a rule docstring cites: an explicit id, or a chapter citation
+    ("PNNL Re-tuning Ch.5/7" cites chapters 5 and 7)."""
+    ids = set(re.findall(r"pnnl-[a-z0-9-]*[a-z0-9]", doc))
+    for group in _DOC_CHAPTERS.findall(doc):
+        ids |= {f"pnnl-retuning-ch{n}" for n in re.findall(r"\d+", group)}
+    return ids
+
+
+def _rule_docstrings() -> dict:
+    """Rule name -> its class docstring, for every rule in camber.rules: the classes with a
+    string ``name``, and the built-in registry's classes (the instance-named rules too)."""
+    from camber.rules.builtin import rule_factories
+
+    docs = {name: cls.__doc__ or "" for name, (cls, _kw) in rule_factories().items()}
+    for mod in pkgutil.iter_modules(camber.rules.__path__):
+        m = importlib.import_module(f"camber.rules.{mod.name}")
+        for _n, obj in inspect.getmembers(m, inspect.isclass):
+            name = getattr(obj, "name", None)
+            if isinstance(name, str) and obj.__module__ == m.__name__:
+                docs.setdefault(name, obj.__doc__ or "")
+    return docs
+
+
+def test_a_chapter_a_rule_docstring_cites_is_mapped_to_its_rule():
+    """0.108 (#232): a rule's class docstring and its RULE_REFERENCES entry agree on the PNNL
+    guides and chapters, so the Learn-more links carry what the docstring cites."""
+    both = {"pnnl-retuning-ch5", "pnnl-retuning-ch7"}
+    assert _doc_ids_cited("coil valve (PNNL Re-tuning Ch.5/7).") == both
+    assert _doc_ids_cited("Fleet census (PNNL Ch. 5 / Ch. 7).") == both
+    assert _doc_ids_cited("plant (Re-tuning Ch.8; pnnl-guide-plant-cooling)") == {
+        "pnnl-retuning-ch8",
+        "pnnl-guide-plant-cooling",
+    }
+    assert _doc_ids_cited("(PNNL Re-tuning / G36).") == set()  # names no chapter
+    docs = _rule_docstrings()
+    cited_any = 0
+    missing = []
+    for rule, doc in sorted(docs.items()):
+        cited = _doc_ids_cited(doc)
+        assert cited <= set(R.REFERENCES), (rule, cited)
+        cited_any += bool(cited)
+        gap = cited - set(R.RULE_REFERENCES.get(rule, ()))
+        if gap:
+            missing.append((rule, sorted(gap)))
+    assert cited_any >= 15  # the check sees the docstrings (19 rules cite a chapter in 0.108)
+    assert not missing, f"docstrings cite PNNL references their rule is not mapped to: {missing}"
+    # the two 0.108 corrections: leaking_valve's coil is an air handler's (ch. 5 only; ch. 7's
+    # reheat-valve leakage is a terminal box's), and the zone census links ch. 5's
+    # discharge-air section too
+    assert "Ch.5/7" not in docs["leaking_valve"]
+    assert R.reference_ids_for("leaking_valve") == ["pnnl-guide-ahu-heat-cool", "pnnl-retuning-ch5"]
+    assert R.reference_ids_for("zones_heat_cool_census") == [
+        "pnnl-retuning-ch7",
+        "pnnl-retuning-ch5",
+    ]
+
+
 def test_references_doc_lists_every_mv_reference():
     """#222: the M&V table on the references page has a row for every MV_REFERENCES id."""
     with open(os.path.join(_ROOT, "docs", "REFERENCES.md"), encoding="utf-8") as fh:

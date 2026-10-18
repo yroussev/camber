@@ -1,0 +1,4 @@
+{
+  "exec_summary": "The report ranks 3 issues [K1@summary]. The 1 costed, non-conditional issue(s) total $7,727/yr [K2@summary], all of it from supply air held cold on DemoAHU2 [C1@a8612f9b8b3b]. 2 issue(s) are uncosted and 0 are conditional on a sensor fix [K3@summary].",
+  "issue:5e97d850de5d": "The DemoAHU economizer admits excess outside air above the 68°F high limit in 43% of those samples [F1@5e97d850de5d]. The issue ran 32 violation hours, 16.4% of 195 fan-on hours [T1@5e97d850de5d]. Fixing the lockout will pay for itself quickly."
+}

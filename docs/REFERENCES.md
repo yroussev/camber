@@ -45,7 +45,7 @@ The `pnnl-trending-requirements` guide lists the points to trend before re-tunin
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 2: Building Personality](https://www.pnnl.gov/sites/default/files/media/file/ch2_building_personality.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 3: Collect Initial Building Information](https://www.pnnl.gov/sites/default/files/media/file/ch3_collect_initial.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 4: Pre-Re-Tuning Phase: Trend Data Collection and Analysis](https://www.pnnl.gov/sites/default/files/media/file/ch4_pre-re-tuning.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
-| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 5: Air Handling Units: Pre-Re-Tuning and Trending and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch5_air_handling.pdf) | PNNL-SA-85063 | `outdoor_air_fraction`, `economizer_high_limit`, `economizer_damper_drift`, `dcv_verification`, `dcv_system_verification`, `co2_ventilation`, `co2_ventilation_system`, `static_pressure_reset`, `damper_census`, `supply_air_reset`, `supply_air_reset_compliance`, `supply_air_control`, `simultaneous_heat_cool`, `leaking_valve`, `coil_leak_drift`, `control_hunting`, `night_weekend_setback`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
+| [Large Commercial Buildings: Re-tuning for Efficiency, chapter 5: Air Handling Units: Pre-Re-Tuning and Trending and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch5_air_handling.pdf) | PNNL-SA-85063 | `outdoor_air_fraction`, `economizer_high_limit`, `economizer_damper_drift`, `dcv_verification`, `dcv_system_verification`, `co2_ventilation`, `co2_ventilation_system`, `static_pressure_reset`, `damper_census`, `supply_air_reset`, `supply_air_reset_compliance`, `supply_air_control`, `simultaneous_heat_cool`, `leaking_valve`, `coil_leak_drift`, `control_hunting`, `night_weekend_setback`, `zones_heat_cool_census`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 6: Economizer Operations: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch6_economizer.pdf) | PNNL-SA-85063 | `outdoor_air_fraction`, `economizer_high_limit`, `free_cooling_missed`, `economizer_damper_drift` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 7: Terminal Units in Air Distribution System: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch7_terminal_units.pdf) | PNNL-SA-85063 | `damper_census`, `reheat_penalty`, `reheat_minimization_g36`, `overcooling_min_flow`, `overcooling_severity`, `unmet_setpoint_hours`, `airflow_tracking`, `zones_heat_cool_census`, `reheat_capacity_shortfall`, `actuator_stuck`, `cohort_airflow`, `cohort_space_temp`, `sat_rogue_zone_census`, `static_rogue_zone_census`, `sat_cohort_starvation`, `static_cohort_starvation` | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 8: Central Utility Plant: Pre-Re-Tuning and Re-Tuning](https://www.pnnl.gov/sites/default/files/media/file/ch8_central_plant.pdf) | PNNL-SA-85063 | `chw_plant_reset`, `chw_pump_dp_reset`, `chw_supply_tracking`, `chiller_efficiency`, `chiller_staging`, `condenser_water_reset`, `cooling_tower_approach`, `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`, `cooling_tower_fan_effort_drift`, `pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift`, `pump_power_drift`, `hw_plant_deltat`, `hw_pump_dp_reset`, `boiler_short_cycle`, `boiler_summer_lockout`, `hw_pump_summer_lockout`, `boiler_efficiency_drift`, `hw_pump_flow_drift`, `hw_pump_head_drift`, `hw_loop_deltat_drift`, `hw_loop_dp_drift`, `hw_pump_power_drift` | 2026-09-29 |
@@ -136,7 +136,8 @@ Guideline 14-2023), so the link is ASHRAE's titles-and-scopes list.
 
 ## Rules without a reference
 
-These rules have no Re-tuning guide or chapter that clearly covers them, so they carry no link:
+These rules have no Re-tuning guide or chapter that clearly covers them, so they carry no link.
+None of their docstrings cites a guide or chapter (checked since 0.108):
 
 - the G36 reset-effectiveness rules (`sat_reset_effectiveness`, `static_reset_effectiveness`),
   which check a trim-and-respond sequence the guides predate;
@@ -155,6 +156,16 @@ to chapter 6's damper checks and chapter 5's outdoor-air fraction, and `coil_lea
 chapter 5's leaking-valve checks (0.107). `outdoor_air_fraction` and `economizer_high_limit`
 also link chapter 5, whose minimum outdoor-air section gives the outdoor-air fraction their
 thresholds guard.
+
+A chapter a rule's docstring cites is in its mapping (0.108, #232; `tests/test_references.py`
+checks it). Two docstrings disagreed with the mapping. `leaking_valve` cited chapters 5 and 7.
+Its coil is an air handler's, which chapter 5's "Air-Handler: Heating and Cooling" section
+covers ("valves not leaking through"). Chapter 7's "Zone Data Analysis: Reheat Valve Leakage" is
+about a terminal box's reheat valve, so the docstring now cites chapter 5 only.
+`zones_heat_cool_census` cited chapters 5 and 7 but mapped to chapter 7 only. It now links
+chapter 5 too: that chapter's "Discharge-Air Temperature Control" section lists reheating in
+the cooler zones among the effects of a low discharge-air temperature, which is the central
+overcooling re-warmed locally that the census reads.
 
 The zone-request census rules map to the guide whose heading covers them: the discharge-air
 guide's reset section bases a zone-driven reset on the zones the unit serves, setting aside the

@@ -42,6 +42,12 @@ names of this script (``df.figure``, ``df._evidence_fig``, ``df._synthetic_plant
 loaded in name order when this script is (so ``--check`` sees them too): they import matplotlib,
 pandas and CAMBER inside the builders only, never at module level.
 
+A module may also register a browser screenshot (0.108) with
+``@df.screenshot("shots/<name>.png", "<what it shows>")`` on a builder ``fn(out_path)`` that
+writes a page and calls ``df._chrome_shot``. ``--screenshots`` takes these after the built-in
+ones; with ``--only`` it takes only the module screenshots whose path starts so, and skips the
+built-in ones unless one of them matches too.
+
 Dev tooling; not packaged.
 """
 
@@ -95,9 +101,24 @@ LAB_FROM_DIR = os.environ.get(
 )
 
 
+#: screenshot path -> builder ``fn(out_path)``: the per-entry modules' screenshots (0.108)
+SHOT_BUILDERS: dict = {}
+
+
 def figure(path: str):
     def deco(fn):
         FIGURES[path] = fn
+        return fn
+
+    return deco
+
+
+def screenshot(path: str, what: str):
+    """Register a per-entry module's browser screenshot (see the module docstring)."""
+
+    def deco(fn):
+        SCREENSHOTS[path] = what
+        SHOT_BUILDERS[path] = fn
         return fn
 
     return deco
@@ -1116,15 +1137,28 @@ def _shot_site(tmp: str):
     return path, {"AHU-1": a, "AHU-2": b}
 
 
-def screenshots() -> list:
+def screenshots(only: str = "") -> list:
+    if not os.path.exists(CHROME):
+        raise SystemExit(f"no Chrome at {CHROME}; set CHROME")
+    _style()
+    done = []
+    builtin = [k for k in SCREENSHOTS if k not in SHOT_BUILDERS]
+    if not only or any(k.startswith(only) for k in builtin):
+        done += _builtin_screenshots()
+    for rel, build in SHOT_BUILDERS.items():
+        if only and not rel.startswith(only):
+            continue
+        build(os.path.join(IMG, rel))
+        done.append(rel)
+    return done
+
+
+def _builtin_screenshots() -> list:
     import subprocess
     import tempfile
     import time
     import urllib.request
 
-    if not os.path.exists(CHROME):
-        raise SystemExit(f"no Chrome at {CHROME}; set CHROME")
-    _style()
     done = []
     out = {k: os.path.join(IMG, k) for k in SCREENSHOTS}
     with tempfile.TemporaryDirectory(prefix="camber-shots-") as tmp:
@@ -1523,7 +1557,9 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--check", action="store_true", help="verify only; render nothing")
     ap.add_argument("--screenshots", action="store_true", help="also take browser screenshots")
-    ap.add_argument("--only", default="", help="render figures whose path starts with this")
+    ap.add_argument(
+        "--only", default="", help="render figures (and screenshots) whose path starts with this"
+    )
     ap.add_argument("--no-figures", action="store_true", help="skip the matplotlib figures")
     args = ap.parse_args(argv)
     if args.check:
@@ -1536,7 +1572,7 @@ def main(argv=None) -> int:
     sys.path.insert(0, ROOT)
     done = [] if args.no_figures else render(args.only)
     if args.screenshots:
-        done += screenshots()
+        done += screenshots(args.only)
     for rel in done:
         print(f"{os.path.getsize(os.path.join(IMG, rel)) // 1024:>4} KB  docs/img/{rel}")
     return 0
