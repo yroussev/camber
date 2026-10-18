@@ -347,28 +347,60 @@ def verify_bundle(path: str) -> dict:
     return {"ok": not problems, "problems": problems, "files": len(listed)}
 
 
-def _restore_tree(bundle: str, prefix: str, target: str, listed: dict) -> int:
-    """Swap ``target`` for the bundle's files under ``prefix`` (crash-safe); returns files."""
-    rels = [r for r in listed if r.startswith(prefix)]
-    if not rels:
-        return 0
+def _stage_tree(bundle: str, prefix: str, target: str, listed: dict) -> list:
+    """Stage ``target``'s replacement from the bundle's files under ``prefix`` (nothing live is
+    touched) and re-read every staged file against its checksum; returns the files that do not
+    match (``[]``: the stage is good and :func:`camber.store._swap.commit` may swap it in)."""
     stage = _swap.staging(target)
-    for rel in rels:
+    bad = []
+    for rel in sorted(r for r in listed if r.startswith(prefix)):
         dst = os.path.join(stage, *rel[len(prefix) :].split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(os.path.join(bundle, *rel.split("/")), dst)
-    _swap.commit(target)
-    return len(rels)
+        if sha256_file(dst) != listed[rel].get("sha256"):
+            bad.append(rel)
+    return bad
 
 
-def restore_bundle(pf, facility_id: str, bundle_path: str) -> dict:
+def _restore_plan(pf, facility_id: str, listed: dict) -> list:
+    """``[(bundle prefix, live target)]`` for every hot tree a restore owns: each tree the bundle
+    lists, and each live tree it does not (the restore empties those: #252)."""
+    part = f"facility_id={facility_id}"
+    plan = {f"store/{part}/": os.path.join(pf.store_root, part)}
+    freqs = {r.split("/")[1] for r in listed if r.startswith("rollups/")}
+    freqs |= set(rollup_roots(pf.root))
+    for freq in sorted(freqs):
+        plan[f"rollups/{freq}/{part}/"] = os.path.join(pf.root, ROLLUPS_DIR, freq, part)
+    plan["state/"] = state_dir(pf.root, facility_id)
+    return list(plan.items())
+
+
+def _would_lose(prefix: str, target: str, listed: dict) -> list:
+    """Live files under ``target`` that a restore of ``prefix`` would delete or change (not in
+    the bundle, or with other bytes) -- what a legal hold forbids."""
+    out = []
+    for rel in _walk(target):
+        e = listed.get(prefix + rel)
+        if e is None or sha256_file(os.path.join(target, *rel.split("/"))) != e.get("sha256"):
+            out.append(prefix + rel)
+    return out
+
+
+def restore_bundle(pf, facility_id: str, bundle_path: str, *, held: bool = False) -> dict:
     """Put a verified bundle's content back (caller holds the lock and updates the registry).
 
     Store and rollup partitions and ``state/<fid>/`` are each swapped in whole (crash-safe:
     an interrupted restore leaves each tree either as it was or fully restored, and re-running
-    finishes it). External artifacts are copied back only where their path is free. Every restored
-    file is then re-hashed against the bundle's manifest. Raises ``ValueError`` when the bundle
-    fails verification, before anything is touched.
+    finishes it). External artifacts are copied back only where their path is free. Raises
+    ``ValueError`` when the bundle fails verification, before anything is touched.
+
+    0.108 (#252): every tree is staged and its staged files re-hashed against the bundle's
+    manifest *before* the first swap, so a mismatch (``OSError``) leaves the live trees as they
+    were. A live hot tree the bundle does not list -- state a run wrote while the facility was
+    archived, say -- is emptied, so the restored facility holds exactly the bundle. ``held``
+    (a legal hold) refuses (:class:`~camber.portfolio.LifecycleError`), before anything is
+    touched, a restore that would delete or change a live file. The restored files are re-hashed
+    once more after the swap.
     """
     check = verify_bundle(bundle_path)
     if not check["ok"]:
@@ -380,19 +412,40 @@ def restore_bundle(pf, facility_id: str, bundle_path: str) -> dict:
     if man.get("facility_id") != facility_id:
         raise ValueError(f"bundle is for {man.get('facility_id')!r}, not {facility_id!r}")
     listed = man.get("files") or {}
-    part = f"facility_id={facility_id}"
+    plan = _restore_plan(pf, facility_id, listed)
+    if held:
+        lost = [r for prefix, target in plan for r in _would_lose(prefix, target, listed)]
+        if lost:
+            from ._states import LifecycleError
+
+            raise LifecycleError(
+                f"{facility_id} is under a legal hold and the restore would delete or replace "
+                f"{len(lost)} live file(s) the bundle does not hold ({', '.join(lost[:5])}); "
+                "nothing was restored (release the hold first: `camber retention release`)"
+            )
     counts: dict = {"store": 0, "rollups": 0, "state": 0, "external": 0, "external_skipped": []}
-    counts["store"] = _restore_tree(
-        bundle_path, f"store/{part}/", os.path.join(pf.store_root, part), listed
-    )
-    freqs = sorted({r.split("/")[1] for r in listed if r.startswith("rollups/")})
-    for freq in freqs:
-        target = os.path.join(pf.root, ROLLUPS_DIR, freq, part)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        counts["rollups"] += _restore_tree(bundle_path, f"rollups/{freq}/{part}/", target, listed)
-    sdir = state_dir(pf.root, facility_id)
-    os.makedirs(os.path.dirname(sdir), exist_ok=True)
-    counts["state"] = _restore_tree(bundle_path, "state/", sdir, listed)
+    staged, bad = [], []
+    try:
+        for prefix, target in plan:
+            if any(r.startswith(prefix) for r in listed):
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                bad += _stage_tree(bundle_path, prefix, target, listed)
+                staged.append(target)
+        if bad:  # pragma: no cover - a disk that returns other bytes than were written
+            raise OSError(f"staged files do not match the bundle, nothing restored: {bad[:5]}")
+    except BaseException:
+        for target in staged:  # roll every stage back: the live trees are untouched
+            _swap.recover(target)
+        raise
+    # every stage verified: swap each tree in, and empty the live trees the bundle does not list
+    for prefix, target in plan:
+        n = sum(1 for r in listed if r.startswith(prefix))
+        if target in staged:
+            _swap.commit(target)
+        elif os.path.lexists(target):
+            _swap.discard(target)
+        key = prefix.split("/", 1)[0]
+        counts[key] += n
     for ext in man.get("external") or []:
         dst = ext.get("path")
         if not dst or os.path.exists(dst):

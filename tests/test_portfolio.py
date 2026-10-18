@@ -132,7 +132,7 @@ def test_future_schema_is_refused(tmp_path):
     p = tmp_path / "ws" / "_portfolio.json"
     doc = json.load(open(p))
     doc["schema_version"] = 99
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
     with pytest.raises(ValueError, match="upgrade CAMBER"):
         pf.status()
 
@@ -197,7 +197,7 @@ def test_effective_retention_precedence(tmp_path):
         "f1": {"raw_trends": {"keep_months": 60}, "audit": {"keep_years": 1}}
     }
     doc["legal_holds"] = {"f2": {"reason": "litigation"}}
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
     f1, f2, f3 = (pf.effective_retention(f) for f in ("f1", "f2", "f3"))
     assert f1["raw_trends"] == {"rule": {"keep_months": 60}, "source": "facility"}
     assert f1["audit"]["source"] == "default"  # the audit log can never be overridden
@@ -228,7 +228,9 @@ def test_audit_append_is_fsynced_and_parses(tmp_path, monkeypatch):
         "reason",
         "details",
     }
-    with open(tmp_path / "_audit.ndjson", "a") as fh:  # a torn trailing line and junk are skipped
+    with open(
+        tmp_path / "_audit.ndjson", "a", encoding="utf-8"
+    ) as fh:  # a torn trailing line and junk are skipped
         fh.write('\n[1, 2]\n{"action": "torn')
     rows = _audit.read_audit(str(tmp_path))
     assert rows == [rec]
@@ -309,7 +311,8 @@ def test_v1_registry_reads_as_active_with_unknown_dates(tmp_path):
     root = tmp_path / "db"
     root.mkdir()
     json.dump(
-        {"old-fac": {"name": "Old", "climate_zone": "4A"}}, open(root / "_facilities.json", "w")
+        {"old-fac": {"name": "Old", "climate_zone": "4A"}},
+        open(root / "_facilities.json", "w", encoding="utf-8"),
     )
     reg = FacilityRegistry(str(root))
     e = reg.get("old-fac")
@@ -383,9 +386,9 @@ def test_registry_without_workspace_uses_the_store_lock_and_writes_no_audit(tmp_
     assert not os.path.exists(tmp_path / "_lock")
     assert not os.path.exists(tmp_path / "_audit.ndjson")
     # a marker pointing at a missing / non-workspace directory is ignored
-    json.dump({"portfolio": ".."}, open(tmp_path / "db" / "_workspace.json", "w"))
+    json.dump({"portfolio": ".."}, open(tmp_path / "db" / "_workspace.json", "w", encoding="utf-8"))
     st.register_facility("f", name="F")
-    json.dump({"portfolio": 3}, open(tmp_path / "db" / "_workspace.json", "w"))
+    json.dump({"portfolio": 3}, open(tmp_path / "db" / "_workspace.json", "w", encoding="utf-8"))
     st.register_facility("f", name="F")
     assert not os.path.exists(tmp_path / "_audit.ndjson")
 
@@ -445,7 +448,7 @@ def test_legal_hold_blocks_deleting_actions_in_the_workspace(tmp_path):
     p = tmp_path / "ws" / "_portfolio.json"
     doc = json.load(open(p))
     doc["legal_holds"] = {fid: {"reason": "litigation"}}
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
     with pytest.raises(LifecycleError, match="legal hold"):
         pf.transition(fid, "purge", reason="cleanup")
     with pytest.raises(FileNotFoundError, match="no bundle"):  # restore is not blocked by a hold

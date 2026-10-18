@@ -413,15 +413,15 @@ def test_a_crash_before_the_prune_then_a_late_part_never_double_counts(pf, tmp_p
     first = _part("2026-06-01", 24 * 10, 1.0)
     _put(tmp_path / "a", _edge_key(A, first, 2026, 6), first)
     land(pf, tmp_path / "a", apply=True, reason="sweep")
-    real = ParquetStore.drop_partition
+    real = ParquetStore._drop_partition  # 0.108: retention's own (hold-checked) entry point
 
     def crash(self, *a, **k):
         raise KeyboardInterrupt("power cut after the rollup, before the prune")
 
-    monkeypatch.setattr(ParquetStore, "drop_partition", crash)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", crash)
     with pytest.raises(KeyboardInterrupt):
         pf.apply_retention(apply=True, reason="monthly", now="2026-08-15")
-    monkeypatch.setattr(ParquetStore, "drop_partition", real)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", real)
     assert _rollup_n(pf, "hourly", A, 2026, 6) == 240  # rolled up, raw still there
     late = _part("2026-06-20", 24 * 2, 5.0)  # lands before the re-run
     _put(tmp_path / "b", _edge_key(A, late, 2026, 6), late)
@@ -441,7 +441,7 @@ import sys, time
 sys.path.insert(0, {repo!r})
 from camber.portfolio._lock import portfolio_lock
 with portfolio_lock({root!r}, timeout=5):
-    open({ready!r}, "w").close()
+    open({ready!r}, "w", encoding="utf-8").close()
     time.sleep(30)
 """
 
@@ -549,7 +549,7 @@ def test_billing_baselines_round_trip_through_export_and_restore_bundles(pf, tmp
     cfg = bills._cfg(base_f="auto")
     cfg.update(workspace=pf.root, facility_id=A)
     path = str(cdir / "cfg.json")
-    json.dump(cfg, open(path, "w"))
+    json.dump(cfg, open(path, "w", encoding="utf-8"))
     assert main(["mv", "freeze", path, "--reason", "initial", "--by", "ana", "--apply"]) == 0
     capsys.readouterr()
     mvfile = os.path.join(pf.state_dir(A), "mv_baselines.json")

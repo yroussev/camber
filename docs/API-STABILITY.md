@@ -824,6 +824,80 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V report fixes** (0.107; #208, #209, #210), additive and provisional:
   `NormalizedSavings.n_excluded`, `MeterChain.meter_unit` and the `model_label` field of the
   freeze and rebaseline plan rows.
+- **Legal holds and audit under the store primitives** (0.108; #250, #251, #252, #255, #256),
+  additive and provisional: the `reason=` keyword of `ParquetStore.drop_facility`, `prune` and
+  `drop_partition` (`FacilityRegistry.remove(reason=)` now defaults to `None`); the audit actions
+  `store.drop_facility`, `store.prune` and `store.drop_partition`; the `recover` action
+  `archive_blocked_legal_hold`; the `deletes` list of a restore plan from `archived`.
+  **Behaviour changes**, inside a portfolio workspace only: those four primitives need a reason
+  and refuse a facility under a legal hold (`LifecycleError`), and `drop_facility` and `remove`
+  also one that is not `provisioning` / `active`; `FacilityRegistry.register` (and
+  so a store write's metadata) refuses to change `private`, `display_name`, `archive`,
+  `offboarding` or `edge_devices`; `interop.openfdd.ingest_package` refuses a changed or forced
+  re-ingest of a held facility, and its state refusal is now a `LifecycleError` (still a
+  `ValueError`); a config run with a `faults` fold, and a drift or M&V baseline write, refuse an
+  archived or purged facility (a hold alone does not), whose report outputs are no longer
+  recorded in its manifest;
+  `restore` empties the live trees its bundle does not list and, under a hold, refuses one that
+  would delete a live file; `Portfolio.rename` refuses another facility's id, name or past
+  display name; `recover` leaves a held facility's hot data. A plain store is unchanged.
+- **Ontology names** (0.108; #253, #254, #257), provisional. **Behaviour changes:** `to_brick`,
+  `site_to_ttl` and `site_to_223` percent-encode every character of a name outside
+  `[A-Za-z0-9_-]` in its local name and add an `rdfs:label` with the exact name (Brick); Brick
+  part nodes are per equipment (`bldg:<equip>.Cooling_Coil`). The Brick and 223P readers decode
+  percent-encoded local names. `roles_from_haystack` and `topology_from_haystack` read Haystack
+  JSON v3 and Hayson markers and refs.
+- **Edge landing row checks and store dedupe** (0.108; #228, #229, #230, #233), additive and
+  provisional: `camber.edge.row_digest.PartitionView` and `read_rows`;
+  `camber.edge.landing.row_duplicates` and the `row_duplicates` and `duplicate_copies` keys of
+  the `reconcile` report; `camber.edge.quarantine.remove_row_duplicates` and the audit action
+  `edge.reconcile.dedupe`; the CLI flag `edge reconcile --yes`; the landing category `conflict`
+  and the `replaces`, `replaced`, `revised` and `conflicts_with` fields of a `land` row; the `replaces` key
+  of the `land` report. **Behaviour changes:** `route_key` signs accepted uploads into `_inbox/`
+  by default (`inbox=False` keeps the old layout); the landing replaces a stored part whose rows
+  a new part holds in full and quarantines a conflicting overlap; an empty directory is an empty
+  store for `store verify`, `normalize` and `migrate-partitions`, as for `camber serve`.
+- **Plant rule fixes** (0.108; #234, #235, #236, #237, #240), additive and provisional:
+  `camber.chillerstaging.chiller_power_running`; the `run_frac` keyword of
+  `analyze_chiller_staging` and `analyze_chiller_staging_fleet` and the `run_source` and
+  `run_threshold_kw` fields of their results (`run_threshold_kw` on `ChillerStagingResult` only);
+  the `min_power_kw` and `run_frac` parameters of `chiller_staging` and `chiller_staging_fleet`
+  and their `run_source` metric (`run_threshold_kw` too on `chiller_staging`);
+  `LoadBaseline.load_source`; the decline reason `load_source_mismatch` of
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`, and their metrics
+  `tower_approach_baseline_load_source` and `baseline_load_source`; `control_hunting`'s metric
+  `not_evaluated_signals`; `BoilerCyclingResult.n_days_observed`, the `gap_factor=` keyword of
+  `analyze_boiler_cycling`, and the `n_days_observed` metric of `boiler_short_cycle` and
+  `compressor_short_cycle`. **Behaviour changes:** `min_power_kw` defaults to `None` (size
+  relative) in place of 2 kW; the short-cycle rates are per observed day; `heatpump_defrost`
+  and `compressor_staging` read a rate over at least one day.
+- **Edge forwarder, spool, sinks and ingest protocols** (0.108; #242–#249 and the rolling-window
+  merge), additive and provisional: `camber.edge.sink.sink_metadata`, `SINK_METADATA_KEYS`,
+  `is_permanent_error`, `is_permanent_status` and `PermanentSinkError`;
+  `camber.edge.spool.read_retirement`, `Spool(dead_letter_after=)`, `Spool.stuck`,
+  `Spool.dead_letters`, `Spool.requeue_dead`, the `SpoolEntry` fields `rejects` and
+  `last_error`, the `DrainResult` fields `rejected` and `dead`, and the journal ops `dead` and
+  `requeue`; the `BatchResult` fields `already_spooled`, `rejected` and `dead`;
+  `camber.edge.config.CONFIG_KEYS`, the `EdgeConfig` fields `timezone` and `dead_letter_after`,
+  the config keys `timezone`, `dead_letter_after`, `sink.timeout`, `source.timezone` and
+  `source.strict_timezone`, and `CAMBER_EDGE_TIMEZONE`; `camber.edge.row_digest.merge_parts`;
+  `camber.edge.quarantine.QuarantineCollision`, the landing category `quarantine_collision`,
+  the `merged` field of a `land` row, the `merges` and `errors` keys of the `land` report and
+  the `merges` / `merged` / `errors` details of the `edge.land` audit records, and the `errors`
+  key of the `reconcile --apply` report; the CLI command `edge requeue` (`--key`, `--apply`)
+  and the flags `edge status --json` and `--limit`; `Bacpypes3Client(trend_records=)`,
+  `BacnetClientConfig.trend_records`, `read_trend_log(address=, max_records=)`,
+  `read_present_value(address=)`, and the `BacnetPoint` fields `device_instance` and
+  `address`; `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
+  strict_timezone=)`, `Series.attrs["unit"]` on its result, and
+  `camber.ingest.haystack.haystack_tz`. **Behaviour changes:** a landed part that agrees with
+  the stored parts it overlaps is merged with them; a permanent sink rejection is counted and
+  dead-lettered instead of blocking the spool; SDK sinks send a compact metadata subset; the
+  spool skips a batch already pending; the edge config refuses unknown keys, bad values and
+  more secret shapes; `BacnetSource` refuses duplicate point names and `discovery_to_points`
+  renames objects that share a name; `parse_his_grid` returns a tz-naive wall-clock index;
+  `edge land` isolates per-object errors and exits 1 when one failed; `edge selftest` uses a
+  temporary spool.
 - **Zone-fleet rule fixes** (0.108; #238, #239, #241), additive and provisional:
   `reheat_minimization_g36`'s `min_reheat_hours` parameter and its metric `n_reheat_samples`;
   the `min_present_frac` parameter of `sat_` and `static_cohort_starvation` and of

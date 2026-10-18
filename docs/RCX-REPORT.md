@@ -358,6 +358,41 @@ Appendix D says only that the index is listed when prose is enabled. `to_dict()`
 and `prose`, which gives each attempted slot's outcome: `status` (`rendered`, `fallback` or
 `overridden`), `source`, `reason`, `text` and `cited`.
 
+### A worked example
+
+0.108 (#231). [`examples/rcx_prose/prose.json`](https://github.com/yroussev/camber/blob/main/examples/rcx_prose/prose.json) is a prose file
+for the synthetic RCx demo: the two-AHU store and config in `tests/_rcx_fixture.py` that the
+golden report is built from. It fills two slots, citing the demo's real fact ids:
+
+```json
+{
+  "exec_summary": "The report ranks 3 issues [K1@summary]. The 1 costed, non-conditional issue(s) total $7,727/yr [K2@summary], all of it from supply air held cold on DemoAHU2 [C1@a8612f9b8b3b]. 2 issue(s) are uncosted and 0 are conditional on a sensor fix [K3@summary].",
+  "issue:5e97d850de5d": "The DemoAHU economizer admits excess outside air above the 68°F high limit in 43% of those samples [F1@5e97d850de5d]. The issue ran 32 violation hours, 16.4% of 195 fan-on hours [T1@5e97d850de5d]. Fixing the lockout will pay for itself quickly."
+}
+```
+
+- `exec_summary` is shown. Every sentence cites a fact the summary may cite, and every figure
+  (3, 1, $7,727, 2, 0) is in a fact its sentence cites. `C1@a8612f9b8b3b` is issue 1's cost,
+  which the summary may cite because issue 1 is in its table.
+- `issue:5e97d850de5d` is issue 2's page (the economizer above its high limit). Its first two
+  sentences are grounded: 68°F and 43% are in `F1`, and 32, 16.4% and 195 are in `T1`. The third
+  sentence cites nothing, so the slot falls back. Issue 2's page keeps its standard text, and
+  Appendix A records the slot:
+
+| Slot | Source | Why |
+|---|---|---|
+| `issue:5e97d850de5d` | file | 1 sentence(s) without a fact citation |
+
+![Screenshot of the executive summary with its boxed generated prose and cited facts, and Appendix A's row for the slot that fell back](img/shots/rcx-prose.png)
+
+*Synthetic data: the demo's executive summary with the example prose file. The paragraph sits under the KPI strip, marked as generated, with each citation as a superscript and the cited facts listed under it. Below, Appendix A's table of the slot that fell back.*
+
+`scripts/docs_figures.py --screenshots` takes the screenshot from the same demo and the same
+file (`scripts/docs_figures.d/rcx_prose.py`). `tests/test_rcx_prose_example_231.py` renders the
+example and checks the boxed prose, the cited facts, the fallback and its Appendix A row
+against this section. To make a slot like issue 2's show, give its last sentence a citation, or
+drop the sentence.
+
 ## Configuration
 
 ```json

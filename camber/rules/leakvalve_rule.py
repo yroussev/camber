@@ -1,4 +1,4 @@
-"""Rule: leaking coil valve (PNNL Re-tuning Ch.5/Ch.7).
+"""Rule: leaking coil valve (PNNL Re-tuning Ch.5).
 
 Flags a coil whose valve is commanded closed but still shifts supply-air temp --
 uncommanded heating or cooling the simultaneous-H/C and reheat checks miss.
@@ -48,7 +48,7 @@ _BASIS = {
 
 
 class LeakingValve:
-    """Detects a leaking (passing) coil valve via uncommanded SAT shift (PNNL Re-tuning Ch.5/7)."""
+    """Detects a leaking (passing) coil valve via uncommanded SAT shift (PNNL Re-tuning Ch.5)."""
 
     name = "leaking_valve"
     # the cooling coil + air temps are required; the heating coil is optional, so

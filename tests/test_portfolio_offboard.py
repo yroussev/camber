@@ -69,11 +69,11 @@ def _setup(tmp_path, name="North Campus"):
         "mv_baselines.json": {"schema": 1, "mv_baselines": [{"kind": "mv_bills", "equip": "gas"}]},
     }
     for n, doc in files.items():
-        with open(os.path.join(sdir, n), "w") as fh:
+        with open(os.path.join(sdir, n), "w", encoding="utf-8") as fh:
             json.dump(doc, fh)
-    with open(os.path.join(sdir, "weather_audit.ndjson"), "w") as fh:
+    with open(os.path.join(sdir, "weather_audit.ndjson"), "w", encoding="utf-8") as fh:
         fh.write(json.dumps({"ts": "2025-01-02T00:00:00Z", "service": "isd", "sent": True}) + "\n")
-    with open(os.path.join(sdir, "reports", "r1.html"), "w") as fh:
+    with open(os.path.join(sdir, "reports", "r1.html"), "w", encoding="utf-8") as fh:
         fh.write("<html>inside</html>")
     ext = tmp_path / "out" / "report.html"
     ext.parent.mkdir()
@@ -187,7 +187,7 @@ def _hold(pf, fid):
     p = os.path.join(pf.root, "_portfolio.json")
     doc = json.load(open(p))
     doc["legal_holds"] = {fid: {"reason": "litigation"}}
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
 
 
 def test_legal_hold_blocks_archive_and_purge(tmp_path):
@@ -242,9 +242,9 @@ def test_tampered_bundle_is_refused_before_anything_changes(tmp_path):
     pf.archive(fid, reason="x", apply=True, now=_LATER)
     b = pf.bundles(fid)[0]["path"]
     victim = os.path.join(b, "state", "faults.json")
-    with open(victim, "a") as fh:
+    with open(victim, "a", encoding="utf-8") as fh:
         fh.write(" ")
-    open(os.path.join(b, "stray.txt"), "w").write("x")
+    open(os.path.join(b, "stray.txt"), "w", encoding="utf-8").write("x")
     v = _bundle.verify_bundle(b)
     assert not v["ok"] and "checksum mismatch: state/faults.json" in v["problems"]
     assert "not in manifest: stray.txt" in v["problems"]
@@ -271,14 +271,14 @@ def test_swap_recovery_rolls_forward_or_back(tmp_path):
     (target / "a").write_text("old")
     # incomplete stage (no .ready): rolled back, target untouched
     stage = _swap.staging(str(target))
-    open(os.path.join(stage, "a"), "w").write("half")
+    open(os.path.join(stage, "a"), "w", encoding="utf-8").write("half")
     assert _swap.recover(str(target)) == "rolled_back"
     assert (target / "a").read_text() == "old" and not os.path.exists(stage)
     # complete stage, crash after the target was moved aside: rolled forward
     stage = _swap.staging(str(target))
-    open(os.path.join(stage, "a"), "w").write("new")
+    open(os.path.join(stage, "a"), "w", encoding="utf-8").write("new")
     new, old, ready = _swap._paths(str(target))
-    open(ready, "w").close()
+    open(ready, "w", encoding="utf-8").close()
     os.rename(str(target), old)
     assert not target.exists()
     out = _swap.recover_tree(str(tmp_path))

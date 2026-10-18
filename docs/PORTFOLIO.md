@@ -77,14 +77,19 @@ relative, so moving the workspace and its store together needs no edit.
   tombstone in `store/_tombstones.json`. Registering that id again, or writing data under it, is
   refused, so an old building's history can never be joined to a new one. A catalog dataset is
   the one exception: its id is derived from the dataset itself, so re-ingesting the *same*
-  dataset reclaims its own tombstone. That reclaim is audited.
+  dataset reclaims its own tombstone. That reclaim is audited. Inside a workspace (0.108)
+  `FacilityRegistry.remove` and `ParquetStore.drop_facility` need a `reason` and refuse a
+  facility under a legal hold; see [Legal holds on every path](#legal-holds-on-every-path).
 - **Case.** A new id that differs from a known one only by letter case (`DemoSite` / `demosite`)
   is refused. On a case-insensitive filesystem the two would share one directory.
   `make_facility_id()` emits lowercase.
 - **Names.** `name` is the name the facility was registered under and never changes. The
   existing `register()` collision guard compares it. `display_name` is the editable one:
   `camber facility rename` changes it, and `ParquetStore.facility_name()`, reports and the read
-  API's `display_name` show it.
+  API's `display_name` show it. Since 0.108 a rename is refused when the new name equals another
+  facility's id, registered name, or current or past display name, live or tombstoned, compared
+  exactly and loosely (case, Unicode form, spacing). Such a name would make the label resolve to
+  two facilities, and the other facility's site-keyed faults and baselines would stop resolving.
 
 - **State.** Fault history, drift baselines, CMMS ticket fingerprints and findings exports are
   keyed by `facility_id` inside a workspace (see [Per-facility state](#per-facility-state)), so a
@@ -94,7 +99,13 @@ relative, so moving the workspace and its store together needs no edit.
 Registry v2 entries add `state`, `created_at`, `state_changed_at`, `display_name`, `owner`,
 `portfolio` (tags) and `notes`. `register()` keeps its old meaning for existing callers. A
 facility it creates (a store write with `name=`, a dataset ingest) starts `active`, and
-`register()` cannot change the lifecycle fields.
+`register()` cannot change the lifecycle fields. Inside a workspace (0.108) it also refuses
+any change to the keys the audited methods own: `private` (`camber facility private`),
+`display_name` (`camber facility rename`), `archive` and `offboarding` (the lifecycle) and
+`edge_devices` (`Portfolio.note_edge_device`). So a store write with `private=False` or a new
+`display_name` is refused rather than changing the facility silently. A facility created by its
+first store write may start `private` or with a `display_name`; its `facility.register` audit
+line records them. A plain store accepts all of these as before.
 
 Since 0.94 an entry may also carry `private: true` (`camber facility add --private`, or `camber
 facility private <id> --reason R`; audited as `facility.private`). A private facility's weather and
@@ -123,9 +134,45 @@ provisioning -> active <-> suspended -> offboarding -> archived -> purged (tombs
   state. `purged` is final.
 - A **legal hold** blocks every transition that deletes data (`archive`, `purge`) and every
   retention deletion. Holds are stored in `_portfolio.json`; `camber retention hold|release`
-  sets and releases them.
+  sets and releases them. Since 0.108 it blocks every other path that deletes or replaces the
+  facility's data too, with no override flag: see
+  [Legal holds on every path](#legal-holds-on-every-path).
 - `offboard`, `restore`, `archive` and `purge` are described in
   [Offboarding, archiving and purging](#offboarding-archiving-and-purging).
+
+### Legal holds on every path
+
+A facility under a legal hold keeps everything until the hold is released (`camber retention
+release`). There is no override flag. Each path below refuses with `LifecycleError` before
+anything is deleted, and names the hold:
+
+| Path | Since | What is refused |
+|---|---|---|
+| `camber facility archive` / `purge`, `camber retention apply` | 0.95 | the deletion |
+| `camber datasets ingest` / `remove --purge-store`, `camber lab` | 0.107 | a re-ingest that replaces its partition, a purge |
+| `camber interop openfdd ingest` | 0.108 | a re-ingest that replaces its partition (an unchanged one is still skipped) |
+| `ParquetStore.drop_facility`, `prune`, `drop_partition` | 0.108 | the deletion |
+| `FacilityRegistry.remove` | 0.108 | the tombstoning |
+| `camber facility restore` from `archived` | 0.108 | a restore that would delete or change a live file |
+| `camber portfolio recover` (run first by every lifecycle command) | 0.108 | finishing an interrupted archive (`archive_blocked_legal_hold`) |
+
+A hold blocks only deleting or replacing data. The non-destructive state writes of an active (or
+provisioning) facility stay allowed under a hold: a config run's `faults` fold, and `camber drift
+freeze` / `accept` and `camber mv freeze` / `rebaseline` / `adjust`, which add versions. An
+archived or purged facility's state is frozen whether it is held or not (see
+[Per-facility state](#per-facility-state)).
+
+`ParquetStore.drop_facility` and `FacilityRegistry.remove` also refuse, inside a workspace, a
+facility that is not `provisioning` or `active` (suspended, offboarding, archived), as a dataset
+purge does: its data belongs to its lifecycle, and an archived facility leaves through `camber
+facility purge`.
+
+Inside a workspace the store and registry primitives in this table also need a `reason`
+(`ValueError` without one) and are audited: `store.drop_facility`, `store.prune` (one line per
+facility) and `store.drop_partition`, and `facility.remove` carries the reason given. Outside a
+workspace (a plain store) they keep their behaviour: no reason, no hold, no audit. The lifecycle's
+own deletions (archive, purge, retention) check the hold themselves and do not go through these
+primitives.
 
 ### What `suspended` means for analyses
 
@@ -192,6 +239,20 @@ folder config names one with `"workspace": "<root>"`. Then:
   a store elsewhere (top-level `"mv_store"`) is migrated like a drift store: `camber portfolio
   migrate` moves every version into `state/<fid>/` and leaves a redirect stub.
 
+**Frozen state (0.108).** An archived facility's state lives in its export bundle and a purged one
+has none, so for these two, held or not, nothing writes `state/<fid>/`:
+
+- a config run with a `faults` section is refused up front (`LifecycleError`), before any rule
+  runs;
+- `camber drift freeze|accept` and `camber mv freeze|rebaseline|adjust` with `--apply` are
+  refused;
+- a report or output a run or command writes is still written where it was asked to go, but it
+  is not recorded in the facility manifest (a warning says so).
+
+A run without a `faults` section only reads, so it still runs (an archived facility is skipped
+unless `include_inactive` is set, as before). A legal hold on its own does not freeze the state:
+these writes add to it, and a hold blocks only deleting or replacing data.
+
 `camber facility show <id>` prints the manifest. Outside a workspace nothing changes: stores stay
 keyed by the site string, and folder configs do not warn about a missing `facility_id`.
 
@@ -217,7 +278,10 @@ camber portfolio migrate ... --apply --reason "0.86 identity migration"
   log's `facility.rename` records). Labels are compared exactly first, then loosely: Unicode NFC,
   case-folded, whitespace collapsed. A label whose `make_facility_id()` is a known facility also
   maps, since that is how an unpinned folder config derives its id. Records that already carry a
-  `facility_id` keep it.
+  `facility_id` keep it. A facility's **own** labels (its id, registered name and current display
+  name) outrank other facilities' **past** display names (0.108). So a transient rename made
+  before 0.108, such as B briefly renamed to A's name and back, no longer makes A's labels
+  ambiguous.
 - **Refusals.** A label that matches **more than one facility** is ambiguous and is never guessed.
   The same goes for a label that matches only a **tombstoned** facility, or a live facility and a
   tombstoned one. So does an unknown label, a blank label with no config to attribute it, or a
@@ -287,8 +351,13 @@ camber facility bundles  <id> [--verify]                          # list (and re
   writes, even if an edge object PUT into the store recreates its partition.
 - **Restore** (`offboarding`/`archived` -> `active`). From `offboarding` it only changes the
   state. From `archived` it verifies the bundle (the one archive recorded, or `--bundle ID`),
-  puts every tree back, re-hashes every restored file against the manifest, and only then marks
-  the facility `active`. External report files come back only where their path is free.
+  stages every tree and re-hashes the staged files against the manifest, and only then swaps the
+  trees in. A mismatch leaves the live trees as they were. It then re-hashes the restored files
+  and marks the facility `active`. Since 0.108 it also empties every live hot tree the bundle
+  does not list, such as state a run wrote while the facility was archived; the dry run lists
+  those trees under `deletes`. So the restored facility holds exactly the bundle. Under a legal
+  hold, a restore that would delete or change a live file is refused before anything is touched.
+  External report files come back only where their path is free.
 - **Purge** (`archived` -> `purged`) deletes the bundles and anything left of the facility,
   including its quarantined edge uploads, and its retention override. What remains is the tombstone in `store/_tombstones.json` (id,
   registered and display names, `state: purged`, `purged_at`, reason) and the audit log. The id
@@ -343,8 +412,12 @@ audit log):
   with `_` are invisible to the store's readers.
 - **Ordering.** Offboard exports before it changes the state. Archive records `archived` with
   `hot_deleted: false` before deleting, and recovery finishes the deletion only after
-  re-verifying the bundle (a damaged bundle blocks it and is reported). Restore changes the state
-  last. Purge writes the tombstone with `purge_pending` first, and recovery finishes it.
+  re-verifying the bundle (a damaged bundle blocks it and is reported). A legal hold placed after
+  the crash blocks it too: recovery reports `archive_blocked_legal_hold` and keeps the hot data
+  until the hold is released (0.108). Restore stages and verifies every tree before the first
+  swap and changes the state last; a restore interrupted between two swaps leaves the facility
+  `archived`, and re-running the restore finishes it. Purge writes the tombstone with
+  `purge_pending` first, and recovery finishes it.
 
 The tests simulate a crash at each of these points, including a child process killed mid-archive.
 
@@ -369,7 +442,8 @@ The tests simulate a crash at each of these points, including a child process ki
   `facility.activate|suspend|resume`, `facility.rename`, `facility.migrate`, `facility.remove`
   (tombstoned), `facility.reclaim`, `facility.export`,
   `facility.offboard|archive|restore|purge`, `retention.set|override|hold|release|apply`,
-  `retention.incomplete`, `store.migrate_partitions`, `drift.freeze`, `drift.accept`, and the
+  `retention.incomplete`, `store.migrate_partitions`, `store.drop_facility`, `store.prune`,
+  `store.drop_partition` (0.108), `drift.freeze`, `drift.accept`, and the
   edge landing's `edge.land`, `edge.reconcile.quarantine`, `edge.quarantine.release|discard`,
   `edge.decommission` and `edge.device` (see [EDGE-DEPLOY.md](EDGE-DEPLOY.md)).
 - Code outside the lifecycle writes its records through `Portfolio.audit(action, reason=...)`,

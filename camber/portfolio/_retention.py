@@ -686,7 +686,7 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
 
         clear_store_cache(store.root, fid)
     else:
-        store.drop_partition(fid, p["year"], p["month"])
+        store._drop_partition(fid, p["year"], p["month"])  # retention checked holds
 
 
 def _snapshot(path: str, *, legacy: bool) -> tuple:
@@ -722,7 +722,7 @@ def _apply_hourly(pf, fid: str, p: dict, daily_cut, problems: list) -> None:
                     f"{want}; hourly partition kept"
                 )
                 return
-    _rollup_store(pf, "hourly").drop_partition(fid, p["year"], p["month"])
+    _rollup_store(pf, "hourly")._drop_partition(fid, p["year"], p["month"])
 
 
 def _trim_versions(path: str, list_key: str, keep_versions) -> int:
@@ -828,7 +828,7 @@ def apply(pf, *, facility_id=None, now=None, reason: str) -> dict:
             for p in fp["hourly"]:
                 _apply_hourly(pf, fid, p, cut["daily_rollups"], problems)
             for p in fp["daily"]:
-                _rollup_store(pf, "daily").drop_partition(fid, p["year"], p["month"])
+                _rollup_store(pf, "daily")._drop_partition(fid, p["year"], p["month"])
             _apply_state(pf, fid, fp, eff, cut)
             if len(problems) > before:
                 pf._audit(

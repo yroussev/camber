@@ -187,7 +187,7 @@ def test_discard_is_guarded_and_honours_legal_holds(ws, inbox):
     doc_path = os.path.join(ws.root, "_portfolio.json")
     doc = json.load(open(doc_path))
     doc["legal_holds"] = {SUSP: {"since": "2025-01-01", "reason": "litigation"}}
-    json.dump(doc, open(doc_path, "w"))
+    json.dump(doc, open(doc_path, "w", encoding="utf-8"))
     rep = discard(ws, facility_id=SUSP, apply=True, yes=True, reason="cleanup")
     assert rep["planned"] == [] and "legal hold" in rep["refused"][0]["why"]
     assert list_quarantine(ws, facility_id=SUSP)
@@ -200,8 +200,9 @@ def test_a_crash_mid_quarantine_is_recoverable(ws, inbox, monkeypatch):
         raise OSError("power cut")
 
     monkeypatch.setattr(qmod, "_move", boom)
-    with pytest.raises(OSError):
-        land(ws, inbox, apply=True, reason="t")
+    # 0.108 (#247): a failing object is reported and the run goes on; it no longer aborts
+    rep = land(ws, inbox, apply=True, reason="t")
+    assert rep["errors"] and all("power cut" in e["error"] for e in rep["errors"])
     monkeypatch.undo()
     # the record was written, the object never left the inbox: nothing is lost
     rows = {r["key"]: r for r in list_quarantine(ws)}

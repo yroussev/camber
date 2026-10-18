@@ -166,9 +166,11 @@ def test_azure_sink_uses_injected_container_client():
     from camber.edge.sink import AzureBlobSink
 
     c = _Container()
-    out = AzureBlobSink(container="cont", prefix="pre", client=c).put("k", b"d", metadata={"n": 1})
+    out = AzureBlobSink(container="cont", prefix="pre", client=c).put(
+        "k", b"d", metadata={"rows": 1, "equips": ["x"]}
+    )
     assert out["ok"] is True and out["key"] == "pre/k"
-    assert c.calls[0] == ("pre/k", b"d", True, {"n": "1"})
+    assert c.calls[0] == ("pre/k", b"d", True, {"rows": "1"})  # 0.108 (#245): the compact subset
 
 
 def test_azure_sink_without_client_raises():

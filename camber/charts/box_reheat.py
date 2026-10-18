@@ -8,6 +8,8 @@ Reheat-at-high-OAT events are highlighted.
 
 from __future__ import annotations
 
+from ._labels import mpl_text
+
 
 def box_reheat_figure(
     df, equip, *, oat=None, valve_thr=5.0, cooling_cutoff_f=65.0, occupied_only=True
@@ -45,7 +47,7 @@ def box_reheat_figure(
                 label="Airflow SP",
             )
         axf.set_ylabel("Airflow (cfm)", color="#888888")
-    ax1.set_title(f"{equip} — reheat diagnostic (occupied hours)")
+    ax1.set_title(mpl_text(f"{equip} — reheat diagnostic (occupied hours)"))
     ax1.legend(loc="upper left", fontsize=8)
 
     # --- panel 2: space temp + setpoint band + OAT ---

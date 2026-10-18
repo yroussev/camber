@@ -17,6 +17,19 @@ those facilities follow the 0.95 lifecycle, and these checks are the one place i
 - every such write is **audited** in the workspace with a ``reason`` (:func:`require_reason`,
   :func:`audit_ingest`, :func:`audit_remove`).
 
+0.108 (#250-#252) puts the same rules under the primitives every caller ends in:
+
+- **delete** -- the store and registry primitives (``ParquetStore.drop_facility`` / ``prune`` /
+  ``drop_partition``, ``FacilityRegistry.remove``) refuse a held facility inside a workspace,
+  need a reason and audit (:func:`store_delete_gate`, :func:`delete_blockers`);
+  ``drop_facility`` and ``remove`` also refuse a facility that has left ``provisioning`` /
+  ``active``, as a purge does (:func:`purge_blockers`): an archived one goes through the
+  lifecycle purge;
+- **state writes** -- a config run never writes ``state/<fid>/`` (faults, baselines, the manifest)
+  of an archived or purged facility (:func:`state_write_blockers`). A legal hold blocks only
+  deleting or replacing data, so the non-destructive writes (a faults fold, a baseline freeze or
+  accept, which add versions) stay allowed for a held facility that is not archived.
+
 Outside a workspace there are no states to follow and no holds: nothing here refuses anything,
 and the store's own guard (:meth:`camber.store.FacilityRegistry._guard_write`: tombstoned ids,
 case-variants, archived facilities) is what every write still passes.
@@ -117,26 +130,89 @@ def purge_blockers(pf, dataset_id: str, *, fids=None, by: str = "CAMBER") -> lis
     return out
 
 
-def replace_blockers(pf, store_root, fids, *, by: str = "CAMBER") -> list:
-    """Why an ingest may not replace the data of the facilities ``fids`` in workspace ``pf``
-    (``[]``: it may; always ``[]`` outside a workspace). 0.107: a legal hold means nothing held is
-    deleted, and replacing a held facility's partition (a forced or changed re-ingest) deletes the
-    rows it holds -- so it is refused, by every writer. A held facility with no partition yet is
-    not blocked: there is nothing to delete."""
+def delete_blockers(pf, fids, *, by: str = "CAMBER", what: str = "delete its data") -> list:
+    """Why ``by`` may not ``what`` for the facilities ``fids`` of workspace ``pf`` (``[]``: it
+    may; always ``[]`` outside a workspace, ``pf is None``). 0.108 (#250): the one legal-hold
+    check -- a facility under a hold keeps everything, so every path that deletes or replaces its
+    data is refused. An unreadable portfolio document blocks too."""
     if pf is None:
         return []
     try:
         holds = pf.legal_holds()
-    except Exception as exc:  # noqa: BLE001 - an unreadable portfolio blocks a replacement
+    except Exception as exc:  # noqa: BLE001 - an unreadable portfolio blocks a deletion
         return [f"the workspace portfolio could not be read ({type(exc).__name__})"]
+    return [
+        f"{fid} is under a legal hold: {by} does not {what} until the hold is released "
+        "(`camber retention release`)"
+        for fid in sorted(set(fids))
+        if fid in holds
+    ]
+
+
+def replace_blockers(pf, store_root, fids, *, by: str = "CAMBER") -> list:
+    """Why an ingest may not replace the data of the facilities ``fids`` in workspace ``pf``
+    (``[]``: it may; always ``[]`` outside a workspace). 0.107: a legal hold means nothing held is
+    deleted, and replacing a held facility's partition (a forced or changed re-ingest) deletes the
+    rows it holds -- so it is refused, by every writer (the datasets path since 0.107, the
+    open-fdd ingest since 0.108, #251). A held facility with no partition yet is not blocked:
+    there is nothing to delete."""
+    have = [f for f in fids if os.path.isdir(os.path.join(store_root, f"facility_id={f}"))]
+    return delete_blockers(
+        pf, have, by=by, what="replace its data (a re-ingest deletes the rows it holds)"
+    )
+
+
+def store_delete_gate(
+    store_root, fids, *, reason, by: str, what: str = "delete its data", states: bool = False
+):
+    """The workspace rule for a store or registry delete primitive (0.108, #250).
+
+    Outside a workspace: ``(None, reason)``, nothing refused (a plain store keeps its behaviour).
+    Inside one: ``reason`` is required (``ValueError``), a facility of ``fids`` under a legal hold
+    refuses the call (:class:`~camber.portfolio.LifecycleError`) and ``(portfolio, reason)`` comes
+    back, so the caller audits its deletion with that reason. ``states=True`` (removing a whole
+    facility) also refuses one that is not ``provisioning`` / ``active``, by the
+    :func:`purge_blockers` rule. There is no override flag: release the hold first.
+    """
+    pf = workspace_of(store_root)
+    if pf is None:
+        return None, reason
+    text = require_reason(reason, what=by)
+    if states:
+        why = purge_blockers(pf, "", fids=fids, by=by)
+    else:
+        why = delete_blockers(pf, fids, by=by, what=what)
+    if why:
+        from ..portfolio import LifecycleError
+
+        raise LifecycleError("; ".join(why) + "; nothing was deleted")
+    return pf, text
+
+
+STATE_FROZEN = ("archived", "purged")
+
+
+def state_write_blockers(pf, facility_id, *, by: str = "a config run") -> list:
+    """Why ``by`` may not write the per-facility state (``state/<fid>/``: faults, baselines, the
+    manifest) of ``facility_id`` in workspace ``pf`` (``[]``: it may; ``[]`` outside one).
+
+    0.108 (#252): an archived facility's state lives in its export bundle (a write would never be
+    in the bundle, and the next restore could not reconcile it), and a purged one has none -- held
+    or not. A legal hold alone does not block these writes: it blocks deleting or replacing data,
+    and a faults fold or a baseline freeze adds to the state.
+    """
+    if pf is None or not facility_id:
+        return []
     out = []
-    for fid in sorted(set(fids)):
-        if fid in holds and os.path.isdir(os.path.join(store_root, f"facility_id={fid}")):
-            out.append(
-                f"{fid} is under a legal hold: {by} does not replace its data (a re-ingest "
-                "deletes the rows it holds) until the hold is released (`camber retention "
-                "release`)"
-            )
+    try:
+        state = pf.facility(facility_id).get("state") or "active"
+    except KeyError:
+        state = None
+    if state in STATE_FROZEN:
+        out.append(
+            f"facility {facility_id} is {state}: {by} writes no state for it (its state lives in "
+            "its export bundle; `camber facility restore` it first)"
+        )
     return out
 
 

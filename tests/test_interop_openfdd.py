@@ -58,7 +58,7 @@ def _write_equip(root, rel, frame, *, sidecar=None, columns=None, ts_col="timest
     frame = frame.rename(columns={"__ts__": ts_col})
     frame.to_csv(os.path.join(d, "history_wide.csv"), index=False)
     if sidecar is not None:
-        with open(os.path.join(d, sidecar[0]), "w") as fh:
+        with open(os.path.join(d, sidecar[0]), "w", encoding="utf-8") as fh:
             json.dump(sidecar[1], fh)
     if columns is not None:
         pd.DataFrame(columns).to_csv(os.path.join(d, "columns.csv"), index=False)
@@ -79,7 +79,7 @@ def make_package(base, *, si=False, days=14, meter_days=120, building=BLDG):
     def t(f):  # degF -> package unit
         return (f - 32) * 5 / 9 if si else f
 
-    with open(os.path.join(root, "manifest.json"), "w") as fh:
+    with open(os.path.join(root, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(
             {
                 "schema_version": "openfdd_package_v1",
@@ -134,9 +134,9 @@ def make_package(base, *, si=False, days=14, meter_days=120, building=BLDG):
             "LOOSE_1": {"points": {"zone-air-temp": "ZT"}},  # no equipType stamp
         },
     }
-    with open(os.path.join(root, "column_map.json"), "w") as fh:
+    with open(os.path.join(root, "column_map.json"), "w", encoding="utf-8") as fh:
         json.dump(root_map, fh)
-    with open(os.path.join(root, "equipment_inventory.json"), "w") as fh:
+    with open(os.path.join(root, "equipment_inventory.json"), "w", encoding="utf-8") as fh:
         json.dump([{"equip_id": "HP_1", "type": "HEAT_PUMP"}], fh)
 
     ahu = pd.DataFrame(
@@ -262,7 +262,7 @@ def make_package(base, *, si=False, days=14, meter_days=120, building=BLDG):
     )
     # open-fdd outputs that sit in packages but are not the ingest contract
     pd.DataFrame({"fault": [1]}).to_csv(os.path.join(root, "AHU_1", "fdd_faults.csv"))
-    with open(os.path.join(root, "session_config.json"), "w") as fh:
+    with open(os.path.join(root, "session_config.json"), "w", encoding="utf-8") as fh:
         json.dump({}, fh)
     return root
 
@@ -415,7 +415,7 @@ def test_equipment_type_limited_rows(tmp_path):
     blk = json.load(open(os.path.join(root, "column_map.json")))
     blk["equipment"]["AHU_1"]["points"]["vav-inlet-air-temp"] = "MAT"
     del blk["equipment"]["AHU_1"]["points"]["mixed-air-temp"]
-    json.dump(blk, open(os.path.join(root, "column_map.json"), "w"))
+    json.dump(blk, open(os.path.join(root, "column_map.json"), "w", encoding="utf-8"))
     p = read_package(root, timezone=TZ, unit_system="ip")
     c = _col(p, "AHU_1", "MAT")
     assert c.status == "not_applicable" and "vav only" in c.reason
@@ -525,7 +525,7 @@ def test_missing_timestamp_and_schema_warning(tmp_path):
     root = make_package(str(tmp_path), days=2, meter_days=2)
     m = json.load(open(os.path.join(root, "manifest.json")))
     m["schema_version"] = "openfdd_package_v9"
-    json.dump(m, open(os.path.join(root, "manifest.json"), "w"))
+    json.dump(m, open(os.path.join(root, "manifest.json"), "w", encoding="utf-8"))
     p = read_package(root, timezone=TZ, unit_system="ip")
     assert any("schema_version" in w for w in p.warnings)
     pd.DataFrame({"when": [1], "x": [2]}).to_csv(
@@ -746,7 +746,7 @@ def _drop_registry_timezone(store, fid):
     with open(path) as fh:
         data = json.load(fh)
     data[fid].pop("timezone", None)
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
 
 

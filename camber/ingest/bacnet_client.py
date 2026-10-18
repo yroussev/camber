@@ -134,13 +134,25 @@ class Bacpypes3Client:
     ``Application`` built in one coroutine cannot be driven from another. Pass an already-built
     async ``app`` (a fake, in tests) **or** an async ``build_app`` factory (the real app, built
     inside the worker), never both. ``address`` is the default target for :meth:`read_present_value`
-    / :meth:`read_trend_log`; the discovery methods take an address per call. Use it as a context
-    manager, or call :meth:`close`.
+    / :meth:`read_trend_log` (each also takes ``address=``, 0.108); the discovery methods take an
+    address per call. ``trend_records`` (0.108, #243) is how many of a trend log's newest records
+    one read returns. Use it as a context manager, or call :meth:`close`.
     """
 
-    def __init__(self, app=None, *, build_app=None, address=None, timeout: float = 10.0):
+    def __init__(
+        self,
+        app=None,
+        *,
+        build_app=None,
+        address=None,
+        timeout: float = 10.0,
+        trend_records: int = 1000,
+    ):
         if (app is None) == (build_app is None):
             raise ValueError("pass exactly one of app / build_app")
+        if isinstance(trend_records, bool) or int(trend_records) < 1:
+            raise ValueError(f"trend_records must be at least 1, got {trend_records!r}")
+        self._trend_records = int(trend_records)  # 0.108 (#243): newest records per read
         self._address = address
         self._timeout = timeout
         self._app = None
@@ -255,27 +267,49 @@ class Bacpypes3Client:
         return meta
 
     # ---- read client (BacnetSource) ----
-    def read_present_value(self, object_id):
-        """ReadProperty the object's ``present-value`` at the configured target address."""
+    def read_present_value(self, object_id, *, address=None):
+        """ReadProperty the object's ``present-value`` at ``address`` (default: the target)."""
+        addr = address or self._address
         return _unwrap(
-            self._run(
-                lambda app: app.read_property(self._address, _oid_str(object_id), "present-value")
-            )
+            self._run(lambda app: app.read_property(addr, _oid_str(object_id), "present-value"))
         )
 
-    def read_trend_log(self, object_id, *, max_records: int = 1000):
-        """ReadRange the object's ``log-buffer`` → ``[(timestamp, value), ...]`` records.
+    def read_trend_log(self, object_id, *, address=None, max_records: int | None = None):
+        """ReadRange the newest records of the object's ``log-buffer`` → ``[(timestamp, value)]``.
 
-        Reads up to ``max_records`` from the start (RangeByPosition). bacpypes3 requires a
-        ``range_params`` 5-tuple ``(range_type, first, date, time, count)``.
+        0.108 (#243): a trend log is a ring buffer whose index 1 is its *oldest* record, so the
+        client first reads ``record-count`` and then asks for the ``max_records`` records ending
+        at that position (RangeByPosition with a negative count: the newest ones, oldest-first).
+        ``max_records`` defaults to the client's ``trend_records`` (1000). When the device does
+        not answer ``record-count`` it reads by position from 1, as before, and warns. bacpypes3
+        requires a ``range_params`` 5-tuple ``(range_type, first, date, time, count)``.
         """
-        records = self._run(
-            lambda app: app.read_range(
-                self._address,
-                _oid_str(object_id),
-                "log-buffer",
-                range_params=("p", 1, None, None, max_records),
+        import warnings
+
+        addr = address or self._address
+        oid = _oid_str(object_id)
+        n = int(max_records if max_records is not None else self._trend_records)
+        if n < 1:
+            raise ValueError(f"max_records must be at least 1, got {n}")
+        try:
+            count = _unwrap(self._run(lambda app: app.read_property(addr, oid, "record-count")))
+            count = int(count)
+        except Exception:  # noqa: BLE001 - optional on some stacks: fall back, loudly
+            count = None
+        if count is not None and count <= 0:
+            return []
+        if count is None:
+            warnings.warn(
+                f"BACnet {oid} at {addr}: record-count unreadable; reading the first {n} records "
+                "of the log buffer (its oldest)",
+                UserWarning,
+                stacklevel=2,
             )
+            params = ("p", 1, None, None, n)
+        else:
+            params = ("p", count, None, None, -min(n, count))
+        records = self._run(
+            lambda app: app.read_range(addr, oid, "log-buffer", range_params=params)
         )
         return [_log_record_to_pair(r) for r in (records or [])]
 
@@ -301,6 +335,7 @@ class BacnetClientConfig:
     timeout: float = 10.0
     device_range: tuple | None = None
     known_addresses: tuple | None = None  # unicast discovery targets (skip broadcast Who-Is)
+    trend_records: int = 1000  # 0.108 (#243): newest trend-log records per read
 
     @classmethod
     def from_mapping(cls, data: dict) -> BacnetClientConfig:
@@ -367,7 +402,12 @@ def _real_client(config, *, address=None):  # pragma: no cover - needs bacpypes3
     async def _build():
         return Application.from_args(SimpleArgumentParser().parse_args(argv))
 
-    return Bacpypes3Client(build_app=_build, address=address, timeout=config.timeout)
+    return Bacpypes3Client(
+        build_app=_build,
+        address=address,
+        timeout=config.timeout,
+        trend_records=config.trend_records,
+    )
 
 
 def bacnet_read_client(

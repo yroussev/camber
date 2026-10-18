@@ -533,7 +533,10 @@ RULE_REFERENCES: dict = {
     "overcooling_severity": (_CH7,),
     "unmet_setpoint_hours": (_CH7,),
     "airflow_tracking": (_CH7,),
-    "zones_heat_cool_census": (_CH7,),
+    # 0.108 (#232): ch. 7's zone heating and cooling demands, and ch. 5's discharge-air
+    # temperature control, whose list of what a low discharge-air temperature causes names
+    # reheating in the cooler zones (the central overcooling re-warmed locally the census reads)
+    "zones_heat_cool_census": (_CH7, _CH5),
     "reheat_capacity_shortfall": (_CH7,),  # 0.98 (#89)
     "actuator_stuck": (_CH7,),  # 0.98 (#85): ch. 7's terminal damper and valve checks
     "cohort_airflow": (_CH7,),

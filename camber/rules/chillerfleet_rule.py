@@ -13,6 +13,10 @@ fleet role-frame interface. This is the plant-level companion to the single-chil
 ``n_loops_excluded``). A declared ``capacity_kw`` replaces the observed 95th-percentile capacity,
 which reads low on a plant that never loads a chiller fully. The counts are samples
 (``n_running_samples``, ``n_multi_samples``) with their hours beside them.
+
+0.108 (#235): a chiller reads as running by its run status / command (``compressor_status``) when
+mapped, else by power above ``run_frac`` of its own 95th-percentile draw, else above an explicit
+``min_power_kw`` (before 0.108, a fixed 2 kW that read standby draw as running).
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from __future__ import annotations
 from ..chillerstaging import analyze_chiller_staging_fleet
 from ..model.equipclass import is_chw_loop
 from ..model.roles import Role
+from ..schedules import CHILLER_POWER_RUN_FRAC
 from .base import Finding
 
 
@@ -28,9 +33,15 @@ class ChillerStagingFleet:
 
     name = "chiller_staging_fleet"
     roles_required = (Role.POWER,)
-    roles_optional = ()
+    roles_optional = (Role.COMPRESSOR_STATUS,)  # 0.108 (#235): the run gate
 
-    def __init__(self, redundancy_ceiling: float = 0.9, capacity_kw=None):
+    def __init__(
+        self,
+        redundancy_ceiling: float = 0.9,
+        capacity_kw=None,
+        min_power_kw: float | None = None,
+        run_frac: float = CHILLER_POWER_RUN_FRAC,
+    ):
         # How fully a single chiller can be loaded before the next must stage on.
         self.redundancy_ceiling = redundancy_ceiling
         # 0.106 (#183): each chiller's full-load power, kW -- one number for equal chillers or
@@ -40,6 +51,9 @@ class ChillerStagingFleet:
             if not capacity_kw > 0:
                 raise ValueError(f"capacity_kw must be positive, got {capacity_kw!r}")
         self.capacity_kw = capacity_kw
+        # 0.108 (#235): the power run gate -- an explicit kW floor, else run_frac x p95 power
+        self.min_power_kw = min_power_kw
+        self.run_frac = run_frac
 
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run across the chillers' role-frames; return one aggregate Finding."""
@@ -62,9 +76,16 @@ class ChillerStagingFleet:
                 summary="no chillers with power points",
                 caveats=caveats,
             )
-        legacy = {e: f.rename(columns={Role.POWER: "Power"}) for e, f in chillers.items()}
+        legacy = {
+            e: f.rename(columns={Role.POWER: "Power", Role.COMPRESSOR_STATUS: "Status"})
+            for e, f in chillers.items()
+        }
         res = analyze_chiller_staging_fleet(
-            legacy, redundancy_ceiling=self.redundancy_ceiling, capacity_kw=self.capacity_kw
+            legacy,
+            redundancy_ceiling=self.redundancy_ceiling,
+            capacity_kw=self.capacity_kw,
+            min_power_kw=self.min_power_kw,
+            run_frac=self.run_frac,
         )
         if res is None:
             return Finding(
@@ -104,6 +125,7 @@ class ChillerStagingFleet:
                 "median_running_count": res.median_running_count,
                 "rep_capacity_kw": res.rep_capacity_kw,
                 "capacity_source": res.capacity_source,
+                "run_source": res.run_source,  # 0.108 (#235)
             },
             summary=(
                 f"fleet: {res.n_chillers} chillers, "

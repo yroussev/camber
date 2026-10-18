@@ -51,6 +51,89 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# 0.108 (#245): the manifest fields an SDK sink sends as object metadata. The full manifest
+# (equipment and role lists, the quality summary) can exceed S3's 2 KB user-metadata limit and is
+# not ASCII-safe; it stays in the spool journal, and the landing computes its own digests.
+SINK_METADATA_KEYS = (
+    ("sha256", "content_sha256"),
+    ("rows", "rows"),
+    ("rows_sha256", "rows_sha256"),
+    ("schema_version", "schema_version"),
+    ("year", "year"),
+    ("month", "month"),
+)
+
+
+def sink_metadata(manifest) -> dict:
+    """The compact, ASCII-safe object metadata an SDK sink sends for a batch ``manifest``.
+
+    Only ``sha256`` (the content sha256), ``rows``, ``rows_sha256``, ``schema_version``,
+    ``year`` and ``month``; missing or ``None`` values are left out. Each value is JSON-encoded
+    with every non-ASCII character escaped (a string is sent without its quotes), so the result
+    fits any provider's header-based metadata: well under S3's 2 KB, and every name a valid Azure
+    metadata name.
+    """
+    import json
+
+    out = {}
+    for name, field in SINK_METADATA_KEYS:
+        value = (manifest or {}).get(field)
+        if value is None:
+            continue
+        text = json.dumps(value, ensure_ascii=True, separators=(",", ":"), default=str)
+        if isinstance(value, str):
+            text = text[1:-1]
+        out[name] = text
+    return out
+
+
+class PermanentSinkError(RuntimeError):
+    """A sink refusal that retrying will not fix (0.108, #245); the spool dead-letters it."""
+
+
+# answers that are worth retrying although they are 4xx: timeout, too early, too many requests
+_RETRYABLE_4XX = frozenset({408, 425, 429})
+
+
+def is_permanent_status(status) -> bool:
+    """True for an HTTP status a retry will not change: a 4xx other than 408, 425 and 429."""
+    try:
+        code = int(status)
+    except (TypeError, ValueError):
+        return False
+    return 400 <= code < 500 and code not in _RETRYABLE_4XX
+
+
+def _status_of(exc):
+    for attr in ("code", "status_code", "status"):
+        v = getattr(exc, attr, None)
+        if isinstance(v, int) and not isinstance(v, bool) and 100 <= v < 600:
+            return v
+    resp = getattr(exc, "response", None)
+    if isinstance(resp, dict):  # botocore ClientError
+        v = (resp.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+        if isinstance(v, int):
+            return v
+    v = getattr(resp, "status_code", None)  # requests / azure-core response objects
+    return v if isinstance(v, int) else None
+
+
+def is_permanent_error(exc: BaseException) -> bool:
+    """True when ``exc`` from :meth:`Sink.put` is permanent (0.108, #245): retrying won't help.
+
+    A :class:`PermanentSinkError`, an HTTP 4xx answer other than 408 / 425 / 429 (from urllib,
+    botocore, azure-core or google-api-core: their status attribute is read), or a validation
+    error (``ValueError`` / ``TypeError``, such as a URL that is not https or not on the
+    allowlisted host). Network errors and 5xx answers are transient.
+    """
+    if isinstance(exc, PermanentSinkError):
+        return True
+    status = _status_of(exc)
+    if status is not None:
+        return is_permanent_status(status)
+    return isinstance(exc, (ValueError, TypeError)) and not isinstance(exc, OSError)
+
+
 class _CollectSink:
     """A no-network sink that records every object; the double behind :func:`collect_sink`."""
 
@@ -218,7 +301,7 @@ class S3Sink:
     ) -> dict:
         """``put_object`` the bytes; a write-only path, never a read/list/actuate."""
         full = f"{self.prefix}/{key}" if self.prefix else key
-        meta = {k: str(v) for k, v in (metadata or {}).items()}
+        meta = sink_metadata(metadata)
         self._c().put_object(
             Bucket=self.bucket, Key=full, Body=data, ContentType=content_type, Metadata=meta
         )
@@ -247,7 +330,7 @@ class AzureBlobSink:
             _require_azure()
             raise ValueError("inject a ContainerClient as client= for AzureBlobSink")
         full = f"{self.prefix}/{key}" if self.prefix else key
-        meta = {k: str(v) for k, v in (metadata or {}).items()}
+        meta = sink_metadata(metadata)
         self._client.upload_blob(name=full, data=data, overwrite=True, metadata=meta)
         _LOG.info("edge.sink.put azure=%s key=%s bytes=%d", self.container, full, len(data))
         return {"ok": True, "key": full}
@@ -277,8 +360,9 @@ class GcsSink:
         """Upload the bytes to the object (overwrite = idempotent land-by-key)."""
         full = f"{self.prefix}/{key}" if self.prefix else key
         blob = self._c().bucket(self.bucket).blob(full)
-        if metadata:
-            blob.metadata = {k: str(v) for k, v in metadata.items()}
+        meta = sink_metadata(metadata)
+        if meta:
+            blob.metadata = meta
         blob.upload_from_string(data, content_type=content_type)
         _LOG.info("edge.sink.put gcs=%s key=%s bytes=%d", self.bucket, full, len(data))
         return {"ok": True, "key": full}

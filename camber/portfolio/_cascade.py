@@ -329,11 +329,13 @@ def restore(pf, facility_id: str, *, reason: str, apply: bool = False, bundle=No
                 raise FileNotFoundError(f"{facility_id} is archived but has no bundle to restore")
             plan["bundle"] = b["bundle_id"]
             plan["restores"] = b.get("counts")
+            # 0.108 (#252): live hot trees the bundle does not list are emptied by the restore
+            plan["deletes"] = _unlisted_live_trees(pf, facility_id, b)
         if not apply:
             return plan
         counts = None
         if b is not None:
-            counts = restore_bundle(pf, facility_id, b["path"])
+            counts = restore_bundle(pf, facility_id, b["path"], held=_held(pf, facility_id))
         pf.registry._update(
             facility_id,
             {"state": new, "state_changed_at": _stamp(now)},
@@ -348,6 +350,22 @@ def restore(pf, facility_id: str, *, reason: str, apply: bool = False, bundle=No
             details={"bundle": plan["bundle"], "restored": counts},
         )
         return {**plan, "restored": counts}
+
+
+def _unlisted_live_trees(pf, facility_id: str, b: dict) -> list:
+    """Live hot trees of ``facility_id`` that bundle ``b`` holds nothing of (restore empties
+    them)."""
+    from ._bundle import _restore_plan
+
+    try:
+        listed = _read_bundle(b).get("files") or {}
+    except (OSError, ValueError):
+        return []
+    return [
+        target
+        for prefix, target in _restore_plan(pf, facility_id, listed)
+        if os.path.lexists(target) and not any(r.startswith(prefix) for r in listed)
+    ]
 
 
 # --------------------------------------------------------------------------- purge
@@ -437,6 +455,10 @@ def recover(pf) -> list:
     the rollups, ``state/`` and ``archive/``; finishes the hot-data deletion of a facility recorded
     ``archived`` (after re-verifying its bundle) and any purge recorded ``purge_pending``. Audited
     as one ``portfolio.recover`` record when it did anything. Returns what it did.
+
+    A facility under a legal hold keeps its hot data: an interrupted archive of one is reported as
+    ``archive_blocked_legal_hold`` and left for a later recover, after the hold is released
+    (0.108, #256).
     """
     done: list = []
     for base in (
@@ -448,9 +470,15 @@ def recover(pf) -> list:
     ):
         done += _swap.recover_tree(base, max_depth=5 if base != pf.store_root else 3)
     reg = pf.registry
+    holds = pf.legal_holds()
     for fid, e in reg.all().items():
         arch = e.get("archive") or {}
         if e.get("state") == "archived" and arch and not arch.get("hot_deleted", True):
+            if fid in holds:
+                # 0.108 (#256): a hold placed after the crash blocks the deletion too; the hot
+                # data stays until the hold is released and the next recover finishes it
+                done.append({"facility_id": fid, "action": "archive_blocked_legal_hold"})
+                continue
             b = _latest_bundle(pf, fid, arch.get("bundle"))
             if b is None or not verify_bundle(b["path"])["ok"]:
                 done.append({"facility_id": fid, "action": "archive_blocked_bad_bundle"})

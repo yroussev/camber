@@ -116,9 +116,11 @@ page per issue.
   `airflow_tracking`, `valve_open_pct` for `reheat_penalty`, `overcool_at_minflow_pct` and
   `median_minflow_fraction` for `overcooling_min_flow`, `too_cold_pct` for
   `unmet_setpoint_hours`.
-- **Evidence.** In the report, `overcooling_min_flow` shades the hours when the zone runs well
-  below its cooling setpoint, and `reheat_penalty` compares the reheat valve with the
-  discharge-air rise.
+- **Evidence.** In the report, `overcooling_min_flow` plots the space temperature against its
+  cooling setpoint, the airflow against its minimum airflow setpoint, and the reheat valve. It
+  shades the occupied hours the rule counted: the zone at or below its cooling setpoint while the
+  box sits at its minimum flow and, when a reheat valve is trended, with the valve open.
+  `reheat_penalty` compares the reheat valve with the discharge-air rise.
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the dataset's declared detectors (here only `airflow_tracking`), and which rules
   fired on each labelled run.

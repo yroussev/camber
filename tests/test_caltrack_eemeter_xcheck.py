@@ -77,7 +77,7 @@ def _write(d, name, case, meter, temp, predict_temp=None):
     if predict_temp is not None:
         predict_temp.to_frame("t").to_csv(os.path.join(d, f"{name}_ptemp.csv"))
         case["predict_temp"] = f"{name}_ptemp.csv"
-    with open(os.path.join(d, f"{name}.json"), "w") as fh:
+    with open(os.path.join(d, f"{name}.json"), "w", encoding="utf-8") as fh:
         json.dump(case, fh)
 
 

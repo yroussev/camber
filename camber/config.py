@@ -333,6 +333,27 @@ class _FacilityCtx:
         """The facility id per-facility stores are keyed by (``None`` outside a workspace)."""
         return self.facility_id if self.workspace else None
 
+    def write_blockers(self) -> list:
+        """Why the facility's workspace state (``state/<fid>/``) may not be written now: it is
+        archived or purged (0.108, #252; a legal hold alone does not block these non-destructive
+        writes; ``[]`` outside a workspace). See
+        :func:`camber.datasets._lifecycle.state_write_blockers`."""
+        if not (self.workspace and self.facility_id):
+            return []
+        from .datasets._lifecycle import state_write_blockers
+        from .portfolio import Portfolio
+
+        return state_write_blockers(Portfolio(self.workspace), self.facility_id)
+
+    def require_writable(self, what: str = "this run") -> None:
+        """Raise :class:`~camber.portfolio.LifecycleError` (nothing written) when
+        :meth:`write_blockers` says the facility's state may not be written."""
+        why = self.write_blockers()
+        if why:
+            from .portfolio import LifecycleError
+
+            raise LifecycleError(f"{what}: " + "; ".join(why) + "; nothing was written")
+
 
 def _facility_context(config: dict, base_dir: str) -> _FacilityCtx:
     """Resolve a config's facility id, portfolio workspace and display label (no data read)."""
@@ -400,6 +421,14 @@ def _state_path(ctx: _FacilityCtx, fname: str):
 def _record_outputs(ctx, paths: dict) -> None:
     """List files a run wrote for its facility in the workspace manifest (no-op outside one)."""
     if ctx is None or not (ctx.workspace and ctx.facility_id):
+        return
+    why = ctx.write_blockers()
+    if why:  # 0.108 (#252): the artifact is written, but the frozen facility state is not
+        warnings.warn(
+            "not recorded in the facility manifest: " + "; ".join(why),
+            UserWarning,
+            stacklevel=3,
+        )
         return
     from ._statefile import save_path
     from .portfolio._state import record_outputs
@@ -2492,7 +2521,17 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     Paths in the config resolve against ``base_dir``. Unknown rule names raise
     ``KeyError`` (fail fast on a typo).
+
+    Inside a portfolio workspace a run with a ``faults`` fold (which writes the facility's
+    state) is refused up front (:class:`~camber.portfolio.LifecycleError`, nothing written) for
+    an archived or purged facility (held or not); such a facility's report outputs are written
+    but not recorded in its manifest (a warning says so) (0.108, #252).
     """
+    if config.get("faults") is not None:
+        with warnings.catch_warnings():  # _prepare repeats the context, with its warnings
+            warnings.simplefilter("ignore")
+            early = _facility_context(config, base_dir)
+        early.require_writable("this config run")
     prep = _prepare(config, base_dir)
     site, resample, mapping, shared = prep.site, prep.resample, prep.mapping, prep.shared
     refs, refs_by_class, min_trust = prep.refs, prep.refs_by_class, prep.min_trust
@@ -2658,7 +2697,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 findings.append(sf)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
         if rep.get("out_text"):
-            with open(_path(base_dir, rep["out_text"]), "w") as fh:
+            with open(_path(base_dir, rep["out_text"]), "w", encoding="utf-8") as fh:
                 fh.write(report.to_text())
             outputs[_path(base_dir, rep["out_text"])] = "report"
         if rep.get("out_html"):
@@ -2672,7 +2711,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             if drift is not None:
                 # the audit body already carries the data-source block; don't repeat it
                 body += "\n" + drift_report_html(drift, standalone=False)
-            with open(_path(base_dir, rep["out_html"]), "w") as fh:
+            with open(_path(base_dir, rep["out_html"]), "w", encoding="utf-8") as fh:
                 fh.write(html_document(body, title=report.display_title()))
             outputs[_path(base_dir, rep["out_html"])] = "report"
     if outputs:
@@ -2811,6 +2850,7 @@ def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -
             "faults.store is required outside a portfolio workspace (inside one it defaults to "
             "state/<facility_id>/faults.json)"
         )
+    ctx.require_writable("folding the run's faults")
     run_id = str(spec.get("run_id") or _dt.datetime.now(_dt.timezone.utc).isoformat("seconds"))
     lock: contextlib.AbstractContextManager = contextlib.nullcontext()
     if ctx.workspace:

@@ -60,8 +60,8 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`boiler_summer_lockout`](#boiler_summer_lockout) | 1 |  |
 | [`chiller_approach_fouling`](#chiller_approach_fouling) | 2 |  |
 | [`chiller_efficiency`](#chiller_efficiency) | 1 |  |
-| [`chiller_staging`](#chiller_staging) | 3 |  |
-| [`chiller_staging_fleet`](#chiller_staging_fleet) | 2 |  |
+| [`chiller_staging`](#chiller_staging) | 5 |  |
+| [`chiller_staging_fleet`](#chiller_staging_fleet) | 4 |  |
 | [`chw_plant_reset`](#chw_plant_reset) | 4 | yes |
 | [`chw_pump_dp_reset`](#chw_pump_dp_reset) | 2 | yes |
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
@@ -219,12 +219,16 @@ How to calibrate:
 | `max_starts_per_day` | `6.0` | per day | 2.0 to 24.0 | CAMBER judgment: a generic cycling limit; the right value depends on the manufacturer's minimum cycle time (the code says to confirm it against the equipment's controls) |
 | `low_load_pct` | `40.0` | % of the chiller's observed peak tons | 10.0 to 70.0 | CAMBER judgment: the 'idling' cut-off for the optional load-factor metric |
 | `max_interval_min` | `15.0` | minutes | 5.0 to 60.0 | CAMBER judgment: the 15-minute grid CAMBER ingests to; a start-to-start cycle shorter than the trend interval is invisible to an off-to-on count |
+| `min_power_kw` | `null` | kW | 1.0 to 500.0 | CAMBER judgment: None reads a chiller as running above run_frac of its own 95th-percentile power; a site input when given |
+| `run_frac` | `0.1` | fraction of the chiller's 95th-percentile power | 0.02 to 0.5 | CAMBER judgment: a tenth of a chiller's working draw sits above its standby load and below its lightest running load (camber.schedules.CHILLER_POWER_RUN_FRAC, the gate chiller_approach_fouling uses) |
 
 How to calibrate:
 
 - `max_starts_per_day`: Take the compressor's minimum start-to-start time (anti-recycle timer) from the chiller controls and allow margin; or use the 95th-percentile daily starts of a known-good cooling season. Coarse trends undercount starts, so the count is a floor. *Note:* Warn at this many starts per day, fault at twice it.
 - `low_load_pct`: Set it near the load below which the chiller's part-load curve (from the manufacturer) turns sharply less efficient, commonly 30-40 % of capacity. *Note:* Needs CHW flow and temperatures. Severity is fixed in code: warn when >= 25 % of running hours sit below this load, fault at >= 50 %. Peak is the observed peak, not nameplate.
 - `max_interval_min`: Keep it at or below the chiller's minimum cycle time (minimum on plus minimum off). Better than raising it: run the rule at the stored interval (resample at or below this) so the count can see the cycles. *Note:* Coarser than this, a count at or above max_starts_per_day stands with a caveat that it is a floor. Below the limit the verdict stands with the caveat (an averaged power trend cannot show the cycles it hid).
+- `min_power_kw`: Set it above the chiller's standby draw (controls, oil heater, crankcase heater: often 5-15 kW) and below its lightest running load, read from a week of power trends with the chiller off and on. Map the run status (compressor_status) instead where it is trended: it replaces the power gate. *Note:* None = size-relative (run_frac x the chiller's 95th-percentile power). Before 0.108 the gate was a fixed 2 kW, which read a stopped chiller's standby draw as running.
+- `run_frac`: Raise it when a chiller's standby draw exceeds a tenth of its 95th-percentile power (a lightly loaded machine with heavy oil heaters); lower it when its lightest running load reads as off. Check against the power trend over a week with known starts. *Note:* Used only when no run status (compressor_status) is mapped and min_power_kw is None. The 95th percentile is over the samples drawing any power, so a lag chiller that sits at 0 kW most of the time still reads its running draw; one that runs under 5 % of the time with a standby draw reads its standby as the percentile, so give it min_power_kw.
 
 ## chiller_staging_fleet
 
@@ -232,11 +236,15 @@ How to calibrate:
 |---|---|---|---|---|
 | `redundancy_ceiling` | `0.9` | fraction of one chiller's capacity | 0.5 to 1.0 | CAMBER judgment: how fully one chiller can be loaded before the next must stage on |
 | `capacity_kw` | `null` | kW (one number, or {equip: kW}) | 10.0 to 5000.0 | CAMBER judgment: None reads each chiller's observed 95th-percentile running power; a site input, not a threshold |
+| `min_power_kw` | `null` | kW | 1.0 to 500.0 | CAMBER judgment: None reads a chiller as running above run_frac of its own 95th-percentile power; a site input when given |
+| `run_frac` | `0.1` | fraction of the chiller's 95th-percentile power | 0.02 to 0.5 | CAMBER judgment: a tenth of a chiller's working draw sits above its standby load and below its lightest running load (camber.schedules.CHILLER_POWER_RUN_FRAC, the gate chiller_approach_fouling uses) |
 
 How to calibrate:
 
 - `redundancy_ceiling`: Use the plant's stage-up load from its staging sequence (e.g. 0.85-0.95 of capacity). Without a declared capacity_kw, capacity is each chiller's 95th-percentile power, so a plant that never reaches full load reads a low capacity; declare capacity_kw, or lower this if the flagged samples look like correct staging. *Note:* Severity is fixed in code: warn when >= 20 % of multi-chiller samples are over-staged, fault at >= 50 %.
 - `capacity_kw`: Enter each chiller's full-load electric power from its nameplate, selection report or start-up log: one number when the chillers are equal, else an {equip: kW} map (a chiller left out of the map keeps its observed figure). 0.106 (#183). *Note:* The observed 95th percentile is only as high as the chiller ever ran, so a plant that never loads a chiller fully (an over-staged one) reads a low capacity and under-states its over-staging; the finding says so (capacity_source) when nothing is declared. Chilled-water loops (CHW_LOOP, SECLOOP) are never in the fleet: their power is the pumps'.
+- `min_power_kw`: Set it above the chiller's standby draw (controls, oil heater, crankcase heater: often 5-15 kW) and below its lightest running load, read from a week of power trends with the chiller off and on. Map the run status (compressor_status) instead where it is trended: it replaces the power gate. *Note:* None = size-relative (run_frac x the chiller's 95th-percentile power). Before 0.108 the gate was a fixed 2 kW, which read a stopped chiller's standby draw as running.
+- `run_frac`: Raise it when a chiller's standby draw exceeds a tenth of its 95th-percentile power (a lightly loaded machine with heavy oil heaters); lower it when its lightest running load reads as off. Check against the power trend over a week with known starts. *Note:* Used only when no run status (compressor_status) is mapped and min_power_kw is None. The 95th percentile is over the samples drawing any power, so a lag chiller that sits at 0 kW most of the time still reads its running draw; one that runs under 5 % of the time with a standby draw reads its standby as the percentile, so give it min_power_kw.
 
 ## chw_plant_reset
 

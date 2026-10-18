@@ -25,7 +25,7 @@ camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|re
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
 camber store migrate-partitions STORE [--apply --yes]   # year= -> year=/month= partitions
 camber store verify|normalize STORE [--facility ID]     # canonical part files (0.104)
-camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder (device)
+camber edge    run|send-once|status|selftest|requeue|compact|decommission  # edge forwarder (device)
 camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing (central)
 ```
 
@@ -531,7 +531,8 @@ camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-
   sha256s, crosswalk version, zone, units) and prints the column coverage. An unchanged package
   is skipped. It holds the store lock while it writes (0.104 for a plain store; see
   [Store and cache locks](#store-and-cache-locks)). Into a workspace it does not wait by
-  default, like every workspace change.
+  default, like every workspace change. A changed or `--force` re-ingest of a facility under a
+  legal hold is refused (0.108), as `datasets ingest` refuses it.
 - **`inspect`** is the same read with nothing written.
 - **`findings`** runs a config (rules, M&V, drift) and writes one JSON document for a separate
   process to read back.
@@ -759,7 +760,9 @@ host. A change takes the workspace lock without waiting. A second concurrent cha
 with `portfolio is locked by <pid>@<host> since <ts>` (exit code 1).
 
 `add` creates a facility as `provisioning` unless `--activate` is given. Its id defaults to one
-derived from the name. Ids are never reused: a removed id is tombstoned.
+derived from the name. Ids are never reused: a removed id is tombstoned. `rename` (0.108) refuses
+a name that is another facility's id, registered name, or current or past display name, live or
+tombstoned, compared exactly and loosely (exit code 1).
 
 `offboard`, `archive`, `restore` and `purge` (0.95) are **dry runs unless `--apply`**: without it
 they print the plan (the footprint, the bundle, every path they would delete) and change nothing;
@@ -768,8 +771,11 @@ facility id (`--confirm ID`, or a prompt when stdin is a terminal). `purge` take
 id. `offboard` writes a verified export bundle to `archive/<fid>/` and starts a 30-day grace
 period; `archive` (after it, or with `--skip-grace`) deletes the hot data and keeps the bundle;
 `restore` brings a facility back, re-verifying every checksum; `purge` leaves only the tombstone
-and the audit record. A legal hold refuses `archive` and `purge`. See
-[PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging).
+and the audit record. A legal hold refuses `archive` and `purge`, and a `restore` from `archived`
+that would delete or change a live file (0.108; a restore also empties the live trees the bundle
+does not list, and its plan lists them under `deletes`). See
+[PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging) and
+[Legal holds on every path](PORTFOLIO.md#legal-holds-on-every-path).
 
 `retention apply` (0.95) enforces the retention policy: it rolls raw month partitions up into
 hourly and daily rollups, verifies the rollups against the raw row count, and only then prunes;
@@ -794,8 +800,11 @@ when a part fails to read or a facility's data is stranded outside its partition
 `--strict`, when a part is not canonical or anything is left over.
 
 `store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
-store: missing, a file, or a directory with no partitions, registry or workspace marker. They
-exit 1 and create nothing. `--facility` must name a facility the store knows.
+store: missing, a file, or a directory of other things (no partitions, registry or workspace
+marker). They exit 1 and create nothing. `--facility` must name a facility the store knows. An
+**empty directory is an empty store** (0.108, #233), as it is for `camber serve`: `store verify`
+reports 0 parts and exits 0, and `normalize` and `migrate-partitions` do nothing and create
+nothing, not even a lock file (dot-files such as `.DS_Store` do not count).
 
 `store normalize` (0.104) rewrites the non-canonical parts in the canonical layout. It is a dry run
 unless `--apply --yes` (and `--reason`, audited as `store.normalize`, inside a workspace), holds
@@ -838,6 +847,8 @@ central side, where uploads land (see
 
 ```
 # on the edge device
+camber edge status <edge.json> [--json] [--limit N]   # pending, stuck and dead-lettered batches
+camber edge requeue <edge.json> [--key K]... [--apply] # queue dead-lettered batches again (0.108)
 camber edge compact <edge.json> [--dry-run] [--lock-timeout S] [--json]   # shrink the spool journal
                                      # (--lock-timeout: wait for a busy spool, default 30 s)
 camber edge decommission <edge.json> [--device ID] [--wait S]  # dry run: what would be flushed
@@ -847,6 +858,7 @@ camber edge decommission <edge.json> --apply (--yes | --confirm FACILITY_ID) --r
 # central, in the portfolio workspace (--workspace, else $CAMBER_PORTFOLIO, else the current dir)
 camber edge reconcile [--landing DIR | --keys LISTING] [--prefix P] [--json]   # read-only
 camber edge reconcile [--landing DIR] --apply --reason R       # quarantine what it flags
+camber edge reconcile --apply --yes --reason R                 # ... and remove row duplicates
 camber edge land <inbox> [--apply --reason R] [--json]        # route uploads: store or quarantine
 camber edge quarantine list [--facility ID] [--json]
 camber edge quarantine release (--facility ID | --key K...) [--apply] --reason R
@@ -861,6 +873,34 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
   OS user and host). `discard` and `decommission` also need `--yes` or the typed facility id
   (`--confirm`). Each takes the portfolio lock (and, on the device, the spool lock).
 - **Legal holds** refuse `quarantine discard` and a forced `decommission`.
+- **Row checks at landing (0.107, #142; 0.108, #228, #230).** `land` quarantines a part whose
+  rows its partition already holds (a `duplicate`, whatever its bytes), replaces a stored part
+  whose rows the new part holds in full (the month in progress, re-sent bigger on every poll, its
+  last hour revised; the partition is swapped in whole, so a reader sees the old part or the new
+  one, never both), and
+  quarantines a `conflict`: a part that overlaps a stored one (the same timestamp, equipment and
+  role) without holding all of its rows. A year-only part from a pre-0.95 forwarder is also
+  compared with the month partitions of its year. Under a legal hold the replaced part is copied
+  into quarantine first. `quarantine release` of a conflict stores it beside the other part.
+  Since 0.108 a part that lacks the oldest rows of a stored part but agrees with it on every
+  shared observation (a rolling window, such as a trend-log ring buffer) is stored as the union
+  of the two (`merges` in the listing), and a disagreement in the overlap is a `conflict`.
+  An upload at a key quarantine already holds with other content stays in the inbox
+  (`quarantine_collision`); one object that fails is listed as an error, the run goes on, and
+  `land --apply` exits 1 (#247).
+- **The spool on the device (0.108, #245).** `edge status` shows the batches that failed
+  delivery (`STUCK`) and those dead-lettered after `dead_letter_after` permanent rejections
+  (`DEAD`, kept in `<spool>/dead/`); `--json` prints them all, `--limit` caps the dead list
+  (default 20). `edge requeue` is a dry run without `--apply`; with it, the dead batches (or
+  those named by `--key`) are queued again with a fresh count, and an unknown `--key` exits 1.
+  `edge selftest` runs on a temporary spool and never touches the configured one (#242).
+- **Row duplicates already in the store (0.108, #229).** A store `reconcile` lists the groups of
+  parts of one facility that hold identical rows under different keys (landed before the row
+  check), with their keys, sizes and landing times. `--apply --yes` (with `--reason`) keeps the
+  oldest copy of each group and deletes the others, under the store lock, audited as
+  `edge.reconcile.dedupe` before anything is deleted. A facility under a legal hold has its extra
+  copies moved to quarantine instead; facilities that do not accept data are left alone. A store
+  reconcile reads every part once to digest it (the digests are cached by `--apply`).
 - **Exit codes:** 0 on success or a dry run; 1 for a refusal (a busy lock, a missing reason or
   confirmation, an unacknowledged spool without `--force`, every selected object refused).
 - `decommission` without a reachable workspace retires the device and tells you to copy the spool's

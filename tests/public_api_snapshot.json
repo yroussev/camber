@@ -325,7 +325,8 @@
     "ChillerFleetStagingResult",
     "ChillerStagingResult",
     "analyze_chiller_staging",
-    "analyze_chiller_staging_fleet"
+    "analyze_chiller_staging_fleet",
+    "chiller_power_running"
   ],
   "camber.chwplant": [
     "CHWPLANT_MEASURES",
@@ -514,6 +515,7 @@
     "rule_days"
   ],
   "camber.edge.config": [
+    "CONFIG_KEYS",
     "EdgeConfig",
     "build_forwarder",
     "load_config"
@@ -541,39 +543,51 @@
     "parse_landed_key",
     "read_key_listing",
     "reconcile",
-    "route_key"
+    "route_key",
+    "row_duplicates"
   ],
   "camber.edge.quarantine": [
     "QUARANTINE_DIR",
+    "QuarantineCollision",
     "RECORD_SUFFIX",
     "discard",
     "land",
     "list_quarantine",
     "quarantine_reconciled",
     "quarantine_root",
-    "release"
+    "release",
+    "remove_row_duplicates"
   ],
   "camber.edge.row_digest": [
     "DIGEST_VERSION",
     "INDEX_NAME",
     "PartitionRows",
+    "PartitionView",
     "file_rows_digest",
+    "merge_parts",
+    "read_rows",
     "rows_digest"
   ],
   "camber.edge.sink": [
     "AzureBlobSink",
     "GcsSink",
+    "PermanentSinkError",
     "PresignedHttpsSink",
     "S3Sink",
+    "SINK_METADATA_KEYS",
     "Sink",
-    "collect_sink"
+    "collect_sink",
+    "is_permanent_error",
+    "is_permanent_status",
+    "sink_metadata"
   ],
   "camber.edge.spool": [
     "CompactResult",
     "DrainResult",
     "Spool",
     "SpoolEntry",
-    "SpoolRetired"
+    "SpoolRetired",
+    "read_retirement"
   ],
   "camber.energy_factors": [
     "Conversion",
@@ -859,6 +873,7 @@
   "camber.ingest.haystack": [
     "HaystackAdapter",
     "client_transport",
+    "haystack_tz",
     "http_json_transport",
     "parse_his_grid",
     "phable_transport"

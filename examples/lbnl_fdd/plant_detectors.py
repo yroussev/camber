@@ -165,7 +165,7 @@ def main(argv=None) -> int:
                 if v["attribution"] in ("heat_metering", "sensor_offset"):
                     print(f"    {fname}: {v['severity']} ({v['attribution']})")
     if args.json:
-        with open(args.json, "w") as fh:
+        with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(out, fh, indent=2, sort_keys=True)
     return 0
 

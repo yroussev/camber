@@ -70,6 +70,14 @@ records; `BacnetSource.read_trend_log()` / `load_points()` shape them into serie
 `read_snapshot()` reads present values. The adapter uses only read services
 (`READ_SERVICES = ReadProperty, ReadPropertyMultiple, ReadRange`).
 
+A trend log is a ring buffer whose position 1 is its **oldest** record. Since 0.108 (#243) the
+bacpypes3 client reads `record-count` first and then the newest `trend_records` records (1000 by
+default; `Bacpypes3Client(trend_records=N)`, `BacnetClientConfig.trend_records`, or
+`read_trend_log(oid, max_records=N)`), so a polling forwarder always sees the latest data. A
+device that does not answer `record-count` is read from position 1, as before, with a warning.
+Each `BacnetPoint` can carry its device's `device_instance` and `address` (0.108, #248): such a
+point is read at its own device, and `BacnetSource` refuses two points with one name.
+
 ### BACnet/SC (Secure Connect) — experimental, certificate-gated
 
 Legacy BACnet/IP is UDP, cleartext, broadcast-based, and unauthenticated. **BACnet/SC**
@@ -114,6 +122,8 @@ from camber.interop.bacnet import mapping_from_bacnet, review_bacnet
 
 devices = discover(my_client)  # read-only enumeration
 points = discovery_to_points(devices)  # Trend-Log objects -> BacnetPoint (feed BacnetSource)
+# each point names its device (instance, address); objects that share a name on different
+# devices are named "<device name>_<object name>" (0.108, #248), with a UserWarning
 rows = discovery_to_inventory(devices)  # a flat per-object inventory
 
 objs = [o for d in devices for o in d.objects]

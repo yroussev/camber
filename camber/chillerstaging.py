@@ -16,6 +16,13 @@ staging *optimization* (how many of N machines to run for a given load) is a
 fleet-level question; this single-equipment rule catches the cycling and idling that
 show up on one machine. Trend resolution bounds the start count -- sub-interval cycles
 are invisible -- so starts-per-day is a floor, reported as such.
+
+**When is a chiller running?** (0.108, #235) A stopped chiller still draws power for its controls,
+oil heater and crankcase heater, often 5-15 kW, so a fixed kW floor reads standby as running. The
+run gate is the chiller's run status or command (``Status``, from ``compressor_status``) when it is
+trended, else its power above a tenth of its own 95th-percentile draw
+(:data:`camber.schedules.CHILLER_POWER_RUN_FRAC`, the gate ``chiller_approach_fouling`` uses), else
+an explicit ``min_power_kw`` when one is given.
 """
 
 from __future__ import annotations
@@ -24,11 +31,14 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
+from .schedules import CHILLER_POWER_RUN_FRAC
+
 __all__ = [
     "ChillerStagingResult",
     "analyze_chiller_staging",
     "ChillerFleetStagingResult",
     "analyze_chiller_staging_fleet",
+    "chiller_power_running",
 ]
 
 
@@ -48,36 +58,80 @@ class ChillerStagingResult:
     # peak (NaN if no load data). Near 0 every run is at one output, so the load factor (read
     # against that same output as its peak) says nothing about part load.
     load_spread_pct: float = float("nan")
+    # 0.108 (#235): how "running" was read -- "status" (the run status / command), "power_p95"
+    # (power above run_frac of its own 95th percentile) or "power_kw" (an explicit min_power_kw)
+    run_source: str = "power_p95"
+    run_threshold_kw: float = float("nan")  # the power gate, kW (NaN on a status gate)
 
     def as_dict(self):
         """Return the result as a plain dict."""
         return asdict(self)
 
 
+def chiller_power_running(
+    power: pd.Series,
+    status: pd.Series | None = None,
+    *,
+    min_power_kw: float | None = None,
+    run_frac: float = CHILLER_POWER_RUN_FRAC,
+) -> tuple[pd.Series, str, float]:
+    """``(running, source, threshold_kw)``: which samples of ``power`` a chiller was running.
+
+    0.108 (#235). The run status / command ``status`` when it has any finite value (more than half
+    on: ``"status"``, threshold NaN); else ``power >= min_power_kw`` when it is given
+    (``"power_kw"``); else power above ``run_frac`` of the chiller's own 95th-percentile draw
+    (``"power_p95"``, the percentile of the samples drawing any power), so a stopped chiller's
+    standby draw does not read as running. A missing status sample reads as not running.
+    """
+    p = pd.to_numeric(power, errors="coerce")
+    if status is not None:
+        st = pd.to_numeric(status, errors="coerce").reindex(p.index)
+        if st.notna().any():
+            return (st > 0.5).fillna(False), "status", float("nan")
+    if min_power_kw is not None:
+        thr = float(min_power_kw)
+        return (p >= thr).fillna(False), "power_kw", thr
+    # the 95th percentile of the samples drawing any power: a lag chiller off more than 95 % of
+    # the time at 0 kW would otherwise read a 0 kW p95 and never run
+    drawing = p[p > 0]
+    p95 = float(drawing.quantile(0.95)) if len(drawing) else float("nan")
+    if not p95 > 0:
+        return pd.Series(False, index=p.index), "power_p95", float("nan")
+    thr = run_frac * p95
+    return (p > thr).fillna(False), "power_p95", thr
+
+
 def analyze_chiller_staging(
     df: pd.DataFrame,
     equip: str,
     *,
-    min_power_kw: float = 2.0,  # power above this == running
+    min_power_kw: float | None = None,  # 0.108 (#235): None = size-relative (run_frac x p95)
     min_load_pct: float = 40.0,  # load factor below this == "low part-load"
+    run_frac: float = CHILLER_POWER_RUN_FRAC,  # 0.108 (#235): share of p95 power == running
 ) -> ChillerStagingResult | None:
     """Compute cycling rate and part-load distribution from metered power (+ optional load).
 
     Expects legacy column ``Power`` (kW); if ``CHWS_Temp``/``CHWR_Temp``/``CHW_Flow``
     are present, load factor (tons vs observed peak) is added. ``min_load_pct`` is the
-    judgment knob; ``min_power_kw`` is the on/off floor.
+    judgment knob. The run gate (0.108, #235) is a ``Status`` column when present, else power
+    above ``min_power_kw`` when given, else above ``run_frac`` of the chiller's own
+    95th-percentile power (:func:`chiller_power_running`); before 0.108 it was a fixed 2 kW.
     """
     if "Power" not in df.columns:
         return None
-    w = df[[c for c in ("Power", "CHWS_Temp", "CHWR_Temp", "CHW_Flow") if c in df.columns]].dropna(
-        subset=["Power"]
-    )
+    cols = ("Power", "Status", "CHWS_Temp", "CHWR_Temp", "CHW_Flow")
+    w = df[[c for c in cols if c in df.columns]].dropna(subset=["Power"])
     if len(w) < 10:
         return None
     span_days = (w.index.max() - w.index.min()).total_seconds() / 86400.0
     span_days = max(span_days, 1.0)
 
-    running = w.Power >= min_power_kw
+    running, run_source, run_thr = chiller_power_running(
+        w.Power,
+        w["Status"] if "Status" in w.columns else None,
+        min_power_kw=min_power_kw,
+        run_frac=run_frac,
+    )
     starts = int((running & ~running.shift(1, fill_value=False)).sum())
 
     load_factor_median = float("nan")
@@ -106,6 +160,8 @@ def analyze_chiller_staging(
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
         load_spread_pct=spread,
+        run_source=run_source,
+        run_threshold_kw=round(run_thr, 2) if run_thr == run_thr else run_thr,
     )
 
 
@@ -131,6 +187,9 @@ class ChillerFleetStagingResult:
     multi_hours: float = 0.0  # n_multi_samples x the sample interval, in hours
     sample_interval_min: float = float("nan")  # the trend's median sample interval, minutes
     capacity_source: str = "observed_p95"  # "declared" | "observed_p95" | "mixed"
+    # 0.108 (#235): how "running" was read across the chillers: "status", "power_p95",
+    # "power_kw" or "mixed" (see chiller_power_running)
+    run_source: str = "power_p95"
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -156,9 +215,10 @@ def _declared_capacity(capacity_kw, equip):
 def analyze_chiller_staging_fleet(
     frames: dict,
     *,
-    min_power_kw: float = 2.0,  # power above this == chiller running
+    min_power_kw: float | None = None,  # 0.108 (#235): None = size-relative (run_frac x p95)
     redundancy_ceiling: float = 0.9,  # a single chiller can carry up to ceiling*capacity
     capacity_kw=None,  # 0.106 (#183): declared per-chiller capacity, kW (number or {equip: kW})
+    run_frac: float = CHILLER_POWER_RUN_FRAC,  # 0.108 (#235): share of p95 power == running
 ) -> ChillerFleetStagingResult | None:
     """Detect over-staging across a set of chillers from their power trends.
 
@@ -174,18 +234,29 @@ def analyze_chiller_staging_fleet(
     a plant that never loads a chiller near full (an over-staged one, by construction) reads a
     low capacity and so under-states its over-staging. The representative capacity is the median
     across the chillers.
+
+    A chiller is running (0.108, #235) by its ``Status`` column when present, else by power above
+    ``min_power_kw`` when given, else above ``run_frac`` of its own 95th-percentile power
+    (:func:`chiller_power_running`); before 0.108 it was a fixed 2 kW, which read standby draw as
+    running.
     """
-    running_cols, load_cols, caps, sources = {}, {}, [], set()
+    running_cols, load_cols, caps, sources, run_sources = {}, {}, [], set(), set()
     for equip, df in frames.items():
         if df is None or "Power" not in df.columns:
             continue
         p = df["Power"].dropna()
         if len(p) < 10:
             continue
-        run = p >= min_power_kw
+        run, rsrc, _ = chiller_power_running(
+            p,
+            df["Status"] if "Status" in df.columns else None,
+            min_power_kw=min_power_kw,
+            run_frac=run_frac,
+        )
         if not bool(run.any()):
             continue
         running_cols[equip] = run
+        run_sources.add(rsrc)
         load_cols[equip] = p.where(run, 0.0)
         declared = _declared_capacity(capacity_kw, equip)
         if declared is not None:
@@ -228,4 +299,5 @@ def analyze_chiller_staging_fleet(
         multi_hours=round(n_multi * step_h, 1),
         sample_interval_min=round(step_min, 2) if step_min == step_min else step_min,
         capacity_source=sources.pop() if len(sources) == 1 else "mixed",
+        run_source=run_sources.pop() if len(run_sources) == 1 else "mixed",
     )

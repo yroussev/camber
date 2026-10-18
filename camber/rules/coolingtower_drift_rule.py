@@ -20,7 +20,10 @@ using chiller tons as the condenser-heat proxy the CW-range detector already use
 its own equipment carries no chilled-water points (0.106, #184), so the load falls back to the
 condenser side: the heat rejected (``cw_flow * range / 24``, tons) when the condenser flow is
 trended, else the tower's range (``cw_return_temp - cw_supply_temp``), which is right only while
-the condenser flow is constant and says so when a finding fires. The reference is
+the condenser flow is constant and says so when a finding fires. The frozen baseline records which
+of the three loads it was fitted on (0.108, #234), and a later run that reads the load another way
+(``cw_flow`` mapped since, or the tower moved from its chiller's points to its own) declines and
+asks for a refreeze rather than reading tons against degF. The reference is
 **frozen**, not rolling (:mod:`camber.store.modelstore`): a refit from the window being judged would
 define away the drift it is meant to catch.
 
@@ -210,7 +213,7 @@ class CoolingTowerApproachDrift:
             )
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats, gate=None):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None, load_source=""):
         """The frozen approach baseline, freezing an initial one from ``base_frame`` if none."""
         return _chillerfit.freeze_baseline(
             self,
@@ -222,6 +225,7 @@ class CoolingTowerApproachDrift:
             metric_range=TOWER_APPROACH_PLAUSIBLE_F,
             gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
             metric_name="tower approach",
+            load_source=load_source,
         )
 
     # ------------------------------------------------------------------ severity
@@ -281,7 +285,24 @@ class CoolingTowerApproachDrift:
             )
         base_t, cur_t = self._prepared(baseline, src_b), self._prepared(current, src_c)
         gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
-        frozen = self._frozen_baseline(equip, base_t, caveats, gate)
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate, load_source=src_b)
+        if frozen is not None:
+            # 0.108 (#234): a baseline fitted on another load is not comparable -- decline
+            why = _chillerfit.load_source_mismatch(frozen, src_b, caveats, kind=_KIND)
+            if why is not None:
+                return Finding(
+                    rule=self.name,
+                    equip=equip,
+                    severity="info",
+                    metrics={
+                        "declined": True,
+                        "reason": "load_source_mismatch",
+                        "tower_approach_load_source": src_b,
+                        "tower_approach_baseline_load_source": frozen.load_source,
+                    },
+                    summary=f"{equip}: declined -- {why}",
+                    caveats=caveats,
+                )
         if frozen is None:
             return Finding(
                 rule=self.name,

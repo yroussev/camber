@@ -151,7 +151,7 @@ def test_policy_from_portfolio_uses_the_portfolio_api(tmp_path):
     doc = json.load(open(p))
     doc["retention"]["overrides"] = {B: {"raw_trends": {"keep_months": 12}}}
     doc["legal_holds"] = {A: {"reason": "litigation"}}
-    json.dump(doc, open(p, "w"))
+    json.dump(doc, open(p, "w", encoding="utf-8"))
     doc_out, facs = policy_from_portfolio(pf)
     assert doc_out["schema"] == "camber.retention/1"
     assert facs == sorted([A, B])

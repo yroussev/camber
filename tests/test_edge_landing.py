@@ -116,7 +116,8 @@ def test_unknown_tombstoned_and_unregistered_with_a_stub_registry():
     gone = facility_status(pf, "gone-1")
     assert gone["status"] == "unknown_facility" and "tombstoned" in gone["detail"]
     assert facility_status(pf, "legacy-1")["status"] == "unregistered"
-    assert route_key(pf, _key("legacy-1")).startswith("facility_id=legacy-1/")
+    assert route_key(pf, _key("legacy-1")).startswith("_inbox/facility_id=legacy-1/")  # 0.108
+    assert route_key(pf, _key("legacy-1"), inbox=False).startswith("facility_id=legacy-1/")
     assert route_key(pf, _key("gone-1")).startswith(QUARANTINE_PREFIX)
     with pytest.raises(ValueError, match="not a landed-object key"):
         route_key(pf, "../../etc/passwd")

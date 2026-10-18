@@ -23,6 +23,7 @@ import pandas as pd
 
 from ..mandv.coverage import ExtrapolationPolicy, assess_coverage
 from ..mandv.stats import avoided_energy_savings
+from ._labels import mpl_text
 
 
 def cumulative_savings(baseline_model, t_report, y_report):
@@ -86,8 +87,10 @@ def savings_chart(
     if res.declined:
         ax.plot(x, cum_base, color="#999999", lw=1.6, ls="--", label="extrapolated — not a saving")
         ax.plot(x, cum_act, color="#111111", lw=1.8, label="actual")
-        ax.set_ylabel(f"Cumulative {ylabel}")  # 0.102 (#116): keep the unit's case
-        ax.set_title(title or "M&V savings declined — severe extrapolation of the baseline")
+        ax.set_ylabel(mpl_text(f"Cumulative {ylabel}"))  # 0.102 (#116): keep the unit's case
+        ax.set_title(
+            mpl_text(title or "M&V savings declined — severe extrapolation of the baseline")
+        )
         ax.legend(loc="best", fontsize=8)
         return ax, res
 
@@ -139,8 +142,8 @@ def savings_chart(
     if cov.get("tier") in ("moderate", "severe") and cov.get("share_points_outside") is not None:
         share = cov["share_points_outside"]
         extra = f"\nextrapolated: {share:.0%} of points outside the baseline range"
-    ax.set_ylabel(f"Cumulative {ylabel}")  # 0.102 (#116): keep the unit's case
-    ax.set_title(title or f"M&V savings — {tot}{unc} ({pct} of baseline{fit}){extra}")
+    ax.set_ylabel(mpl_text(f"Cumulative {ylabel}"))  # 0.102 (#116): keep the unit's case
+    ax.set_title(mpl_text(title or f"M&V savings — {tot}{unc} ({pct} of baseline{fit}){extra}"))
     ax.legend(loc="best", fontsize=8)
     return ax, res
 

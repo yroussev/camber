@@ -89,7 +89,7 @@ def test_equipment_is_cached_and_carries_the_ingest_class(tmp_path):
     assert st.equipment(facility_id=FID) == eq
     assert st.equipment(facility_id="nope") == {}
     # a catalog written before the equipment cache existed is rebuilt once
-    json.dump({"points": []}, open(os.path.join(st.root, "_catalog.json"), "w"))
+    json.dump({"points": []}, open(os.path.join(st.root, "_catalog.json"), "w", encoding="utf-8"))
     assert st.equipment() == eq
     assert ParquetStore(str(tmp_path / "missing")).equipment() == {}
 
@@ -404,7 +404,7 @@ def test_cli_drift_report_and_report_carry_the_licence(tmp_path):
     root = str(tmp_path)
     _, store_cfg = _drift_sites(root)
     path = os.path.join(root, "cfg.json")
-    json.dump(store_cfg, open(path, "w"))
+    json.dump(store_cfg, open(path, "w", encoding="utf-8"))
     _freeze_and_run(load_config(path), root)
     out = os.path.join(root, "drift.html")
     assert main(["drift", "report", path, "--out", out]) == 0

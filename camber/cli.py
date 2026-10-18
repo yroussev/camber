@@ -23,7 +23,7 @@ Subcommands:
     camber retention show|set|override|hold|release|apply             # retention policy (0.95)
     camber store migrate-partitions STORE [--apply --yes]             # year= -> year=/month=
     camber store verify|normalize STORE [--facility ID]               # canonical parts (0.104)
-    camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
+    camber edge    run|send-once|status|selftest|requeue|compact|decommission    # edge forwarder
     camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
@@ -101,7 +101,12 @@ def _cmd_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         path = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(path, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(path, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {path}")
         _record(res, {path: "report"})
     if res.faults is not None:
@@ -161,7 +166,7 @@ def _cmd_report(args) -> int:
         html = _plugin_report(layout, res)
         if html is None:
             return 2
-    with open(args.out, "w") as fh:
+    with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(html)
     print(f"wrote {args.out}  ({len(res.findings)} findings, layout {layout})")
     _record(res, {args.out: "report"})
@@ -242,7 +247,7 @@ def _report_rcx(args, cfg, base) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 2
     else:
-        with open(args.out, "w") as fh:
+        with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(rep.to_html())
     k = rep.kpis
     dollars = f"${k['annual_cost_usd']:,.0f}/yr costed" if k["n_costed"] else "no costed issues"
@@ -264,12 +269,12 @@ def _report_rcx(args, cfg, base) -> int:
         from .report.rcx import prose_prompts
 
         prompts = prose_prompts(rep)
-        with open(args.prose_prompts, "w") as fh:
+        with open(args.prose_prompts, "w", encoding="utf-8") as fh:
             json.dump(prompts, fh, indent=2)
         print(f"wrote {args.prose_prompts}  ({len(prompts)} prose slots)")
         written[args.prose_prompts] = "report"
     if args.notes_template:
-        with open(args.notes_template, "w") as fh:
+        with open(args.notes_template, "w", encoding="utf-8") as fh:
             json.dump(notes_template(rep), fh, indent=2)
         print(f"wrote {args.notes_template}  ({len(rep.slots())} note slots)")
         written[args.notes_template] = "report"
@@ -283,10 +288,10 @@ def _cmd_validate(args) -> int:
     dossier = build_dossier(full=args.full)
     print(dossier.to_text())
     if args.json:
-        json.dump(dossier.as_dict(), open(args.json, "w"), indent=2)
+        json.dump(dossier.as_dict(), open(args.json, "w", encoding="utf-8"), indent=2)
         print(f"wrote {args.json}")
     if args.html:
-        open(args.html, "w").write(dossier.to_html())
+        open(args.html, "w", encoding="utf-8").write(dossier.to_html())
         print(f"wrote {args.html}")
     return 0
 
@@ -385,7 +390,7 @@ def _cmd_fleet(args) -> int:
     fr = build_fleet_report(buildings, units=units)
     print(fr.to_text())
     if args.out:
-        open(args.out, "w").write(fr.to_html())
+        open(args.out, "w", encoding="utf-8").write(fr.to_html_document())
         print(f"\nwrote {args.out}")
     if args.ask:
         from .agent import ask, build_context
@@ -446,7 +451,7 @@ def _cmd_charts(args) -> int:
             f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F), n={m.n_considered}"
         )
 
-    with open(os.path.join(args.out, "hec_summary.json"), "w") as f:
+    with open(os.path.join(args.out, "hec_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(f"Wrote {len(ids) * 2} charts + hec_summary.json to {args.out}/")
     return 0
@@ -533,15 +538,82 @@ def _cmd_edge_status(args) -> int:
     from .edge.spool import Spool
 
     cfg = load_config(args.config)
-    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes)
+    spool = Spool(
+        cfg.spool_dir, max_bytes=cfg.spool_max_bytes, dead_letter_after=cfg.dead_letter_after
+    )
     count, nbytes = spool.depth()
+    stuck = spool.stuck()  # 0.108 (#245): batches that failed delivery, and dead letters
+    dead = spool.dead_letters()
+    retired = spool.retirement()
+    if getattr(args, "json", False):
+        import dataclasses
+
+        print(
+            json.dumps(
+                {
+                    "spool_dir": cfg.spool_dir,
+                    "pending": count,
+                    "bytes": nbytes,
+                    "stuck": [dataclasses.asdict(e) for e in stuck],
+                    "dead": dead,
+                    "retired": retired,
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return 0
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
-    retired = spool.retirement()  # 0.95 (#18): shown only for a decommissioned device
-    if retired is not None:
+    if stuck:
+        head = stuck[0]
+        print(
+            f"  STUCK: {len(stuck)} batch(es) failed delivery; the oldest, {head.key}, queued "
+            f"{head.enqueued_ts}, after {head.attempts} attempt(s)"
+            + (f" ({head.rejects} rejected)" if head.rejects else "")
+            + (f": {head.last_error}" if head.last_error else "")
+        )
+    if dead:
+        print(
+            f"  DEAD: {len(dead)} batch(es) rejected permanently and kept in "
+            f"{os.path.join(cfg.spool_dir, 'dead')}; fix the cause, then `camber edge requeue`"
+        )
+        for rec in dead[: args.limit]:
+            print(f"    {rec.get('key')}  ({rec.get('dead_at', '?')}: {rec.get('error', '')})")
+    if retired is not None:  # 0.95 (#18): shown only for a decommissioned device
         print(
             f"  RETIRED at {retired.get('retired_at', '?')} (device "
             f"{retired.get('device_id', '?')}); `edge run` / `send-once` refuse this spool"
         )
+    return 0
+
+
+def _cmd_edge_requeue(args) -> int:
+    """0.108 (#245): send dead-lettered batches again, once the cause of the rejection is fixed."""
+    from .edge.config import load_config
+    from .edge.spool import Spool, SpoolRetired
+
+    cfg = load_config(args.config)
+    spool = Spool(
+        cfg.spool_dir, max_bytes=cfg.spool_max_bytes, dead_letter_after=cfg.dead_letter_after
+    )
+    dead = spool.dead_letters()
+    chosen = [r for r in dead if not args.key or r.get("key") in set(args.key)]
+    if args.key:
+        missing = sorted(set(args.key) - {r.get("key") for r in dead})
+        if missing:
+            print(f"error: not dead-lettered: {', '.join(missing)}", file=sys.stderr)
+            return 1
+    if not args.apply:
+        print(f"edge requeue (dry run; --apply to queue them): {len(chosen)} dead batch(es)")
+        for rec in chosen:
+            print(f"  {rec.get('key')}  ({rec.get('error', '')})")
+        return 0
+    try:
+        done = spool.requeue_dead(keys=args.key or None)
+    except SpoolRetired as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"edge requeue: {len(done)} batch(es) queued again; the next poll sends them")
     return 0
 
 
@@ -584,18 +656,41 @@ def _cmd_edge_compact(args) -> int:
 
 
 def _cmd_edge_selftest(args) -> int:
-    """Dry-run through an in-memory sink: prove read-only + build the batches without any egress."""
+    """Dry-run through an in-memory sink: prove read-only + build the batches without any egress.
+
+    0.108 (#242): it runs on a temporary spool, so the configured spool (a backlog waiting for the
+    link to return) is never drained, acked or written; a retired spool is refused."""
+    import dataclasses
+    import shutil
+    import tempfile
+
     from .edge.config import build_forwarder, load_config
     from .edge.sink import collect_sink
+    from .edge.spool import read_retirement
 
     cfg = load_config(args.config)
+    retired = read_retirement(cfg.spool_dir)
+    if retired is not None:
+        print(
+            f"error: this edge device was decommissioned at {retired.get('retired_at', '?')} "
+            f"(spool {cfg.spool_dir}); it no longer forwards, so there is nothing to test",
+            file=sys.stderr,
+        )
+        return 1
     sink, log = collect_sink()
-    fwd = build_forwarder(cfg, sink=sink)
-    res = fwd.poll_once()
+    scratch = tempfile.mkdtemp(prefix="camber-edge-selftest-")
+    try:
+        fwd = build_forwarder(dataclasses.replace(cfg, spool_dir=scratch), sink=sink)
+        res = fwd.poll_once()
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
     print(f"edge selftest: would send {len(log)} object(s); rows={res.rows}")
     for obj in log:
         print(f"  {obj['key']} ({len(obj['data'])} bytes)")
-    print("no real sink touched; no BAS write path exists (see docs/EDGE-DEPLOY.md).")
+    print(
+        "no real sink touched, and the configured spool was not read or changed (a temporary "
+        "spool was used); no BAS write path exists (see docs/EDGE-DEPLOY.md)."
+    )
     return 0
 
 
@@ -1982,6 +2077,13 @@ def _print_reconcile(rep: dict, limit: int) -> None:
         print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
     if len(rows) > limit:
         print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+    # 0.108 (#229): parts of one facility holding identical rows under different keys
+    for g in rep.get("row_duplicates", [])[:limit]:
+        act = f"-> {g['action']} {len(g['extra'])}" if g["action"] else f"left alone: {g['detail']}"
+        print(f"  row duplicates {g['facility_id']} ({g['rows']} rows) {act}")
+        for p in g["parts"]:
+            mark = "keep  " if p["key"] == g["keep"] else "extra "
+            print(f"    {mark}{p['key']}  {p['bytes']} bytes, {p['landed_at']}")
 
 
 @_pf_errors
@@ -1989,8 +2091,15 @@ def _cmd_edge_reconcile(args) -> int:
     from .edge.landing import reconcile
 
     pf = _portfolio(args)
+    if args.yes and not args.apply:
+        raise ValueError("--yes confirms --apply; pass both to remove row-duplicate parts")
+    if args.yes and (args.keys or args.landing):
+        raise ValueError(
+            "--yes removes row-duplicate parts from the workspace store; drop --keys / --landing"
+        )
+    dedupe = None
     if args.apply:
-        from .edge.quarantine import quarantine_reconciled
+        from .edge.quarantine import quarantine_reconciled, remove_row_duplicates
 
         if args.keys:
             raise ValueError(
@@ -1998,6 +2107,11 @@ def _cmd_edge_reconcile(args) -> int:
                 "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
             )
         rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+        if args.yes:
+            dedupe = remove_row_duplicates(pf, reason=args.reason, apply=True, yes=True)
+            rep["row_duplicates"] = dedupe["groups"]
+            rep["duplicate_copies"] = dedupe["copies"]
+            rep["duplicates_removed"] = dedupe["copies"]
     else:
         rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
     if args.json:
@@ -2006,9 +2120,22 @@ def _cmd_edge_reconcile(args) -> int:
     _print_reconcile(rep, args.limit)
     if args.apply:
         print(f"  quarantined {rep['quarantined']} object(s) (audited)")
-    elif rep["to_quarantine"]:
-        hint = "" if args.keys else " (--apply --reason R to move them)"
-        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if dedupe is not None:
+            print(
+                f"  removed {dedupe['copies']} row-duplicate copy(ies), {dedupe['bytes']} bytes "
+                "(audited; a facility under a legal hold keeps them in quarantine)"
+            )
+        elif rep.get("duplicate_copies"):
+            print(f"  {rep['duplicate_copies']} row-duplicate copy(ies) kept (add --yes)")
+    else:
+        if rep["to_quarantine"]:
+            hint = "" if args.keys else " (--apply --reason R to move them)"
+            print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+        if rep.get("duplicate_copies"):
+            print(
+                f"  {rep['duplicate_copies']} row-duplicate copy(ies) beside the oldest "
+                "(--apply --yes --reason R to remove them)"
+            )
     return 0
 
 
@@ -2029,7 +2156,19 @@ def _cmd_edge_land(args) -> int:
     for r in rep["objects"][: args.limit]:
         if r["to"] != "store":
             print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
-    return 0
+        elif r.get("merged"):  # 0.108: a rolling window, stored as the union
+            m = r["merged"]
+            print(
+                f"  {'store':10s} {'merges':16s} {r['key']}  (with {', '.join(r['replaces'])}, "
+                f"as {m['stored_as'].rsplit('/', 1)[-1]}: {m['kept_old_rows']} stored row(s) "
+                f"kept, {m['new_rows']} new, {m['revised']} revised)"
+            )
+        elif r.get("replaces"):
+            print(f"  {'store':10s} {'replaces':16s} {r['key']}  ({', '.join(r['replaces'])})")
+    errors = rep.get("errors") or []
+    for e in errors:  # 0.108 (#247): one bad object is reported, the run went on
+        print(f"  error      {e['key']}: {e['error']}", file=sys.stderr)
+    return 1 if errors and rep["applied"] else 0
 
 
 @_pf_errors
@@ -2237,6 +2376,8 @@ def _state_lock(ctx, *, write: bool = True):
 
     if not ctx.workspace or not write:
         return contextlib.nullcontext()
+    # 0.108 (#252): no baseline write for an archived or purged facility
+    ctx.require_writable("this baseline write")
     from .portfolio._lock import portfolio_lock
 
     return portfolio_lock(ctx.workspace, timeout=0.0)
@@ -2306,9 +2447,14 @@ def _cmd_drift_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         dpath = os.path.join(args.out, "drift.json")
-        json.dump(res.as_dict(), open(dpath, "w"), indent=2, default=str)
+        json.dump(res.as_dict(), open(dpath, "w", encoding="utf-8"), indent=2, default=str)
         fpath = os.path.join(args.out, "findings.json")
-        json.dump([f.as_dict() for f in res.findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in res.findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {dpath}\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2330,7 +2476,7 @@ def _cmd_drift_report(args) -> int:
     html = drift_report_html(
         res, charts=bool(args.charts), data_sources=data_sources(cfg, base_dir=base)
     )
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     from .config import _record_outputs
 
     _record_outputs(_drift_ctx(cfg, base), {args.out: "report"})
@@ -2426,7 +2572,12 @@ def _cmd_drift_list(args) -> int:
             f"{who}{sup}{hist}  {r.reason}"
         )
     if args.json:
-        json.dump([r.as_dict() for r in recs], open(args.json, "w"), indent=2, default=str)
+        json.dump(
+            [r.as_dict() for r in recs],
+            open(args.json, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"wrote {args.json}")
     return 0
 
@@ -2709,7 +2860,12 @@ def _cmd_mv_run(args) -> int:
     if args.out:
         os.makedirs(args.out, exist_ok=True)
         fpath = os.path.join(args.out, "mv_findings.json")
-        json.dump([f.as_dict() for f in findings], open(fpath, "w"), indent=2, default=str)
+        json.dump(
+            [f.as_dict() for f in findings],
+            open(fpath, "w", encoding="utf-8"),
+            indent=2,
+            default=str,
+        )
         print(f"\nwrote {fpath}")
         from .config import _record_outputs
 
@@ -2744,7 +2900,7 @@ def _cmd_mv_list(args) -> int:
                 f"by={row['accepted_by'] or '-'}{trig}{adj}  {row['reason']}{ok}"
             )
     if args.json:
-        json.dump(rows, open(args.json, "w"), indent=2, default=str)
+        json.dump(rows, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2793,7 +2949,7 @@ def _cmd_mv_propose(args) -> int:
             print(f"  SEP method proposal: {mp['error']}")
     print("\nnothing written: `camber mv rebaseline` / `camber mv adjust` apply a decision")
     if args.json:
-        json.dump(doc, open(args.json, "w"), indent=2, default=str)
+        json.dump(doc, open(args.json, "w", encoding="utf-8"), indent=2, default=str)
         print(f"wrote {args.json}")
     return 0
 
@@ -2809,12 +2965,12 @@ def _cmd_mv_report(args) -> int:
     if _mv_suspended(rep["skipped_state"] or "", ctx):
         return 0
     html = mv_report_html(rep, charts=not args.no_charts)
-    open(args.out, "w").write(html)
+    open(args.out, "w", encoding="utf-8").write(html)
     outs = {args.out: "report"}
     if args.json:
         json.dump(
             {**rep, "meters": [m.as_dict() for m in rep["meters"]]},
-            open(args.json, "w"),
+            open(args.json, "w", encoding="utf-8"),
             indent=2,
             default=str,
         )
@@ -3164,9 +3320,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     es.add_argument("config")
     es.set_defaults(func=_cmd_edge_send_once)
-    est = edsub.add_parser("status", help="show the local spool depth (pending batches / bytes)")
+    est = edsub.add_parser(
+        "status", help="show the local spool: pending, stuck and dead-lettered batches"
+    )
     est.add_argument("config")
+    est.add_argument("--json", action="store_true")
+    est.add_argument("--limit", type=int, default=20, help="dead batches to list (default 20)")
     est.set_defaults(func=_cmd_edge_status)
+    erq = edsub.add_parser(
+        "requeue", help="queue dead-lettered batches again once the rejection is fixed"
+    )
+    erq.add_argument("config")
+    erq.add_argument("--key", action="append", help="only this dead batch's key (repeatable)")
+    erq.add_argument("--apply", action="store_true", help="queue them (default: a dry run)")
+    erq.set_defaults(func=_cmd_edge_requeue)
     esf = edsub.add_parser(
         "selftest", help="dry-run through an in-memory sink (no egress; proves the read-only path)"
     )
@@ -3197,6 +3364,11 @@ def _build_parser() -> argparse.ArgumentParser:
     erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
     erc.add_argument(
         "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument(
+        "--yes",
+        action="store_true",
+        help="with --apply: also remove row-duplicate parts, keeping the oldest copy",
     )
     erc.add_argument("--reason", help="why (audited; required with --apply)")
     erc.add_argument("--json", action="store_true")

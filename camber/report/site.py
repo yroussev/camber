@@ -20,10 +20,10 @@ from .audit import data_sources_html
 from .chiller import chiller_diagnosis_table
 from .condenser import condenser_diagnosis_table
 from .dashboard import (
-    _SECTION_TITLES,
     _STYLE,
     _findings_table,
     _rules_map,
+    _section_block,
     _section_image,
     render_evidence_blocks,
 )
@@ -133,10 +133,7 @@ def build_site_report(
         img = _section_image(
             letter, df, spans=None, carpet_col=None, multitrend_cols=None, normalize=normalize
         )
-        parts.append(
-            f"<h2>{letter}. {_SECTION_TITLES.get(letter, letter)}</h2>"
-            f"<img src='{img}' alt='{_SECTION_TITLES.get(letter, letter)}'>"
-        )
+        parts.append(_section_block(letter, img))
 
     if findings:
         key = "annual_cost_usd" if rank_by == "cost" else None

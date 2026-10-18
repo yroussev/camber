@@ -280,7 +280,10 @@ camber interop openfdd ingest PKG --timezone America/Chicago --units ip \
   facility in any other state (suspended, offboarding, ...) is refused.
 - **Store.** A new facility is registered `active`, as a store write always has been.
 - **Replace semantics.** Data is staged and swapped in, so it replaces the facility's trends.
-  Ingest a newer export of the same building to update it.
+  Ingest a newer export of the same building to update it. In a workspace, a facility under a
+  legal hold that already has data is refused (`LifecycleError`, nothing written), with the same
+  check `camber datasets ingest` uses (0.108). A changed export or `--force` would delete the rows
+  the hold keeps. An unchanged re-ingest is still skipped.
 - **Idempotent.** An unchanged ingest is skipped; `--force` redoes it. "Unchanged" means the
   same files, crosswalk, time zone, units, resample and column decisions.
 - **Resample.** The default `--resample 15min` takes the mean, so a status point becomes its duty

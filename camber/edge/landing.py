@@ -30,7 +30,15 @@ Each object falls in one category:
     into month partitions (see ``ParquetStore.migrated_files``): an older forwarder re-sent it.
     Storing it again would count its rows twice, so it is quarantined (then discarded).
     ``camber edge land`` also calls an object a ``duplicate`` when a part of its store partition
-    already holds the same rows in different bytes (0.107, #142; :mod:`camber.edge.row_digest`).
+    already holds the same rows in different bytes (0.107, #142; :mod:`camber.edge.row_digest`),
+    when every row it holds is already stored (0.108, #228), and, for a year-only object, when the
+    month partitions of its year already hold every row of it (0.108, #230).
+
+``camber edge land`` also replaces a stored part whose rows a new object holds in full (a month
+that grew since its last send, 0.108, #228) and quarantines a ``conflict``: an object that
+overlaps a stored part without holding all of its rows. A store reconciliation also reports
+``row_duplicates`` (0.108, #229): stored parts of one facility that hold identical rows under
+different keys, with the copy to keep.
 
 Lifecycle state is read **only** through the :mod:`camber.portfolio` API (``Portfolio.facilities``
 and the registry's tombstones). A purged facility is tombstoned, not a registry state, so its
@@ -64,6 +72,7 @@ __all__ = [
     "route_key",
     "read_key_listing",
     "reconcile",
+    "row_duplicates",
 ]
 
 # States whose uploads land in the store; every other state (known or not) is quarantined.
@@ -74,8 +83,9 @@ NON_ACCEPTING_STATES = ("suspended", "offboarding", "archived", "purged")
 # The bucket-side quarantine prefix a presigned-URL broker routes non-accepted uploads to. A
 # leading underscore keeps Hive / pyarrow dataset discovery from ever reading it as data.
 QUARANTINE_PREFIX = "_quarantine/"
-# The bucket-side staging prefix a broker signs accepted uploads into with route_key(inbox=True)
-# (0.107, #142); `camber edge land` moves them into the store after its checks.
+# The bucket-side staging prefix a broker signs accepted uploads into with route_key() -- the
+# default since 0.108 (#233; opt-in with inbox=True in 0.107, #142); `camber edge land` moves them
+# into the store after its checks.
 INBOX_PREFIX = "_inbox/"
 CATEGORIES = (
     "ok",
@@ -242,18 +252,20 @@ def facility_status(portfolio, facility_id: str) -> dict:
     return _Registry(portfolio).status(facility_id)
 
 
-def route_key(portfolio, key: str, *, inbox: bool = False) -> str:
-    """Where an upload for ``key`` should land: ``key`` itself, ``_inbox/<key>`` or
-    ``_quarantine/<key>``.
+def route_key(portfolio, key: str, *, inbox: bool = True) -> str:
+    """Where an upload for ``key`` should land: ``_inbox/<key>``, ``_quarantine/<key>`` or (with
+    ``inbox=False``) ``key`` itself.
 
     For a presigned-URL broker: sign the returned key, so a facility that does not accept data
     (or an unknown one) can never write into the store's layout. An unparseable key raises
     ``ValueError`` -- a broker should refuse it outright.
 
-    ``inbox=True`` (0.107, #142) signs an accepted upload into the bucket's ``_inbox/`` prefix
-    instead of the store's layout, so nothing reaches the store until ``camber edge land
-    <bucket>/_inbox`` has checked it -- including the row digest that recognises a month re-sent
-    in different bytes. The leading underscore keeps readers from seeing staged objects.
+    An accepted upload is signed into the bucket's ``_inbox/`` prefix, so nothing reaches the
+    store until ``camber edge land <bucket>/_inbox`` has checked it -- including the row checks
+    that recognise a month re-sent in different bytes or grown since its last send. This is the
+    default since 0.108 (#233; ``inbox=True`` was opt-in in 0.107, #142): run a landing before
+    you upgrade the brokers (docs/EDGE-DEPLOY.md). ``inbox=False`` keeps the old straight-to-store
+    layout. The leading underscore keeps readers from seeing staged objects.
     """
     lk, why = parse_landed_key(key)
     if lk is None:
@@ -426,14 +438,114 @@ def _classify(reg: _Registry, key: str, mtime, *, source: str, base=None, store_
     return row
 
 
+def _partition_dirs(store_root: str):
+    """``(facility_id, directory)`` of every ``year=`` and ``year=/month=`` directory of a store."""
+    if not os.path.isdir(store_root):
+        return
+    for fd in sorted(os.listdir(store_root)):
+        fpath = os.path.join(store_root, fd)
+        if not fd.startswith("facility_id=") or not os.path.isdir(fpath):
+            continue
+        fid = fd[len("facility_id=") :]
+        for yd in sorted(os.listdir(fpath)):
+            ypath = os.path.join(fpath, yd)
+            if not re.fullmatch(r"year=\d{4}", yd) or not os.path.isdir(ypath):
+                continue
+            yield fid, ypath
+            for md in sorted(os.listdir(ypath)):
+                mpath = os.path.join(ypath, md)
+                if re.fullmatch(r"month=\d{1,2}", md) and os.path.isdir(mpath):
+                    yield fid, mpath
+
+
+def _dedupe_gate(reg: _Registry, holds, fid: str):
+    """``(action, why)`` for the extra copies of a facility's row duplicates: ``remove``,
+    ``quarantine`` (a legal hold: the bytes are kept) or ``None`` with the reason it is left."""
+    st = reg.status(fid)
+    if st["status"] == "unknown_facility":
+        return None, "store data of a retired id is the lifecycle cascade's to remove"
+    if st["status"] == "inactive":
+        return None, f"{st['detail']}; only facilities that accept data are de-duplicated"
+    if fid in holds:
+        return "quarantine", "under a legal hold: the extra copies are moved to quarantine, kept"
+    return "remove", ""
+
+
+def row_duplicates(portfolio, *, save: bool = False) -> list:
+    """Groups of parts in the workspace store that hold identical rows under different keys.
+
+    Provisional (0.108, #229). Parts are compared by their row digest
+    (:mod:`camber.edge.row_digest`; cached in each partition's ``_edge_rows.json``, digested when
+    missing), within one facility. Each group is ``{"facility_id", "state", "rows_sha256",
+    "rows", "parts": [{"key", "bytes", "landed_at"}], "keep", "extra", "bytes_extra", "action",
+    "detail"}``, oldest part first: ``keep`` is the oldest copy (by modification time, then key)
+    and ``extra`` the others. ``action`` is ``remove``, ``quarantine`` (a facility under a legal
+    hold: the copies are moved out of the store but kept) or ``None`` (left alone, ``detail``
+    says why). Read-only unless ``save`` (which writes the digest caches it filled).
+    """
+    from .row_digest import PartitionRows
+
+    root = portfolio.store_root
+    reg = _Registry(portfolio)
+    holds = portfolio.legal_holds()
+    groups: dict = {}
+    for fid, d in _partition_dirs(root):
+        idx = PartitionRows(d)
+        for n in idx.names():
+            e = idx.entry(n)
+            if not e or not e.get("rows_sha256"):
+                continue
+            path = os.path.join(d, n)
+            key = os.path.relpath(path, root).replace(os.sep, "/")
+            mtime = _dt.datetime.fromtimestamp(e["mtime_ns"] / 1e9, tz=_dt.timezone.utc)
+            groups.setdefault((fid, e["rows_sha256"]), []).append(
+                {
+                    "key": key,
+                    "bytes": e.get("bytes"),
+                    "landed_at": mtime.isoformat(),
+                    "rows": e.get("rows"),
+                    "_order": (e["mtime_ns"], key),
+                }
+            )
+        if save:
+            idx.save()
+    out = []
+    for (fid, digest), parts in sorted(groups.items()):
+        if len(parts) < 2:
+            continue
+        parts.sort(key=lambda p: p["_order"])
+        for p in parts:
+            del p["_order"]
+        action, why = _dedupe_gate(reg, holds, fid)
+        st = reg.status(fid)
+        out.append(
+            {
+                "facility_id": fid,
+                "state": st["state"],
+                "rows_sha256": digest,
+                "rows": parts[0].pop("rows"),
+                "parts": [{k: v for k, v in p.items() if k != "rows"} for p in parts],
+                "keep": parts[0]["key"],
+                "extra": [p["key"] for p in parts[1:]],
+                "bytes_extra": sum(int(p.get("bytes") or 0) for p in parts[1:]),
+                "action": action,
+                "detail": why,
+            }
+        )
+    return out
+
+
 def reconcile(portfolio, *, landing=None, keys=None, prefix: str = "") -> dict:
     """Classify landed objects against the registry; read-only (provisional, 0.95).
 
     Sources (at most one of ``landing`` / ``keys``): the workspace store (default), a local
     landing directory, or a key-listing file (see :func:`read_key_listing`). Returns a JSON-ready
     report: ``source``, ``counts`` by category, ``objects`` (every row that is not ``ok``, with the
-    suggested ``action``), and per-facility counts. Nothing is moved -- see
-    :func:`camber.edge.quarantine.quarantine_findings` for the audited ``--apply``.
+    suggested ``action``), and per-facility counts. For the workspace store it also carries
+    ``row_duplicates`` (0.108, #229; see :func:`row_duplicates`) and ``duplicate_copies``, the
+    number of extra copies it would remove or quarantine (both empty for other sources). Nothing
+    is moved -- see :func:`camber.edge.quarantine.quarantine_reconciled` and
+    :func:`camber.edge.quarantine.remove_row_duplicates` for the audited ``--apply``.
     """
     if landing is not None and keys is not None:
         raise ValueError("give at most one of landing= and keys=")
@@ -475,6 +587,7 @@ def reconcile(portfolio, *, landing=None, keys=None, prefix: str = "") -> dict:
             fc[row["category"]] = fc.get(row["category"], 0) + 1
         if row["category"] != "ok":
             rows.append(row)
+    dups = row_duplicates(portfolio) if kind == "store" else []
     return {
         "source": source,
         "objects_scanned": sum(counts.values()),
@@ -483,5 +596,7 @@ def reconcile(portfolio, *, landing=None, keys=None, prefix: str = "") -> dict:
         "to_quarantine": sum(1 for r in rows if r["action"] == "quarantine"),
         "objects": rows,
         "facilities": dict(sorted(per_fac.items())),
+        "row_duplicates": dups,
+        "duplicate_copies": sum(len(g["extra"]) for g in dups if g["action"]),
         "read_only": True,
     }

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ._labels import mpl_text
+
 __all__ = ["hourly_groups", "box_by_hour"]
 
 
@@ -75,7 +77,7 @@ def box_by_hour(
     ax.set_xticks(range(0, 24, 2))
     ax.set_xticklabels([str(h) for h in range(0, 24, 2)])
     ax.set_xlabel("Hour of day")
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(mpl_text(ylabel))
     n = sum(len(v) for v in groups.values())
-    ax.set_title(title or f"Box by hour — {n} samples")
+    ax.set_title(mpl_text(title or f"Box by hour — {n} samples"))
     return ax

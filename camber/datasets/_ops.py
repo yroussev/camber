@@ -436,7 +436,7 @@ def remove_dataset(
             from ..portfolio import LifecycleError
 
             raise LifecycleError("; ".join(why) + "; nothing was removed")
-        res = _remove_files(entry, data_dir, st)
+        res = _remove_files(entry, data_dir, st, reason=reason)
         if pf is not None and audit_as:
             _lifecycle.audit_remove(
                 pf, audit_as, reason=str(reason), dataset_id=entry.id, res=res, purge_store=True
@@ -444,9 +444,9 @@ def remove_dataset(
         return res
 
 
-def _remove_files(entry: DatasetEntry, data_dir, st) -> dict:
+def _remove_files(entry: DatasetEntry, data_dir, st, *, reason=None) -> dict:
     """The deleting part of :func:`remove_dataset` (the caller holds the store lock when ``st``
-    is given)."""
+    is given, and has checked the lifecycle: the purge is audited by the caller)."""
     root = _paths.data_dir(data_dir)
     ddir = _paths.dataset_dir(root, entry.id)
     freed = 0
@@ -463,7 +463,7 @@ def _remove_files(entry: DatasetEntry, data_dir, st) -> dict:
     if st is not None:
         for fid, m in sorted(st.facilities_meta().items()):
             if dataset_meta(m).get("dataset_id") == entry.id:
-                st.drop_facility(fid, forget=True)
+                st._drop_facility(fid, True, reason=reason or f"datasets remove {entry.id}")
                 dropped.append(fid)
     return {"dataset_id": entry.id, "freed_bytes": freed, "facilities_dropped": dropped}
 

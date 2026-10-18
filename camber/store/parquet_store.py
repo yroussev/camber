@@ -838,23 +838,50 @@ class ParquetStore:
                 total += dest.write_long(sub.drop(columns=[_FACILITY]), facility_id=s)
         return total
 
-    def prune(self, *, before_year: int, facility_id=None) -> int:
+    def prune(self, *, before_year: int, facility_id=None, reason=None) -> int:
         """Delete year partitions older than ``before_year`` (retention policy).
 
         Removes ``facility_id=*/year=Y`` directories with Y < ``before_year``, each by one atomic
         rename before removal (a crash never leaves a half-deleted year visible). Returns the
         number of year partitions removed. Month-level, policy-driven retention is
         ``camber retention apply`` (:mod:`camber.portfolio`). Holds the store lock.
+
+        Inside a portfolio workspace (0.108, #250) it needs a ``reason``, refuses
+        (:class:`~camber.portfolio.LifecycleError`, nothing deleted) when a facility it would
+        prune is under a legal hold, and audits one ``store.prune`` line per facility pruned.
         """
         if not os.path.isdir(self.root):
             return 0
         with self._write_lock(create=False):
-            return self._prune(before_year, facility_id)
+            doomed = self._prune_targets(before_year, facility_id)
+            pf, reason = self._delete_gate(
+                sorted({fid for fid, _ in doomed}), reason, "`ParquetStore.prune`"
+            )
+            removed = self._prune(before_year, facility_id)
+            if pf is not None:
+                for fid in sorted({f for f, _ in doomed}):
+                    years = sorted(y for f, y in doomed if f == fid)
+                    pf.audit(
+                        "store.prune",
+                        reason=reason,
+                        facility_id=fid,
+                        details={"before_year": int(before_year), "years": years},
+                    )
+            return removed
 
-    def _prune(self, before_year: int, facility_id) -> int:
-        from . import _swap
+    def _delete_gate(self, fids, reason, by: str, what: str = "delete its data", states=False):
+        """``(portfolio, reason)`` for a delete primitive: the workspace's hold, reason and audit
+        rule (:func:`camber.datasets._lifecycle.store_delete_gate`); ``(None, reason)`` for a
+        plain store or a scratch one."""
+        if not self._self_lock:  # a scratch store (staging, rollups): its caller decides
+            return None, reason
+        from ..datasets._lifecycle import store_delete_gate  # lazy: datasets imports the store
 
-        removed = 0
+        return store_delete_gate(self.root, fids, reason=reason, by=by, what=what, states=states)
+
+    def _prune_targets(self, before_year: int, facility_id) -> list:
+        """``[(facility_id, year)]`` of the year partitions :meth:`prune` would remove."""
+        out = []
         fac_dirs = (
             [f"{_FACILITY}={facility_id}"]
             if facility_id is not None
@@ -872,8 +899,16 @@ class ParquetStore:
                 except ValueError:
                     continue
                 if yr < before_year:
-                    _swap.discard(os.path.join(spath, yd))
-                    removed += 1
+                    out.append((sd.split("=", 1)[1], yr))
+        return sorted(out)
+
+    def _prune(self, before_year: int, facility_id) -> int:
+        from . import _swap
+
+        removed = 0
+        for fid, yr in self._prune_targets(before_year, facility_id):
+            _swap.discard(os.path.join(self.root, f"{_FACILITY}={fid}", f"{_YEAR}={yr}"))
+            removed += 1
         if removed:
             self._invalidate_catalog()  # next points() rebuilds from the remaining data
         return removed
@@ -952,13 +987,33 @@ class ParquetStore:
         out.sort(key=lambda p: (p["facility_id"], p["year"], p["month"] or 0, p["legacy"]))
         return out
 
-    def drop_partition(self, facility_id: str, year: int, month=None) -> int:
+    def drop_partition(self, facility_id: str, year: int, month=None, *, reason=None) -> int:
         """Delete one partition crash-safely; returns the rows it held (0 if absent).
 
         ``month=None`` deletes the whole ``year=Y`` directory (every month in it, and any legacy
         files); otherwise only ``year=Y/month=M``. A low-level primitive with no policy: retention
         (``camber retention apply``) decides what to drop and rolls it up first.
+
+        Inside a portfolio workspace (0.108, #250) it needs a ``reason``, is refused
+        (:class:`~camber.portfolio.LifecycleError`) for a facility under a legal hold, and a
+        partition it deletes is audited as ``store.drop_partition``.
         """
+        require_facility_id(facility_id)
+        with self._write_lock(create=False):
+            pf, reason = self._delete_gate([facility_id], reason, "`ParquetStore.drop_partition`")
+            rows = self._drop_partition(facility_id, year, month)
+            if pf is not None and rows is not None:
+                pf.audit(
+                    "store.drop_partition",
+                    reason=reason,
+                    facility_id=facility_id,
+                    details={"year": int(year), "month": month, "rows": rows},
+                )
+            return rows or 0
+
+    def _drop_partition(self, facility_id: str, year: int, month=None):
+        """:meth:`drop_partition` without the workspace rule (retention, which checks holds and
+        audits itself, calls this): the rows deleted, or ``None`` when the partition is absent."""
         from . import _swap
 
         require_facility_id(facility_id)
@@ -967,7 +1022,7 @@ class ParquetStore:
             path = os.path.join(path, f"{_MONTH}={int(month)}")
         with self._write_lock(create=False):
             if not os.path.isdir(path):
-                return 0
+                return None
             try:
                 rows = int(ds.dataset(path, format="parquet").count_rows())
             except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
@@ -993,15 +1048,17 @@ class ParquetStore:
         ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
         """
         from . import _swap
-        from .facilities import _require_store_dir
+        from .facilities import _is_empty_store, _require_store_dir
 
         _require_store_dir(self.root)  # 0.107 (#215): a typo'd path is an error, nothing created
+        # 0.108 (#233): an empty folder is an empty store -- nothing to migrate, no lock file
+        locking = apply and not _is_empty_store(self.root)
         reg = self._registry()
         ws = reg._workspace()
         if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
             raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
-        with self._write_lock(create=False) if apply else _nullcontext():
-            if apply:
+        with self._write_lock(create=False) if locking else _nullcontext():
+            if locking:
                 _swap.recover_tree(self.root, max_depth=3)
             todo = [p for p in self.partitions() if p["legacy"]]
             report = {
@@ -1140,7 +1197,7 @@ class ParquetStore:
             )
         _swap.commit(ypath)
 
-    def drop_facility(self, facility_id: str, *, forget: bool = False) -> int:
+    def drop_facility(self, facility_id: str, *, forget: bool = False, reason=None) -> int:
         """Hard-delete every stored row of ``facility_id``; returns the number of rows removed.
 
         **Irreversible.** This is a narrow, low-level primitive: it removes the facility's
@@ -1153,12 +1210,37 @@ class ParquetStore:
         (re-ingesting without it would silently duplicate rows, which the role-frame read then
         mean-aggregates). The facility's registry entry (display name + metadata) is kept unless
         ``forget=True``. An unknown facility is a no-op returning 0.
+
+        Inside a portfolio workspace (0.108, #250) it needs a ``reason``, is refused
+        (:class:`~camber.portfolio.LifecycleError`, nothing deleted) for a facility under a legal
+        hold or one that is not ``provisioning`` / ``active`` (an archived facility goes through
+        ``camber facility purge``), and is audited as ``store.drop_facility`` (plus
+        ``facility.remove`` with the same reason when ``forget``). The lifecycle's own deletions
+        (``camber facility archive|purge``) do not come through here.
         """
         require_facility_id(facility_id)
         with self._write_lock(create=forget):
-            return self._drop_facility(facility_id, forget)
+            pf, reason = self._delete_gate(
+                [facility_id], reason, "`ParquetStore.drop_facility`", states=True
+            )
+            rows = self._drop_facility(
+                facility_id, forget, reason=reason or "drop_facility(forget=True)"
+            )
+            if pf is not None:
+                pf.audit(
+                    "store.drop_facility",
+                    reason=reason,
+                    facility_id=facility_id,
+                    details={"rows": rows, "forget": bool(forget)},
+                )
+            return rows
 
-    def _drop_facility(self, facility_id: str, forget: bool) -> int:
+    def _drop_facility(
+        self, facility_id: str, forget: bool, *, reason: str = "drop_facility(forget=True)"
+    ) -> int:
+        """:meth:`drop_facility` without the workspace rule: for callers that have checked the
+        lifecycle and audit the deletion themselves (``camber datasets remove|ingest``), holding
+        the store lock."""
         fdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
         rows = 0
         if os.path.isdir(fdir):
@@ -1171,9 +1253,7 @@ class ParquetStore:
             _swap.discard(fdir)  # one atomic rename, then removal: never half-deleted
             self._invalidate_catalog()
         if forget:  # tombstones the id: a forgotten facility id is never reused
-            self._registry()._forget(
-                facility_id, had_data=rows > 0, reason="drop_facility(forget=True)"
-            )
+            self._registry()._forget(facility_id, had_data=rows > 0, reason=reason)
         from ..resolve import clear_store_cache  # lazy: resolve imports the store, not vice versa
 
         clear_store_cache(self.root, facility_id)

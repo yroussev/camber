@@ -28,6 +28,13 @@ _FACILITIES = "_facilities.json"  # leading "_" -> ignored by pyarrow dataset di
 _TOMBSTONES = "_tombstones.json"  # ids removed from the registry; never reusable
 _WORKSPACE_MARKER = "_workspace.json"  # in a portfolio's store: points back at the workspace
 _LIFECYCLE_KEYS = ("state", "created_at", "state_changed_at")
+# 0.108 (#250): keys the portfolio's audited methods own inside a workspace -- the privacy flag
+# (Portfolio.set_private), the display name (rename), the lifecycle records (offboard/archive) and
+# the edge-device notes (note_edge_device). register() never changes them there.
+_WORKSPACE_KEYS = ("private", "display_name", "archive", "offboarding", "edge_devices")
+# ... of which a facility registered on its first write may start with these (the creation is
+# audited with them); the lifecycle records only ever come from the lifecycle.
+_WORKSPACE_CREATE_KEYS = ("private", "display_name")
 _CREATE_STATES = ("provisioning", "active")
 
 # A facility_id contains only path-safe characters (no "/", "=", whitespace, or unicode -- the
@@ -225,6 +232,7 @@ class FacilityRegistry:
         reason: str,
         meta=None,
         action: str = "facility.register",
+        details=None,
     ) -> dict:
         """Create a new entry (caller holds the lock); audited. Returns the normalized entry."""
         if state not in _CREATE_STATES:
@@ -243,7 +251,7 @@ class FacilityRegistry:
             facility_id=facility_id,
             to_state=state,
             reason=reason,
-            details={"name": name} if name is not None else {},
+            details={**({"name": name} if name is not None else {}), **(details or {})},
         )
         return _normalize(facility_id, entry)
 
@@ -256,12 +264,29 @@ class FacilityRegistry:
         way (a store write, a dataset ingest) starts ``active``; the lifecycle fields
         (``state``, ``created_at``, ``state_changed_at``) cannot be changed through ``register``
         -- use :class:`camber.portfolio.Portfolio` for that.
+
+        Inside a portfolio workspace (0.108, #250) the keys its audited methods own --
+        ``private``, ``display_name``, ``archive``, ``offboarding``, ``edge_devices`` -- are
+        refused (``ValueError``) whenever the call would change them: use
+        ``Portfolio.set_private`` / ``rename`` (``camber facility private|rename``) and the
+        lifecycle commands. A facility registered on its first write may start ``private`` or with
+        a ``display_name``; its ``facility.register`` audit line records them. A plain store keeps
+        accepting them.
         """
         require_facility_id(facility_id)
         with self._locked():
             data = self._raw()
+            in_ws = self._workspace() is not None
             if facility_id not in data:
                 bad = sorted(k for k in meta if k in _LIFECYCLE_KEYS and k != "state")
+                if in_ws:
+                    bad += sorted(
+                        k
+                        for k in meta
+                        if k in _WORKSPACE_KEYS
+                        and k not in _WORKSPACE_CREATE_KEYS
+                        and meta[k] is not None
+                    )
                 if bad:
                     raise ValueError(f"register() cannot set {', '.join(bad)}")
                 state = str(meta.pop("state", "active"))
@@ -271,6 +296,7 @@ class FacilityRegistry:
                     state=state,
                     reason="registered automatically on first write",
                     meta=meta,
+                    details={k: meta[k] for k in _WORKSPACE_CREATE_KEYS if k in meta},
                 )
                 return
             entry = dict(data[facility_id])
@@ -282,11 +308,20 @@ class FacilityRegistry:
                         f"not {name!r}"
                     )
                 entry["name"] = name
-            clash = sorted(k for k in meta if k in _LIFECYCLE_KEYS and meta[k] != entry.get(k))
+            owned = _LIFECYCLE_KEYS + (_WORKSPACE_KEYS if in_ws else ())
+            cur = _normalize(facility_id, entry)
+            cur["private"] = bool(entry.get("private", False))
+            clash = sorted(
+                k
+                for k in meta
+                if k in owned
+                and (bool(meta[k]) if k == "private" else meta[k]) != cur.get(k, entry.get(k))
+            )
             if clash:
                 raise ValueError(
                     f"register() cannot change {', '.join(clash)} of {facility_id!r}; "
-                    "lifecycle changes go through camber.portfolio (camber facility ...)"
+                    "lifecycle, privacy and display-name changes go through camber.portfolio "
+                    "(camber facility rename|private|offboard|...), which audits them"
                 )
             entry.update(meta)
             data[facility_id] = entry
@@ -328,14 +363,33 @@ class FacilityRegistry:
         tomb[facility_id] = {k: v for k, v in rec.items() if v is not None}
         _write_json(os.path.join(self.root, _TOMBSTONES), tomb, root=self.root)
 
-    def remove(self, facility_id: str, *, reason: str = "registry entry removed") -> bool:
+    def remove(self, facility_id: str, *, reason=None) -> bool:
         """Drop ``facility_id`` from the registry; returns whether it was present.
 
         The id is tombstoned (written *before* the entry is dropped, so a crash never leaves it
         reusable) and can never be registered again. Removing the entry does not touch stored
         data -- see :meth:`ParquetStore.drop_facility`.
+
+        Inside a portfolio workspace (0.108, #250) it needs a ``reason`` (audited on the
+        ``facility.remove`` line) and is refused (:class:`~camber.portfolio.LifecycleError`) for
+        a facility under a legal hold or one that is not ``provisioning`` / ``active`` (an
+        archived facility leaves through ``camber facility purge``). A plain store's removal
+        defaults its reason to ``"registry entry removed"``.
         """
-        return self._forget(facility_id, had_data=False, reason=reason)
+        with self._locked():
+            from ..datasets._lifecycle import store_delete_gate  # lazy: datasets imports this
+
+            _pf, reason = store_delete_gate(
+                self.root,
+                [facility_id],
+                reason=reason,
+                by="`FacilityRegistry.remove`",
+                what="remove it from the registry",
+                states=True,
+            )
+            return self._forget(
+                facility_id, had_data=False, reason=reason or "registry entry removed"
+            )
 
     def _forget(self, facility_id: str, *, had_data: bool, reason: str) -> bool:
         with self._locked():
@@ -393,36 +447,75 @@ def _workspace_of_store(root: str):
     return ws if os.path.isfile(os.path.join(ws, "_portfolio.json")) else None
 
 
-_STORE_MARKERS = (_FACILITIES, _TOMBSTONES, _WORKSPACE_MARKER, "_catalog.json")
+# What a ParquetStore root holds besides its ``facility_id=`` partitions (0.107, #215, #217): the
+# registry, the tombstones, the workspace marker, the point catalog and its generation, and the
+# single-writer lock file. One list for `camber serve` and the store commands (0.108, #233).
+_STORE_MARKERS = (
+    _FACILITIES,
+    _TOMBSTONES,
+    _WORKSPACE_MARKER,
+    "_catalog.json",
+    "_catalog.gen",
+    "_migrated.json",
+    "_lock",
+)
+
+
+def _store_entries(root):
+    """The names in ``root`` that count (dot-files such as ``.DS_Store`` do not), or ``None``."""
+    try:
+        return [n for n in os.listdir(root) if not n.startswith(".")]
+    except OSError:
+        return None
+
+
+def _store_dir_problem(root) -> str | None:
+    """Why ``root`` is not a ParquetStore directory, or ``None`` when it is (0.108, #233).
+
+    A store is a directory holding ``facility_id=`` (or legacy ``site=``) partitions or the
+    store's own files (:data:`_STORE_MARKERS`); an **empty directory is an empty store**, one
+    nothing was written to yet. A missing path, a file, or a directory of other things is not
+    one, so a mistyped path is never read as an empty store. The one definition `camber serve`
+    and `camber store verify` / `normalize` / `migrate-partitions` share.
+    """
+    root = os.path.abspath(os.fspath(root))
+    if not os.path.exists(root):
+        return f"{root} is not a ParquetStore: it does not exist"
+    if not os.path.isdir(root):
+        return f"{root} is not a ParquetStore: it is not a directory"
+    names = _store_entries(root)
+    if names is None:
+        return f"{root} is not a ParquetStore: it cannot be listed"
+    if not names or any(
+        n in _STORE_MARKERS or n.startswith(("facility_id=", "site=")) for n in names
+    ):
+        return None
+    return (
+        f"{root} is not a ParquetStore: it holds no facility partitions, registry "
+        f"({_FACILITIES}) or workspace marker ({_WORKSPACE_MARKER})"
+    )
 
 
 def _is_store_dir(root) -> bool:
-    """Whether ``root`` is a ParquetStore directory: it exists and holds a facility partition,
-    a registry, a tombstone list, a workspace marker or a point catalog (0.107, #215). An empty
-    or unrelated directory is not one."""
+    """Whether ``root`` is a ParquetStore directory (:func:`_store_dir_problem`): it holds a
+    facility partition or store files, or is empty (0.108, #233: an empty store)."""
+    return _store_dir_problem(root) is None
+
+
+def _is_empty_store(root) -> bool:
+    """Whether ``root`` is an existing directory with nothing in it (dot-files aside)."""
     root = os.fspath(root)
-    if not os.path.isdir(root):
-        return False
-    try:
-        names = os.listdir(root)
-    except OSError:
-        return False
-    return any(n in _STORE_MARKERS or n.startswith(("facility_id=", "site=")) for n in names)
+    return os.path.isdir(root) and _store_entries(root) == []
 
 
 def _require_store_dir(root) -> str:
-    """``root`` (absolute) if it is a ParquetStore directory (:func:`_is_store_dir`), else
-    ``FileNotFoundError`` -- checked before anything is created or locked (0.107, #215)."""
-    root = os.path.abspath(os.fspath(root))
-    if not os.path.isdir(root):
-        why = "it is not a directory" if os.path.exists(root) else "it does not exist"
-        raise FileNotFoundError(f"{root} is not a ParquetStore: {why}")
-    if not _is_store_dir(root):
-        raise FileNotFoundError(
-            f"{root} is not a ParquetStore: it holds no facility partitions, registry "
-            f"({_FACILITIES}) or workspace marker ({_WORKSPACE_MARKER})"
-        )
-    return root
+    """``root`` (absolute) if it is a ParquetStore directory (:func:`_store_dir_problem`; an empty
+    directory is an empty store, 0.108), else ``FileNotFoundError`` -- checked before anything is
+    created or locked (0.107, #215)."""
+    problem = _store_dir_problem(root)
+    if problem is not None:
+        raise FileNotFoundError(problem)
+    return os.path.abspath(os.fspath(root))
 
 
 def _utc_now() -> str:
