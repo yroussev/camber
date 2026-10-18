@@ -23,7 +23,9 @@ Three things the rate has to get right, each of which bit on real trend data:
   which no trend can realistically show). When the warn threshold is out of reach the rule cannot
   tell a hunting loop from a stable one, so it **declines** (``info`` + caveat, ``None`` rate)
   rather than reporting "stable"; when only the fault threshold is out of reach the verdict is
-  capped at ``warn`` and caveated (0.106, #182).
+  capped at ``warn`` and caveated (0.106, #182). The check is **per signal** (0.108, #236): a
+  coarsely logged damper is not evaluated on its own, with a caveat naming it, and no longer hides
+  a hunting valve sampled every minute; the rule declines only when no signal can be evaluated.
 * **Fan-off time is not control time (0.106, #181).** With the fan stopped the loop is not
   controlling, and an hour of a shut valve would dilute the rate. Only steps between two fan-on
   samples count (fan status, else fan speed, else airflow -- :func:`camber.schedules.fan_on_mask`),
@@ -156,22 +158,49 @@ class ControlHunting:
     def _signals(self, frame):
         return [r for r in _MODULATING if r in frame.columns and frame[r].notna().sum() >= 3]
 
-    def _worst(self, frame, gate=None):
-        worst_role, worst_rate, worst_rev, rates, ceilings = None, 0.0, 0, {}, {}
+    def _per_signal(self, frame, gate=None) -> dict:
+        """``{role: (rate, reversals, ceiling)}`` for every modulating signal present."""
+        out = {}
         for role in self._signals(frame):
             sig = normalize_percent(frame[role])
             rate, rev = reversals_per_hour(
                 sig, self.deadband, gap_factor=self.gap_factor, gate=gate
             )
-            key = getattr(role, "value", str(role))
-            rates[key] = round(rate, 2)
-            ceilings[key] = max_resolvable_per_hour(sig, gap_factor=self.gap_factor)
-            if worst_role is None or rate > worst_rate:
-                worst_role, worst_rate, worst_rev = role, rate, rev
-        return worst_role, worst_rate, worst_rev, rates, ceilings
+            out[role] = (rate, rev, max_resolvable_per_hour(sig, gap_factor=self.gap_factor))
+        return out
+
+    def _worst(self, frame, gate=None, per=None):
+        """The worst signal among those whose sampling can show the warn threshold (0.108, #236),
+        else among all: ``(role, rate, reversals, ceiling, evaluable)``."""
+        per = self._per_signal(frame, gate) if per is None else per
+        evaluable = [r for r, v in per.items() if self._reachable(v[2], self.warn_per_hr)]
+        pool = evaluable or list(per)
+        worst = None
+        for role in pool:
+            if worst is None or per[role][0] > per[worst][0]:
+                worst = role
+        if worst is None:
+            return None, 0.0, 0, None, evaluable
+        rate, rev, ceiling = per[worst]
+        return worst, rate, rev, ceiling, evaluable
+
+    def _too_coarse(self, ceiling) -> str:
+        """Where a ceiling sits against the warn threshold, for a not-evaluated caveat."""
+        if ceiling is None or ceiling < self.warn_per_hr:
+            return f"below the {self.warn_per_hr:g}/hr warn threshold"
+        return (
+            f"too close to the {self.warn_per_hr:g}/hr warn threshold to show it (a "
+            f"threshold needs a ceiling {self.resolution_margin:g}x above it)"
+        )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run over an equipment role-frame; return a Finding on the worst-hunting output."""
+        """Run over an equipment role-frame; return a Finding on the worst-hunting output.
+
+        The resolution check is per signal (0.108, #236): a signal whose sampling cannot show the
+        warn threshold is not evaluated (its rate is ``None`` and a caveat names it), and the
+        verdict is the worst of the signals that can be evaluated, judged against that signal's
+        own ceiling. Only when no signal can be evaluated does the rule decline.
+        """
         if not self._signals(frame):
             return Finding(
                 rule=self.name,
@@ -180,10 +209,11 @@ class ControlHunting:
                 summary=f"{equip}: no modulating output present",
             )
         gate, fan_src = self._gate(frame)
-        role, rate, rev, rates, ceilings = self._worst(frame, gate)
+        per = self._per_signal(frame, gate)
+        role, rate, rev, ceiling, evaluable = self._worst(frame, gate, per)
+        rates = {getattr(r, "value", str(r)): round(v[0], 2) for r, v in per.items()}
         rn = getattr(role, "value", str(role)) if role is not None else ""
-        known = [c for c in ceilings.values() if c is not None]
-        ceiling = min(known) if known else None
+        declined = [r for r in per if r not in evaluable]
         missing = [r.value for r in _MODULATING if r not in frame.columns]
         if fan_src == FAN_GATE_NONE:
             missing.append(Role.SUPPLY_FAN_STATUS.value)
@@ -207,27 +237,21 @@ class ControlHunting:
                 "controlling, count as calm time and dilute the rate -- map SUPPLY_FAN_STATUS"
             )
         margin = self.resolution_margin
-        if not self._reachable(ceiling, self.warn_per_hr):
-            # The sampling can't realistically show a rate as high as the warn threshold:
-            # "stable" would be an untested negative. Decline, but say how close to the ceiling
-            # the signal ran.
+        if not evaluable:
+            # No signal's sampling can realistically show a rate as high as the warn threshold:
+            # "stable" would be an untested negative. Decline, but say how close to its own
+            # ceiling the signal ran.
             share = rate / ceiling if ceiling else None
             metrics["reversals_per_hr"] = None
             metrics["per_signal_rate"] = {k: None for k in rates}
             metrics["reversal_share_of_max"] = None if share is None else round(share, 2)
             dt_min = None if ceiling is None else 60.0 / ceiling
-            if ceiling is None or ceiling < self.warn_per_hr:
-                where = f"below the {self.warn_per_hr:g}/hr warn threshold"
-            else:
-                where = (
-                    f"too close to the {self.warn_per_hr:g}/hr warn threshold to show it (a "
-                    f"threshold needs a ceiling {margin:g}x above it)"
-                )
             caveats.append(
                 "hunting not evaluated: the trend's sampling "
                 + (f"(~{dt_min:.0f}-min) " if dt_min is not None else "")
-                + f"can show at most {0 if ceiling is None else ceiling:.1f} reversals/hr, {where}"
-                " -- a hunting loop is aliased away; re-trend at 1-5 min to judge"
+                + f"can show at most {0 if ceiling is None else ceiling:.1f} reversals/hr, "
+                + self._too_coarse(ceiling)
+                + " -- a hunting loop is aliased away; re-trend at 1-5 min to judge"
                 + (
                     f" (observed reversals on {share:.0%} of the resolvable maximum)"
                     if share is not None
@@ -242,6 +266,20 @@ class ControlHunting:
                 summary=f"{equip}: hunting not evaluated (sampling too coarse to resolve it)",
                 caveats=caveats,
             )
+        if declined:
+            # 0.108 (#236): a coarsely logged signal is not evaluated on its own; it no longer
+            # hides hunting on a finely sampled one
+            names = [getattr(r, "value", str(r)) for r in declined]
+            metrics["not_evaluated_signals"] = names
+            for r, k in zip(declined, names):
+                metrics["per_signal_rate"][k] = None
+                c = per[r][2]
+                dt = "" if c is None else f" (~{60.0 / c:.0f}-min, at most {c:.1f} reversals/hr)"
+                caveats.append(
+                    f"{k} not evaluated for hunting: its sampling{dt} is "
+                    + self._too_coarse(c)
+                    + " -- re-trend it at 1-5 min to judge it"
+                )
         if gate is not None and metrics["fan_on_hours"] == 0:
             metrics["reversals_per_hr"] = None
             metrics["per_signal_rate"] = {k: None for k in rates}

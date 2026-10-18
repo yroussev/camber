@@ -325,7 +325,8 @@
     "ChillerFleetStagingResult",
     "ChillerStagingResult",
     "analyze_chiller_staging",
-    "analyze_chiller_staging_fleet"
+    "analyze_chiller_staging_fleet",
+    "chiller_power_running"
   ],
   "camber.chwplant": [
     "CHWPLANT_MEASURES",

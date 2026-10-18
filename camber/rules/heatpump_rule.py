@@ -12,6 +12,11 @@ rounded count read as heating: the defrost vanished. The count now takes the few
 means allow (a part-way bin between two heating bins is a reversal out and back), and on a trend
 coarser than ``max_interval_min`` it is a floor: a count at or above the limit stands with a
 caveat; below it, part-way samples decline the verdict to ``info`` instead of ``ok``.
+
+**Short trends (0.108, #240).** The rate is read over at least one day, as ``boiler_short_cycle``
+reads its starts: one defrost in a two-hour trend is two reversals in a day, not 24 a day, and a
+caveat says the window is short. An ``ok`` summary names no cause; "check defrost termination" is
+for ``warn`` and ``fault``.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ import pandas as pd
 from ..boilercycle import _interval_min
 from ..model.roles import Role
 from .base import Finding
-from .compressor_stage_rule import _binary_changes, _coarse_trend_check
+from .compressor_stage_rule import _binary_changes, _coarse_trend_check, _short_trend_caveat
 
 
 class HeatPumpDefrost:
@@ -77,10 +82,13 @@ class HeatPumpDefrost:
         )
         summary = (
             f"{equip}: {per_day:.1f} reversing-valve cycles/day "
-            f"(threshold {self.max_reversals_per_day:.0f}) — check defrost termination"
+            f"(threshold {self.max_reversals_per_day:.0f})"
         )
+        if severity in ("warn", "fault"):  # 0.108 (#240): an ok summary names no cause
+            summary += " — check defrost termination"
         if declined:
             summary += f"; cannot confirm on a {interval:g}-minute trend"
+        caveats += _short_trend_caveat(span, "reversing-valve changes")  # 0.108 (#240)
         return Finding(
             rule=self.name,
             equip=equip,

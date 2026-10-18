@@ -2235,6 +2235,36 @@ PARAM_DOCS["chiller_efficiency"] = {
     ),
 }
 
+# 0.108 (#235): when a chiller reads as running, for the staging rules (status, else power)
+_CHILLER_RUN_GATE = {
+    "min_power_kw": _P(
+        "kW",
+        "CAMBER judgment: None reads a chiller as running above run_frac of its own "
+        "95th-percentile power; a site input when given",
+        "Set it above the chiller's standby draw (controls, oil heater, crankcase heater: often "
+        "5-15 kW) and below its lightest running load, read from a week of power trends with the "
+        "chiller off and on. Map the run status (compressor_status) instead where it is trended: "
+        "it replaces the power gate.",
+        (1.0, 500.0),
+        "None = size-relative (run_frac x the chiller's 95th-percentile power). Before 0.108 the "
+        "gate was a fixed 2 kW, which read a stopped chiller's standby draw as running.",
+    ),
+    "run_frac": _P(
+        "fraction of the chiller's 95th-percentile power",
+        "CAMBER judgment: a tenth of a chiller's working draw sits above its standby load and "
+        "below its lightest running load (camber.schedules.CHILLER_POWER_RUN_FRAC, the gate "
+        "chiller_approach_fouling uses)",
+        "Raise it when a chiller's standby draw exceeds a tenth of its 95th-percentile power (a "
+        "lightly loaded machine with heavy oil heaters); lower it when its lightest running load "
+        "reads as off. Check against the power trend over a week with known starts.",
+        (0.02, 0.5),
+        "Used only when no run status (compressor_status) is mapped and min_power_kw is None. "
+        "The 95th percentile is over the samples drawing any power, so a lag chiller that sits "
+        "at 0 kW most of the time still reads its running draw; one that runs under 5 % of the "
+        "time with a standby draw reads its standby as the percentile, so give it min_power_kw.",
+    ),
+}
+
 PARAM_DOCS["chiller_staging"] = {
     "max_starts_per_day": _P(
         "per day",
@@ -2255,6 +2285,7 @@ PARAM_DOCS["chiller_staging"] = {
         "hours sit below this load, fault at >= 50 %. Peak is the observed peak, not nameplate.",
     ),
     "max_interval_min": _max_interval("chiller", declines=False),  # 0.104 (#143)
+    **_CHILLER_RUN_GATE,  # 0.108 (#235)
 }
 
 PARAM_DOCS["chiller_staging_fleet"] = {
@@ -2283,6 +2314,7 @@ PARAM_DOCS["chiller_staging_fleet"] = {
         "Chilled-water loops (CHW_LOOP, SECLOOP) are never in the fleet: their power is the "
         "pumps'.",
     ),
+    **_CHILLER_RUN_GATE,  # 0.108 (#235)
 }
 
 PARAM_DOCS["chiller_approach_fouling"] = {

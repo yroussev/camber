@@ -187,6 +187,10 @@ class LoadBaseline:
         0.0  # lag-1 autocorrelation of the residuals (0 = not significant / unknown)
     )
     sample_seconds: float = 0.0  # the baseline's sampling interval that resid_lag1 refers to
+    # 0.108 (#234): which load the fit was matched on, for a rule that can read its load more than
+    # one way (the tower drift rules: "chw_tons", "cw_heat_rejection", "cw_range"); "" = not
+    # recorded (a single-load rule, or a record frozen before 0.108)
+    load_source: str = ""
 
     def predict(self, tons, covariate=None):
         """Expected metric (degF) at ``tons``; scalar in -> float out, array in -> array out.
@@ -245,8 +249,12 @@ class LoadBaseline:
         return bool(self.tons_min <= float(tons) <= self.tons_max)
 
     def as_dict(self) -> dict:
-        """Return the baseline as a plain dict (JSON-friendly; see :meth:`from_dict`)."""
-        return asdict(self)
+        """Return the baseline as a plain dict (JSON-friendly; see :meth:`from_dict`). An empty
+        ``load_source`` is left out, so a single-load rule's record is unchanged byte for byte."""
+        d = asdict(self)
+        if not d["load_source"]:
+            del d["load_source"]
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> LoadBaseline:
