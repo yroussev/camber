@@ -23,6 +23,7 @@ from ..loadprofile import (
     weekday_weekend_profiles,
 )
 from ..timegrid import interval_hours
+from ._labels import mpl_text
 
 
 def load_profile_chart(
@@ -67,9 +68,11 @@ def load_profile_chart(
             m.near_base, color="#2ca02c", ls=":", lw=1.0, label=f"baseload ≈ {m.near_base:g}"
         )
     ax.set_xlabel("hour of day")
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(mpl_text(ylabel))
     ax.set_xticks(range(0, 24, 3))
-    ax.set_title(title or f"Load profile — base/peak {m.base_to_peak:.2f}, LF {m.load_factor:.2f}")
+    ax.set_title(
+        mpl_text(title or f"Load profile — base/peak {m.base_to_peak:.2f}, LF {m.load_factor:.2f}")
+    )
     ax.legend(loc="best", fontsize=8)
     return ax, m
 
@@ -106,7 +109,7 @@ def load_duration_chart(
         energy = float(np.nansum(series.dropna().to_numpy()) * interval_hours(series.index))
         cost_note = f" · {energy:,.0f} kWh ≈ ${energy * price:,.0f}"
     ax.set_xlabel("% of time at or above")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title or f"Load-duration curve — LF {m.load_factor:.2f}{cost_note}")
+    ax.set_ylabel(mpl_text(ylabel))
+    ax.set_title(mpl_text(title or f"Load-duration curve — LF {m.load_factor:.2f}{cost_note}"))
     ax.legend(loc="best", fontsize=8)
     return ax, m

@@ -11,6 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from ._labels import mpl_text
+
 
 def _as_frame(data) -> pd.DataFrame:
     return data.to_frame() if isinstance(data, pd.Series) else data
@@ -50,12 +52,14 @@ def readiness_ribbon(
     if ax is None:
         _, ax = plt.subplots(figsize=(12, 0.4 * max(len(cols), 1) + 1.2))
     if mat.size == 0:
-        ax.set_title(title or "Readiness ribbon — no data")
+        ax.set_title(mpl_text(title or "Readiness ribbon — no data"))
         return ax
 
     ax.imshow(mat, aspect="auto", cmap="RdYlGn", vmin=0, vmax=1, interpolation="nearest")
     ax.set_yticks(range(len(cols)))
-    ax.set_yticklabels([f"{c}  ({coverage[i] * 100:.0f}%)" for i, c in enumerate(cols)], fontsize=8)
+    ax.set_yticklabels(
+        [mpl_text(f"{c}  ({coverage[i] * 100:.0f}%)") for i, c in enumerate(cols)], fontsize=8
+    )
     n = len(bins)
     step = max(1, n // max_xticks)
     pos = list(range(0, n, step))
@@ -67,5 +71,5 @@ def readiness_ribbon(
         fontsize=8,
     )
     ax.set_xlabel("Time")
-    ax.set_title(title or f"Ingest readiness — {len(cols)} points, green = data present")
+    ax.set_title(mpl_text(title or f"Ingest readiness — {len(cols)} points, green = data present"))
     return ax

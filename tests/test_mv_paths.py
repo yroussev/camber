@@ -349,7 +349,7 @@ def test_other_frozen_methods_and_auto(tmp_path):
     c = load_config(cfg)
     c["mv"][0]["method"] = "backcast"
     base = os.path.dirname(cfg)
-    open(cfg, "w").write(json.dumps(c))
+    open(cfg, "w", encoding="utf-8").write(json.dumps(c))
     assert main(["mv", "freeze", cfg, "--reason", "init", "--apply"]) == 0
     fs = run_mv_config(c, base_dir=base)
     (sav,) = [f for f in fs if f.rule == "mv_savings"]

@@ -275,7 +275,7 @@ def main(argv=None) -> int:
             print(f"  {k}: {v}")
             result[f"info.{label}.{k}"] = v
     if a.json:
-        with open(a.json, "w") as fh:
+        with open(a.json, "w", encoding="utf-8") as fh:
             json.dump(result, fh, indent=2, sort_keys=True)
     return 0
 

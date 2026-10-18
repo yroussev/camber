@@ -26,6 +26,7 @@ import pandas as pd
 
 from ..mandv.models import best_model
 from ..mandv.names import model_label
+from ._labels import mpl_text
 from .energy_signature import _r2
 
 _KINDS = ("2P", "3PC", "3PH", "4P", "5P")
@@ -141,11 +142,16 @@ def oat_scatter(
         codes = cats.cat.codes.to_numpy()
         sc = ax.scatter(T, y, c=codes, cmap=cmap, s=18, alpha=0.7, zorder=2)
         handles = [
-            plt.Line2D([], [], marker="o", ls="", color=sc.cmap(sc.norm(c)), label=str(lbl))
+            plt.Line2D([], [], marker="o", ls="", color=sc.cmap(sc.norm(c)), label=mpl_text(lbl))
             for c, lbl in enumerate(cats.cat.categories)
         ]
         if handles:
-            ax.legend(handles=handles, loc="best", fontsize=8, title=getattr(by, "name", None))
+            ax.legend(
+                handles=handles,
+                loc="best",
+                fontsize=8,
+                title=mpl_text(getattr(by, "name", None)) or None,
+            )
     else:
         ax.scatter(T, y, s=18, alpha=0.6, color="#3366cc", zorder=2, label="measured")
 
@@ -170,8 +176,8 @@ def oat_scatter(
 
     shape = classify_shape(df["y"], df["T"], kinds=kinds, _model=model) if classify else None
 
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    ax.set_xlabel(mpl_text(xlabel))
+    ax.set_ylabel(mpl_text(ylabel))
     if title is None and shape is not None:
         title = f"OAT cloud — {shape.shape}" + (
             f" ({model_label(model) if model is not None else model_label(shape.model_kind)}, "
@@ -179,7 +185,7 @@ def oat_scatter(
             if shape.model_kind
             else ""
         )
-    ax.set_title(title or "OAT scatter")
+    ax.set_title(mpl_text(title or "OAT scatter"))
     if by is None or model is not None:
         ax.legend(loc="best", fontsize=8)
     return ax, shape

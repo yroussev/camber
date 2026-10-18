@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..mandv.cusum import cusum as _cusum
+from ._labels import mpl_text
 
 
 def _ylabel(units: str | None) -> str:
@@ -69,11 +70,13 @@ def cusum_plot(
         )
 
     total = float(s.iloc[-1])
-    ax.set_ylabel(_ylabel(units))
+    ax.set_ylabel(mpl_text(_ylabel(units)))
     ax.set_xlabel("Time")
     verdict = "savings" if total > 0 else "waste"
     ax.set_title(
-        title or f"CUSUM — net {verdict} {total:,.0f}{_unit(units)} over {len(s)} intervals"
+        mpl_text(
+            title or f"CUSUM — net {verdict} {total:,.0f}{_unit(units)} over {len(s)} intervals"
+        )
     )
     ax.legend(loc="upper left", fontsize=8)
     return ax
@@ -118,7 +121,13 @@ def chained_cusum_plot(
         d = (seg["projected"] - seg["actual"]).astype(float)
         s = carry + d.cumsum()
         color = _VERSION_COLORS[k % len(_VERSION_COLORS)]
-        ax.plot(s.index, s.to_numpy(), color=color, lw=1.4, label=f"{ver} (Σ projected − actual)")
+        ax.plot(
+            s.index,
+            s.to_numpy(),
+            color=color,
+            lw=1.4,
+            label=mpl_text(f"{ver} (Σ projected − actual)"),
+        )
         if k > 0:  # the carried-forward level the segment continues from
             ax.plot([s.index[0], s.index[0]], [carry, s.iloc[0]], color=color, lw=0.8, ls=":")
         carry = float(s.iloc[-1])
@@ -143,13 +152,15 @@ def chained_cusum_plot(
             color="#444444",
         )
     ax.axhline(0, color="#444444", lw=0.8)
-    ax.set_ylabel(_ylabel(units))
+    ax.set_ylabel(mpl_text(_ylabel(units)))
     ax.set_xlabel("Time")
     verdict = "savings" if carry > 0 else "waste"
     ax.set_title(
-        title
-        or f"Chained CUSUM -- net {verdict} {carry:,.0f}{_unit(units)} across {len(order)} "
-        "version(s)"
+        mpl_text(
+            title
+            or f"Chained CUSUM -- net {verdict} {carry:,.0f}{_unit(units)} across {len(order)} "
+            "version(s)"
+        )
     )
     handles, labels = ax.get_legend_handles_labels()
     uniq = dict(zip(labels, handles))

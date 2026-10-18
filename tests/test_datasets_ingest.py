@@ -626,7 +626,7 @@ def test_config_run_and_score(ahu):
     assert {r["equip"] for r in sc["records"]} == {"AHU__fault_free", "AHU__damper", "AHU__leak"}
     # findings from a file, and an explicit rule suite
     fj = tmp / "findings.json"
-    json.dump([f.as_dict() for f in res.findings], open(fj, "w"), default=str)
+    json.dump([f.as_dict() for f in res.findings], open(fj, "w", encoding="utf-8"), default=str)
     sc2 = _ops.score_dataset(entry, store, findings=str(fj), rules=["outdoor_air_fraction"])
     assert sc2["overall"]["tp"] == 1 and sc2["suite"] == ["outdoor_air_fraction"]
 

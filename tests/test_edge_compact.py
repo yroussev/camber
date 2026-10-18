@@ -112,7 +112,7 @@ def test_crash_before_the_swap_leaves_the_old_journal(tmp_path, monkeypatch):
     fresh = Spool(str(tmp_path), clock=_clock)
     assert _ident(fresh) == before
     # a torn side file from the crash is simply overwritten by the next compaction
-    with open(os.path.join(sp.root, "journal.ndjson.compact"), "w") as fh:
+    with open(os.path.join(sp.root, "journal.ndjson.compact"), "w", encoding="utf-8") as fh:
         fh.write('{"op":"enq')
     assert fresh.compact().compacted and _ident(fresh) == before
     assert not os.path.exists(os.path.join(sp.root, "journal.ndjson.compact"))
@@ -204,7 +204,7 @@ def test_retired_spool_refuses_new_batches_and_stops_the_daemon(tmp_path):
     with pytest.raises(SpoolRetired):
         fwd.run(0, iterations=3, _sleep=lambda s: None)
     # a torn retired.json still counts as retired (fail closed)
-    with open(os.path.join(sp.root, "retired.json"), "w") as fh:
+    with open(os.path.join(sp.root, "retired.json"), "w", encoding="utf-8") as fh:
         fh.write("{")
     assert sp.retirement()["unreadable"] is True
 

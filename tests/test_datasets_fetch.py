@@ -222,7 +222,7 @@ def test_existing_right_size_wrong_sha_redownloaded(tmp_path):
 def test_range_resume_206_appends_with_if_range(tmp_path):
     dest = str(tmp_path / "f")
     open(dest + ".part", "wb").write(PAYLOAD[:4000])
-    open(dest + ".part.etag", "w").write('"v1"')
+    open(dest + ".part.etag", "w", encoding="utf-8").write('"v1"')
     op = FakeOpener(FakeResponse(PAYLOAD[4000:], status=206, headers={"ETag": '"v1"'}))
     res = _fetch.download(URL, dest, size=len(PAYLOAD), sha256=SHA, opener=op)
     assert res.resumed and res.sha256 == SHA
@@ -250,7 +250,7 @@ def test_resume_200_restarts_from_zero(tmp_path):
 def test_etag_change_restarts_and_records_new_validator(tmp_path, monkeypatch):
     dest = str(tmp_path / "f")
     open(dest + ".part", "wb").write(PAYLOAD[:100])
-    open(dest + ".part.etag", "w").write('"old"')
+    open(dest + ".part.etag", "w", encoding="utf-8").write('"old"')
     # If-Range mismatch -> server sends the full (new) file with 200 and a new ETag
     op = FakeOpener(FakeResponse(PAYLOAD, status=200, headers={"ETag": '"new"'}))
     res = _fetch.download(URL, dest, sha256=SHA, opener=op)
@@ -262,7 +262,7 @@ def test_etag_change_restarts_and_records_new_validator(tmp_path, monkeypatch):
 def test_oversized_part_restarts(tmp_path):
     dest = str(tmp_path / "f")
     open(dest + ".part", "wb").write(PAYLOAD + b"extra")
-    open(dest + ".part.etag", "w").write("stale")
+    open(dest + ".part.etag", "w", encoding="utf-8").write("stale")
     op = FakeOpener(FakeResponse(PAYLOAD, headers={"Last-Modified": "Mon"}))
     res = _fetch.download(URL, dest, size=len(PAYLOAD), opener=op)
     assert _hdr(op.requests[0], "Range") is None and res.etag == "Mon"

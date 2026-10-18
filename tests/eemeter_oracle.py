@@ -105,7 +105,7 @@ def main(d):
         with open(path) as fh:
             case = json.load(fh)
         out = _hourly(case, d) if case["kind"] == "hourly" else _usage_per_day(case, d)
-        with open(path[: -len(".json")] + ".out.json", "w") as fh:
+        with open(path[: -len(".json")] + ".out.json", "w", encoding="utf-8") as fh:
             json.dump(out, fh)
 
 

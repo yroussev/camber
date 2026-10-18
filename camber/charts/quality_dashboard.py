@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ..ingest.quality import assess
+from ._labels import mpl_text
 
 # Metric -> (higher-is-better?, label). Heatmap is colored so green = good for each.
 _METRICS = {
@@ -36,8 +37,10 @@ def quality_matrix(
 
     ``values`` is points×metrics raw; ``goodness`` is the same mapped to 0–1 where 1 is good
     (so a single colormap reads correctly across higher- and lower-is-better metrics).
+    Only numeric (and boolean) columns are scored (0.108, #265): a text column such as a mode
+    point has no flatline or outlier test to run.
     """
-    points = [c for c in df.columns]
+    points = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
     raw = np.full((len(points), len(metrics)), np.nan)
     good = np.full((len(points), len(metrics)), np.nan)
     for i, c in enumerate(points):
@@ -69,16 +72,16 @@ def quality_dashboard(
     if ax is None:
         _, ax = plt.subplots(figsize=(1.6 * len(labels) + 3, 0.4 * max(len(points), 1) + 1.2))
     if raw.size == 0:
-        ax.set_title(title or "Data quality — no data")
+        ax.set_title(mpl_text(title or "Data quality — no data"))
         return ax
 
     ax.imshow(good, aspect="auto", cmap="RdYlGn", vmin=0, vmax=1)
     ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, fontsize=9)
     ax.set_yticks(range(len(points)))
-    ax.set_yticklabels([str(p) for p in points], fontsize=8)
+    ax.set_yticklabels([mpl_text(p) for p in points], fontsize=8)
     for i in range(len(points)):  # annotate the raw value in each cell
         for j in range(len(labels)):
             ax.text(j, i, f"{raw[i, j]:.2f}", ha="center", va="center", fontsize=7, color="black")
-    ax.set_title(title or "Data-quality dashboard (green = good)")
+    ax.set_title(mpl_text(title or "Data-quality dashboard (green = good)"))
     return ax

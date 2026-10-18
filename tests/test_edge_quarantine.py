@@ -187,7 +187,7 @@ def test_discard_is_guarded_and_honours_legal_holds(ws, inbox):
     doc_path = os.path.join(ws.root, "_portfolio.json")
     doc = json.load(open(doc_path))
     doc["legal_holds"] = {SUSP: {"since": "2025-01-01", "reason": "litigation"}}
-    json.dump(doc, open(doc_path, "w"))
+    json.dump(doc, open(doc_path, "w", encoding="utf-8"))
     rep = discard(ws, facility_id=SUSP, apply=True, yes=True, reason="cleanup")
     assert rep["planned"] == [] and "legal hold" in rep["refused"][0]["why"]
     assert list_quarantine(ws, facility_id=SUSP)

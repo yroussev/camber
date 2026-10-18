@@ -6,6 +6,8 @@ while others cool, across the week and against outdoor temperature.
 
 from __future__ import annotations
 
+from ._labels import mpl_text
+
 
 def zones_timeofweek_figure(profile, *, title="Zones heating vs cooling (time-of-week)"):
     """profile: DataFrame indexed by time-of-week hour (0..167) with n_heating/
@@ -35,7 +37,7 @@ def zones_timeofweek_figure(profile, *, title="Zones heating vs cooling (time-of
     ax.set_xticks([d * 24 + 12 for d in range(7)])
     ax.set_xticklabels(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     ax.set_ylabel("Average # of zones")
-    ax.set_title(title)
+    ax.set_title(mpl_text(title))
     ax.legend(loc="upper right", fontsize=8)
     fig.tight_layout()
     return fig
@@ -51,7 +53,7 @@ def zones_vs_oat_figure(states, oat, *, title="Zones heating/cooling vs OAT"):
     ax.scatter(oa, states["n_cooling"], s=4, alpha=0.3, color="#3366cc", label="# cooling")
     ax.set_xlabel("OAT (°F)")
     ax.set_ylabel("# of zones")
-    ax.set_title(title)
+    ax.set_title(mpl_text(title))
     ax.legend(loc="upper left", fontsize=8)
     fig.tight_layout()
     return fig

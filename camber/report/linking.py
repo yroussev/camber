@@ -13,6 +13,8 @@ later step); this delivers the linking principle end to end.
 
 from __future__ import annotations
 
+import datetime as _dt
+import html as _html
 import json
 
 import pandas as pd
@@ -37,9 +39,13 @@ _BRUSH_JS = """
   var data = JSON.parse(document.getElementById("__ID__-data").textContent);
   var svg = document.getElementById("__ID__"), out = document.getElementById("__ID__-out");
   var W = +svg.getAttribute("width"), H = +svg.getAttribute("height"), pad = 44, NS = svg.namespaceURI;
-  var xs = data.map(function(d){return d[1];}), ys = data.map(function(d){return d[2];});
-  var xmin = Math.min.apply(null, xs), xmax = Math.max.apply(null, xs);
-  var ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
+  // a loop: spreading ~200k points into Math.min as arguments overflows the call stack
+  var xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+  for(var k = 0; k < data.length; k++){
+    var dx = data[k][1], dy = data[k][2];
+    if(dx < xmin) xmin = dx; if(dx > xmax) xmax = dx;
+    if(dy < ymin) ymin = dy; if(dy > ymax) ymax = dy;
+  }
   function sx(x){return pad + (x - xmin) / ((xmax - xmin) || 1) * (W - 2*pad);}
   function sy(y){return H - pad - (y - ymin) / ((ymax - ymin) || 1) * (H - 2*pad);}
   var circles = data.map(function(d){
@@ -88,7 +94,10 @@ def interactive_scatter_html(
     height: int = 380,
 ) -> str:
     """Return a self-contained HTML fragment: an inline JSON payload, a brush-able SVG scatter, a
-    linked readout, and the vanilla-JS module — no external dependencies."""
+    linked readout, and the vanilla-JS module — no external dependencies.
+
+    ``xlabel`` and ``ylabel`` are HTML-escaped (0.108, #260): they are point names from a BAS
+    export. The JSON payload carries only timestamp strings and floats."""
     pts = [
         [str(t), float(xi), float(yi)]
         for t, xi, yi in zip(timestamps, x, y)
@@ -97,7 +106,8 @@ def interactive_scatter_html(
     payload = json.dumps(pts, separators=(",", ":"))
     js = _BRUSH_JS.replace("__ID__", elem_id)
     return (
-        f"<p style='font-size:13px;color:#555'>{ylabel} vs {xlabel} — drag a box to select points; "
+        f"<p style='font-size:13px;color:#555'>{_html.escape(str(ylabel))} vs "
+        f"{_html.escape(str(xlabel))} — drag a box to select points; "
         f"the readout lists their timestamps.</p>"
         f"<script type='application/json' id='{elem_id}-data'>{payload}</script>"
         f"<svg class='camber-svg' id='{elem_id}' width='{width}' height='{height}'></svg>"
@@ -157,7 +167,8 @@ def carpet_svg_html(
 
     Each cell carries its ``data-ts`` (the sample's timestamp string, matching the scatter
     payload), so a brush selection in the scatter highlights the corresponding cells.
-    Self-contained, CSP-safe.
+    Self-contained, CSP-safe. The columns are every calendar day from the first sample to the last
+    (0.108, #263), so a day with no data is a blank column; ``title`` is HTML-escaped (#260).
     """
     import numpy as np
 
@@ -165,10 +176,11 @@ def carpet_svg_html(
     if s.empty:
         return ""
     idx = pd.DatetimeIndex(s.index)
-    dates = sorted({d.date() for d in idx})
-    di = {d: i for i, d in enumerate(dates)}
+    first, last = min(idx).date(), max(idx).date()
+    n_days = (last - first).days + 1
+    di = {first + _dt.timedelta(days=i): i for i in range(n_days)}
     pad_l, pad_t = 30, 20
-    cw = max((width - pad_l) / max(len(dates), 1), 1.0)
+    cw = max((width - pad_l) / max(n_days, 1), 1.0)
     ch = max((height - pad_t) / 24.0, 1.0)
     vmin, vmax = float(np.nanmin(s.values)), float(np.nanmax(s.values))
     rng = (vmax - vmin) or 1.0
@@ -183,7 +195,8 @@ def carpet_svg_html(
         )
     js = _CARPET_JS.replace("__ID__", elem_id)
     return (
-        f"<p style='font-size:13px;color:#555'>{title} — cells highlight for the brushed selection "
+        f"<p style='font-size:13px;color:#555'>{_html.escape(str(title))} — cells highlight for "
+        "the brushed selection "
         f"(hour of day × date).</p>"
         f"<svg class='camber-static' id='{elem_id}' width='{width}' height='{height}'>"
         f"{''.join(rects)}</svg><script>{js}</script>"
@@ -216,7 +229,10 @@ def multitrend_svg_html(
     df, cols, *, spans=None, elem_id: str = "camber-trend", width: int = 680, height: int = 300
 ) -> str:
     """An inline-SVG multitrend (a normalized polyline per column + fault-span shading) that shades
-    the brushed time ranges on the shared selection. Self-contained, CSP-safe."""
+    the brushed time ranges on the shared selection. Self-contained, CSP-safe.
+
+    0.108 (#265): a line breaks at missing samples (a NaN is not drawn as the series minimum), and
+    a column with no finite value is left out; with none left the panel is empty (``""``)."""
     import json as _json
 
     import numpy as np
@@ -234,19 +250,35 @@ def multitrend_svg_html(
 
     lines = []
     palette = ["#3366cc", "#dc3912", "#109618", "#ff9900", "#990099"]
-    for k, c in enumerate(frame.columns):
-        v = frame[c].to_numpy(dtype=float)
-        lo, hi = np.nanmin(v), np.nanmax(v)
+    drawn = 0
+    for c in frame.columns:
+        try:
+            v = frame[c].to_numpy(dtype=float)
+        except (TypeError, ValueError):
+            continue  # a text column has no trend line
+        finite = np.isfinite(v)
+        if not finite.any():
+            continue
+        lo, hi = float(v[finite].min()), float(v[finite].max())
         rng = (hi - lo) or 1.0
-        pts = " ".join(
-            f"{px(i):.1f},"
-            f"{(height - pad - (0 if vi != vi else (vi - lo) / rng) * (height - 2 * pad)):.1f}"
-            for i, vi in enumerate(v)
-        )
-        lines.append(
-            f"<polyline fill='none' stroke='{palette[k % len(palette)]}' "
-            f"stroke-width='1' points='{pts}'></polyline>"
-        )
+        colour = palette[drawn % len(palette)]
+        drawn += 1
+        run: list = []
+        for i, vi in enumerate(v):
+            if finite[i]:
+                run.append(
+                    f"{px(i):.1f},{(height - pad - (vi - lo) / rng * (height - 2 * pad)):.1f}"
+                )
+                if i + 1 < len(v):
+                    continue
+            if run:
+                lines.append(
+                    f"<polyline fill='none' stroke='{colour}' "
+                    f"stroke-width='1' points='{' '.join(run)}'></polyline>"
+                )
+                run = []
+    if not lines:
+        return ""
     span_rects = []
     for start, end in spans or []:
         i0 = int(idx.searchsorted(pd.Timestamp(start)))

@@ -61,7 +61,10 @@ fault_multitrend(df, ["load_kw", "sat"], spans={"high_load": df["load_kw"] > 95}
 *Synthetic data: `camber.synth.make_ahu_trends(fault="reheat")`, normalised to 0–1. The shaded spans are where a heating-valve-open and cooling-valve-open mask is true: simultaneous heating and cooling every weekday afternoon.*
 
 `spans` is `{label: boolean Series}` — each rule supplies the timestamps where it tripped, and
-each True run is shaded once. Flags: `normalize` (overlay disparate units 0–1), `shade_color`,
+each True run is shaded once. Each flagged sample is shaded over its own interval, up to the next
+sample, and a run splits at a data gap (a step longer than 2.5 times the median step), so missing
+data is never shaded. Flags: `normalize` (overlay disparate units 0–1; `"unit"` scales series that
+share a unit together, so a temperature keeps its place against its setpoint), `shade_color`,
 `shade_alpha`, `title`. `mask_to_spans(mask)` is the reusable mask→intervals helper.
 
 ### E — load carpet
@@ -77,7 +80,8 @@ load_carpet(df["load_kw"], agg="mean", label="Load (kW)")  # hour of day x date
 *Synthetic data: eight weeks of hourly building load. Each weekday is a bright block from 06:00 to 19:00; the one weekend that runs a weekday profile joins two weeks into one long block.*
 
 Each column is a day and each row an hour, so the occupied schedule, the setback and a day the
-building was left on read at a glance. Flags: `agg`, `cmap`, `label`, `title`, `max_xticks`.
+building was left on read at a glance. Every calendar day from the first sample to the last has a
+column, so a day with no data is a blank column and an outage shows as a gap. Flags: `agg`, `cmap`, `label`, `title`, `max_xticks`.
 `carpet_matrix(series)` returns the raw `(matrix, hours, dates)`.
 
 ### I — data-quality dashboard

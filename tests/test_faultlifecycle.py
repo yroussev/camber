@@ -219,7 +219,7 @@ def test_relabelled_record_follows_its_fingerprint():
 
 
 def _write(path, recs):
-    open(path, "w").write(json.dumps({"faults": recs}))
+    open(path, "w", encoding="utf-8").write(json.dumps({"faults": recs}))
 
 
 def test_record_without_a_site_is_reported_never_resolved(tmp_path):

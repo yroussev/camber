@@ -133,13 +133,13 @@ def diagnostic_scatter(
             zorder=3,
         )
 
-    from ._labels import role_label
+    from ._labels import mpl_text, role_label
 
-    ax.set_xlabel(template.xlabel or role_label(template.x))
-    ax.set_ylabel(template.ylabel or role_label(template.y))
+    ax.set_xlabel(mpl_text(template.xlabel or role_label(template.x)))
+    ax.set_ylabel(mpl_text(template.ylabel or role_label(template.y)))
     frac = float(violating.mean()) if len(violating) else 0.0
     title = f"{template.name} — {frac:.0%} out of band"
-    ax.set_title(title + (f"  · {template.cite}" if template.cite else ""))
+    ax.set_title(mpl_text(title + (f"  · {template.cite}" if template.cite else "")))
     ax.legend(loc="best", fontsize=8)
     return ax, mask
 
