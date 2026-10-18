@@ -1132,6 +1132,15 @@ PARAM_DOCS["reheat_minimization_g36"] = {
         "Used only without zone_heat_loop and when the box's discharge temperature "
         "(supply_air_temp at a terminal) and space temperature are both trended.",
     ),
+    "min_reheat_hours": _P(
+        "h of occupied reheat (samples x the sample interval)",
+        "CAMBER judgment (0.108, #238): a floor so that one setpoint transition cannot decide "
+        "the verdict; not from G36",
+        "Raise it on long records or noisy valve commands so a few stray reheat samples are not "
+        "rated; compare with the finding's n_reheat_hours.",
+        (0.0, 24.0),
+        "Below it the box is reported as info with a caveat, not rated ok, warn or fault.",
+    ),
 }
 
 PARAM_DOCS["reheat_capacity_shortfall"] = {
@@ -1235,7 +1244,32 @@ PARAM_DOCS["night_weekend_setback"] = {
     ),
 }
 
-PARAM_DOCS["zones_heat_cool_census"] = {**_SCHEDULE}
+PARAM_DOCS["zones_heat_cool_census"] = {
+    **_SCHEDULE,
+    "min_heating_frac": _P(
+        "fraction of the fleet's zones (mean, in the mixed hours)",
+        "CAMBER judgment (0.108, #241): a fleet fault means many zones re-warming central "
+        "overcooling (PNNL Re-tuning), not one box",
+        "Read heating_frac_when_mixed on a fleet known to be free of simultaneous heating and "
+        "cooling; set this above it.",
+        (0.0, 0.5),
+        "Under it a fault is rated warn, with a caveat.",
+    ),
+    "max_driver_zones": _P(
+        "count of zones",
+        "CAMBER judgment (0.108, #241): one or two boxes heating is a local fault",
+        "Raise it in very large fleets where three or four bad valves are still local; the "
+        "result is capped at warn when the mixed share without these zones is under 25 %.",
+        (0, 10),
+        "The zones are the most-heating ones in the mixed hours (driver_zones).",
+    ),
+    "persistent_frac": _P(
+        "fraction of the mixed hours",
+        "CAMBER judgment (0.108, #241)",
+        "Lower it to list more zones as persistently heating (persistent_heating_zones).",
+        (0.1, 1.0),
+    ),
+}
 
 PARAM_DOCS["unmet_setpoint_hours"] = {
     "start_hour": _SCHEDULE["start_hour"],
@@ -1457,6 +1491,15 @@ _ZONE_STARVE = {
         "Raise it so that a few zones requesting together are not read as a whole starved "
         "air handler.",
         (3, 20),
+    ),
+    "min_present_frac": _P(
+        "fraction of the group's zones with data on a cycle",
+        "CAMBER judgment (0.108, #239): None (default) = cohort_frac, so a cohort is never "
+        "judged on fewer zones than it takes to call one",
+        "Lower it only when some boxes trend sparsely by design; read group_skipped_cycles to "
+        "see how many cycles the floor leaves out.",
+        (0.25, 1.0),
+        "Cycles below it are skipped, counted and caveated.",
     ),
 }
 

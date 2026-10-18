@@ -771,6 +771,8 @@ class CohortStarvationResult:
     caveats: list
     coverage_start: str
     coverage_end: str
+    #: 0.108 (#239): per group, the cycles left unjudged because too few of its zones had data
+    group_skipped_cycles: dict = field(default_factory=dict)
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -798,6 +800,7 @@ def cohort_starvation(
     fan_thr: float = 95.0,
     gate_cols=(),
     cool_loop_col=None,
+    min_present_frac: float | None = None,
 ) -> CohortStarvationResult | None:
     """Find air handlers whose whole zone cohort is demand-starved at once (an upstream fault).
 
@@ -812,6 +815,9 @@ def cohort_starvation(
     shares requests too evenly to be a rogue). Returns ``None`` only for an empty fleet.
     ``gate_cols`` gate request cycles on the system being on, and ``cool_loop_col`` adds the SAT
     tier-1 request, as in :func:`rogue_zone_census`.
+    0.108 (#239): a cycle is judged only when at least ``min_present_frac`` (default
+    ``cohort_frac``) of the group's zones have data on it, so one zone left reporting through the
+    others' outage cannot read as the whole cohort; skipped cycles are counted and caveated.
     Screening / opportunity-grade thresholds (provisional-untuned).
     """
     if reset not in ("sat", "static"):
@@ -851,7 +857,9 @@ def cohort_starvation(
     starved_detail: dict = {}
     starved: list = []
     collapsed: list = []
+    skipped: dict = {}
     total_requests = 0.0
+    need_frac = cohort_frac if min_present_frac is None else min_present_frac
 
     for g, zones in groups_map.items():
         R = pd.concat({z: series[z] for z in zones}, axis=1)
@@ -864,7 +872,12 @@ def cohort_starvation(
             present = np.sum(~np.isnan(arr), axis=1)  # zones with data this cycle
             requesting = np.nansum(arr >= 1, axis=1)  # NaN >= 1 is False -> excluded
             row_max = np.nanmax(arr, axis=1)
-            active = (present > 0) & (row_max > 0)
+            # 0.108 (#239): judge a cycle only with enough of the group's zones reporting
+            enough = present >= need_frac * len(zones) - 1e-9
+            n_skip = int(((present > 0) & (row_max > 0) & ~enough).sum())
+            if n_skip:
+                skipped[g] = n_skip
+            active = (present > 0) & (row_max > 0) & enough
             n_active = int(active.sum())
             if n_active > 0:
                 frac = np.divide(
@@ -915,6 +928,12 @@ def cohort_starvation(
             f"{len(unevaluable)} zone(s) not evaluated (missing request signals or too few rows): "
             f"census may under-count"
         )
+    if skipped:
+        txt = ", ".join(f"{g} {n}" for g, n in sorted(skipped.items(), key=lambda kv: str(kv[0])))
+        caveats.append(
+            f"{sum(skipped.values())} active cycle(s) not judged because fewer than "
+            f"{need_frac:.0%} of the group's zones had data ({txt})"
+        )
     collapsed_real = [g for g in collapsed if len(groups_map.get(g, [])) < min_zones_per_group]
     if collapsed_real:
         caveats.append(
@@ -939,4 +958,5 @@ def cohort_starvation(
         caveats=caveats,
         coverage_start=str(min(starts)) if starts else "",
         coverage_end=str(max(ends)) if ends else "",
+        group_skipped_cycles=skipped,
     )

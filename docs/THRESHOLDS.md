@@ -97,14 +97,14 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`overcooling_min_flow`](#overcooling_min_flow) | 3 |  |
 | [`overcooling_severity`](#overcooling_severity) | 10 |  |
 | [`reheat_capacity_shortfall`](#reheat_capacity_shortfall) | 10 |  |
-| [`reheat_minimization_g36`](#reheat_minimization_g36) | 7 | yes |
+| [`reheat_minimization_g36`](#reheat_minimization_g36) | 8 | yes |
 | [`reheat_penalty`](#reheat_penalty) | 5 |  |
-| [`sat_cohort_starvation`](#sat_cohort_starvation) | 4 |  |
+| [`sat_cohort_starvation`](#sat_cohort_starvation) | 5 |  |
 | [`sat_reset_effectiveness`](#sat_reset_effectiveness) | 7 |  |
 | [`sat_rogue_zone_census`](#sat_rogue_zone_census) | 5 |  |
 | [`simultaneous_heat_cool`](#simultaneous_heat_cool) | 6 |  |
 | [`source_loop_deltat`](#source_loop_deltat) | 6 |  |
-| [`static_cohort_starvation`](#static_cohort_starvation) | 4 |  |
+| [`static_cohort_starvation`](#static_cohort_starvation) | 5 |  |
 | [`static_pressure_reset`](#static_pressure_reset) | 2 |  |
 | [`static_reset_effectiveness`](#static_reset_effectiveness) | 7 |  |
 | [`static_rogue_zone_census`](#static_rogue_zone_census) | 5 |  |
@@ -112,7 +112,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`supply_air_reset`](#supply_air_reset) | 1 |  |
 | [`supply_air_reset_compliance`](#supply_air_reset_compliance) | 10 |  |
 | [`unmet_setpoint_hours`](#unmet_setpoint_hours) | 5 |  |
-| [`zones_heat_cool_census`](#zones_heat_cool_census) | 3 | yes |
+| [`zones_heat_cool_census`](#zones_heat_cool_census) | 6 | yes |
 
 ## actuator_stuck
 
@@ -1000,6 +1000,7 @@ How to calibrate:
 | `flow_margin` | `1.2` | - (multiple of the airflow setpoint) | 1.05 to 2.0 | CAMBER judgment: 20 % headroom over the minimum-flow setpoint before airflow counts as above minimum |
 | `dual_max_valve` | `90.0` | % valve open | 50.0 to 100.0 | CAMBER judgment (0.106, #186): in ASHRAE Guideline 36 §5.6.5's dual-maximum sequence the airflow rises above the minimum only once the heating loop passes 50 %, with the discharge air at its maximum and the reheat valve near fully open; this value is not from G36 |
 | `dual_max_dat_rise` | `15.0` | °F (discharge minus space temperature) | 5.0 to 40.0 | CAMBER judgment (0.106, #186): G36's dual-maximum sequence raises the discharge air to its maximum, typically about 20 °F above the space, before it raises the airflow; 15 °F leaves room for sensor offsets |
+| `min_reheat_hours` | `2.0` | h of occupied reheat (samples x the sample interval) | 0.0 to 24.0 | CAMBER judgment (0.108, #238): a floor so that one setpoint transition cannot decide the verdict; not from G36 |
 | `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
@@ -1010,6 +1011,7 @@ How to calibrate:
 - `flow_margin`: On healthy boxes at minimum flow, take the 95th percentile of airflow / airflow setpoint; set the margin just above it so sensor noise and tracking error do not count as violations. *Note:* The minimum is airflow_min_sp when mapped, else airflow_sp read as the minimum, else (airflow_sp moving like an active setpoint) the 5th percentile of airflow_sp (0.106, #186).
 - `dual_max_valve`: On a box known to run dual maximum, read the valve command in the hours its airflow rises above the minimum while heating; set this just below their low end. *Note:* Used only when the zone heating loop (zone_heat_loop) is not trended; with it, the high heating loop is the loop above 50 %.
 - `dual_max_dat_rise`: On a box known to run dual maximum, read the discharge-minus-space difference in the hours its airflow rises above the minimum while heating; set this just below it. *Note:* Used only without zone_heat_loop and when the box's discharge temperature (supply_air_temp at a terminal) and space temperature are both trended.
+- `min_reheat_hours`: Raise it on long records or noisy valve commands so a few stray reheat samples are not rated; compare with the finding's n_reheat_hours. *Note:* Below it the box is reported as info with a caveat, not rated ok, warn or fault.
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
@@ -1042,6 +1044,7 @@ How to calibrate:
 | `sustained_frac` | `0.5` | fraction of active cycles | 0.2 to 0.9 | CAMBER judgment: screening-grade (provisional-untuned) |
 | `min_active_cycles` | `10` | count (request cycles) | 5 to 500 | CAMBER judgment: screening-grade (provisional-untuned) |
 | `min_zones_per_group` | `3` | count | 3 to 20 | CAMBER judgment: a common-mode pattern needs a cohort, not a pair |
+| `min_present_frac` | `null` | fraction of the group's zones with data on a cycle | 0.25 to 1.0 | CAMBER judgment (0.108, #239): None (default) = cohort_frac, so a cohort is never judged on fewer zones than it takes to call one |
 
 How to calibrate:
 
@@ -1049,6 +1052,7 @@ How to calibrate:
 - `sustained_frac`: Read group_sustained_frac on healthy air handlers over a hot week; set this above it. For SAT, corroborate with OAT: a hot design day can starve a healthy cohort.
 - `min_active_cycles`: Raise it for long or fine-grained records; zones with fewer usable system-on cycles are reported unevaluable. *Note:* The cohort-starvation rules also need this many active cycles in a group before calling it starved.
 - `min_zones_per_group`: Raise it so that a few zones requesting together are not read as a whole starved air handler.
+- `min_present_frac`: Lower it only when some boxes trend sparsely by design; read group_skipped_cycles to see how many cycles the floor leaves out. *Note:* Cycles below it are skipped, counted and caveated.
 
 Not thresholds: `groups` (explicit zone -> air-handler membership ({zone: ahu} or a callable), a structural input; None uses the served-by topology or a building-wide pool).
 
@@ -1142,6 +1146,7 @@ How to calibrate:
 | `sustained_frac` | `0.5` | fraction of active cycles | 0.2 to 0.9 | CAMBER judgment: screening-grade (provisional-untuned) |
 | `min_active_cycles` | `10` | count (request cycles) | 5 to 500 | CAMBER judgment: screening-grade (provisional-untuned) |
 | `min_zones_per_group` | `3` | count | 3 to 20 | CAMBER judgment: a common-mode pattern needs a cohort, not a pair |
+| `min_present_frac` | `null` | fraction of the group's zones with data on a cycle | 0.25 to 1.0 | CAMBER judgment (0.108, #239): None (default) = cohort_frac, so a cohort is never judged on fewer zones than it takes to call one |
 
 How to calibrate:
 
@@ -1149,6 +1154,7 @@ How to calibrate:
 - `sustained_frac`: Read group_sustained_frac on healthy air handlers over a hot week; set this above it. For SAT, corroborate with OAT: a hot design day can starve a healthy cohort.
 - `min_active_cycles`: Raise it for long or fine-grained records; zones with fewer usable system-on cycles are reported unevaluable. *Note:* The cohort-starvation rules also need this many active cycles in a group before calling it starved.
 - `min_zones_per_group`: Raise it so that a few zones requesting together are not read as a whole starved air handler.
+- `min_present_frac`: Lower it only when some boxes trend sparsely by design; read group_skipped_cycles to see how many cycles the floor leaves out. *Note:* Cycles below it are skipped, counted and caveated.
 
 Not thresholds: `groups` (explicit zone -> air-handler membership ({zone: ahu} or a callable), a structural input; None uses the served-by topology or a building-wide pool).
 
@@ -1287,12 +1293,18 @@ How to calibrate:
 | `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
+| `min_heating_frac` | `0.1` | fraction of the fleet's zones (mean, in the mixed hours) | 0.0 to 0.5 | CAMBER judgment (0.108, #241): a fleet fault means many zones re-warming central overcooling (PNNL Re-tuning), not one box |
+| `max_driver_zones` | `2` | count of zones | 0 to 10 | CAMBER judgment (0.108, #241): one or two boxes heating is a local fault |
+| `persistent_frac` | `0.5` | fraction of the mixed hours | 0.1 to 1.0 | CAMBER judgment (0.108, #241) |
 
 How to calibrate:
 
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
+- `min_heating_frac`: Read heating_frac_when_mixed on a fleet known to be free of simultaneous heating and cooling; set this above it. *Note:* Under it a fault is rated warn, with a caveat.
+- `max_driver_zones`: Raise it in very large fleets where three or four bad valves are still local; the result is capped at warn when the mixed share without these zones is under 25 %. *Note:* The zones are the most-heating ones in the mixed hours (driver_zones).
+- `persistent_frac`: Lower it to list more zones as persistently heating (persistent_heating_zones).
 
 Fixed in code: a zone heats when its reheat valve is > 5 % open and cools when it does not heat and its airflow is > 1.1 x its minimum (else its space at or above its cooling setpoint); fault when >= 75 % and warn when >= 25 % of occupied hours have a zone heating while another cools (camber/zones.py, camber/rules/zones_rule.py)
 
