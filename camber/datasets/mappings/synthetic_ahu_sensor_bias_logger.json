@@ -1,0 +1,6 @@
+{
+  "_comment": "Synthetic duct logger (generator ahu_sensor_bias; 0.108): SAT_LOGGER is a calibrated logger's reading of the supply air in the unit's duct (F), every 15 minutes for four weekdays of the second week and empty otherwise, ingested as its own LOGGER equipment so no rule runs on it. It is the reference a sensor comparison (camber.sensordrift.compare_to_reference) reads the unit's supply-air sensor against.",
+  "aliases": {
+    "SAT_LOGGER": "supply_air_temp"
+  }
+}

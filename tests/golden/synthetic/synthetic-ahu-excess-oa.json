@@ -1,0 +1,35 @@
+{
+ "_comment": "0.108: what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "ahu_excess_oa",
+ "seed": 195,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "OA_RH",
+  "RAT",
+  "RA_RH",
+  "MAT",
+  "SAT",
+  "SAT_SP",
+  "OA_DMPR",
+  "SA_CFM",
+  "HTG_VLV",
+  "CLG_VLV",
+  "SF_STS",
+  "OCC"
+ ],
+ "scenarios": [
+  "excess_oa",
+  "economizer"
+ ],
+ "runs": [
+  "excess_oa",
+  "economizer",
+  "excess_oa_no_flow"
+ ],
+ "equipment": 3,
+ "rows_per_scenario": 4032,
+ "max_bytes": 1500000
+}

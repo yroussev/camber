@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise air-excess-oa-cost, the declared-minimum lesson: outdoor_air_fraction with no min_oa_pct. The rule still judges the units against its generic 20 % assumption (min_oa_source default), so the verdicts do not move, but the cost estimate declines: it prices only a minimum the site declared.",
+  "_dataset": "synthetic-ahu-excess-oa",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-ahu-excess-oa"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "outdoor_air_fraction"
+  ],
+  "report": {
+    "level": 2
+  }
+}

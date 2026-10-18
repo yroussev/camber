@@ -75,6 +75,7 @@ nav:
       # BEGIN slot #146 (AHU maintenance)
       - "Air side: dirty filters and a hunting valve": workbook/air-maintenance.md
       # END slot #146 (AHU maintenance)
+      - "Air side: what excess outside air costs": workbook/air-excess-oa-cost.md
       # END workbook-air (#80)
       #
       # BEGIN workbook-zone (#81)
@@ -107,6 +108,7 @@ nav:
       #
       # BEGIN workbook-practice (#83)
       - "Practice: are the trends good enough?": workbook/data-trend-quality.md
+      - "Practice: a biased sensor, conditional findings and money at risk": workbook/data-sensor-conditional.md
       - "Practice: energy charting": workbook/data-energy-charting.md
       - "Practice: change-point baselines and M&V": workbook/mv-baselines.md
       - "Practice: capstone": workbook/capstone.md

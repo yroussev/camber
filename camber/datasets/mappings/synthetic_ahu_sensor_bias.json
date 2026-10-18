@@ -1,0 +1,16 @@
+{
+  "_comment": "Synthetic air handler (generator ahu_sensor_bias, camber.datasets._synthetic_ahu_sensor_bias; 0.108) -> CAMBER Role mapping. Every column is CAMBER's own: OAT, RAT, MAT and SAT the outdoor, return, mixed and supply air temperatures (F), SAT_SP the supply-air setpoint (F), OA_DMPR the outdoor-air damper command (%), SA_CFM the supply airflow (cfm), HTG_VLV and CLG_VLV the heating and cooling valve commands (%), SF_STS the supply fan's run status (1 = running), OCC the occupancy point (1 = occupied). SAT_LOGGER (a duct logger's reading) is mapped by synthetic_ahu_sensor_bias_logger.json. The scenario column selects one unit per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "RAT": "return_air_temp",
+    "MAT": "mixed_air_temp",
+    "SAT": "supply_air_temp",
+    "SAT_SP": "supply_air_temp_sp",
+    "OA_DMPR": "oa_damper",
+    "SA_CFM": "airflow",
+    "HTG_VLV": "heat_valve",
+    "CLG_VLV": "cool_valve",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy"
+  }
+}

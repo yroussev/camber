@@ -52,6 +52,29 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   carries its device's `device_instance` and `address` (#248).
 - **Haystack: `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
   strict_timezone=)` and `haystack_tz` (#244).**
+- **Excess outside air priced end to end, and the `air-excess-oa-cost` exercise (0.108, C2).**
+  The new catalog entry `synthetic-ahu-excess-oa` (generator `ahu_excess_oa`, catalog file 102)
+  generates two variable-air-volume air handlers with trended outdoor and return humidity, supply
+  airflow, a heating valve and occupancy, every 15 minutes for six weeks of a humid spring: one
+  holding about 45 % outside air against its declared 20 % minimum in all weather, one
+  economizing below a 65 °F high limit. The first is ingested a second time without its airflow
+  point (`AHU__excess_oa_no_flow`). Its run template prices the excess with the 0.107 estimator
+  (#195): $731/yr on the enthalpy path (cooling and heating), $255/yr if the humidity points are
+  dropped, $0 for the economizer, and declines without airflow or a declared minimum. The
+  workbook exercise `air-excess-oa-cost` walks through it, with two config variants
+  (`--no-min`, `--design-oa`), an instructor key and a figure. The answer key is pending
+  maintainer sign-off.
+- **A biased sensor, conditional findings and the at-risk total: the `data-sensor-conditional`
+  exercise (0.108, C3).** The new catalog entry `synthetic-ahu-sensor-bias` (generator
+  `ahu_sensor_bias`, catalog file 103) generates two identical air handlers on a fixed 55 °F
+  supply setpoint, one with a supply-air sensor reading 3 °F high, and a calibrated duct logger
+  in each for four days (`LOGGER__<unit>`). The false reading makes `leaking_valve` fault, the
+  loop it drives makes `supply_air_control` pass, and the sensor-trust layer scores it trusted.
+  Compared with the logger (`camber.sensordrift.drift_finding`), the bias becomes a
+  `sensor_drift:supply_air_temp` finding: the unit's dependent findings turn conditional and its
+  reset estimate moves to the RCx report's at-risk total ($5,250/yr), while the healthy twin's
+  identical finding stays firm. The workbook exercise `data-sensor-conditional` walks through it,
+  with an instructor key and a figure. The answer key is pending maintainer sign-off.
 
 ### Changed
 - **A rule's docstring citations are checked against its references (#232).**

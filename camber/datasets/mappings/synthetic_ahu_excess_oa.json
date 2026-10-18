@@ -1,0 +1,18 @@
+{
+  "_comment": "Synthetic air handler (generator ahu_excess_oa, camber.datasets._synthetic_ahu_excess_oa; 0.108, #195) -> CAMBER Role mapping. Every column is CAMBER's own: OAT and OA_RH the outdoor temperature (F) and relative humidity (%), RAT and RA_RH the return air's, MAT and SAT the mixed and supply air temperatures (F), SAT_SP the supply-air setpoint (F), OA_DMPR the outdoor-air damper command (%), SA_CFM the supply airflow (cfm), HTG_VLV and CLG_VLV the heating and cooling valve commands (%), SF_STS the supply fan's run status (1 = running), OCC the occupancy point (1 = occupied). The scenario column selects one unit per ingest run and is not a point.",
+  "aliases": {
+    "OAT": "oat",
+    "OA_RH": "outdoor_rh",
+    "RAT": "return_air_temp",
+    "RA_RH": "return_air_humidity",
+    "MAT": "mixed_air_temp",
+    "SAT": "supply_air_temp",
+    "SAT_SP": "supply_air_temp_sp",
+    "OA_DMPR": "oa_damper",
+    "SA_CFM": "airflow",
+    "HTG_VLV": "heat_valve",
+    "CLG_VLV": "cool_valve",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy"
+  }
+}

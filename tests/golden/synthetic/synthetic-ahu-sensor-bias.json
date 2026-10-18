@@ -1,0 +1,35 @@
+{
+ "_comment": "0.108: what the entry generates; tests/test_datasets_synthetic.py checks it",
+ "generator": "ahu_sensor_bias",
+ "seed": 108,
+ "version": 1,
+ "header": [
+  "Timestamp",
+  "scenario",
+  "OAT",
+  "RAT",
+  "MAT",
+  "SAT",
+  "SAT_SP",
+  "OA_DMPR",
+  "SA_CFM",
+  "HTG_VLV",
+  "CLG_VLV",
+  "SF_STS",
+  "OCC",
+  "SAT_LOGGER"
+ ],
+ "scenarios": [
+  "healthy",
+  "sat_bias"
+ ],
+ "runs": [
+  "healthy",
+  "sat_bias",
+  "LOGGER__healthy",
+  "LOGGER__sat_bias"
+ ],
+ "equipment": 4,
+ "rows_per_scenario": 2016,
+ "max_bytes": 800000
+}

@@ -1,0 +1,17 @@
+{
+  "_comment": "Synthetic air handler without its airflow point (generator ahu_excess_oa; 0.108, #195): the same columns as synthetic_ahu_excess_oa.json, read as a BAS with no supply airflow station would trend the unit, so SA_CFM is left unmapped. The excess-outside-air estimate then needs the unit's supply_airflow_cfm (or design_oa_cfm) from the config's loads.",
+  "aliases": {
+    "OAT": "oat",
+    "OA_RH": "outdoor_rh",
+    "RAT": "return_air_temp",
+    "RA_RH": "return_air_humidity",
+    "MAT": "mixed_air_temp",
+    "SAT": "supply_air_temp",
+    "SAT_SP": "supply_air_temp_sp",
+    "OA_DMPR": "oa_damper",
+    "HTG_VLV": "heat_valve",
+    "CLG_VLV": "cool_valve",
+    "SF_STS": "supply_fan_status",
+    "OCC": "occupancy"
+  }
+}

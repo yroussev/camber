@@ -81,6 +81,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Ch. 6][pnnl-retuning-ch6], [Air-Side Economizer Operation][pnnl-guide-economizer] | [`air-economizer`: a stuck outdoor-air damper and missed free cooling](air-economizer.md) | `lbnl-sdahu`, `irish-ahu` |
 | [Ch. 5][pnnl-retuning-ch5], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | [`air-scheduling`: 24/7 operation, night setback and after-hours fan energy](air-scheduling.md) | `ornl-frp-ops` |
 | [Ch. 5][pnnl-retuning-ch5], [Ch. 9][pnnl-retuning-ch9] | [`air-maintenance`: a dirty filter and a hunting valve](air-maintenance.md) | `synthetic-ahu-maintenance` |
+| [Ch. 6][pnnl-retuning-ch6], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa], [Air-Side Economizer Operation][pnnl-guide-economizer] | [`air-excess-oa-cost`: what excess outside air costs: enthalpy, heating and free cooling](air-excess-oa-cost.md) | `synthetic-ahu-excess-oa` (synthetic) |
 <!-- END workbook-air (#80) -->
 
 <!-- BEGIN workbook-zone (#81) -->
@@ -122,6 +123,7 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | PNNL reading | Exercise | Datasets |
 |---|---|---|
 | [Ch. 3][pnnl-retuning-ch3], [Ch. 4][pnnl-retuning-ch4], [Trending Requirements][pnnl-trending-requirements] | [`data-trend-quality`: are the trends good enough?](data-trend-quality.md) | `lbnl-b59`, `irish-ahu`, `nuig-ahu101` |
+| [Ch. 4][pnnl-retuning-ch4], [Ch. 5][pnnl-retuning-ch5], [AHU Discharge-Air Temperature Control][pnnl-guide-discharge-air-temp] | [`data-sensor-conditional`: a sensor that reads 3 °F high, conditional findings and money at risk](data-sensor-conditional.md) | `synthetic-ahu-sensor-bias` (synthetic) |
 | [Ch. 4][pnnl-retuning-ch4], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | [`data-energy-charting`: load profiles and weather dependence](data-energy-charting.md) | `bdg2`, `valladolid-uva` |
 | [Ch. 4][pnnl-retuning-ch4], [Ch. 10][pnnl-retuning-ch10] | [`mv-baselines`: change-point baselines and M&V](mv-baselines.md) | `valladolid-uva`, `cofactor-drammen`, `bdg2` (synthetic bills) |
 | [Economizer][pnnl-guide-economizer], [Ch. 9][pnnl-retuning-ch9], [Ch. 10][pnnl-retuning-ch10] | [`capstone`: the RCx report, a walk-down list, a re-tuning plan, verification](capstone.md) | `lbnl-sdahu`, `ornl-frp-ops` |

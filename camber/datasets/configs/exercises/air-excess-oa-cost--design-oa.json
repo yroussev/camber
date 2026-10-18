@@ -1,0 +1,41 @@
+{
+  "_comment": "Workbook exercise air-excess-oa-cost, the airflow lesson: the main run plus the design outdoor airflow of the unit that trends no supply airflow (report.rcx.loads: AHU__excess_oa_no_flow design_oa_cfm 2400). With no trended airflow and no supply_airflow_cfm, the estimate takes the supply airflow the declared minimum implies, 2400 / 0.20 = 12,000 cfm: the unit's design flow, which a VAV unit reaches only at full load.",
+  "_dataset": "synthetic-ahu-excess-oa",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-ahu-excess-oa"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 20
+      }
+    },
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "high_limit_f": 65,
+        "min_oa_pct": 20
+      }
+    }
+  ],
+  "report": {
+    "level": 2,
+    "rcx": {
+      "loads": {
+        "AHU__excess_oa_no_flow": {
+          "design_oa_cfm": 2400
+        }
+      }
+    }
+  }
+}
