@@ -23,7 +23,7 @@ Subcommands:
     camber retention show|set|override|hold|release|apply             # retention policy (0.95)
     camber store migrate-partitions STORE [--apply --yes]             # year= -> year=/month=
     camber store verify|normalize STORE [--facility ID]               # canonical parts (0.104)
-    camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
+    camber edge    run|send-once|status|selftest|requeue|compact|decommission    # edge forwarder
     camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
@@ -538,15 +538,82 @@ def _cmd_edge_status(args) -> int:
     from .edge.spool import Spool
 
     cfg = load_config(args.config)
-    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes)
+    spool = Spool(
+        cfg.spool_dir, max_bytes=cfg.spool_max_bytes, dead_letter_after=cfg.dead_letter_after
+    )
     count, nbytes = spool.depth()
+    stuck = spool.stuck()  # 0.108 (#245): batches that failed delivery, and dead letters
+    dead = spool.dead_letters()
+    retired = spool.retirement()
+    if getattr(args, "json", False):
+        import dataclasses
+
+        print(
+            json.dumps(
+                {
+                    "spool_dir": cfg.spool_dir,
+                    "pending": count,
+                    "bytes": nbytes,
+                    "stuck": [dataclasses.asdict(e) for e in stuck],
+                    "dead": dead,
+                    "retired": retired,
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return 0
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
-    retired = spool.retirement()  # 0.95 (#18): shown only for a decommissioned device
-    if retired is not None:
+    if stuck:
+        head = stuck[0]
+        print(
+            f"  STUCK: {len(stuck)} batch(es) failed delivery; the oldest, {head.key}, queued "
+            f"{head.enqueued_ts}, after {head.attempts} attempt(s)"
+            + (f" ({head.rejects} rejected)" if head.rejects else "")
+            + (f": {head.last_error}" if head.last_error else "")
+        )
+    if dead:
+        print(
+            f"  DEAD: {len(dead)} batch(es) rejected permanently and kept in "
+            f"{os.path.join(cfg.spool_dir, 'dead')}; fix the cause, then `camber edge requeue`"
+        )
+        for rec in dead[: args.limit]:
+            print(f"    {rec.get('key')}  ({rec.get('dead_at', '?')}: {rec.get('error', '')})")
+    if retired is not None:  # 0.95 (#18): shown only for a decommissioned device
         print(
             f"  RETIRED at {retired.get('retired_at', '?')} (device "
             f"{retired.get('device_id', '?')}); `edge run` / `send-once` refuse this spool"
         )
+    return 0
+
+
+def _cmd_edge_requeue(args) -> int:
+    """0.108 (#245): send dead-lettered batches again, once the cause of the rejection is fixed."""
+    from .edge.config import load_config
+    from .edge.spool import Spool, SpoolRetired
+
+    cfg = load_config(args.config)
+    spool = Spool(
+        cfg.spool_dir, max_bytes=cfg.spool_max_bytes, dead_letter_after=cfg.dead_letter_after
+    )
+    dead = spool.dead_letters()
+    chosen = [r for r in dead if not args.key or r.get("key") in set(args.key)]
+    if args.key:
+        missing = sorted(set(args.key) - {r.get("key") for r in dead})
+        if missing:
+            print(f"error: not dead-lettered: {', '.join(missing)}", file=sys.stderr)
+            return 1
+    if not args.apply:
+        print(f"edge requeue (dry run; --apply to queue them): {len(chosen)} dead batch(es)")
+        for rec in chosen:
+            print(f"  {rec.get('key')}  ({rec.get('error', '')})")
+        return 0
+    try:
+        done = spool.requeue_dead(keys=args.key or None)
+    except SpoolRetired as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"edge requeue: {len(done)} batch(es) queued again; the next poll sends them")
     return 0
 
 
@@ -589,18 +656,41 @@ def _cmd_edge_compact(args) -> int:
 
 
 def _cmd_edge_selftest(args) -> int:
-    """Dry-run through an in-memory sink: prove read-only + build the batches without any egress."""
+    """Dry-run through an in-memory sink: prove read-only + build the batches without any egress.
+
+    0.108 (#242): it runs on a temporary spool, so the configured spool (a backlog waiting for the
+    link to return) is never drained, acked or written; a retired spool is refused."""
+    import dataclasses
+    import shutil
+    import tempfile
+
     from .edge.config import build_forwarder, load_config
     from .edge.sink import collect_sink
+    from .edge.spool import read_retirement
 
     cfg = load_config(args.config)
+    retired = read_retirement(cfg.spool_dir)
+    if retired is not None:
+        print(
+            f"error: this edge device was decommissioned at {retired.get('retired_at', '?')} "
+            f"(spool {cfg.spool_dir}); it no longer forwards, so there is nothing to test",
+            file=sys.stderr,
+        )
+        return 1
     sink, log = collect_sink()
-    fwd = build_forwarder(cfg, sink=sink)
-    res = fwd.poll_once()
+    scratch = tempfile.mkdtemp(prefix="camber-edge-selftest-")
+    try:
+        fwd = build_forwarder(dataclasses.replace(cfg, spool_dir=scratch), sink=sink)
+        res = fwd.poll_once()
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
     print(f"edge selftest: would send {len(log)} object(s); rows={res.rows}")
     for obj in log:
         print(f"  {obj['key']} ({len(obj['data'])} bytes)")
-    print("no real sink touched; no BAS write path exists (see docs/EDGE-DEPLOY.md).")
+    print(
+        "no real sink touched, and the configured spool was not read or changed (a temporary "
+        "spool was used); no BAS write path exists (see docs/EDGE-DEPLOY.md)."
+    )
     return 0
 
 
@@ -2066,9 +2156,19 @@ def _cmd_edge_land(args) -> int:
     for r in rep["objects"][: args.limit]:
         if r["to"] != "store":
             print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+        elif r.get("merged"):  # 0.108: a rolling window, stored as the union
+            m = r["merged"]
+            print(
+                f"  {'store':10s} {'merges':16s} {r['key']}  (with {', '.join(r['replaces'])}, "
+                f"as {m['stored_as'].rsplit('/', 1)[-1]}: {m['kept_old_rows']} stored row(s) "
+                f"kept, {m['new_rows']} new, {m['revised']} revised)"
+            )
         elif r.get("replaces"):
             print(f"  {'store':10s} {'replaces':16s} {r['key']}  ({', '.join(r['replaces'])})")
-    return 0
+    errors = rep.get("errors") or []
+    for e in errors:  # 0.108 (#247): one bad object is reported, the run went on
+        print(f"  error      {e['key']}: {e['error']}", file=sys.stderr)
+    return 1 if errors and rep["applied"] else 0
 
 
 @_pf_errors
@@ -3220,9 +3320,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     es.add_argument("config")
     es.set_defaults(func=_cmd_edge_send_once)
-    est = edsub.add_parser("status", help="show the local spool depth (pending batches / bytes)")
+    est = edsub.add_parser(
+        "status", help="show the local spool: pending, stuck and dead-lettered batches"
+    )
     est.add_argument("config")
+    est.add_argument("--json", action="store_true")
+    est.add_argument("--limit", type=int, default=20, help="dead batches to list (default 20)")
     est.set_defaults(func=_cmd_edge_status)
+    erq = edsub.add_parser(
+        "requeue", help="queue dead-lettered batches again once the rejection is fixed"
+    )
+    erq.add_argument("config")
+    erq.add_argument("--key", action="append", help="only this dead batch's key (repeatable)")
+    erq.add_argument("--apply", action="store_true", help="queue them (default: a dry run)")
+    erq.set_defaults(func=_cmd_edge_requeue)
     esf = edsub.add_parser(
         "selftest", help="dry-run through an in-memory sink (no egress; proves the read-only path)"
     )

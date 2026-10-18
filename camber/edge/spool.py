@@ -24,6 +24,19 @@ batches. Every journal write takes the spool's single-writer lock (``<spool>/_lo
 advisory lock a portfolio workspace uses), so a compaction or a decommission never races a running
 forwarder.
 
+**Permanent rejections (0.108, #245).** A send that fails with a 4xx answer (other than 408,
+425 and 429) or a validation error is permanent: retrying will not help. It is counted as a
+rejection, the drain moves on to the next batch instead of stopping, and after
+``dead_letter_after`` rejections (5 by default) the batch moves to ``dead/``: its payload and a
+``<file>.json`` record (key, metadata, attempts, the last error, the time) are kept, a ``dead``
+journal record and a WARNING log line are written, and :meth:`Spool.requeue_dead` sends it again
+once the cause is fixed. A transient failure (a network error, a 5xx) still stops the cycle and
+backs off.
+
+**No duplicate copies (0.108, #246).** :meth:`Spool.enqueue` skips a batch whose key and content
+sha256 are already pending (or dead-lettered): a forwarder that re-reads the same window while
+offline queues each distinct batch once.
+
 **Retirement (0.95, provisional).** A decommissioned device's spool carries ``retired.json``
 (:meth:`Spool.retire`); :meth:`Spool.enqueue` refuses with :class:`SpoolRetired` from then on.
 """
@@ -31,6 +44,7 @@ forwarder.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -46,6 +60,9 @@ _TMP = "tmp"
 _JOURNAL = "journal.ndjson"
 _COMPACT_TMP = "journal.ndjson.compact"
 _RETIRED = "retired.json"
+_DEAD = "dead"
+_DEFAULT_DEAD_LETTER_AFTER = 5
+_ERROR_CHARS = 500
 _DEFAULT_MAX_BYTES = 2 * 1024**3  # 2 GiB
 _DEFAULT_LOCK_TIMEOUT = 30.0
 
@@ -75,6 +92,8 @@ class SpoolEntry:
     bytes: int
     enqueued_ts: str
     attempts: int = 0
+    rejects: int = 0  # 0.108 (#245): permanent rejections (a 4xx, a validation error)
+    last_error: str = ""
 
 
 @dataclass
@@ -111,6 +130,25 @@ class DrainResult:
     remaining: int = 0
     failed: int = 0
     keys: list = field(default_factory=list)
+    rejected: int = 0  # 0.108 (#245): permanent rejections this cycle (the drain went on)
+    dead: list = field(default_factory=list)  # keys moved to dead/ this cycle
+
+
+def read_retirement(root: str) -> dict | None:
+    """The ``retired.json`` record of the spool at ``root``, else ``None`` (reads only).
+
+    Unlike constructing a :class:`Spool`, this creates nothing, so ``edge selftest`` can check a
+    configured spool without touching it (0.108, #242).
+    """
+    path = os.path.join(root, _RETIRED)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {"retired_at": "?", "unreadable": True}  # present but torn: still retired
+    return data if isinstance(data, dict) else {"retired_at": "?", "unreadable": True}
 
 
 class Spool:
@@ -123,9 +161,15 @@ class Spool:
         max_bytes: int = _DEFAULT_MAX_BYTES,
         clock: Callable[[], datetime] | None = None,
         lock_timeout: float = _DEFAULT_LOCK_TIMEOUT,
+        dead_letter_after: int = _DEFAULT_DEAD_LETTER_AFTER,
     ):
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+            raise ValueError(f"spool max_bytes must be a positive integer, got {max_bytes!r}")
+        if isinstance(dead_letter_after, bool) or int(dead_letter_after) < 1:
+            raise ValueError(f"dead_letter_after must be at least 1, got {dead_letter_after!r}")
         self.root = root
         self.max_bytes = max_bytes
+        self.dead_letter_after = int(dead_letter_after)
         self.lock_timeout = lock_timeout
         self._clock = clock or _default_clock
         os.makedirs(os.path.join(root, _PENDING), exist_ok=True)
@@ -175,6 +219,8 @@ class Spool:
         """``(live entries, high-water seq, parsed records, torn lines)`` of a journal file."""
         live: dict = {}
         attempts: dict = {}
+        rejects: dict = {}
+        errors: dict = {}
         hwm, n, torn = -1, 0, 0
         if not os.path.isfile(path):
             return live, hwm, n, torn
@@ -197,6 +243,8 @@ class Spool:
                     hwm = max(hwm, seq)
                 if op == "enqueue" and isinstance(seq, int):
                     attempts[seq] = int(rec.get("attempts", 0) or 0)
+                    rejects[seq] = int(rec.get("rejects", 0) or 0)
+                    errors[seq] = str(rec.get("last_error", "") or "")
                     live[seq] = SpoolEntry(
                         seq=seq,
                         key=rec["key"],
@@ -206,12 +254,23 @@ class Spool:
                         bytes=rec.get("bytes", 0),
                         enqueued_ts=rec.get("ts", ""),
                         attempts=attempts[seq],
+                        rejects=rejects[seq],
+                        last_error=errors[seq],
                     )
                 elif op == "attempt":
                     attempts[seq] = attempts.get(seq, 0) + 1
+                    if rec.get("permanent"):
+                        rejects[seq] = rejects.get(seq, 0) + 1
+                    if rec.get("error"):
+                        errors[seq] = str(rec["error"])
                     if seq in live:
-                        live[seq] = _with_attempts(live[seq], attempts[seq])
-                elif op in ("ack", "evict"):
+                        live[seq] = _with_attempts(
+                            live[seq],
+                            attempts[seq],
+                            rejects=rejects.get(seq, 0),
+                            last_error=errors.get(seq, ""),
+                        )
+                elif op in ("ack", "evict", "dead"):
                     live.pop(seq, None)
                 # "mark" (the compaction high-water record) and unknown ops only raise ``hwm``
         return live, hwm, n, torn
@@ -228,13 +287,30 @@ class Spool:
         with self.lock():
             return self._enqueue(key, data, content_type=content_type, metadata=metadata)
 
-    def _enqueue(self, key: str, data: bytes, *, content_type: str, metadata=None) -> SpoolEntry:
+    def _refuse_if_retired(self) -> None:
         retired = self.retirement()
         if retired is not None:
             raise SpoolRetired(
                 f"spool {self.root} was retired at {retired.get('retired_at', '?')} (device "
                 f"{retired.get('device_id', '?')} decommissioned); it takes no new batches"
             )
+
+    def _enqueue(self, key: str, data: bytes, *, content_type: str, metadata=None) -> SpoolEntry:
+        self._refuse_if_retired()
+        sha = hashlib.sha256(data).hexdigest()
+        same = self._same_batch(key, data, sha)
+        if same is not None:  # 0.108 (#246): one copy of each batch, however often it is read
+            _LOG.info(
+                "edge.spool.enqueue skipped key=%s: the same batch is already %s (seq %d)",
+                key,
+                "dead-lettered" if same.file.startswith(_DEAD + "/") else "pending",
+                same.seq,
+            )
+            return same
+        return self._enqueue_new(key, data, content_type=content_type, metadata=metadata)
+
+    def _enqueue_new(self, key: str, data: bytes, *, content_type: str, metadata=None):
+        self._refuse_if_retired()
         while self._would_exceed(len(data)):
             if self._evict_oldest() is None:
                 break  # empty queue but the single batch is still larger than the cap; keep it
@@ -270,11 +346,52 @@ class Spool:
         )
         return entry
 
+    def _same_batch(self, key: str, data: bytes, sha: str) -> SpoolEntry | None:
+        """A pending (or dead-lettered) entry with this key and these exact bytes, else None."""
+        for e in self.pending():
+            if e.key == key and e.bytes == len(data):
+                payload = self._read_payload(e)
+                if payload is not None and hashlib.sha256(payload).hexdigest() == sha:
+                    return e
+        for rec in self.dead_letters():
+            if rec.get("key") == key and rec.get("sha256") == sha:
+                return SpoolEntry(
+                    seq=int(rec.get("seq", -1)),
+                    key=key,
+                    file=f"{_DEAD}/{rec.get('file', '')}",
+                    content_type=rec.get("content_type", "application/octet-stream"),
+                    metadata=rec.get("metadata", {}),
+                    bytes=int(rec.get("bytes", 0) or 0),
+                    enqueued_ts=rec.get("enqueued_ts", ""),
+                    attempts=int(rec.get("attempts", 0) or 0),
+                    rejects=int(rec.get("rejects", 0) or 0),
+                    last_error=str(rec.get("error", "")),
+                )
+        return None
+
     def _would_exceed(self, incoming: int) -> bool:
         _, used = self.depth()
+        used += sum(int(r.get("bytes", 0) or 0) for r in self.dead_letters())
         return used + incoming > self.max_bytes
 
-    def _evict_oldest(self) -> SpoolEntry | None:
+    def _evict_oldest(self):
+        """Drop the oldest dead letter (already rejected) or else the oldest pending batch."""
+        dead = self.dead_letters()
+        if dead:
+            victim = dead[0]
+            d = os.path.join(self.root, _DEAD)
+            blob = os.path.join(d, victim["file"])
+            for path in (blob, blob + ".json"):
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(path)
+            _LOG.warning(
+                "edge.spool.evict dead key=%s bytes=%s — spool over %d-byte cap, oldest dead "
+                "letter dropped",
+                victim.get("key"),
+                victim.get("bytes"),
+                self.max_bytes,
+            )
+            return victim
         pend = self.pending()
         if not pend:
             return None
@@ -300,6 +417,128 @@ class Spool:
         pend = self.pending()
         return len(pend), sum(e.bytes for e in pend)
 
+    def stuck(self) -> list[SpoolEntry]:
+        """Pending batches that failed at least one delivery attempt, oldest-first (0.108)."""
+        return [e for e in self.pending() if e.attempts > 0]
+
+    def dead_letters(self) -> list[dict]:
+        """The dead-lettered batches (0.108, #245): each one's ``dead/<file>.json`` record.
+
+        Only records whose payload is present count (a crash between the record and the move
+        leaves the batch pending)."""
+        d = os.path.join(self.root, _DEAD)
+        if not os.path.isdir(d):
+            return []
+        out = []
+        for name in sorted(os.listdir(d)):
+            if not name.endswith(".json"):
+                continue
+            blob = name[: -len(".json")]
+            if not os.path.isfile(os.path.join(d, blob)):
+                continue
+            try:
+                with open(os.path.join(d, name), encoding="utf-8") as fh:
+                    rec = json.load(fh)
+            except (OSError, ValueError):
+                rec = {"file": blob, "error": "unreadable dead-letter record"}
+            if isinstance(rec, dict):
+                rec.setdefault("file", blob)
+                out.append(rec)
+        return out
+
+    def requeue_dead(self, keys=None) -> list[SpoolEntry]:
+        """Queue dead-lettered batches again (all, or those whose key is in ``keys``).
+
+        Each becomes a new pending batch with a fresh attempt count; its dead-letter payload and
+        record are removed only after the new batch is committed, and a ``requeue`` journal record
+        names both sequence numbers. Takes the spool lock; a retired spool refuses.
+        """
+        wanted = None if keys is None else set(keys)
+        out = []
+        with self.lock():
+            d = os.path.join(self.root, _DEAD)
+            for rec in self.dead_letters():
+                if wanted is not None and rec.get("key") not in wanted:
+                    continue
+                blob = os.path.join(d, rec["file"])
+                with open(blob, "rb") as fh:
+                    data = fh.read()
+                entry = self._enqueue_new(
+                    rec["key"],
+                    data,
+                    content_type=rec.get("content_type", "application/octet-stream"),
+                    metadata=rec.get("metadata") or {},
+                )
+                self._append_journal(
+                    {
+                        "op": "requeue",
+                        "seq": entry.seq,
+                        "from_seq": rec.get("seq"),
+                        "key": rec["key"],
+                    }
+                )
+                for path in (blob + ".json", blob):
+                    with contextlib.suppress(FileNotFoundError):
+                        os.remove(path)
+                _fsync_dir(d)
+                _LOG.info(
+                    "edge.spool.requeue key=%s seq=%s->%d", rec["key"], rec.get("seq"), entry.seq
+                )
+                out.append(entry)
+        return out
+
+    def _dead_letter(self, entry: SpoolEntry, error: str, rejects: int) -> None:
+        """Move a permanently rejected batch to ``dead/`` (record first, then payload, journal)."""
+        with self.lock():
+            d = os.path.join(self.root, _DEAD)
+            os.makedirs(d, exist_ok=True)
+            src = os.path.join(self.root, _PENDING, entry.file)
+            payload = self._read_payload(entry)
+            if payload is None:
+                return
+            record = {
+                "seq": entry.seq,
+                "key": entry.key,
+                "file": entry.file,
+                "content_type": entry.content_type,
+                "metadata": entry.metadata,
+                "bytes": entry.bytes,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "enqueued_ts": entry.enqueued_ts,
+                "attempts": entry.attempts + 1,
+                "rejects": rejects,
+                "error": error,
+                "dead_at": self._clock().isoformat(),
+            }
+            tmp = os.path.join(d, entry.file + ".json.tmp")
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(record, fh, indent=2, sort_keys=True, default=str)
+                fh.write("\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, os.path.join(d, entry.file + ".json"))
+            os.replace(src, os.path.join(d, entry.file))
+            _fsync_dir(d)
+            self._append_journal(
+                {
+                    "op": "dead",
+                    "seq": entry.seq,
+                    "key": entry.key,
+                    "rejects": rejects,
+                    "error": error,
+                    "ts": record["dead_at"],
+                }
+            )
+        _LOG.warning(
+            "edge.spool.dead seq=%d key=%s rejects=%d error=%s — rejected permanently; kept in "
+            "%s (requeue it once the cause is fixed)",
+            entry.seq,
+            entry.key,
+            rejects,
+            error,
+            d,
+        )
+
     # ------------------------------------------------------------------ drain
     def drain(
         self,
@@ -309,7 +548,14 @@ class Spool:
         backoff: Callable[[int], float] | None = None,
         _sleep: Callable[[float], None] = time.sleep,
     ) -> DrainResult:
-        """Send pending batches oldest-first; ack on success, stop+backoff on the first failure."""
+        """Send pending batches oldest-first; ack on success, stop+backoff on the first failure.
+
+        A permanent rejection (0.108, #245: a 4xx answer, a validation error; see
+        :func:`camber.edge.sink.is_permanent_error`) does not stop the cycle: it is counted, the
+        drain goes on with the next batch, and after ``dead_letter_after`` rejections the batch
+        moves to ``dead/``."""
+        from .sink import is_permanent_error, is_permanent_status
+
         backoff = backoff or _default_backoff
         result = DrainResult()
         pend = self.pending()
@@ -319,25 +565,49 @@ class Spool:
             payload = self._read_payload(entry)
             if payload is None:
                 continue
+            error, permanent = "", False
             try:
                 resp = sink.put(
                     entry.key, payload, content_type=entry.content_type, metadata=entry.metadata
                 )
+                resp = resp if isinstance(resp, dict) else {}
                 ok = bool(resp.get("ok", True))
+                if not ok:
+                    error = f"sink answered status {resp.get('status', '?')}"
+                    permanent = bool(resp.get("permanent")) or is_permanent_status(
+                        resp.get("status")
+                    )
             except Exception as exc:  # a network/transport error -- keep the batch, back off
-                _LOG.warning(
-                    "edge.spool.drain send failed seq=%d key=%s: %s", entry.seq, entry.key, exc
-                )
                 ok = False
+                error = f"{type(exc).__name__}: {exc}"[:_ERROR_CHARS]
+                permanent = is_permanent_error(exc)
+                _LOG.warning(
+                    "edge.spool.drain send failed seq=%d key=%s%s: %s",
+                    entry.seq,
+                    entry.key,
+                    " (permanent)" if permanent else "",
+                    exc,
+                )
             if ok:
                 self.ack(entry)
                 result.forwarded += 1
                 result.keys.append(entry.key)
-            else:
-                self._append_journal({"op": "attempt", "seq": entry.seq})
-                result.failed += 1
-                _sleep(backoff(entry.attempts + 1))
-                break  # leave the rest queued; the next cycle retries
+                continue
+            result.failed += 1
+            if permanent:
+                rejects = entry.rejects + 1
+                result.rejected += 1
+                if rejects >= self.dead_letter_after:
+                    self._dead_letter(entry, error, rejects)
+                    result.dead.append(entry.key)
+                else:
+                    self._append_journal(
+                        {"op": "attempt", "seq": entry.seq, "permanent": True, "error": error}
+                    )
+                continue  # a rejected batch never blocks the ones behind it
+            self._append_journal({"op": "attempt", "seq": entry.seq, "error": error})
+            _sleep(backoff(entry.attempts + 1))
+            break  # leave the rest queued; the next cycle retries
         result.remaining = self.depth()[0]
         return result
 
@@ -419,15 +689,7 @@ class Spool:
     # ------------------------------------------------------------------ retirement
     def retirement(self) -> dict | None:
         """The ``retired.json`` record if the device was decommissioned, else ``None``."""
-        path = os.path.join(self.root, _RETIRED)
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-        except FileNotFoundError:
-            return None
-        except (OSError, ValueError):
-            return {"retired_at": "?", "unreadable": True}  # present but torn: still retired
-        return data if isinstance(data, dict) else {"retired_at": "?", "unreadable": True}
+        return read_retirement(self.root)
 
     def retire(self, record: dict) -> dict:
         """Write ``retired.json`` atomically (tmp + fsync + replace); enqueue refuses from then on.
@@ -477,6 +739,10 @@ def _enqueue_record(e: SpoolEntry) -> dict:
     }
     if e.attempts:
         rec["attempts"] = e.attempts
+    if e.rejects:
+        rec["rejects"] = e.rejects
+    if e.last_error:
+        rec["last_error"] = e.last_error
     return rec
 
 
@@ -490,6 +756,8 @@ def _identity(e: SpoolEntry) -> tuple:
         e.bytes,
         e.enqueued_ts,
         e.attempts,
+        e.rejects,
+        e.last_error,
     )
 
 
@@ -505,7 +773,9 @@ def _fsync_dir(path: str) -> None:
             os.close(fd)
 
 
-def _with_attempts(entry: SpoolEntry, attempts: int) -> SpoolEntry:
+def _with_attempts(
+    entry: SpoolEntry, attempts: int, *, rejects: int = 0, last_error: str = ""
+) -> SpoolEntry:
     return SpoolEntry(
         seq=entry.seq,
         key=entry.key,
@@ -515,4 +785,6 @@ def _with_attempts(entry: SpoolEntry, attempts: int) -> SpoolEntry:
         bytes=entry.bytes,
         enqueued_ts=entry.enqueued_ts,
         attempts=attempts,
+        rejects=rejects,
+        last_error=last_error,
     )

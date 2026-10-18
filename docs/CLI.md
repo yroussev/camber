@@ -25,7 +25,7 @@ camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|re
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
 camber store migrate-partitions STORE [--apply --yes]   # year= -> year=/month= partitions
 camber store verify|normalize STORE [--facility ID]     # canonical part files (0.104)
-camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder (device)
+camber edge    run|send-once|status|selftest|requeue|compact|decommission  # edge forwarder (device)
 camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing (central)
 ```
 
@@ -847,6 +847,8 @@ central side, where uploads land (see
 
 ```
 # on the edge device
+camber edge status <edge.json> [--json] [--limit N]   # pending, stuck and dead-lettered batches
+camber edge requeue <edge.json> [--key K]... [--apply] # queue dead-lettered batches again (0.108)
 camber edge compact <edge.json> [--dry-run] [--lock-timeout S] [--json]   # shrink the spool journal
                                      # (--lock-timeout: wait for a busy spool, default 30 s)
 camber edge decommission <edge.json> [--device ID] [--wait S]  # dry run: what would be flushed
@@ -880,6 +882,18 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
   role) without holding all of its rows. A year-only part from a pre-0.95 forwarder is also
   compared with the month partitions of its year. Under a legal hold the replaced part is copied
   into quarantine first. `quarantine release` of a conflict stores it beside the other part.
+  Since 0.108 a part that lacks the oldest rows of a stored part but agrees with it on every
+  shared observation (a rolling window, such as a trend-log ring buffer) is stored as the union
+  of the two (`merges` in the listing), and a disagreement in the overlap is a `conflict`.
+  An upload at a key quarantine already holds with other content stays in the inbox
+  (`quarantine_collision`); one object that fails is listed as an error, the run goes on, and
+  `land --apply` exits 1 (#247).
+- **The spool on the device (0.108, #245).** `edge status` shows the batches that failed
+  delivery (`STUCK`) and those dead-lettered after `dead_letter_after` permanent rejections
+  (`DEAD`, kept in `<spool>/dead/`); `--json` prints them all, `--limit` caps the dead list
+  (default 20). `edge requeue` is a dry run without `--apply`; with it, the dead batches (or
+  those named by `--key`) are queued again with a fresh count, and an unknown `--key` exits 1.
+  `edge selftest` runs on a temporary spool and never touches the configured one (#242).
 - **Row duplicates already in the store (0.108, #229).** A store `reconcile` lists the groups of
   parts of one facility that hold identical rows under different keys (landed before the row
   check), with their keys, sizes and landing times. `--apply --yes` (with `--reason`) keeps the
