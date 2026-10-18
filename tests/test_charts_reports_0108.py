@@ -239,7 +239,13 @@ def test_fleet_top_findings_independent_of_hash_seed():
 
 def _shaded_hours(df, mask):
     ax = fault_multitrend(df, ["sat"], spans={"v": mask})
-    return [round(p.get_width() * 24, 2) for p in ax.patches]
+    # axvspan returns a Rectangle on newer matplotlib and a Polygon on the 3.8 floor: measure
+    # both from their vertices in data coordinates.
+    widths = []
+    for p in ax.patches:
+        xs = p.get_patch_transform().transform(p.get_path().vertices)[:, 0]
+        widths.append(round(float(xs.max() - xs.min()) * 24, 2))
+    return widths
 
 
 def test_each_flagged_sample_is_shaded_over_its_own_interval():
