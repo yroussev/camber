@@ -63,7 +63,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   too cold (2 of 6 boxes, costed at its largest member), while the stuck box stays its own
   issue. Without the topology the same run ranks 22 issues instead of 5 and counts the reheat
   twice. The workbook exercise `rcx-cause-chains` walks through it, with an instructor key and a
-  figure. The answer key is pending maintainer sign-off.
+  figure.
 - **`unmet_setpoint_hours` and `airflow_tracking` on the G36 fleet (#226).** The
   `synthetic-g36-vav-fleet` run template and the `zone-g36-fleet` exercise configs run both
   rules, and the entry labels the boxes behind `AHU__starved` and `AHU__not_responding`
@@ -208,10 +208,20 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   together, takes three reset cycles per trended hour, holds both resets at their start value
   while the fan is off (G36 §5.1.14), and holds a tier-1 request until the loop or the damper
   falls below 85 % (G36's hysteresis). The blocked inlet of `rogue_static` moves from box 5 to
-  the north box 4, and the near miss's extra load drops from 0.06 to 0.01. Every labelled fault
-  is still detected and the label scores hold. **Workbook:** the `zone-g36-fleet` answers move.
-  Their keys and instructor text are unchanged here and are drafted for sign-off, so the
-  exercise's answer test fails until then.
+  the north box 4, and the near miss's extra load becomes 0.008 of its cooling maximum on weekday
+  mornings (it was 0.06 all day). Every labelled fault is still detected and the label scores
+  hold. **Workbook:** the `zone-g36-fleet` answers are re-recorded (key, instructor block, page
+  and config comments). The headline moves: the SAT rogue sends all of its air handler's SAT
+  requests (92.5 % before) and the static rogue is `VAV4__rogue_static` (was `VAV5`, 95.9 %, now
+  100 %); SAT cohort starvation on `AHU__not_responding` 57.8 % → 83.1 % of active cycles, static
+  71.1 % → 86.1 %; `cohort_space_temp` adds four `AHU__starved` boxes to its outliers; the
+  healthy SAT reset swings 5.15 → 6.82 °F; `VAV2__reheat` and `VAV4__reheat` above minimum
+  69.7 % → 56.5 % and 93.1 % → 72.4 % (still faults); the building-wide census 98.3 % → 100 %
+  mixed, the `reheat` run 18.3 % → 8.9 %, the `heat_cool` run 98.3 % → 85.0 %; overall detection
+  73 % → 22 of 23, with `unmet_setpoint_hours` (13 of 14) and `airflow_tracking` (14 of 14)
+  newly scored; the near miss's zone 1 holds the binding request on 45.4 % → 44.4 % of active
+  cycles and sends 43.0 % → 30.8 % of the requests. On the healthy fleet the north zone's z is
+  now −2.2 (it was −7.6, excused by the 1 °F floor), so that answer is gone.
 - **Behaviour change (#238):** `reheat_minimization_g36` reports `info`, with a caveat, below
   `min_reheat_hours` of occupied reheat, so one sample no longer decides the verdict.
   `n_reheat_hours` now counts hours (samples × the sample interval), and heating-loop samples

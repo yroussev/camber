@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise zone-g36-fleet, the healthy fleet alone: AHU__healthy and its six boxes, every rule of the main run. Both resets are effective, the censuses and zones_heat_cool_census pass, and so does cohort_space_temp: the north zone's mean sits 0.8 F below the six's median, a large z against their tight spread but under the rule's 1 F floor.",
+  "_comment": "Workbook exercise zone-g36-fleet, the healthy fleet alone: AHU__healthy and its six boxes, every rule of the main run. Both resets are effective, the censuses, cohort_space_temp (no outlier; the six zones' means within a MAD of 0.12 F) and zones_heat_cool_census (6.7 % of occupied hours mixed) pass, and every box passes unmet_setpoint_hours and airflow_tracking (generator version 3, 0.108, #226).",
   "_dataset": "synthetic-g36-vav-fleet",
   "source": {
     "kind": "store",

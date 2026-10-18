@@ -63,7 +63,7 @@ camber run g36.json --out g36_out
 camber datasets score synthetic-g36-vav-fleet --store lab_store --findings g36_out/findings.json
 ```
 
-The exercise's config (`--exercise zone-g36-fleet`) runs ten rules over all 56 pieces of
+The exercise's config (`--exercise zone-g36-fleet`) runs twelve rules over all 56 pieces of
 equipment and declares which boxes each air handler serves (its `topology`). Most of the rules
 are **fleet rules**: they read many pieces of equipment at once and write one finding, on
 `<fleet>`, for all of them. Four variants keep one air handler each, so a fleet rule judges that
@@ -97,8 +97,10 @@ camber run g36_heatcool.json --out g36_heatcool_out
 5. **Peers.** Read `cohort_airflow` and `cohort_space_temp`: their `outliers` and `z`.
 6. **Reheat.** Read `reheat_minimization_g36` for each box and `zones_heat_cool_census` on
    `<fleet>`. Then run the `reheat` and `heat-cool` variants and read the same two rules.
-7. **Score.** Run `camber datasets score` and read the rates for the three rules it scores.
-8. **The healthy fleet and the near miss.** Run the `healthy` and `near-miss` variants and read
+7. **Comfort and airflow.** Read `unmet_setpoint_hours` and `airflow_tracking` for each box:
+   which boxes fail, and behind which air handlers?
+8. **Score.** Run `camber datasets score` and read the rates for the five rules it scores.
+9. **The healthy fleet and the near miss.** Run the `healthy` and `near-miss` variants and read
    every finding.
 
 ## Questions
@@ -116,9 +118,11 @@ camber run g36_heatcool.json --out g36_heatcool_out
 6. Which boxes does `reheat_minimization_g36` flag? What does `zones_heat_cool_census` say about
    the `reheat` boxes alone, and about the `heat_cool` boxes alone? What setpoint would you look
    at on `heat_cool`?
-7. What does the label score say, and which of the faults can it not score at all?
-8. On the healthy fleet alone, does any rule flag something? Why does `cohort_space_temp` let
-   the north zone pass? What separates the near miss's zone 1 from a rogue?
+7. Which boxes fail `unmet_setpoint_hours` and `airflow_tracking`? Which box does
+   `airflow_tracking` find that `unmet_setpoint_hours` misses, and why?
+8. What does the label score say, and which of the faults can it not score at all?
+9. On the healthy fleet alone, does any rule flag something, the per-box comfort and airflow
+   rules included? What separates the near miss's zone 1 from a rogue?
 
 ## What CAMBER shows
 
@@ -151,6 +155,10 @@ camber run g36_heatcool.json --out g36_heatcool_out
   counts as the high heating loop; without one, the valve at 90 % or more. `zones_heat_cool_census` counts the occupied hours with one box heating (its valve
   open) while another cools (its valve shut, its airflow over 1.1 times its minimum), and faults
   when 75 % of the hours have one (warn at 25 %). Both read the trended occupancy point.
+- **Comfort and airflow.** `unmet_setpoint_hours` faults a box when its space is more than
+  1.5 °F outside its setpoints on 15 % or more of occupied hours (warn at 5 %);
+  `airflow_tracking` faults one whose airflow misses its setpoint by more than 20 % on 25 % or
+  more of its occupied fan-on hours (warn at 10 %).
 - **Score.** `camber datasets score` scores only the rules that judge one piece of equipment.
 
 ![Each of the 48 boxes placed by its share of its air handler's SAT reset requests and by how often it holds the largest request; only the equipment room of AHU__rogue_sat lies in the rogue corner, with the near miss's zone 1 and the healthy fleet's zone 1 just outside it](../img/workbook/zone-g36-fleet.png)
@@ -162,9 +170,10 @@ camber run g36_heatcool.json --out g36_heatcool_out
 - The data are synthetic: CAMBER's own model of a VAV system, built to show these faults. They
   show what the rules see, not how real systems behave; never cite them as evidence about a
   building.
-- The resets here take one trim-and-respond step per trended hour, so the reset rules rebuild
-  them exactly. A real controller steps every few minutes; on an hourly trend of one, the rebuilt
-  trajectory is coarse.
+- The resets here take three trim-and-respond steps per trended hour (a 20-minute step), and
+  the trend keeps each hour's last one, so the reset rules rebuild them closely but not exactly.
+  A real controller steps every few minutes; on an hourly trend of one, the rebuilt trajectory is
+  coarser still.
 - The fleet rules write one finding for everything they see. To judge one air handler, keep
   only its equipment (the variants do), and declare the served-by topology: without one, the
   censuses guess the grouping from the equipment names.

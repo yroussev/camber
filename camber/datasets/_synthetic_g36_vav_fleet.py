@@ -51,8 +51,9 @@ The eight air handlers (``scenario``):
   their cooling maximum instead of at the minimum.
 * ``heat_cool``: boxes 1 to 5 have their heating setpoint (74 °F) above their cooling setpoint
   (73 °F) while the fan runs, so the reheat valve and the cooling airflow fight all day.
-* ``near_miss``: zone 1 carries a little extra load: it asks for colder air a little more often
-  than the healthy fleet's zone 1, but not often enough to be called a rogue.
+* ``near_miss``: zone 1 carries a little extra load on weekday mornings (more sun on the east
+  corner): it asks for colder air a little more often than the healthy fleet's zone 1, but not
+  often enough to be called a rogue.
 
 Every air handler runs weekdays 05:00-19:00 (the occupancy point reads occupied 06:00-18:00);
 the zones set back to 62-80 °F with the fan off. Each box reports its airflow, its active airflow
@@ -96,7 +97,9 @@ _OAT_SWING = 14.0  # °F, half the day-night range
 _DESIGN_STATIC = 1.0  # in. w.c. at which a box's open damper passes 1.15 x its cooling maximum
 _STARVED_STATIC = 0.06  # in. w.c.: the most a capped supply fan can make
 _WARM_F = 12.0  # °F a zone warms per unit of unmet load (a fraction of its cooling maximum)
-_NEAR_MISS_LOAD = 0.01  # the near-miss zone's extra load (a fraction of its cooling maximum)
+_NEAR_MISS_LOAD = 0.008  # the near-miss zone's extra load (a fraction of its cooling maximum)
+#: the hours (from, to) it carries it: more morning sun on the east corner
+_NEAR_MISS_HOURS = (6, 10)
 #: version 3 (0.108, #226): trim-and-respond cycles per trended hour, a 20-minute time step. G36's
 #: default is 2 minutes, but on an hourly trend a 2-minute reset's hour-to-hour moves no longer
 #: follow the last cycle's requests: reset_effectiveness read 35-51 % of them as the wrong way
@@ -271,7 +274,8 @@ def _fleet(
     if scenario == "rogue_sat":
         load[:, 0] += 1.6  # an equipment room no box can keep up with
     if scenario == "near_miss":
-        load[:, 0] += _NEAR_MISS_LOAD  # a sunnier, busier corner
+        morning = (hour >= _NEAR_MISS_HOURS[0]) & (hour < _NEAR_MISS_HOURS[1])
+        load[:, 0] += _NEAR_MISS_LOAD * morning  # a sunnier corner in the morning
     if scenario == "rogue_static":
         load[:, _ROGUE_STATIC_BOX] = 0.05 + 0.02 * _smooth(
             _noise(n, seed, 200 + a), 6
