@@ -902,6 +902,25 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   dead-lettered (`camber.edge.sink.AUTH_STATUSES`, `is_auth_status`, `is_auth_error`,
   `Spool.auth_failing`, `DrainResult.auth_failed`, the `auth_failing` and `config_warnings`
   keys of `edge status --json`, and `EdgeConfig.warnings`).
+- **Zone-fleet rule fixes** (0.108; #238, #239, #241), additive and provisional:
+  `reheat_minimization_g36`'s `min_reheat_hours` parameter and its metric `n_reheat_samples`;
+  the `min_present_frac` parameter of `sat_` and `static_cohort_starvation` and of
+  `camber.g36_reset.cohort_starvation`, their metric `group_skipped_cycles` and the
+  `CohortStarvationResult.group_skipped_cycles` field; `zones_heat_cool_census`'s
+  `min_heating_frac`, `max_driver_zones` and `persistent_frac` parameters and its metrics
+  `heating_frac_when_mixed`, `persistent_heating_zones`, `driver_zones`,
+  `pct_hours_mixed_without_drivers` and `severity_capped`. **Behaviour changes:**
+  `reheat_minimization_g36`'s `n_reheat_hours` counts hours, not samples, and the rule reports
+  `info` below `min_reheat_hours`; the cohort censuses skip cycles with too few zones reporting;
+  the heating/cooling census caps a result one or two boxes drive at `warn`.
+- **G36 fleet generator version 3 and the RCx cause-chain entry** (0.108; #226), additive and
+  provisional: the catalog entry `synthetic-g36-rcx-chains` (generator `g36_rcx_chains`, its
+  run template and the workbook configs `rcx-cause-chains` and `rcx-cause-chains--no-topology`),
+  the mapping `synthetic_g36_chains_ahu.json`, and the fault labels `starved_by_air_handler`,
+  `warm_by_air_handler`, `stuck_damper`, `sat_too_warm`, `sat_too_cold` and `static_too_low`.
+  The generator modules are private; what an entry generates may change with its generator
+  version. **Behaviour change:** `synthetic-g36-vav-fleet` generates version 3, so its data and
+  every answer recorded on it change; its blocked inlet is on `VAV4__rogue_static`.
 
 ### The read API server: `camber.api.server`
 

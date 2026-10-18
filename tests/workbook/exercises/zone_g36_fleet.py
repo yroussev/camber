@@ -19,7 +19,11 @@ plus the ``zone-g36-fleet--healthy``, ``--near-miss``, ``--reheat`` and ``--heat
 the static census lists the equipment room as overloaded, the reheat rule reads the trended
 occupancy and excuses the high heating loop, cohort_space_temp has a 1 °F floor; and again
 after generator version 2: the boxes trend their active airflow setpoint, minimum and heating and
-cooling loops, so the censuses count tier-1 and active-setpoint requests).
+cooling loops, so the censuses count tier-1 and active-setpoint requests; re-recorded on CAMBER
+0.108.0-dev, 2026-10-17, after generator version 3 (#226): the zones' loads rise and fall
+together, three reset cycles an hour, resets held at their start value with the fan off, G36
+request hysteresis, the blocked inlet on the north box, a morning-only near miss; and after
+#238, #239 and #241, with unmet_setpoint_hours and airflow_tracking added to the run).
 """
 
 from __future__ import annotations
@@ -37,6 +41,7 @@ _SAT_ROGUE, _DSP_ROGUE = "sat_rogue_zone_census", "static_rogue_zone_census"
 _SAT_COHORT, _DSP_COHORT = "sat_cohort_starvation", "static_cohort_starvation"
 _AIRFLOW, _TEMP = "cohort_airflow", "cohort_space_temp"
 _REHEAT, _CENSUS = "reheat_minimization_g36", "zones_heat_cool_census"
+_UNMET, _FLOW = "unmet_setpoint_hours", "airflow_tracking"
 _AHUS = (
     "healthy",
     "rogue_sat",
@@ -85,13 +90,13 @@ def _rogues(ctx) -> None:
     assert sat["rogue_by_group"] == {"AHU__rogue_sat": ["VAV1__rogue_sat"]}, sat["rogue_by_group"]
     assert sat["worst_zone"] == "VAV1__rogue_sat", sat["worst_zone"]
     dsp = _metrics(ctx, _DSP_ROGUE)
-    assert dsp["rogue_by_group"] == {"AHU__rogue_static": ["VAV5__rogue_static"]}, dsp[
+    assert dsp["rogue_by_group"] == {"AHU__rogue_static": ["VAV4__rogue_static"]}, dsp[
         "rogue_by_group"
     ]
     assert dsp["overloaded_zones"] == ["VAV1__rogue_sat"], dsp["overloaded_zones"]
     assert dsp["overloaded_share"] == {"VAV1__rogue_sat": 1.0}, dsp["overloaded_share"]
-    assert dsp["worst_zone"] == "VAV5__rogue_static", dsp["worst_zone"]
-    assert dsp["zone_request_share"]["VAV1__rogue_sat"] == 0.608, dsp["zone_request_share"]
+    assert dsp["worst_zone"] == "VAV4__rogue_static", dsp["worst_zone"]
+    assert dsp["zone_request_share"]["VAV1__rogue_sat"] == 0.803, dsp["zone_request_share"]
 
 
 def _cohorts(ctx) -> None:
@@ -99,27 +104,28 @@ def _cohorts(ctx) -> None:
     first."""
     sat = _metrics(ctx, _SAT_COHORT)
     assert sat["starved_groups"] == ["AHU__not_responding"], sat["starved_groups"]
-    assert sat["group_sustained_frac"]["AHU__starved"] == 0.085, sat["group_sustained_frac"]
+    assert sat["group_sustained_frac"]["AHU__starved"] == 0.43, sat["group_sustained_frac"]
     dsp = _metrics(ctx, _DSP_COHORT)
     assert dsp["starved_groups"] == ["AHU__not_responding", "AHU__starved"], dsp["starved_groups"]
     assert dsp["worst_group"] == "AHU__starved", dsp["worst_group"]
-    assert dsp["group_sustained_frac"]["AHU__not_responding"] == 0.711, dsp
+    assert dsp["group_sustained_frac"]["AHU__not_responding"] == 0.861, dsp
     summary = ctx.finding(_DSP_COHORT, _FLEET).summary
     assert summary.index("AHU__starved") < summary.index("AHU__not_responding"), summary
 
 
 def _peers(ctx) -> None:
     """cohort_airflow (compared within each air handler) finds the two rogue boxes;
-    cohort_space_temp (all 48 boxes at once) the equipment room and the reset that ignores its
-    requests."""
+    cohort_space_temp (all 48 boxes at once) the equipment room and the warm boxes behind the
+    reset that ignores its requests and the capped fan."""
     air = _metrics(ctx, _AIRFLOW)
     assert air["group_by_topology"] is True, air
-    assert air["outliers"] == ["VAV1__rogue_sat", "VAV5__rogue_static"], air["outliers"]
-    assert round(air["z"]["VAV5__rogue_static"], 1) == -5.7, air["z"]["VAV5__rogue_static"]
+    assert air["outliers"] == ["VAV1__rogue_sat", "VAV4__rogue_static"], air["outliers"]
+    assert round(air["z"]["VAV4__rogue_static"], 1) == -4.0, air["z"]["VAV4__rogue_static"]
     temp = _metrics(ctx, _TEMP)
     want = ["VAV1__rogue_sat"] + [f"VAV{k}__not_responding" for k in (1, 2, 3, 5, 6)]
+    want += [f"VAV{k}__starved" for k in (1, 3, 5, 6)]
     assert sorted(temp["outliers"]) == sorted(want), temp["outliers"]
-    assert round(temp["z"]["VAV1__rogue_sat"], 1) == 10.9, temp["z"]["VAV1__rogue_sat"]
+    assert round(temp["z"]["VAV1__rogue_sat"], 1) == 15.1, temp["z"]["VAV1__rogue_sat"]
 
 
 def _reheat_faults(ctx) -> None:
@@ -132,24 +138,30 @@ def _reheat_faults(ctx) -> None:
 
 
 def _healthy_cohort(ctx) -> None:
-    """On the healthy six alone every rule passes. cohort_space_temp does not flag the north
-    zone: its mean is 0.8 °F below the six's median, a z of -7.6 against a spread (MAD) of
-    0.07 °F, but under the rule's 1 °F floor."""
+    """On the healthy six alone every rule passes, the per-box comfort and airflow rules too
+    (generator version 3, #226): cohort_space_temp finds no outlier among zones whose means sit
+    within a spread (MAD) of 0.12 °F."""
     m = _metrics(ctx, _TEMP, "healthy")
     assert m["outliers"] == [], m["outliers"]
-    assert round(m["mad"], 2) == 0.07, m["mad"]
-    assert round(m["z"]["VAV4__healthy"], 1) == -7.6, m["z"]
+    assert round(m["mad"], 2) == 0.12, m["mad"]
     for rule in (_SAT_ROGUE, _DSP_ROGUE, _SAT_COHORT, _DSP_COHORT, _AIRFLOW, _TEMP, _CENSUS):
         f = ctx.finding(rule, _FLEET, "healthy")
         assert f is not None and f.severity == "ok", (rule, f)
+    for rule in (_UNMET, _FLOW):
+        sev = {f.equip: f.severity for f in ctx.findings("healthy") if f.rule == rule}
+        assert sev == {f"VAV{k}__healthy": "ok" for k in range(1, 7)}, (rule, sev)
 
 
 def _near_miss(ctx) -> None:
-    """The near miss's zone 1 asks for the most and binds the most, under both bars' one."""
+    """The near miss's zone 1 asks for the most and binds the most, clearly under the binding bar
+    (50 %) and just under the share bar (a third)."""
     m = _metrics(ctx, _SAT_ROGUE, "near-miss")
     assert m["rogues"] == [], m["rogues"]
-    assert m["zone_binding_frac"]["VAV1__near_miss"] == 0.454, m["zone_binding_frac"]
-    assert m["zone_request_share"]["VAV1__near_miss"] == 0.43, m["zone_request_share"]
+    binding, share = m["zone_binding_frac"], m["zone_request_share"]
+    assert binding["VAV1__near_miss"] == 0.444, binding
+    assert share["VAV1__near_miss"] == 0.308, share
+    assert max(binding, key=binding.get) == "VAV1__near_miss", binding
+    assert max(share, key=share.get) == "VAV1__near_miss", share
 
 
 EXERCISE = Exercise(
@@ -191,64 +203,72 @@ EXERCISE = Exercise(
         Check("only AHU__not_responding's resets fail", _resets, quote="stuck"),
         Metric(_SAT_RE, "AHU__not_responding", "actual_sp_range", 0.06, 0.005, quote="0.06"),
         Metric(_SAT_RE, "AHU__not_responding", "expected_sp_range", 10.0, 0.005),
-        Metric(_DSP_RE, "AHU__not_responding", "actual_sp_range", 0.35, 0.005, quote="0.35"),
+        Metric(_DSP_RE, "AHU__not_responding", "actual_sp_range", 0.4, 0.005, quote="0.4 in. w.c."),
         Metric(_DSP_RE, "AHU__not_responding", "pct_high_demand_unresponsive", 100.0, 0.05),
-        Metric(_SAT_RE, "AHU__healthy", "actual_sp_range", 5.15, 0.005, quote="5.15"),
-        Metric(_SAT_RE, "AHU__healthy", "pct_high_demand_unresponsive", 0.0, 0.05, quote="0.0 %"),
-        Metric(_SAT_RE, "AHU__rogue_sat", "actual_sp_range", 10.06, 0.005, quote="10.06"),
-        Metric(_DSP_RE, "AHU__rogue_static", "actual_sp_range", 1.4, 0.005, quote="1.4"),
-        Metric(_DSP_RE, "AHU__starved", "actual_sp_range", 1.4, 0.005),
+        Metric(_SAT_RE, "AHU__healthy", "actual_sp_range", 6.82, 0.005, quote="6.82"),
+        Metric(_SAT_RE, "AHU__rogue_sat", "actual_sp_range", 10.05, 0.005, quote="10.05"),
+        Metric(_DSP_RE, "AHU__rogue_static", "actual_sp_range", 1.0, 0.005, quote="1.0 in. w.c."),
+        Metric(_DSP_RE, "AHU__starved", "actual_sp_range", 1.0, 0.005),
         # 2. the rogue zones
         Finding(_SAT_ROGUE, _FLEET, severity=("warn",)),
         Finding(_DSP_ROGUE, _FLEET, severity=("warn",)),
-        Metric(_SAT_ROGUE, _FLEET, "worst_zone_share", 0.925, 0.0005, quote="92.5%"),
-        Metric(_DSP_ROGUE, _FLEET, "worst_zone_share", 0.959, 0.0005, quote="95.9%"),
-        Check("the rogues by air handler", _rogues, quote="60.8 %"),
+        Metric(
+            _SAT_ROGUE,
+            _FLEET,
+            "worst_zone_share",
+            1.0,
+            0.0005,
+            quote="all of its air handler's SAT",
+        ),
+        Metric(_DSP_ROGUE, _FLEET, "worst_zone_share", 1.0, 0.0005),
+        Check("the rogues by air handler", _rogues, quote="80.3 %"),
         # 3. the starved cohorts
         Finding(_SAT_COHORT, _FLEET, severity=("warn",)),
         Finding(_DSP_COHORT, _FLEET, severity=("warn",)),
-        Metric(_SAT_COHORT, _FLEET, "worst_group_frac", 0.578, 0.0005, quote="57.8%"),
+        Metric(_SAT_COHORT, _FLEET, "worst_group_frac", 0.831, 0.0005, quote="83.1%"),
         Metric(_DSP_COHORT, _FLEET, "worst_group_frac", 1.0, 0.0005, quote="100%"),
-        Check("the starved air handlers", _cohorts, quote="71.1%"),
+        Check("the starved air handlers", _cohorts, quote="86.1%"),
         # 4. peers
         Finding(_AIRFLOW, _FLEET, severity=("warn",)),
         Finding(_TEMP, _FLEET, severity=("warn",)),
-        Check("the outliers among peers", _peers, quote="-5.7"),
+        Check("the outliers among peers", _peers, quote="-4.0"),
         # 5. reheat, per box and across the fleet
         Check("the boxes that reheat above minimum", _reheat_faults, quote="seven"),
         Finding(_REHEAT, "VAV2__reheat", severity=("fault",)),
         Finding(_REHEAT, "VAV4__reheat", severity=("fault",)),
         Finding(_REHEAT, "VAV2__healthy", severity=("ok",)),
-        Metric(_REHEAT, "VAV2__reheat", "reheat_hours_pct", 18.3, 0.05, quote="18.3 %"),
-        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 69.7, 0.05, quote="69.7 %"),
+        Metric(_REHEAT, "VAV2__reheat", "reheat_hours_pct", 12.8, 0.05, quote="12.8 %"),
+        Metric(_REHEAT, "VAV2__reheat", "reheat_above_min_pct", 56.5, 0.05, quote="56.5 %"),
         Metric(_REHEAT, "VAV4__reheat", "reheat_hours_pct", 16.1, 0.05, quote="16.1 %"),
-        Metric(_REHEAT, "VAV4__reheat", "reheat_above_min_pct", 93.1, 0.05, quote="93.1 %"),
-        Metric(_REHEAT, "VAV2__healthy", "reheat_hours_pct", 17.2, 0.05, quote="17.2 %"),
+        Metric(_REHEAT, "VAV4__reheat", "reheat_above_min_pct", 72.4, 0.05, quote="72.4 %"),
+        Metric(_REHEAT, "VAV2__healthy", "reheat_hours_pct", 10.6, 0.05, quote="10.6 %"),
         Metric(_REHEAT, "VAV2__healthy", "reheat_above_min_pct", 0.0, 0.05),
-        Metric(_REHEAT, "VAV2__healthy", "reheat_high_loop_pct", 9.7, 0.05, quote="9.7 %"),
+        Metric(_REHEAT, "VAV2__healthy", "reheat_high_loop_pct", 5.3, 0.05, quote="5.3 %"),
         Finding(_CENSUS, _FLEET, severity=("fault",)),
-        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 98.3, 0.05, quote="98.3 %"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 98.3, 0.05),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 100.0, 0.05, quote="100 % of occupied"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 98.9, 0.05),
         Finding(_CENSUS, _FLEET, severity=("ok",), run="reheat"),
-        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 18.3, 0.05, run="reheat", quote="18.3 %"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 18.3, 0.05, run="reheat"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 8.9, 0.05, run="reheat", quote="8.9 %"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 16.1, 0.05, run="reheat"),
         Finding(_CENSUS, _FLEET, severity=("fault",), run="heat-cool"),
-        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 98.3, 0.05, run="heat-cool"),
-        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 93.3, 0.05, run="heat-cool", quote="93.3 %"),
-        Metric(_CENSUS, _FLEET, "avg_zones_both", 2.44, 0.005, run="heat-cool", quote="2.44"),
-        Metric(_REHEAT, "VAV4__heat_cool", "reheat_hours_pct", 98.3, 0.05, run="heat-cool"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 85.0, 0.05, run="heat-cool", quote="85.0 %"),
+        Metric(_CENSUS, _FLEET, "pct_hours_any_both", 92.8, 0.05, run="heat-cool", quote="92.8 %"),
+        Metric(_CENSUS, _FLEET, "avg_zones_both", 3.88, 0.005, run="heat-cool", quote="3.88"),
+        Metric(_REHEAT, "VAV4__heat_cool", "reheat_hours_pct", 99.4, 0.05, run="heat-cool"),
         # 6. the label score (the per-equipment rules only)
         Score(_SAT_RE, tpr=1.0, fpr=0.0),
         Score(_DSP_RE, tpr=1.0, fpr=0.0),
         Score(_REHEAT, tpr=1.0, fpr=0.0),
-        Score(None, tpr=0.7273, fpr=0.0, tol=0.0001, quote="73%"),
+        Score(_UNMET, tpr=0.9286, fpr=0.0294, tol=0.0001, quote="13 of 14"),
+        Score(_FLOW, tpr=1.0, fpr=0.0, quote="14 of 14"),
+        Score(None, tpr=0.9565, fpr=0.0, tol=0.0001, quote="22 of 23"),
         # 7. the healthy fleet and the near miss
-        Check("the healthy fleet", _healthy_cohort, quote="0.07"),
-        Metric(_TEMP, _FLEET, "median", 72.44, 0.005, run="healthy"),
-        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 17.2, 0.05, run="healthy", quote="17.2 %"),
+        Check("the healthy fleet", _healthy_cohort, quote="0.12 °F"),
+        Metric(_TEMP, _FLEET, "median", 71.92, 0.005, run="healthy"),
+        Metric(_CENSUS, _FLEET, "pct_hours_mixed", 6.7, 0.05, run="healthy", quote="6.7 %"),
         Metric(_CENSUS, _FLEET, "pct_hours_any_both", 2.2, 0.05, run="healthy", quote="2.2 %"),
         Finding(_SAT_ROGUE, _FLEET, severity=("ok",), run="near-miss"),
-        Check("the near miss", _near_miss, quote="45.4%"),
+        Check("the near miss", _near_miss, quote="44.4 %"),
     ),
     standin=standin,
 )

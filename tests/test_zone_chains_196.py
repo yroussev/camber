@@ -238,3 +238,31 @@ def test_report_shows_the_chain_and_appendix_a_notes_a_missing_topology(tmp_path
     assert "Cause chain: supply air too warm at DemoAHU" in html and "2 of 3 boxes" in html
     d = next(i for i in rep.to_dict()["issues"] if i["zone_chains"])
     assert d["zone_chains"][0]["n_boxes"] == 2 and d["zone_chains"][0]["n_served"] == 3
+
+
+def test_compliance_above_its_target_is_not_supply_air_too_cold():
+    """0.108: ``supply_air_reset_compliance`` also warns when supply air runs above the G36
+    target (a cooling shortfall). Only its below-target side roots the "supply air too cold"
+    chain; the reheat at the boxes then stays separate."""
+    above = _f(
+        "supply_air_reset_compliance",
+        "AHU-1",
+        pct_below_g36_target=5.0,
+        mean_gap_f=-5.1,
+        warn_pct_threshold=40.0,
+        warn_gap_floor_f=1.0,
+        pct_above_g36_target=60.0,
+    )
+    below = _f(
+        "supply_air_reset_compliance",
+        "AHU-1",
+        pct_below_g36_target=55.0,
+        mean_gap_f=3.0,
+        warn_pct_threshold=40.0,
+        warn_gap_floor_f=1.0,
+    )
+    reheat = _f("reheat_minimization_g36", "VAV-1", severity="fault")
+    linked = link_findings([below, reheat], rules=REG, topology=_topo(2))
+    assert [z.chain for i in linked for z in i.zone_links] == ["sat_low"]
+    apart = link_findings([above, reheat], rules=REG, topology=_topo(2))
+    assert all(not i.zone_links for i in apart) and len(apart) == 2
