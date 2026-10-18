@@ -330,13 +330,14 @@ def _est_sat_reset_compliance(m, load, price, P):
         load,
         price,
         P,
-        pct_keys=("pct_below_g36_target",),
+        pct_keys=("pct_below_target", "pct_below_g36_target"),  # 0.108 (#269): the old name too
         with_cooling=False,
         intensity_scale=gap_scale,
     )
     if gas > 0 or elec > 0:
         used["gap_scale"] = round(gap_scale, 3)
-        return elec, gas, "sat-below-g36-target->reheat", used
+        kind = str(m.get("target_source") or "g36").replace("_", "-")  # 0.108 (#269)
+        return elec, gas, f"sat-below-{kind}-target->reheat", used
     return elec, gas, basis, used  # uncosted (missing capacity, or no gap) passthrough
 
 
@@ -452,6 +453,63 @@ def _est_cohort_starvation(m, load, price, P):
     return 0.0, 0.0, f"cohort starvation (unknown reset {reset!r}) -- uncosted", {}
 
 
+def _excess_oa_airflow(m, load, min_pct):
+    """``(cfm | None, used, missing)``: where an excess-OA estimate's airflow comes from.
+
+    The trended supply airflow (``cfm`` None: the rule's period sums carry it), else
+    ``EquipmentLoad.supply_airflow_cfm``, else ``design_oa_cfm / (min_pct / 100)``. ``used`` holds
+    the source (and the cfm a load gives); ``missing`` is the decline note when none applies.
+    """
+    if _num(m, "oa_cost_excess_cool_kbtu") is not None and (
+        _num(m, "oa_cost_excess_heat_kbtu") is not None
+    ):
+        return (
+            None,
+            {"airflow_source": str(m.get("oa_cost_airflow") or "trended supply airflow")},
+            "",
+        )
+    if load.supply_airflow_cfm:
+        cfm = float(load.supply_airflow_cfm)
+        return (
+            cfm,
+            {
+                "airflow_source": "EquipmentLoad.supply_airflow_cfm",
+                "supply_airflow_cfm": round(cfm, 1),
+            },
+            "",
+        )
+    if load.design_oa_cfm and min_pct and min_pct > 0:
+        if m.get("min_oa_pct_by_month"):
+            return (
+                None,
+                {},
+                (
+                    "needs EquipmentLoad.supply_airflow_cfm (design_oa_cfm is ambiguous under a "
+                    "seasonal minimum)"
+                ),
+            )
+        cfm = load.design_oa_cfm / (min_pct / 100.0)
+        return (
+            cfm,
+            {
+                "airflow_source": "EquipmentLoad.design_oa_cfm / min OA fraction",
+                "design_oa_cfm": load.design_oa_cfm,
+                "supply_airflow_cfm": round(float(cfm), 1),
+            },
+            "",
+        )
+    if load.design_oa_cfm:  # no minimum to divide by: name the source it would use
+        return (
+            None,
+            {
+                "airflow_source": "EquipmentLoad.design_oa_cfm / min OA fraction",
+                "design_oa_cfm": load.design_oa_cfm,
+            },
+            ("needs EquipmentLoad.supply_airflow_cfm or EquipmentLoad.design_oa_cfm"),
+        )
+    return None, {}, "needs EquipmentLoad.supply_airflow_cfm or EquipmentLoad.design_oa_cfm"
+
+
 def _est_excess_oa(m, load, price, P):
     """Excess outside air above the declared minimum: the cooling and heating it costs (#195).
 
@@ -478,14 +536,18 @@ def _est_excess_oa(m, load, price, P):
     obs = _num(m, "oa_cost_observed_h")
     if obs is None:
         return 0.0, 0.0, "needs the rule's excess-OA cost metrics (MAT/RAT/OAT samples)", {}
-    if m.get("min_oa_source") not in (None, "configured") or _num(m, "min_oa_pct") is None:
+    configured = m.get("min_oa_source") in (None, "configured")
+    min_pct = _num(m, "min_oa_pct") if configured else None
+    # 0.108 (#269): the airflow source is resolved first, so a decline for another input still
+    # says where the airflow would have come from
+    cfm, flow, flow_missing = _excess_oa_airflow(m, load, min_pct)
+    if min_pct is None:
         return (
             0.0,
             0.0,
             "needs min_oa_pct (the unit's design minimum OA; the rule's generic 20% is not priced)",
-            {},
+            flow,
         )
-    min_pct = _num(m, "min_oa_pct")
     if m.get("oa_cost_flagged") is False:
         return 0.0, 0.0, "no excess-OA verdict (nothing priced)", {}
     cool_pc = _num(m, "oa_cost_excess_cool_btu_per_cfm") or 0.0
@@ -497,36 +559,15 @@ def _est_excess_oa(m, load, price, P):
         return 0.0, 0.0, note, {"min_oa_pct": min_pct, "min_oa_source": "configured"}
     if obs <= 0:
         return 0.0, 0.0, "needs observed hours of data (none)", {}
+    if flow_missing:
+        return 0.0, 0.0, flow_missing, {}
     used = {"min_oa_pct": min_pct, "min_oa_source": "configured"}
     if m.get("min_oa_pct_by_month"):
         used["min_oa_pct_by_month"] = m.get("min_oa_pct_by_month")
-    cool_k, heat_k = _num(m, "oa_cost_excess_cool_kbtu"), _num(m, "oa_cost_excess_heat_kbtu")
-    if cool_k is not None and heat_k is not None:
-        used["airflow_source"] = str(m.get("oa_cost_airflow") or "trended supply airflow")
+    used.update(flow)
+    if cfm is None:  # the trended airflow's period sums
+        cool_k, heat_k = _num(m, "oa_cost_excess_cool_kbtu"), _num(m, "oa_cost_excess_heat_kbtu")
     else:
-        cfm = load.supply_airflow_cfm
-        if cfm:
-            used["airflow_source"] = "EquipmentLoad.supply_airflow_cfm"
-        elif load.design_oa_cfm and min_pct and min_pct > 0:
-            if m.get("min_oa_pct_by_month"):
-                return (
-                    0.0,
-                    0.0,
-                    "needs EquipmentLoad.supply_airflow_cfm (design_oa_cfm is ambiguous under a "
-                    "seasonal minimum)",
-                    {},
-                )
-            cfm = load.design_oa_cfm / (min_pct / 100.0)
-            used["airflow_source"] = "EquipmentLoad.design_oa_cfm / min OA fraction"
-            used["design_oa_cfm"] = load.design_oa_cfm
-        else:
-            return (
-                0.0,
-                0.0,
-                "needs EquipmentLoad.supply_airflow_cfm or EquipmentLoad.design_oa_cfm",
-                {},
-            )
-        used["supply_airflow_cfm"] = round(float(cfm), 1)
         cool_k, heat_k = cool_pc * cfm / 1e3, heat_pc * cfm / 1e3
     scale = load.annual_hours / obs
     cool_yr, heat_yr = cool_k * scale, heat_k * scale

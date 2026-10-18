@@ -98,6 +98,22 @@ class SupplyAirResetCompliance:
         same = all(float(self._reset_kwargs[k]) == v for k, v in self.G36_DEFAULTS.items())
         return "g36_default" if same else "configured"
 
+    @property
+    def target_kind(self) -> str:
+        """What the target is (0.108, #269): ``"g36"`` (the G36 defaults), ``"site_sequence"`` (a
+        sequence declared in ``report.rcx.sequence``) or ``"configured"`` (any other map)."""
+        src = self.source
+        if src == "g36_default":
+            return "g36"
+        if str(src).startswith("site sequence"):
+            return "site_sequence"
+        return "configured"
+
+    @property
+    def target_label(self) -> str:
+        """The target's name in a summary: ``"G36"``, ``"site-sequence"`` or ``"configured"``."""
+        return {"g36": "G36", "site_sequence": "site-sequence"}.get(self.target_kind, "configured")
+
     def _gate(self, frame: pd.DataFrame):
         """``(mask | None, metrics)``: the fan-on / occupied samples to judge, and how."""
         mask = None
@@ -184,6 +200,12 @@ class SupplyAirResetCompliance:
         )
         severity = "warn" if (opportunity or not_tracking) else "ok"
         metrics = {
+            # 0.108 (#269): the target is named by its source; the *_g36_target keys are the
+            # pre-0.108 names of the same values, kept as aliases for one release
+            "target_source": self.target_kind,
+            "pct_below_target": res.pct_below_g36_target,
+            "target_median": res.g36_target_median,
+            "pct_above_target": res.pct_above_g36_target,
             "pct_below_g36_target": res.pct_below_g36_target,
             "mean_gap_f": res.mean_gap_f,
             "actual_sat_median": res.actual_sat_median,
@@ -209,14 +231,14 @@ class SupplyAirResetCompliance:
                 "the target (cooling shortfall or a fixed/high setpoint)"
             )
         elif metrics["tracks_target"]:
-            tail = "tracks the G36 reset target"
+            tail = f"tracks the {self.target_label} reset target"
         else:
             tail = (
                 f"no below-target reheat opportunity, but mean tracking error "
                 f"{res.mean_abs_error_f:.1f}°F"
             )
         summary = (
-            f"{equip}: SAT median {res.actual_sat_median:.1f}°F vs G36 target "
+            f"{equip}: SAT median {res.actual_sat_median:.1f}°F vs {self.target_label} target "
             f"{res.g36_target_median:.1f}°F; below target {res.pct_below_g36_target:.0f}% of hours "
             f"(mean gap {res.mean_gap_f:+.1f}°F) -- {tail}"
         )

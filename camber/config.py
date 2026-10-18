@@ -171,8 +171,9 @@ lifecycle (:class:`~camber.faultlifecycle.FaultLifecycle`): ``{"store": "faults.
 The ``report`` section selects the report: ``"layout": "audit"`` (the default Std-211 audit) or
 ``"rcx"`` -- the printable retro-commissioning layout of :mod:`camber.report.rcx`, tuned by
 ``"rcx": {"top_n", "week", "paper", "chart_format", "sections", "price", "loads", "occupancy",
-"oat_reference", "sequence", "notes"}`` (``camber report CONFIG --layout rcx``). ``report.loads``
-(``{equip: {"heating_capacity_kbtuh": ...}}``) sizes equipment for the existing cost estimators.
+"oat_reference", "references", "sequence", "notes"}`` (``camber report CONFIG --layout rcx``).
+``report.loads`` (``{equip: {"heating_capacity_kbtuh": ...}}``) sizes equipment for the existing
+cost estimators.
 The audit is titled as an ASHRAE Std-211 audit only when it carries the Std-211 inputs -- a
 ``benchmark`` and, at Level 2 and above, an ECM table (``"ecms": [{"name", "finding",
 "affected_system", "est_savings", ...}]``, the fields of :class:`camber.report.audit.ECM`); else it

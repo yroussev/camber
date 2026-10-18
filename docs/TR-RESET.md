@@ -61,10 +61,11 @@ via the runner's `shared` channel; the rule declines loudly when it is unmapped.
 *above* the target is not "tracking" it either -- a cooling shortfall or a fixed, high setpoint. So
 the rule also reports the mean absolute error (`mean_abs_error_f`, `tracks_target`) and, over the
 warm-weather samples where the cooling reset applies (OAT at or above `oat_min`, so a heating mode
-can't explain it), how often and how far supply air runs above the target (`pct_above_g36_target`,
+can't explain it), how often and how far supply air runs above the target (`pct_above_target`,
 `mean_above_gap_f`, `n_warm`). When supply air runs more than `track_gap_f` (5 °F) above the target on
 average for `warn_pct` % of those samples, the rule warns "NOT tracking" instead of saying "ok";
-an `ok` finding says "tracks the G36 reset target" only when the mean absolute error is below
+an `ok` finding says "tracks the G36 reset target" (or the configured or site-sequence one: the
+finding names its target by its source, `target_source`, 0.108, #269) only when the mean absolute error is below
 `track_gap_f`.
 
 **Air handlers only (0.90.1).** Rules are gated by roles, so a heat pump's or a terminal unit's

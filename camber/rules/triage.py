@@ -426,11 +426,20 @@ class Issue:
     # box symptoms the served-by topology ties to it (members on other equipment); on a fleet
     # rogue-zone census issue, the air handlers whose reset its rogue boxes sit under.
     zone_links: list = field(default_factory=list)
+    # 0.108 (#268): sensor causes that taint only an input a member reads to price its finding
+    # (its rule's ``roles_cost``): the verdict stands, the dollars wait on the sensor
+    cost_conditional_on: list = field(default_factory=list)
 
     @property
     def conditional(self) -> bool:
         """True when the issue leans on a sensor we have reason to distrust."""
         return bool(self.conditional_on)
+
+    @property
+    def cost_at_risk(self) -> bool:
+        """True when the issue is costed and its dollars wait on a sensor fix (0.108, #268): the
+        issue is conditional, or a cost-only input of a member is distrusted."""
+        return self.cost is not None and (self.conditional or bool(self.cost_conditional_on))
 
     @property
     def costed(self) -> bool:
@@ -716,6 +725,16 @@ def _uncosted_note(basis: str) -> str:
     return f"uncosted — {b}" if b else "uncosted"
 
 
+def _rule_cost_roles(rules_map: dict, rule_name: str) -> set:
+    """The role slugs a rule reads only to price its finding (``roles_cost``, 0.107 #195), less
+    the ones its verdict reads too (0.108, #268)."""
+    rule = rules_map.get(rule_name)
+    if rule is None:
+        return set()
+    cost = {_slug(r) for r in getattr(rule, "roles_cost", ()) or ()}
+    return cost - _rule_roles(rules_map, rule_name)
+
+
 def link_findings(
     findings,
     *,
@@ -871,6 +890,18 @@ def link_findings(
             )
         ]
 
+        # 0.108 (#268): a distrusted cost-only input taints the dollars, not the verdict
+        cost_cond = [
+            c
+            for c in causes
+            if id(c.source) not in ids
+            and c not in cond
+            and any(
+                _taints(c, _attr(f, "equip", ""), _rule_cost_roles(rmap, _attr(f, "rule", "")))
+                for f in members
+            )
+        ]
+
         # hours: union of member masks, gated to fan-on when a gate is known
         gate, gate_label, fan_hours = None, "", None
         if runtime is not None:
@@ -921,6 +952,7 @@ def link_findings(
             root=root,
             members=members,
             conditional_on=cond,
+            cost_conditional_on=cost_cond,
             hours_union=hours,
             cost=cost,
             cost_basis_note=note,
@@ -963,6 +995,11 @@ def link_findings(
             conf = finding_confidence(iss.root, conditional_on=iss.conditional_on)
         iss.confidence = conf.level
         iss.why = list(conf.why) + _upstream_why(iss) + _zone_why(iss)
+        if iss.cost_conditional_on and not iss.conditional:  # 0.108 (#268)
+            iss.why.append(
+                "Cost at risk (the verdict stands): its estimate reads "
+                + "; ".join(c.label() for c in iss.cost_conditional_on)
+            )
         iss.confidence_components = dict(conf.components)
 
     issues.sort(
@@ -1202,7 +1239,7 @@ def _sat_cold(f) -> bool:
 
 def _below_target(f) -> bool:
     """True when a ``supply_air_reset_compliance`` finding reports its below-target (reheat)
-    side: supply air colder than the G36 target on at least its warn share of hours, by at least
+    side: supply air colder than its reset target on at least its warn share of hours, by at least
     its gap floor. An older finding without the thresholds counts on a positive gap."""
     m = _metrics(f)
 
@@ -1210,7 +1247,9 @@ def _below_target(f) -> bool:
         v = m.get(key)
         return float(v) if _num(v) else default
 
-    pct, gap = num("pct_below_g36_target"), num("mean_gap_f")
+    pct, gap = num("pct_below_target"), num("mean_gap_f")
+    if pct is None:  # 0.108 (#269): a finding from before the rename
+        pct = num("pct_below_g36_target")
     if pct is None or gap is None:
         return False
     return pct >= num("warn_pct_threshold", 0.0) and gap >= num("warn_gap_floor_f", 1e-9)
@@ -1589,16 +1628,32 @@ def _or(a, b):
     return a.reindex(idx, fill_value=False) | b.reindex(idx, fill_value=False)
 
 
+def _at_risk(issue) -> bool:
+    """An issue's dollars wait on a sensor fix (an object without ``cost_at_risk``: conditional)."""
+    v = getattr(issue, "cost_at_risk", None)
+    return bool(issue.conditional) if v is None else bool(v)
+
+
 def issue_totals(issues) -> dict:
     """Roll issues up: the costed, non-conditional $/yr (issues add; a chain counts once), the
-    conditional "at risk pending sensor fix" $/yr, and the uncosted / conditional counts."""
-    firm = sum(i.cost for i in issues if i.cost is not None and not i.conditional)
-    at_risk = sum(i.cost for i in issues if i.cost is not None and i.conditional)
+    conditional "at risk pending sensor fix" $/yr, and the uncosted / conditional counts.
+
+    0.108 (#268): an issue whose verdict stands but whose cost reads a distrusted cost-only input
+    (``Issue.cost_conditional_on``) counts at risk too (``n_cost_conditional``)."""
+    # 0.108 (#268): an issue whose cost-only input is distrusted is at risk too
+    firm = sum(i.cost for i in issues if i.cost is not None and not _at_risk(i))
+    at_risk = sum(i.cost for i in issues if i.cost is not None and _at_risk(i))
     return {
         "annual_cost_usd": round(firm, 2),
         "at_risk_usd": round(at_risk, 2),
         "n_issues": len(issues),
-        "n_costed": sum(1 for i in issues if i.cost is not None and not i.conditional),
+        "n_costed": sum(1 for i in issues if i.cost is not None and not _at_risk(i)),
         "n_uncosted": sum(1 for i in issues if i.cost is None),
         "n_conditional": sum(1 for i in issues if i.conditional),
+        # 0.108 (#268): costed issues whose verdict stands but whose dollars are at risk
+        "n_cost_conditional": sum(
+            1
+            for i in issues
+            if i.cost is not None and not i.conditional and getattr(i, "cost_conditional_on", None)
+        ),
     }

@@ -93,11 +93,24 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   supply setpoint, one with a supply-air sensor reading 3 °F high, and a calibrated duct logger
   in each for four days (`LOGGER__<unit>`). The false reading makes `leaking_valve` fault, the
   loop it drives makes `supply_air_control` pass, and the sensor-trust layer scores it trusted.
-  Compared with the logger (`camber.sensordrift.drift_finding`), the bias becomes a
+  With the loggers as `report.rcx.references` (#267, below), the bias becomes a
   `sensor_drift:supply_air_temp` finding: the unit's dependent findings turn conditional and its
   reset estimate moves to the RCx report's at-risk total ($5,250/yr), while the healthy twin's
-  identical finding stays firm. The workbook exercise `data-sensor-conditional` walks through it,
-  with an instructor key and a figure.
+  identical finding stays firm. The workbook exercise `data-sensor-conditional` walks through it
+  (the `--no-reference` variant is the report before the references), with an instructor key
+  and a figure.
+- **Sensor references for any point in the RCx report (#267).** `report.rcx.references` maps an
+  equipment to `{role: reference}`: another equipment's reading in the store facility (a duct
+  logger ingested as its own equipment), or a CSV file, with an optional label and comparison
+  thresholds. Each comparison is the OAT reference's (bias, drift, correlation), listed in the
+  data section; at warn or fault it is a `sensor_drift:<role>` issue on that unit, and the unit's
+  findings that read the point become conditional, their dollars at risk. A constant offset
+  that no trust check can see now reaches the report through the config alone.
+  `references["*"]["oat"]` is an alias of `oat_reference`. See docs/RCX-REPORT.md, "Sensor
+  references".
+- `Issue.cost_conditional_on`, `Issue.cost_at_risk` and the `n_cost_conditional` total (#268);
+  the `supply_air_reset_compliance` metrics `target_source`, `pct_below_target`,
+  `target_median` and `pct_above_target` (#269).
 
 ### Changed
 - **A rule's docstring citations are checked against its references (#232).**
@@ -271,6 +284,19 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   or two boxes drive the result in a larger fleet. It names the zones that heat persistently.
 
 ### Fixed
+- **A distrusted cost-only input left an estimate firm (#268).** The points a rule reads only
+  to price its finding (`roles_cost`: the excess-outside-air rules' humidity, supply air,
+  heating valve and occupancy) never made the finding conditional, so an excess-OA estimate
+  priced on stuck humidity sensors stayed a firm $/yr. Now the verdict stands but the issue's
+  dollars move to "at risk pending a sensor fix", with the cause named on the issue page.
+- **The SAT-reset target is named by its source (#269).** `supply_air_reset_compliance` said "vs
+  G36 target" even for a configured or site-sequence reset map. Its summary, metrics and cost
+  basis now name the source ("vs configured target", `sat-below-configured-target->reheat`); a
+  G36-default map reads as before, and the old `*_g36_target` metric keys stay as aliases until
+  0.109.
+- **Appendix B named no airflow on a missing-minimum decline (#269).** The excess-OA estimate
+  returned before resolving its airflow; it now names the source it would use (the trended
+  supply airflow, or the configured one) on that decline too.
 - **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
   Re-tuning chapters 5 and 7, but the rule judges an air handler's coil valves, which chapter 5
   covers. Chapter 7's reheat-valve leakage is a terminal box's. The docstrings now cite chapter 5,

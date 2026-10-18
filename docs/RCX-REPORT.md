@@ -78,10 +78,21 @@ role like OAT, that covers every equipment that uses it. A conditional issue is 
 demoted, never deleted. Its dollars move to "at risk pending sensor fix", and it is listed as a
 dependent on the sensor issue's page.
 
+**Cost-only inputs (0.108, #268).** Some rules read a point only to price their finding: the
+excess-outside-air rules read the outdoor and return humidity, the supply air, the heating valve
+and the occupancy point for the cost, never for the verdict (`roles_cost`). A sensor problem on
+such a point leaves the verdict and its confidence alone, but the issue's dollars move to "at risk
+pending sensor fix" (`Issue.cost_at_risk`). The issue page carries a "Cost at risk" banner naming
+the cause, and the issue's `cost_conditional_on` lists it. The KPI `n_cost_conditional` counts
+these issues.
+
 **SAT compliance and G36.** Some `supply_air_reset_compliance` findings are judged against the G36
 default map because no site sequence is known. Those findings are shown as a reference only. They
 are left out of the dollar totals, and their confidence is L. A declared sequence re-judges them
-against the site's own map.
+against the site's own map. Each finding names its target by its source (0.108, #269): "vs G36 target", "vs
+site-sequence target" or "vs configured target" in its summary, `target_source` in its metrics
+(`pct_below_target`, `target_median` and `pct_above_target`; the `*_g36_target` names remain as
+aliases until 0.109) and in the cost basis (`sat-below-configured-target->reheat`).
 
 **Air side and plant links (0.91).** The air-side pages (economizer, SAT reset census, air
 distribution) cover air handlers only: a VAV box's discharge air, a heat pump's or a fan coil's is
@@ -405,6 +416,7 @@ drop the sentence.
     "price": {"electricity_per_kwh": 0.14, "gas_per_therm": 1.10},
     "occupancy": {"start_hour": 6, "end_hour": 20, "days": [0, 1, 2, 3, 4, 5]},
     "oat_reference": {"csv": "weather/oat_reference.csv"},
+    "references": {"AHU-1": {"supply_air_temp": {"equip": "LOGGER-1", "label": "duct logger"}}},
     "sequence": {"sat_reset": {"oat": [50, 70], "sat": [60, 55], "tol_f": 2}},
     "notes": "notes.json",
     "prose": "prose.json"
@@ -458,7 +470,9 @@ Appendix B lists each actionable OA finding's minimum and its source, the airflo
 cooling and heating bases with their hours and efficiencies, and the estimate or the input it
 needs. The finding's `oa_cost_*` metrics carry the period's sums. The humidity, supply-air,
 heating-valve and occupancy points they read are cost-only inputs (`roles_cost`): they never change
-a verdict, and they are not listed as missing inputs.
+a verdict, and they are not listed as missing inputs. A distrusted one moves the estimate to the
+at-risk total (0.108, #268; see "Cost-only inputs" above). On a decline for a missing minimum,
+Appendix B still names the airflow source the estimate would use (0.108, #269).
 - `oat_reference` is offline by default (a CSV of time and °F). To fetch NASA POWER instead, opt in
   with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
   Every distinct OAT source is compared (0.91): units reading one sensor
@@ -485,6 +499,43 @@ open("rcx.html", "w").write(rep.to_html())
 rep.to_dict()  # KPIs, ranked issues, the week choice, sections, notes
 rep.slots()  # every note slot id
 ```
+
+### Sensor references
+
+A constant offset cannot be seen from a building's own data: a supply-air sensor that reads 3 °F
+high is smooth, in range and never stuck, so the trust checks score it trusted. Only a reference
+reading, such as a duct logger or a calibrated portable, shows it. `report.rcx.references` (0.108,
+#267) compares any point of an equipment with a reference:
+
+```json
+"references": {
+  "AHU-1": {"supply_air_temp": {"equip": "LOGGER-1", "label": "duct logger"}},
+  "AHU-2": {"mixed_air_temp": {"csv": "loggers/ahu2_mat.csv", "bias_warn": 1.5}},
+  "*": {"oat": {"csv": "weather/oat_reference.csv"}}
+}
+```
+
+- **The reference.** `{"equip": "<equipment>"}` reads the same role of another equipment: one of
+  the run's, or another equipment of the store facility (a logger ingested as its own
+  equipment); `"role"` reads a different role of it. `{"csv": "<file>"}` reads a file of time and
+  value (`time_col` and `value_col` name the columns; by default the first column and the next
+  one). `label` names the reference in the report.
+- **The comparison** is the OAT reference's (`camber.sensordrift.compare_to_reference`), on the
+  shared timestamps: the bias (the median difference; warn at 2, fault at 5), the drift per month
+  (evaluated only over at least 28 days), the RMSE and the correlation (below 0.7 the sensor is
+  not tracking the reference: fault). The defaults suit °F; set `bias_warn`, `bias_fault`,
+  `drift_warn`, `drift_fault`, `min_correlation`, `min_samples` or `min_drift_days` per reference
+  for other units.
+- **What it raises.** Each comparison is a `sensor_drift:<role>` finding on the unit, scoped to
+  it. At warn or fault it is an issue, and the unit's findings whose rule reads that role become
+  conditional, their dollars at risk, as for any sensor problem. The data section lists every
+  comparison in a table, ok ones included; a reference that cannot be loaded is noted there and
+  raises nothing.
+- **`oat_reference` is an alias** of `references["*"]["oat"]`, the site-wide OAT reference above;
+  give it one way only. Other roles take a reference per equipment.
+
+The workbook exercise [`data-sensor-conditional`](workbook/data-sensor-conditional.md) walks
+through a 3 °F supply-air bias with a duct logger as the reference.
 
 ## Printing
 

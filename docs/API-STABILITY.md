@@ -921,6 +921,35 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   The generator modules are private; what an entry generates may change with its generator
   version. **Behaviour change:** `synthetic-g36-vav-fleet` generates version 3, so its data and
   every answer recorded on it change; its blocked inlet is on `VAV4__rogue_static`.
+- **Sensor references for any point in the RCx report** (0.108; #267), additive and
+  provisional: `report.rcx.references` (`{equip: {role: spec}}`, a spec being `{"equip": ...}`
+  with an optional `"role"`, or `{"csv": ...}` with `time_col` / `value_col`, plus an optional
+  `label` and the `compare_to_reference` thresholds `bias_warn`, `bias_fault`, `drift_warn`,
+  `drift_fault`, `min_correlation`, `min_samples`, `min_drift_days`) and
+  `RcxOptions.references`. Each comparison is a `sensor_drift:<role>` finding on the unit, scoped
+  to it (`metrics["scope_equips"]`, `metrics["reference"]`), shown in the data section's
+  reference table. `references["*"]["oat"]` is an alias of `oat_reference` (giving both is an
+  error).
+- **Cost-only inputs and money at risk** (0.108; #268), additive and provisional:
+  `camber.rules.triage.Issue.cost_conditional_on` and `Issue.cost_at_risk`, the
+  `n_cost_conditional` key of `issue_totals` and of the RCx `kpis`, and the issue dict's
+  `cost_conditional_on`. **Behaviour change:** a sensor cause on a role a member's rule reads
+  only to price its finding (`roles_cost`) moves the issue's dollars to the at-risk total; the
+  verdict, the confidence and `conditional_on` are unchanged.
+- **The SAT-reset target named by its source** (0.108; #269), additive: the
+  `supply_air_reset_compliance` metrics `target_source` (`"g36"`, `"site_sequence"` or
+  `"configured"`), `pct_below_target`, `target_median` and `pct_above_target`. The pre-0.108
+  keys `pct_below_g36_target`, `g36_target_median` and `pct_above_g36_target` carry the same
+  values and are kept as aliases until 0.109. **Behaviour change:** the finding's summary and
+  the cost basis name the source ("vs configured target", `sat-below-configured-target->reheat`,
+  `sat-below-site-sequence-target->reheat`); a G36-default map reads as before. The excess-OA
+  estimate's assumptions on a missing-minimum decline now carry the `airflow_source` it would
+  use, so Appendix B shows it.
+- **The synthetic entries `synthetic-ahu-excess-oa` and `synthetic-ahu-sensor-bias`** (0.108,
+  Track C), additive and provisional: their generators (`ahu_excess_oa`, `ahu_sensor_bias`),
+  run templates, mappings and the workbook configs `air-excess-oa-cost` (and its `--no-min` and
+  `--design-oa` variants) and `data-sensor-conditional` (and `--no-reference`), and the fault
+  labels `excess_oa` and `sat_sensor_bias`.
 
 ### The read API server: `camber.api.server`
 

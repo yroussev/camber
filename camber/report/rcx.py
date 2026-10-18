@@ -162,6 +162,7 @@ class RcxOptions:
     cost_params: dict | None = None
     occupancy: dict | None = None
     oat_reference: dict | None = None
+    references: dict | None = None  # 0.108 (#267): {equip: {role: reference spec}}
     sequence: dict | None = None
     g36_reference: bool = False
     corroboration: bool = True
@@ -201,6 +202,16 @@ class RcxOptions:
             if ref.get("cache_dir") and not os.path.isabs(ref["cache_dir"]):  # 0.92 (#64)
                 ref["cache_dir"] = os.path.join(base_dir, ref["cache_dir"])
             opts.oat_reference = ref
+        refs = spec.get("references")
+        if refs:  # 0.108 (#267): sensor references for any point, per equipment
+            opts.references, site_oat = _parse_references(refs, base_dir)
+            if site_oat is not None:
+                if opts.oat_reference:
+                    raise ValueError(
+                        "report.rcx: give the site OAT reference once, as oat_reference or as "
+                        'references["*"]["oat"]'
+                    )
+                opts.oat_reference = site_oat
         price = spec.get("price") or report.get("price")
         if price:
             opts.price = EnergyPrice.from_dict(price)  # 0.92 (#69): also per-unit rates
@@ -945,6 +956,8 @@ def _issue_dict(i) -> dict:
         "cost": i.cost,
         "cost_basis_note": i.cost_basis_note,
         "conditional_on": [c.label() for c in i.conditional_on],
+        # 0.108 (#268): causes on a cost-only input: the dollars are at risk, the verdict stands
+        "cost_conditional_on": [c.label() for c in getattr(i, "cost_conditional_on", None) or ()],
         "dependents": [
             f"{getattr(f, 'rule', '')} @ {getattr(f, 'equip', '')}" for f in i.dependents
         ],
@@ -1105,6 +1118,186 @@ def _synthetic_per_rule() -> dict:
         }
         for name, c in rep.per_detector.items()
     }
+
+
+#: the comparison thresholds a sensor reference may set (`compare_to_reference`)
+_REFERENCE_THRESHOLDS = (
+    "bias_warn",
+    "bias_fault",
+    "drift_warn",
+    "drift_fault",
+    "min_correlation",
+    "min_samples",
+    "min_drift_days",
+)
+
+
+def _parse_references(refs: dict, base_dir: str) -> tuple:
+    """``(per-equipment references, site OAT reference | None)`` from ``report.rcx.references``
+    (0.108, #267).
+
+    ``refs`` maps an equipment id to ``{role: spec}``. A spec is ``{"equip": "<equipment>"}`` (the
+    same role of another equipment of the run's store facility, e.g. a duct logger ingested as its
+    own equipment; ``"role"`` reads a different role of it), or ``{"csv": "<file>"}`` (a time and a
+    value column; ``time_col`` / ``value_col`` name them). Optional keys: ``label`` and the
+    comparison thresholds of :data:`_REFERENCE_THRESHOLDS`. The key ``"*"`` holds the site-wide
+    ``{"oat": spec}``, the same as ``oat_reference`` (its alias).
+    """
+    from ..model.roles import Role
+
+    if not isinstance(refs, dict):
+        raise ValueError("report.rcx.references must map an equipment id to {role: reference}")
+    out: dict = {}
+    site_oat = None
+    for equip, roles in refs.items():
+        if not isinstance(roles, dict):
+            raise ValueError(f"report.rcx.references[{equip!r}] must map a role to a reference")
+        if equip == "*":
+            extra = sorted(set(roles) - {"oat"})
+            if extra:
+                raise ValueError(
+                    'report.rcx.references["*"] holds only the site OAT reference ("oat"); '
+                    f"give {', '.join(extra)} per equipment"
+                )
+            if roles.get("oat"):
+                site_oat = dict(roles["oat"])
+                if site_oat.get("csv") and not os.path.isabs(site_oat["csv"]):
+                    site_oat["csv"] = os.path.join(base_dir, site_oat["csv"])
+                if site_oat.get("cache_dir") and not os.path.isabs(site_oat["cache_dir"]):
+                    site_oat["cache_dir"] = os.path.join(base_dir, site_oat["cache_dir"])
+            continue
+        per: dict = {}
+        for role, spec in roles.items():
+            try:
+                Role(role)
+            except ValueError:
+                raise ValueError(
+                    f"report.rcx.references[{equip!r}]: {role!r} is not a CAMBER role"
+                ) from None
+            if not isinstance(spec, dict) or not (spec.get("equip") or spec.get("csv")):
+                raise ValueError(
+                    f"report.rcx.references[{equip!r}][{role!r}] needs 'equip' (another "
+                    "equipment of the store facility) or 'csv' (a file)"
+                )
+            spec = dict(spec)
+            if spec.get("csv") and not os.path.isabs(spec["csv"]):
+                spec["csv"] = os.path.join(base_dir, spec["csv"])
+            unknown = sorted(
+                set(spec)
+                - {"equip", "role", "csv", "time_col", "value_col", "label"}
+                - set(_REFERENCE_THRESHOLDS)
+            )
+            if unknown:
+                raise ValueError(
+                    f"report.rcx.references[{equip!r}][{role!r}]: unknown key(s) "
+                    + ", ".join(unknown)
+                )
+            per[role] = spec
+        out[str(equip)] = per
+    return out, site_oat
+
+
+def _reference_label(spec: dict) -> str:
+    if spec.get("label"):
+        return str(spec["label"])
+    if spec.get("equip"):
+        return f"{spec['equip']}" + (f" ({spec['role']})" if spec.get("role") else "")
+    return os.path.basename(str(spec.get("csv")))
+
+
+def _load_point_reference(spec: dict, role: str, run, ctx) -> pd.Series | None:
+    """The reference series of one point reference (0.108, #267): ``spec["equip"]`` read from the
+    run's equipment or its store facility, or ``spec["csv"]``."""
+    if spec.get("csv"):
+        df = pd.read_csv(spec["csv"])
+        tcol = spec.get("time_col") or df.columns[0]
+        vcol = spec.get("value_col") or next(c for c in df.columns if c != tcol)
+        s = pd.Series(
+            pd.to_numeric(df[vcol], errors="coerce").to_numpy(),
+            index=pd.to_datetime(df[tcol]),
+        )
+        return s.sort_index()
+    from ..model.roles import Role
+
+    want = Role(spec.get("role") or role)
+    other = str(spec["equip"])
+    fr = ctx.frame(other) if other in ctx.equips else None
+    if fr is None:
+        cfg = getattr(run, "config", None) or {}
+        source = cfg.get("source") or {}
+        if str(source.get("kind") or "") != "store":
+            raise ValueError(
+                f"reference equipment {other!r} is not in the run, and only a store source can "
+                "read another equipment"
+            )
+        from ..config import _path
+        from ..store import ParquetStore
+
+        store = ParquetStore(_path(getattr(run, "base_dir", ".") or ".", source["store"]))
+        fr = store.read_role_frame(
+            facility_id=source["facility_id"],
+            equip=other,
+            roles=[want],
+            start=source.get("start"),
+            end=source.get("end"),
+            resample=cfg.get("resample"),
+        )
+    col = _col(fr, want) if fr is not None else None
+    if col is None:
+        raise ValueError(f"reference equipment {other!r} has no {want.value} data")
+    return pd.to_numeric(col, errors="coerce")
+
+
+def _point_references(ctx, o, run) -> tuple:
+    """``(findings, rows, notes)`` of the per-equipment sensor references (0.108, #267).
+
+    Each reference is compared with :func:`camber.sensordrift.drift_finding` (bias, drift,
+    correlation), giving a ``sensor_drift:<role>`` finding on the equipment, scoped to it
+    (``metrics["scope_equips"]``), so a warn or fault makes that unit's findings that read the
+    point conditional.
+    """
+    from ..model.roles import Role
+    from ..sensordrift import drift_finding
+
+    findings, rows, notes = [], [], []
+    for equip, roles in sorted((o.references or {}).items()):
+        fr = ctx.frame(equip) if equip in ctx.equips else None
+        if fr is None or fr.empty:
+            notes.append(f"Sensor reference for {equip}: no such equipment in this run.")
+            continue
+        for slug, spec in sorted(roles.items()):
+            role = Role(slug)
+            series = _col(fr, role)
+            label = _reference_label(spec)
+            if series is None:
+                notes.append(f"Sensor reference for {equip} {slug}: the unit does not trend it.")
+                continue
+            try:
+                ref = _load_point_reference(spec, slug, run, ctx)
+            except Exception as exc:  # noqa: BLE001 - a bad reference is reported, not fatal
+                notes.append(f"Sensor reference for {equip} {slug} could not be loaded: {exc}")
+                continue
+            kw = {k: spec[k] for k in _REFERENCE_THRESHOLDS if k in spec}
+            series = pd.to_numeric(series, errors="coerce")
+            f = drift_finding(series, ref.reindex(series.index), equip, role, **kw)
+            f.metrics["reference"] = label
+            f.metrics["scope_equips"] = [equip]  # this unit's own point, whatever the role
+            findings.append(f)
+            m = f.metrics
+            rows.append(
+                [
+                    equip,
+                    slug,
+                    label,
+                    f.severity,
+                    m.get("bias"),
+                    "—" if m.get("drift_per_month") is None else m.get("drift_per_month"),
+                    m.get("rmse"),
+                    m.get("correlation"),
+                    m.get("n"),
+                ]
+            )
+    return findings, rows, notes
 
 
 def _load_reference_oat(spec: dict, index, weather=None) -> pd.Series | None:
@@ -1433,6 +1626,10 @@ def build_rcx_report(
                         ]
                     )
 
+    # ---- 0.108 (#267): sensor references for any point, per equipment
+    point_findings, point_ref_rows, point_ref_notes = _point_references(ctx, o, run)
+    findings.extend(point_findings)
+
     # ---- SAT reset tiers (decides which compliance findings may be priced)
     seq = (o.sequence or {}).get("sat_reset")
     soo_classes = {s.get("class") for s in cfg.get("soo", []) or []}
@@ -1575,6 +1772,7 @@ def build_rcx_report(
         "n_issues": totals["n_issues"],
         "n_uncosted": totals["n_uncosted"],
         "n_conditional": totals["n_conditional"],
+        "n_cost_conditional": totals["n_cost_conditional"],  # 0.108 (#268)
         "coverage_pct": None if coverage != coverage else round(100 * coverage, 1),
         "n_declined": len(declined),
     }
@@ -1603,6 +1801,8 @@ def build_rcx_report(
         "ref_note": ref_note,
         "ref_kind": ref_kind,
         "ref_source": ref_source,
+        "point_ref_rows": point_ref_rows,  # 0.108 (#267)
+        "point_ref_notes": point_ref_notes,
         "costs": costs,
         "cost_defaults": {**DEFAULTS, **(o.cost_params or {})},
         "exclude_cost": exclude_cost,
@@ -1832,8 +2032,10 @@ def _sec_summary(S) -> dict:
         action = action[:1].upper() + action[1:] if action else ""
         action = action or "Engineer to specify (no packaged action)."
         cost = _fmt_usd(iss.cost) if iss.cost is not None else _cut(iss.cost_basis_note, 60)
-        if iss.conditional:
-            cost += " (at risk)" if iss.cost is not None else " (conditional)"
+        if iss.cost_at_risk:  # 0.108 (#268): also a distrusted cost-only input
+            cost += " (at risk)"
+        elif iss.conditional:
+            cost += " (conditional)"
         rows.append(
             [
                 f"<a href='#issue-{iss.key}'>{iss.rank}</a>",
@@ -1910,6 +2112,27 @@ def _sec_data(S) -> dict:
                 "weather."
             )
         )
+    if S.get("point_ref_rows") or S.get("point_ref_notes"):  # 0.108 (#267)
+        blocks.append(_p("Sensors vs their configured references (report.rcx.references):"))
+        if S.get("point_ref_rows"):
+            blocks.append(
+                _table(
+                    [
+                        "Equipment",
+                        "Point",
+                        "Reference",
+                        "Result",
+                        "Bias",
+                        "Drift / month",
+                        "RMSE",
+                        "r",
+                        "Samples",
+                    ],
+                    S["point_ref_rows"],
+                )
+            )
+        for note in S.get("point_ref_notes") or ():
+            blocks.append(_p(note))
     mrows = [
         [
             e,
@@ -2606,6 +2829,14 @@ def _sec_issue(S, iss) -> dict:
                 + "; ".join(c.label() for c in iss.conditional_on),
             }
         )
+    if iss.cost_conditional_on and not iss.conditional:  # 0.108 (#268)
+        blocks.append(
+            {
+                "kind": "banner",
+                "text": "Cost at risk pending a sensor fix (the verdict stands): the estimate "
+                "reads " + "; ".join(c.label() for c in iss.cost_conditional_on),
+            }
+        )
     ups = [c for c in getattr(iss, "upstream_causes", None) or () if c.kind == "plant_capacity"]
     if ups:
         blocks.append(
@@ -2622,7 +2853,7 @@ def _sec_issue(S, iss) -> dict:
         ["Severity", iss.severity],
         [
             "$/yr",
-            (_fmt_usd(iss.cost) + (" (at risk)" if iss.conditional else ""))
+            (_fmt_usd(iss.cost) + (" (at risk)" if iss.cost_at_risk else ""))
             if iss.cost is not None
             else "—",
         ],

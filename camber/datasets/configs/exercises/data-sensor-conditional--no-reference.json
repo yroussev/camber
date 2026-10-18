@@ -1,0 +1,39 @@
+{
+  "_comment": "Workbook exercise data-sensor-conditional, the before view: the main config without report.rcx.references, so nothing compares the supply-air sensors with the duct loggers. The trust checks score both sensors trusted, every issue is firm, and nothing is at risk.",
+  "_dataset": "synthetic-ahu-sensor-bias",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-synthetic-ahu-sensor-bias"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "supply_air_control",
+    {
+      "name": "supply_air_reset_compliance",
+      "params": {
+        "t_max": 62
+      }
+    },
+    "leaking_valve"
+  ],
+  "report": {
+    "level": 2,
+    "rcx": {
+      "loads": {
+        "AHU__healthy": {
+          "heating_capacity_kbtuh": 400
+        },
+        "AHU__sat_bias": {
+          "heating_capacity_kbtuh": 400
+        }
+      }
+    }
+  }
+}

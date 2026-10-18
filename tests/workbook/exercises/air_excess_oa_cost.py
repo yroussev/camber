@@ -167,6 +167,9 @@ def _no_min_declines(ctx) -> None:
     assert ctx.finding(_OAF, _BAD, "nomin").metrics["min_oa_source"] == "default"
     rows = _appendix_b(ctx, "nomin")
     assert rows[(_BAD, _OAF)][2] == "20% (default)", rows[(_BAD, _OAF)]
+    # 0.108 (#269): the airflow source is resolved before the decline, so it still shows
+    assert rows[(_BAD, _OAF)][3] == "trended supply airflow", rows[(_BAD, _OAF)]
+    assert rows[(_NOFLOW, _OAF)][3] == "—", rows[(_NOFLOW, _OAF)]
     assert _rcx(ctx, "nomin").to_dict()["kpis"]["annual_cost_usd"] is None
 
 

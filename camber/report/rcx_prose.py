@@ -243,7 +243,9 @@ def _issue_facts(S, iss, add) -> None:
         rank=iss.rank,
     )
     if iss.cost is not None:
-        tail = " at risk pending a sensor fix" if iss.conditional else ""
+        tail = (
+            " at risk pending a sensor fix" if getattr(iss, "cost_at_risk", iss.conditional) else ""
+        )
         add(
             "cost",
             c,
