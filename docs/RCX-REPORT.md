@@ -114,7 +114,7 @@ each test reads the rules' own metrics:
 | Chain | AHU-side root | Box-side symptom |
 |---|---|---|
 | `sat_high` | `supply_air_control` with too-warm leading; `g36_afdd` FC13; `sat_reset_effectiveness` not responding (parked warm under demand) | `unmet_setpoint_hours` with too-hot leading |
-| `sat_low` | `supply_air_control` with too-cold leading; `supply_air_reset` (warns only when SAT is held cold); `supply_air_reset_compliance`; `sat_reset_effectiveness` not trimming (and not also parked warm) | `overcooling_min_flow`, `overcooling_severity`, `reheat_penalty`, `reheat_minimization_g36` |
+| `sat_low` | `supply_air_control` with too-cold leading; `supply_air_reset` (warns only when SAT is held cold); `supply_air_reset_compliance` on its below-target side (0.108: it also warns when supply air runs above the target, which is not a cold-supply root); `sat_reset_effectiveness` not trimming (and not also parked warm) | `overcooling_min_flow`, `overcooling_severity`, `reheat_penalty`, `reheat_minimization_g36` |
 | `static_low` | `g36_afdd` FC1 (duct static too low at full fan); `static_reset_effectiveness` not responding | `airflow_tracking` with under-setpoint leading; `unmet_setpoint_hours` with too-hot leading (a starved box can't cool) |
 
 A box finding joins the first chain, in table order, whose root sits on an air handler that

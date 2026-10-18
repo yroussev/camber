@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise zone-g36-fleet, single-maximum reheat: AHU__reheat's six boxes, reheat_minimization_g36 and zones_heat_cool_census. Two boxes reheat at 80 % of their cooling maximum airflow: the per-box rule faults on both, the fleet census passes them (18.3 % of occupied hours).",
+  "_comment": "Workbook exercise zone-g36-fleet, single-maximum reheat: AHU__reheat's six boxes, reheat_minimization_g36 and zones_heat_cool_census. Two boxes reheat at 80 % of their cooling maximum airflow: the per-box rule faults on both, the fleet census passes them (8.9 % of occupied hours mixed).",
   "_dataset": "synthetic-g36-vav-fleet",
   "source": {
     "kind": "store",

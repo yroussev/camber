@@ -93,15 +93,31 @@ class PermanentSinkError(RuntimeError):
 
 # answers that are worth retrying although they are 4xx: timeout, too early, too many requests
 _RETRYABLE_4XX = frozenset({408, 425, 429})
+# 0.108: an authentication / authorization refusal is a fleet-wide credential or configuration
+# problem (an expired presigned template, a revoked key), not a bad batch: transient, never
+# dead-lettered.
+AUTH_STATUSES = frozenset({401, 403})
+
+
+def _code(status):
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_auth_status(status) -> bool:
+    """True for 401 / 403: the sink refused the credentials, not the batch (0.108)."""
+    return _code(status) in AUTH_STATUSES
 
 
 def is_permanent_status(status) -> bool:
-    """True for an HTTP status a retry will not change: a 4xx other than 408, 425 and 429."""
-    try:
-        code = int(status)
-    except (TypeError, ValueError):
+    """True for an HTTP status a retry will not change: a 4xx other than 401, 403 (an auth
+    problem, 0.108), 408, 425 and 429."""
+    code = _code(status)
+    if code is None:
         return False
-    return 400 <= code < 500 and code not in _RETRYABLE_4XX
+    return 400 <= code < 500 and code not in _RETRYABLE_4XX and code not in AUTH_STATUSES
 
 
 def _status_of(exc):
@@ -118,10 +134,16 @@ def _status_of(exc):
     return v if isinstance(v, int) else None
 
 
+def is_auth_error(exc: BaseException) -> bool:
+    """True when ``exc`` from :meth:`Sink.put` carries a 401 / 403 answer (0.108)."""
+    return is_auth_status(_status_of(exc))
+
+
 def is_permanent_error(exc: BaseException) -> bool:
     """True when ``exc`` from :meth:`Sink.put` is permanent (0.108, #245): retrying won't help.
 
-    A :class:`PermanentSinkError`, an HTTP 4xx answer other than 408 / 425 / 429 (from urllib,
+    A :class:`PermanentSinkError`, an HTTP 4xx answer other than 401 / 403 (an auth problem,
+    transient: see :func:`is_auth_error`) and 408 / 425 / 429 (from urllib,
     botocore, azure-core or google-api-core: their status attribute is read), or a validation
     error (``ValueError`` / ``TypeError``, such as a URL that is not https or not on the
     allowlisted host). Network errors and 5xx answers are transient.

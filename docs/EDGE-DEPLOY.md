@@ -294,9 +294,12 @@ and pushes, then exits — nothing stays resident and nothing listens.
   `quality` a JSON boolean (`"false"` is refused, not read as true), `wire_format`,
   `part_layout` and the sink kind one of their choices, `resample` a pandas frequency,
   `timezone` an IANA zone, and `dead_letter_after` at least 1. An unknown key, at the top level
-  or in a file source or sink, is refused with the closest known key (`spool_dri`: did you mean
-  `spool_dir`?) rather than silently left at its default. Keys that start with `_`, and `note`,
-  `comment` and `description`, are comments at any level.
+  or in a file source or sink, is ignored with a WARNING naming the closest known key
+  (`spool_dri`: did you mean `spool_dir`?), so a typo no longer leaves a default in force
+  unnoticed: it is logged, raised as a `FutureWarning`, and shown by `edge status` and `edge
+  selftest` (`CONFIG WARNING`); the forwarder keeps running. **CAMBER 0.109 will refuse unknown
+  keys.** Keys that start with `_`, and `note`, `comment` and `description`, are comments at any
+  level.
 - **`timezone`** (0.108, #249): the site's IANA zone (or `CAMBER_EDGE_TIMEZONE`). File sources
   get it, so offset-bearing timestamps land on the site's wall clock; `source.timezone` (and
   `source.strict_timezone`) override it for the source.
@@ -328,21 +331,26 @@ INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 alread
 - **Transient sink error** (a network error, a 5xx, a 408 / 425 / 429) → the batch is kept, an
   attempt is recorded, a capped backoff is applied, and the next cycle retries. Nothing is acked
   until a 2xx.
-- **Permanent rejection** (0.108, #245: any other 4xx, or a validation error such as a URL that is
-  not https or not on the allowlisted host) → the batch is kept and its rejection counted, and the
-  drain **goes on** with the batches behind it, so one refused key never blocks the spool. After
-  `dead_letter_after` rejections (5 by default) the batch moves to `<spool>/dead/`: its payload
-  and a `<file>.json` record (key, metadata, sha256, attempts, rejections, the last error, the
-  time) stay on disk, a `dead` journal record and a `WARNING edge.spool.dead` log line are
-  written. Dead letters count toward the disk cap, and the oldest is dropped first, with a
-  WARNING, when the cap is reached. `edge decommission` counts dead letters as unacknowledged.
-  Fix the cause, then `camber edge requeue <edge.json>`
-  (a dry run; `--apply` queues them again with a fresh count, `--key K` picks one). An expired
-  presigned URL template answers 403 for every key, so every batch would dead-letter: requeue
-  them once the template is renewed.
+- **The sink refuses the device's credentials** (0.108: a 401 or 403, such as an expired presigned
+  URL template or a revoked key) → treated as transient, because it affects every batch: the cycle
+  stops and backs off, nothing is ever dead-lettered for it, and a loud `WARNING edge.spool.auth
+  AUTH FAILING since <time>` is logged on every failed cycle. `edge status` shows `AUTH FAILING
+  since <time>` with the count and the last error until a batch is delivered again. Renew the
+  template or keys; the queued batches then drain.
+- **Permanent rejection** (0.108, #245: any other 4xx but 401 / 403, or a validation error such as a
+  URL that is not https or not on the allowlisted host) → the batch is kept and its rejection
+  counted, and the drain **goes on** with the batches behind it, so one refused key never blocks the
+  spool. After `dead_letter_after` rejections (5 by default) the batch moves to `<spool>/dead/`: its
+  payload and a `<file>.json` record (key, metadata, sha256, attempts, rejections, the last error,
+  the time) stay on disk, a `dead` journal record and a `WARNING edge.spool.dead` log line are
+  written. Dead letters count toward the disk cap, and the oldest is dropped first, with a WARNING,
+  when the cap is reached. `edge decommission` counts dead letters as unacknowledged. Fix the cause,
+  then `camber edge requeue <edge.json>` (a dry run; `--apply` queues them again with a fresh count,
+  `--key K` picks one).
 - **`edge status`** (0.108, #245) shows, beside the queue depth, the batches that failed delivery
   (`STUCK`: how many, the oldest one's key, queue time, attempts and last error) and the dead
-  letters (`DEAD`, each with its error); `--json` prints it all.
+  letters (`DEAD`, each with its error), `AUTH FAILING since <time>` while the sink answers 401 /
+  403, and `CONFIG WARNING` lines for unknown config keys; `--json` prints it all.
 - **Re-reading the same window while offline** (0.108, #246) → the forwarder reads its whole source
   window on each poll, but the spool skips a batch whose key and content sha256 are already
   pending (or dead-lettered), so an outage of k polls holds one copy of each month, not k. Only

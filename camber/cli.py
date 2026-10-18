@@ -545,6 +545,7 @@ def _cmd_edge_status(args) -> int:
     stuck = spool.stuck()  # 0.108 (#245): batches that failed delivery, and dead letters
     dead = spool.dead_letters()
     retired = spool.retirement()
+    auth = spool.auth_failing()  # 0.108: the sink refuses this device's credentials
     if getattr(args, "json", False):
         import dataclasses
 
@@ -557,6 +558,8 @@ def _cmd_edge_status(args) -> int:
                     "stuck": [dataclasses.asdict(e) for e in stuck],
                     "dead": dead,
                     "retired": retired,
+                    "auth_failing": auth,
+                    "config_warnings": list(cfg.warnings),
                 },
                 indent=2,
                 default=str,
@@ -564,6 +567,14 @@ def _cmd_edge_status(args) -> int:
         )
         return 0
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
+    for note in cfg.warnings:  # 0.108: unknown config keys (refused from 0.109)
+        print(f"  CONFIG WARNING: {note}")
+    if auth:
+        print(
+            f"  AUTH FAILING since {auth.get('since', '?')} ({auth.get('failures', '?')} "
+            f"failure(s), last {auth.get('last', '?')}: {auth.get('error', '')}); check the "
+            "presigned URL template, broker or keys -- batches stay queued"
+        )
     if stuck:
         head = stuck[0]
         print(
@@ -669,6 +680,8 @@ def _cmd_edge_selftest(args) -> int:
     from .edge.spool import read_retirement
 
     cfg = load_config(args.config)
+    for note in cfg.warnings:  # 0.108: unknown config keys (refused from 0.109)
+        print(f"edge selftest: CONFIG WARNING: {note}")
     retired = read_retirement(cfg.spool_dir)
     if retired is not None:
         print(

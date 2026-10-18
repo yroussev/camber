@@ -349,10 +349,12 @@ class _Resp:
 
 
 class _LoopOpener:
-    """A loopback opener: 403 for ``month=1/`` keys, 200 otherwise (or raise ``fail`` for all)."""
+    """A loopback opener: ``status`` (400) for ``month=1/`` keys, 200 otherwise (or raise
+    ``fail`` for every key)."""
 
-    def __init__(self, fail=None):
+    def __init__(self, fail=None, status=400):
         self.fail = fail
+        self.status = status
         self.urls = []
 
     def open(self, req, timeout=None):
@@ -360,7 +362,7 @@ class _LoopOpener:
         if self.fail is not None:
             raise self.fail
         if "month=1/" in req.full_url:
-            raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+            raise urllib.error.HTTPError(req.full_url, self.status, "Refused", {}, None)
         return _Resp()
 
 
@@ -383,13 +385,13 @@ def test_a_rejected_batch_never_blocks_the_ones_behind_it(tmp_path):
     r = sp.drain(sink, _sleep=lambda s: None)
     assert r.forwarded == 4 and r.rejected == 1 and r.remaining == 1 and not r.dead
     (head,) = sp.pending()
-    assert head.rejects == 1 and "403" in head.last_error
+    assert head.rejects == 1 and "400" in head.last_error
     for _ in range(2):
         r = sp.drain(sink, _sleep=lambda s: None)
     assert r.dead == ["facility_id=s/year=2026/month=1/part-a.parquet"]
     assert sp.depth()[0] == 0
     (dead,) = sp.dead_letters()
-    assert dead["rejects"] == 3 and "403" in dead["error"]
+    assert dead["rejects"] == 3 and "400" in dead["error"]
     assert dead["sha256"] == hashlib.sha256(b"rejected").hexdigest()
     ops = [json.loads(line)["op"] for line in _journal(sp.root).splitlines()]
     assert ops.count("dead") == 1
@@ -821,11 +823,7 @@ def test_a_user_without_a_password_is_not_a_secret(tmp_path):
         ({"resample": "fortnightly-ish"}, "resample"),
         ({"timezone": "Mars/Base"}, "timezone"),
         ({"dead_letter_after": 0}, "dead_letter_after"),
-        ({"spool_dri": "/x"}, "did you mean 'spool_dir'"),
-        ({"wire_fromat": "ndjson"}, "did you mean 'wire_format'"),
-        ({"sink": {"kind": "s3", "bucket": "b", "prefx": "p"}}, "prefx"),
         ({"sink": {"kind": "ftp"}}, "sink kind"),
-        ({"source": {"kind": "csv_wide", "path": "x.csv", "tz": "UTC"}}, "'tz'"),
     ],
 )
 def test_values_and_keys_are_validated(tmp_path, extra, match):
@@ -934,3 +932,95 @@ def test_decommission_refuses_while_a_batch_is_dead_lettered(tmp_path):
     assert [u["key"] for u in res.unacknowledged if u.get("dead")] == [
         "facility_id=s/year=2026/month=1/part-a.parquet"
     ]
+
+
+# --------------------------------------------------------------------------- 0.108 policy
+
+
+def _auth_opener(status):
+    return _LoopOpener(fail=urllib.error.HTTPError("u", status, "Auth", {}, None))
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_an_auth_refusal_is_transient_and_never_dead_letters(tmp_path, status, caplog):
+    assert not is_permanent_error(urllib.error.HTTPError("u", status, "Auth", {}, None))
+    clock = iter(f"2026-10-18T0{i}:00:00+00:00" for i in range(10))
+    sp = Spool(str(tmp_path / "spool"), dead_letter_after=1)
+    _seed(sp)
+    sp._clock = lambda: pd.Timestamp(next(clock)).to_pydatetime()
+    with caplog.at_level("WARNING", logger="camber.edge"):
+        for _ in range(4):
+            r = sp.drain(_presigned(_auth_opener(status)), _sleep=lambda s: None)
+            # the cycle stops at the head batch, nothing is rejected or dead-lettered
+            assert r.forwarded == 0 and r.rejected == 0 and not r.dead and r.auth_failed
+    assert "AUTH FAILING" in caplog.text
+    assert sp.depth()[0] == 5 and sp.dead_letters() == []
+    assert sp.pending()[0].rejects == 0 and sp.pending()[0].attempts == 4
+    auth = sp.auth_failing()
+    assert auth["since"].startswith("2026-10-18T00") and auth["failures"] == 4
+    assert str(status) in auth["error"]
+    # once the credentials work again, the record is cleared and everything drains
+    r = sp.drain(_presigned(_LoopOpener(status=400)), _sleep=lambda s: None)
+    assert r.forwarded == 4 and sp.auth_failing() is None
+
+
+def test_edge_status_shows_auth_failing_since(tmp_path, capsys):
+    spool_dir = str(tmp_path / "spool")
+    cfg = _write_cfg(
+        tmp_path, {"facility_id": FID, "sink": {"kind": "collect"}, "spool_dir": spool_dir}
+    )
+    sp = Spool(spool_dir)
+    _seed(sp)
+    sp.drain(_presigned(_auth_opener(401)), _sleep=lambda s: None)
+    since = sp.auth_failing()["since"]
+    assert main(["edge", "status", cfg]) == 0
+    out = capsys.readouterr().out
+    assert f"AUTH FAILING since {since}" in out and "401" in out
+    assert main(["edge", "status", cfg, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["auth_failing"]["since"] == since
+
+
+@pytest.mark.parametrize(
+    ("extra", "match"),
+    [
+        ({"spool_dri": "/x"}, "did you mean 'spool_dir'"),
+        ({"wire_fromat": "ndjson"}, "did you mean 'wire_format'"),
+        ({"sink": {"kind": "s3", "bucket": "b", "prefx": "p"}}, "prefx"),
+        ({"source": {"kind": "csv_wide", "path": "x.csv", "tz": "UTC"}}, "'tz'"),
+    ],
+)
+def test_unknown_keys_warn_in_0108(tmp_path, caplog, extra, match):
+    path = _write_cfg(tmp_path, {"facility_id": FID, **extra})
+    with caplog.at_level("WARNING", logger="camber.edge"):
+        with pytest.warns(FutureWarning, match="0.109 will refuse"):
+            cfg = load_config(path, environ={})
+    assert match in caplog.text and any(match in w for w in cfg.warnings)
+    assert cfg.spool_dir == "./camber-edge-spool"  # the typo is ignored, the default applies
+
+
+def test_unknown_keys_show_in_status_and_selftest_and_the_forwarder_runs(tmp_path, capsys):
+    spool_dir = str(tmp_path / "spool")
+    cfg = _write_cfg(
+        tmp_path,
+        {
+            "facility_id": FID,
+            "source": {"kind": "csv_wide", "path": _csv(tmp_path)},
+            "sink": {"kind": "collect"},
+            "spool_dir": spool_dir,
+            "intervall": 60,
+        },
+    )
+    with pytest.warns(FutureWarning):
+        assert main(["edge", "selftest", cfg]) == 0
+    out = capsys.readouterr().out
+    assert "CONFIG WARNING" in out and "did you mean 'interval'" in out
+    assert "would send 1 object(s)" in out
+    with pytest.warns(FutureWarning):
+        assert main(["edge", "send-once", cfg]) == 0
+    capsys.readouterr()
+    with pytest.warns(FutureWarning):
+        assert main(["edge", "status", cfg]) == 0
+    assert "CONFIG WARNING" in capsys.readouterr().out
+    with pytest.warns(FutureWarning):
+        assert main(["edge", "status", cfg, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["config_warnings"]

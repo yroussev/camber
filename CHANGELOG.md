@@ -52,6 +52,30 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   carries its device's `device_instance` and `address` (#248).
 - **Haystack: `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
   strict_timezone=)` and `haystack_tz` (#244).**
+- **A synthetic fleet whose faults reach the boxes, and the `rcx-cause-chains` exercise
+  (0.108, C1).** The new catalog entry `synthetic-g36-rcx-chains` (generator `g36_rcx_chains`)
+  runs the G36 fleet model with each air handler's supply fan speed and cooling valve, as five
+  air handlers: a healthy one, a healthy one with one stuck box damper, a cooling coil that
+  cannot make supply air below 63 °F, a weak fan that cannot make more than 0.35 in. w.c., and
+  a SAT reset disabled at 55 °F with two single-maximum reheat boxes. Its run template declares
+  the served-by topology and the reheat-coil sizes, so the RCx report shows the #196 cause
+  chains: supply air too warm (5 of 6 boxes), duct static too low (5 of 6 boxes) and supply air
+  too cold (2 of 6 boxes, costed at its largest member), while the stuck box stays its own
+  issue. Without the topology the same run ranks 22 issues instead of 5 and counts the reheat
+  twice. The workbook exercise `rcx-cause-chains` walks through it, with an instructor key and a
+  figure.
+- **`unmet_setpoint_hours` and `airflow_tracking` on the G36 fleet (#226).** The
+  `synthetic-g36-vav-fleet` run template and the `zone-g36-fleet` exercise configs run both
+  rules, and the entry labels the boxes behind `AHU__starved` and `AHU__not_responding`
+  (`starved_by_air_handler`) so `camber datasets score` scores them. With the boxes' symptoms in
+  the run, the RCx report links them to `AHU__not_responding`'s reset findings (6 of 6 boxes,
+  for both resets).
+- `reheat_minimization_g36`'s `min_reheat_hours` parameter (default 2 h) and its metric
+  `n_reheat_samples` (#238). `cohort_starvation`'s `min_present_frac` parameter and the
+  `group_skipped_cycles` metric and result field (#239). `zones_heat_cool_census`'s
+  `min_heating_frac`, `max_driver_zones` and `persistent_frac` parameters and its metrics
+  `heating_frac_when_mixed`, `persistent_heating_zones`, `driver_zones`,
+  `pct_hours_mixed_without_drivers` and `severity_capped` (#241).
 - **Excess outside air priced end to end, and the `air-excess-oa-cost` exercise (0.108, C2).**
   The new catalog entry `synthetic-ahu-excess-oa` (generator `ahu_excess_oa`, catalog file 102)
   generates two variable-air-volume air handlers with trended outdoor and return humidity, supply
@@ -62,8 +86,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   (#195): $731/yr on the enthalpy path (cooling and heating), $255/yr if the humidity points are
   dropped, $0 for the economizer, and declines without airflow or a declared minimum. The
   workbook exercise `air-excess-oa-cost` walks through it, with two config variants
-  (`--no-min`, `--design-oa`), an instructor key and a figure. The answer key is pending
-  maintainer sign-off.
+  (`--no-min`, `--design-oa`), an instructor key and a figure.
 - **A biased sensor, conditional findings and the at-risk total: the `data-sensor-conditional`
   exercise (0.108, C3).** The new catalog entry `synthetic-ahu-sensor-bias` (generator
   `ahu_sensor_bias`, catalog file 103) generates two identical air handlers on a fixed 55 °F
@@ -74,7 +97,7 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   `sensor_drift:supply_air_temp` finding: the unit's dependent findings turn conditional and its
   reset estimate moves to the RCx report's at-risk total ($5,250/yr), while the healthy twin's
   identical finding stays firm. The workbook exercise `data-sensor-conditional` walks through it,
-  with an instructor key and a figure. The answer key is pending maintainer sign-off.
+  with an instructor key and a figure.
 
 ### Changed
 - **A rule's docstring citations are checked against its references (#232).**
@@ -163,13 +186,13 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   replacement, duplicates are still quarantined, and under a legal hold the parts a merge
   supersedes are copied into quarantine first (`camber.edge.row_digest.merge_parts`).
 - **Behaviour change: a permanently refused batch is dead-lettered and no longer blocks the spool
-  (#245).** A 4xx answer other than 408, 425 and 429, or a validation error, is permanent: the
-  drain counts it and goes on with the batches behind it (it used to retry the head batch
+  (#245).** A 4xx answer other than 401, 403, 408, 425 and 429, or a validation error, is permanent:
+  the drain counts it and goes on with the batches behind it (it used to retry the head batch
   forever and send nothing else). After `dead_letter_after` rejections the batch moves to
   `<spool>/dead/` with a `<file>.json` record, a `dead` journal record and a WARNING. Transient
-  errors still stop the cycle and back off. Dead letters count toward the disk cap, and
-  `edge decommission` counts them as unacknowledged
-  (`camber.edge.sink.is_permanent_error`, `is_permanent_status`, `PermanentSinkError`).
+  errors still stop the cycle and back off. Dead letters count toward the disk cap, and `edge
+  decommission` counts them as unacknowledged (`camber.edge.sink.is_permanent_error`,
+  `is_permanent_status`, `PermanentSinkError`).
 - **Behaviour change: SDK sinks send a compact metadata subset (#245).** The S3, Azure and GCS
   sinks send `sha256`, `rows`, `rows_sha256`, `schema_version`, `year` and `month`,
   JSON-encoded and ASCII-safe (`camber.edge.sink.sink_metadata`), instead of the whole manifest as
@@ -178,13 +201,27 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **Behaviour change: the spool keeps one copy of each batch (#246).** `Spool.enqueue` skips a
   batch whose key and content sha256 are already pending or dead-lettered, so a forwarder that
   re-reads its window while offline no longer queues a copy per poll.
-- **Behaviour change: the edge config is validated (#249).** `load_config` refuses an unknown key
-  (with the closest known one), a non-boolean `quality`, an `interval`, `spool_max_bytes` or
-  `sink.timeout` of 0 or less, an unknown `wire_format`, `part_layout`, sink kind, `resample`
-  or `timezone`, and, as secrets, any value with a signature or credential in it whatever its
-  scheme (an Azure SAS `sig=`, `X-Goog-Signature`, `signature=` / `token=` parameters,
-  `AccountKey=`) and any URL with a password in its userinfo. Keys starting with `_`, and `note`,
-  `comment`, `description`, are comments. `Spool` refuses a `max_bytes` of 0 or less.
+- **Behaviour change: the edge config is validated (#249).** `load_config` refuses a non-boolean
+  `quality`, an `interval`, `spool_max_bytes` or `sink.timeout` of 0 or less, an unknown
+  `wire_format`, `part_layout`, sink kind, `resample` or `timezone`, and, as secrets, any value with
+  a signature or credential in it whatever its scheme (an Azure SAS `sig=`, `X-Goog-Signature`,
+  `signature=` / `token=` parameters, `AccountKey=`) and any URL with a password in its userinfo.
+  Keys starting with `_`, and `note`, `comment`, `description`, are comments. `Spool` refuses a
+  `max_bytes` of 0 or less.
+- **Deprecation: unknown edge-config keys warn in 0.108 and will be refused in 0.109.** A key
+  `load_config` does not know, at the top level or in a file source or sink (a typo such as
+  `spool_dri`, which leaves the default in force), is ignored with a WARNING that names the
+  closest known key: logged, raised as a `FutureWarning`, kept in `EdgeConfig.warnings` and shown
+  by `edge status` (`CONFIG WARNING`; `config_warnings` in `--json`) and `edge selftest`. The
+  forwarder keeps running. **CAMBER 0.109 will refuse unknown keys**: fix or remove them now, or
+  prefix a comment key with `_`.
+- **Behaviour change: a 401 or 403 from the sink is transient, never dead-lettered.** An
+  authentication or authorization refusal is a fleet-wide credential or configuration problem
+  (an expired presigned URL template, a revoked key), not a bad batch: the drain stops the cycle
+  and backs off, as for a network error, and logs a loud `edge.spool.auth AUTH FAILING since
+  <time>` WARNING. `edge status` shows `AUTH FAILING since <time>` (`auth_failing` in `--json`;
+  `Spool.auth_failing`) until a batch is delivered again. Other 4xx answers and validation errors
+  stay permanent (`camber.edge.sink.is_auth_error`, `is_auth_status`, `AUTH_STATUSES`).
 - **Behaviour change: duplicate BACnet point names are refused (#248).** `BacnetSource` raises
   instead of silently keeping one of two points with one name, and `discovery_to_points` names
   objects that share a name on different devices `<device name>_<object name>` (then
@@ -196,6 +233,42 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **Behaviour change: `edge land` isolates per-object errors (#247).** One object that fails is
   reported in the report's `errors` and the `done` audit record, the run goes on, and `land
   --apply` exits 1. `edge reconcile --apply` does the same.
+- **The G36 fleet generator is at version 3 (#226).** On version 2, `unmet_setpoint_hours` and
+  `airflow_tracking` flagged the healthy air handler's boxes: its zones sat 3-5 °F above their
+  cooling setpoint for up to 28 % of occupied hours, with dampers wide open at 40-56 % of their
+  airflow setpoint. The rules were right and their defaults stand: an unmet tolerance of 4 °F
+  still left a healthy box 18 % unmet, and `airflow_tracking` needed half the setpoint. The generator was the cause: each perimeter zone
+  peaked alone, and a correct reset that ignores two requests (G36's I = 2) left that zone
+  warm. One trim-and-respond cycle an hour could not follow the morning load, and the duct
+  static trimmed to its minimum overnight. Version 3 gives the zones loads that rise and fall
+  together, takes three reset cycles per trended hour, holds both resets at their start value
+  while the fan is off (G36 §5.1.14), and holds a tier-1 request until the loop or the damper
+  falls below 85 % (G36's hysteresis). The blocked inlet of `rogue_static` moves from box 5 to
+  the north box 4, and the near miss's extra load becomes 0.008 of its cooling maximum on weekday
+  mornings (it was 0.06 all day). Every labelled fault is still detected and the label scores
+  hold. **Workbook:** the `zone-g36-fleet` answers are re-recorded (key, instructor block, page
+  and config comments). The headline moves: the SAT rogue sends all of its air handler's SAT
+  requests (92.5 % before) and the static rogue is `VAV4__rogue_static` (was `VAV5`, 95.9 %, now
+  100 %); SAT cohort starvation on `AHU__not_responding` 57.8 % → 83.1 % of active cycles, static
+  71.1 % → 86.1 %; `cohort_space_temp` adds four `AHU__starved` boxes to its outliers; the
+  healthy SAT reset swings 5.15 → 6.82 °F; `VAV2__reheat` and `VAV4__reheat` above minimum
+  69.7 % → 56.5 % and 93.1 % → 72.4 % (still faults); the building-wide census 98.3 % → 100 %
+  mixed, the `reheat` run 18.3 % → 8.9 %, the `heat_cool` run 98.3 % → 85.0 %; overall detection
+  73 % → 22 of 23, with `unmet_setpoint_hours` (13 of 14) and `airflow_tracking` (14 of 14)
+  newly scored; the near miss's zone 1 holds the binding request on 45.4 % → 44.4 % of active
+  cycles and sends 43.0 % → 30.8 % of the requests. On the healthy fleet the north zone's z is
+  now −2.2 (it was −7.6, excused by the 1 °F floor), so that answer is gone.
+- **Behaviour change (#238):** `reheat_minimization_g36` reports `info`, with a caveat, below
+  `min_reheat_hours` of occupied reheat, so one sample no longer decides the verdict.
+  `n_reheat_hours` now counts hours (samples × the sample interval), and heating-loop samples
+  that read nothing are left out instead of read as a low loop.
+- **Behaviour change (#239):** `sat_` and `static_cohort_starvation` judge a cycle only when at
+  least `min_present_frac` (default `cohort_frac`) of the group's zones have data, and say how
+  many cycles they skipped. One box reporting through the others' outage is no longer a starved
+  cohort.
+- **Behaviour change (#241):** `zones_heat_cool_census` faults only when a meaningful share of
+  the fleet heats in the mixed hours (`min_heating_frac`, 10 %), and is at most `warn` when one
+  or two boxes drive the result in a larger fleet. It names the zones that heat persistently.
 
 ### Fixed
 - **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
@@ -353,6 +426,10 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
   every read went to the single target address.
 - **The edge config's secret scan catches SAS URLs and DSN passwords (#249)**, and file sources
   get the config's `timezone` (it was dropped).
+- **The RCx report no longer reads supply air above its target as supply air too cold.**
+  `supply_air_reset_compliance` warns on both sides of the G36 target. The "supply air too
+  cold" cause chain took either one, so a coil that could not cool would root a chain of reheat
+  findings. It now takes only the below-target side.
 
 ## [0.107.0] — 2026-10-17
 

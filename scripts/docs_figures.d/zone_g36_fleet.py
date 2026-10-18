@@ -9,7 +9,8 @@ def register(df) -> None:
         """The exercise's SAT rogue-zone census (#144): every box of the eight air handlers,
         placed by its share of its air handler's SAT reset requests and by the share of active
         cycles it holds the binding (largest) request, the cooling loop over 95 % counted as
-        one request (generator version 2). A rogue needs both: the shaded corner.
+        one request (generator version 2 on; version 3 since 0.108). A rogue needs both: the
+        shaded corner.
         The equipment room of AHU__rogue_sat sits alone in it; the near miss's warm corner and
         the healthy fleet's zone 1 sit just outside."""
         import matplotlib.pyplot as plt

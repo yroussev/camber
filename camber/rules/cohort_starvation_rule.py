@@ -63,6 +63,7 @@ class CohortStarvation:
         sustained_frac: float = 0.50,
         min_active_cycles: int = 10,
         min_zones_per_group: int = 3,
+        min_present_frac: float | None = None,
     ):
         if reset not in _RESETS:
             raise ValueError(f"reset must be one of {sorted(_RESETS)}, got {reset!r}")
@@ -83,6 +84,7 @@ class CohortStarvation:
             "sustained_frac": sustained_frac,
             "min_active_cycles": min_active_cycles,
             "min_zones_per_group": min_zones_per_group,
+            "min_present_frac": min_present_frac,
         }
 
     def _cols(self) -> dict:
@@ -150,6 +152,7 @@ class CohortStarvation:
             "worst_group_frac": res.worst_group_frac,
             "group_sustained_frac": res.group_sustained_frac,
             "unevaluable_zones": res.unevaluable_zones,
+            "group_skipped_cycles": res.group_skipped_cycles,
         }
 
         if res.starved_groups:

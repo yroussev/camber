@@ -29,11 +29,17 @@ or the minimum flow set too high -- see the overcooling diagnostic).
   valve wide open looks the same in those hours; it still shows in its part-load reheat hours.
 * **Occupancy.** A trended ``occupancy`` point replaces the assumed weekday 07:00-18:00 schedule.
 
+0.108 (#238): reheat is counted in hours (samples x the sample interval), and below
+``min_reheat_hours`` of occupied reheat the rule does not rate the box (``info``, with a caveat),
+so one sample cannot decide the verdict. The sample count is ``n_reheat_samples``. With the
+heating loop trended, samples where it reads nothing are dropped, not read as a low loop.
+
 Clean-room: implements the §5.6.5 logic; G36 text/tables not reproduced.
 """
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from ..model.roles import Role
@@ -66,6 +72,7 @@ class ReheatMinimization:
         *,
         dual_max_valve: float = 90.0,
         dual_max_dat_rise: float = 15.0,
+        min_reheat_hours: float = 2.0,
         start_hour: float = 7,
         end_hour: float = 18,
         occupied_days=(0, 1, 2, 3, 4),
@@ -76,6 +83,8 @@ class ReheatMinimization:
         # 0.106 (#186): the high-heating-loop evidence without a trended heating loop
         self.dual_max_valve = dual_max_valve
         self.dual_max_dat_rise = dual_max_dat_rise
+        # 0.108 (#238): below this much occupied reheat the box is not rated
+        self.min_reheat_hours = min_reheat_hours
         # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
         self.start_hour = start_hour
         self.end_hour = end_hour
@@ -84,7 +93,7 @@ class ReheatMinimization:
     def _high_loop(self, w: pd.DataFrame) -> tuple[pd.Series, str]:
         """Hours in G36's high heating loop (airflow may rise above the minimum by design)."""
         if Role.ZONE_HEAT_LOOP in w.columns and w[Role.ZONE_HEAT_LOOP].notna().any():
-            return w[Role.ZONE_HEAT_LOOP].fillna(0.0) > 50.0, "zone_heat_loop"
+            return w[Role.ZONE_HEAT_LOOP] > 50.0, "zone_heat_loop"
         high = w[Role.HEAT_VALVE] >= self.dual_max_valve
         if Role.SUPPLY_AIR_TEMP in w.columns and Role.SPACE_TEMP in w.columns:
             rise = w[Role.SUPPLY_AIR_TEMP] - w[Role.SPACE_TEMP]
@@ -117,12 +126,19 @@ class ReheatMinimization:
         w["_vmin"] = vmin
         w = w[occupied.reindex(w.index).fillna(False).astype(bool)]
         w = w.dropna(subset=[Role.HEAT_VALVE, Role.AIRFLOW, "_vmin"])
+        # 0.108 (#238): a trended heating loop that reads nothing is not a low loop -- drop it
+        n_loop_missing = 0
+        if Role.ZONE_HEAT_LOOP in w.columns and w[Role.ZONE_HEAT_LOOP].notna().any():
+            n_loop_missing = int(w[Role.ZONE_HEAT_LOOP].isna().sum())
+            w = w[w[Role.ZONE_HEAT_LOOP].notna()]
         n = len(w)
         occupancy = "trended" if occ_pt is not None and occ_pt.notna().any() else "schedule"
         if n == 0:
             return Finding(rule=self.name, equip=equip, severity="info", summary="no occupied data")
         reheating = w[Role.HEAT_VALVE] > self.valve_thr
         n_reheat = int(reheating.sum())
+        step_h = _interval_hours(frame.index)
+        reheat_h = round(n_reheat * step_h, 2)
         if n_reheat == 0:
             return Finding(
                 rule=self.name,
@@ -145,6 +161,10 @@ class ReheatMinimization:
         viol_pct = round(100.0 * int(violation.sum()) / n_reheat, 1)  # of reheat hours
         severity = "fault" if viol_pct >= 40.0 else ("warn" if viol_pct >= 15.0 else "ok")
         caveats = []
+        if n_loop_missing:
+            caveats.append(
+                f"{n_loop_missing} occupied sample(s) with no heating-loop reading were left out"
+            )
         if basis == BASIS_INFERRED:
             caveats.append(INFERRED_CAVEAT)
             if severity == "fault":
@@ -157,10 +177,18 @@ class ReheatMinimization:
                 else ""
             )
             caveats.append(
-                f"heating loop not trended: {n_design} reheating hour(s) above the minimum were "
+                f"heating loop not trended: {round(n_design * step_h, 2):g} reheating hour(s) "
+                "above the minimum were "
                 f"read as G36's high heating loop (valve >= {self.dual_max_valve:g} %{dat}) and "
                 "not counted; a single-maximum box with its valve wide open looks the same"
             )
+        if reheat_h < self.min_reheat_hours:
+            # 0.108 (#238): too little reheat to rate the sequence on
+            caveats.append(
+                f"only {reheat_h:g} h of occupied reheat, under min_reheat_hours "
+                f"({self.min_reheat_hours:g} h): not rated"
+            )
+            severity = "info"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -170,7 +198,8 @@ class ReheatMinimization:
                 "reheat_hours_pct": round(100.0 * n_reheat / n, 1),
                 "reheat_above_min_pct": viol_pct,  # of reheating hours
                 "reheat_high_loop_pct": round(100.0 * n_design / n_reheat, 1),
-                "n_reheat_hours": n_reheat,
+                "n_reheat_hours": reheat_h,
+                "n_reheat_samples": n_reheat,
                 "n_considered": n,
                 "min_flow_basis": basis,
                 "high_loop_evidence": evidence,
@@ -182,3 +211,13 @@ class ReheatMinimization:
                 f"loop (G36 §5.6.5 would hold min flow until deep heating demand)"
             ),
         )
+
+
+def _interval_hours(index) -> float:
+    """The median positive sample spacing in hours (1.0 with fewer than two distinct samples)."""
+    idx = pd.DatetimeIndex(index)
+    if len(idx) < 2:
+        return 1.0
+    steps = np.diff(idx.asi8) / 3.6e12
+    steps = steps[steps > 0]
+    return float(np.median(steps)) if steps.size else 1.0

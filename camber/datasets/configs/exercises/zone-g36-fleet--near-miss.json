@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise zone-g36-fleet, the near miss alone: AHU__near_miss's six boxes and the rogue-zone and cohort-starvation censuses. Its zone 1 carries a little extra load: it asks for colder air most often and holds the binding request most often, but under the census's 50 % bar.",
+  "_comment": "Workbook exercise zone-g36-fleet, the near miss alone: AHU__near_miss's six boxes and the rogue-zone and cohort-starvation censuses. Its zone 1 carries a little extra load on weekday mornings: it asks for colder air most often (30.8 % of the SAT requests, near the one-third bar) and holds the binding request most often (44.4 % of active cycles), clearly under the census's 50 % bar.",
   "_dataset": "synthetic-g36-vav-fleet",
   "source": {
     "kind": "store",

@@ -340,14 +340,88 @@ def test_g36_vav_fleet_boxes_trend_their_active_setpoint_and_loops():
             assert col.between(0.0, 100.0).all() and (col[~fan] == 0).all()
         both = (df[f"ZN{z}_HTG_LOOP"] > 0) & (df[f"ZN{z}_CLG_LOOP"] > 0)
         assert set(df.loc[both, "scenario"]) <= {"heat_cool"}
-    # the healthy air handler's summed tier-1 requests are the boxes' cooling loops over 95 %
-    # wherever no box is warm enough to ask for more
+    # the healthy air handler's summed tier-1 requests: every box with its cooling loop over 95 %,
+    # and (G36's hysteresis, version 3) none with it under 85 %, wherever no box is warm enough to
+    # ask for more
     h = df[(df["scenario"] == "healthy") & fan]
     warm = sum((h[f"ZN{z}_T"] - h[f"ZN{z}_CLG_SP"] >= 3.0) for z in vmax).astype(bool)
-    tier1 = sum((h[f"ZN{z}_CLG_LOOP"] > 95.0).astype(int) for z in vmax)
-    assert (tier1[~warm] == h.loc[~warm, "SAT_REQ"]).mean() > 0.95
+    on = sum((h[f"ZN{z}_CLG_LOOP"] > 95.0).astype(int) for z in vmax)[~warm]
+    held = sum((h[f"ZN{z}_CLG_LOOP"] >= 85.0).astype(int) for z in vmax)[~warm]
+    req = h.loc[~warm, "SAT_REQ"]
+    assert ((on <= req) & (req <= held)).mean() > 0.95
+    assert (req > on).any()  # some requests are held between 85 and 95 %
     zone = _aliases("synthetic_g36_fleet_zone.json")
     assert zone["ZN{n}_FLOW_SP"] == "airflow_sp"
     assert zone["ZN{n}_FLOW_MIN"] == "airflow_min_sp"
     assert zone["ZN{n}_HTG_LOOP"] == "zone_heat_loop"
     assert zone["ZN{n}_CLG_LOOP"] == "zone_cool_loop"
+
+
+def _box_frame(d, n):
+    import pandas as pd
+
+    from camber.model.roles import Role
+
+    z = f"ZN{n}_"
+    return pd.DataFrame(
+        {
+            Role.AIRFLOW: d[z + "FLOW"],
+            Role.AIRFLOW_SP: d[z + "FLOW_SP"],
+            Role.SUPPLY_FAN_STATUS: d["SF_STS"],
+            Role.OCCUPANCY: d["OCC"],
+            Role.SPACE_TEMP: d[z + "T"],
+            Role.COOL_SP: d[z + "CLG_SP"],
+            Role.HEAT_SP: d[z + "HTG_SP"],
+        }
+    )
+
+
+def test_g36_vav_fleet_v3_healthy_zones_are_comfortable_and_their_boxes_track():
+    """Version 3 (0.108, #226): a correct reset keeps the healthy air handler's zones within the
+    unmet band and its boxes on their airflow setpoints, at both rules' defaults; the boxes behind
+    the capped fan and the reset that ignores its requests fault on both. With the fan off both
+    resets sit at their start value (G36 §5.1.14)."""
+    import pandas as pd
+
+    from camber.rules.airflow_rule import AirflowTracking
+    from camber.rules.unmet_rule import UnmetHours
+
+    df = _frame("g36_vav_fleet", 144)
+    for scenario, want in (("healthy", {"ok"}), ("starved", {"fault"})):
+        d = df[df["scenario"] == scenario].reset_index(drop=True)
+        d.index = pd.to_datetime(d["Timestamp"])
+        for n in range(1, 7):
+            frame = _box_frame(d, n)
+            unmet = UnmetHours().analyze(f"VAV{n}", frame)
+            air = AirflowTracking().analyze(f"VAV{n}", frame)
+            if scenario == "healthy":
+                assert unmet.severity in want and air.severity in want, (n, unmet, air)
+            elif n != 4:  # the north box needs little air even behind the capped fan
+                assert unmet.severity in want and air.severity in want, (n, unmet, air)
+    resets = df[df["SF_STS"] == 0]
+    assert (resets["SAT_SP"].round(1) == 65.0).all()
+    assert (resets["DSP_SP"] == 0.5).all()
+
+
+def test_g36_rcx_chains_trends_the_faults_its_air_handlers_propagate():
+    """The C1 entry (0.108): the coil of warm_sat holds the supply air at 63 F or above while
+    its setpoint asks for less with the valve wide open; the weak fan of low_static runs flat
+    out under 0.35 in. w.c.; cold_sat's setpoint is fixed at 55 F; one_bad_box's box 3 reads its
+    stuck damper; every air handler trends its fan speed and cooling valve."""
+    df = _frame("g36_rcx_chains", 196)
+    on = df["SF_STS"] == 1
+    warm = df[on & (df["scenario"] == "warm_sat")]
+    short = warm["SAT_SP"] < 62.5
+    assert short.mean() > 0.3
+    assert (warm.loc[short, "SAT"] >= 62.7).all() and (warm.loc[short, "CLG_VLV"] == 100).all()
+    low = df[on & (df["scenario"] == "low_static")]
+    capped = low["DSP_SP"] > 0.36
+    assert capped.mean() > 0.3 and (low.loc[capped, "SF_SPD"] == 100).all()
+    assert (low["DSP"] <= 0.37).all()
+    assert (df.loc[df["scenario"] == "cold_sat", "SAT_SP"].round(1) == 55.0).all()
+    bad = df[on & (df["scenario"] == "one_bad_box")]
+    assert (bad["ZN3_DMPR"] == 30).all()
+    others = df[on & (df["scenario"] != "low_static")]
+    assert others["SF_SPD"].max() < 95.0  # only the weak fan reads full speed
+    ahu = _aliases("synthetic_g36_chains_ahu.json")
+    assert ahu["SF_SPD"] == "supply_fan_speed" and ahu["CLG_VLV"] == "cool_valve"

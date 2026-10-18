@@ -15,7 +15,7 @@
  "licence": "Apache-2.0",
  "access": "open",
  "attribution_required": false,
- "verified_on": "2026-10-13",
+ "verified_on": "2026-10-17",
  "kind": "synthetic",
  "generator": {
   "name": "g36_vav_fleet",
@@ -36,14 +36,23 @@
    "reheat_minimization_g36": [
     "reheat_not_minimized",
     "heating_cooling_overlap"
+   ],
+   "unmet_setpoint_hours": [
+    "starved_by_air_handler",
+    "rogue_zone"
+   ],
+   "airflow_tracking": [
+    "starved_by_air_handler",
+    "rogue_zone"
    ]
   },
   "fault_types": {
-   "reset_not_responding": "the air handler's trim-and-respond logic ignores its requests and only trims: the SAT setpoint sits at its 65 F trim end, the duct-static setpoint trims to 0.1 in. w.c. on the first morning and stays there",
+   "reset_not_responding": "the air handler's trim-and-respond logic ignores its requests and only trims: the SAT setpoint sits at its 65 F trim end, the duct-static setpoint trims to 0.1 in. w.c. within two hours of each morning's start",
    "starved_cohort": "the supply fan is capped and the duct static cannot rise past 0.06 in. w.c.: every box is short of air at once (labelled on the air handler; the cohort-starvation rules find it, and they are fleet rules, not scored per equipment)",
-   "rogue_zone": "one box that drags a reset for its whole air handler: an equipment room no box can cool (SAT), or a blocked inlet that gets 40 % of its minimum airflow with its damper wide open (duct static) (the rogue-zone censuses find it, and they are fleet rules, not scored per equipment)",
+   "rogue_zone": "one box that drags a reset for its whole air handler: an equipment room no box can cool (SAT), or a blocked inlet that gets 40 % of its minimum airflow with its damper wide open (duct static, the north box VAV4 since generator version 3) (the rogue-zone censuses find them; unmet_setpoint_hours and airflow_tracking score them per box, and the blocked box stays comfortable, so unmet_setpoint_hours misses it)",
    "reheat_not_minimized": "a single-maximum heating sequence: the box reheats at 80 % of its cooling maximum airflow instead of at its minimum",
-   "heating_cooling_overlap": "the zone's heating setpoint (74 F) is above its cooling setpoint (73 F) while the fan runs, so the reheat valve and the cooling airflow fight"
+   "heating_cooling_overlap": "the zone's heating setpoint (74 F) is above its cooling setpoint (73 F) while the fan runs, so the reheat valve and the cooling airflow fight",
+   "starved_by_air_handler": "a box behind AHU__starved or AHU__not_responding: short of air and warm because its air handler cannot or will not serve it, not because of the box (generator version 3, 0.108; unmet_setpoint_hours and airflow_tracking find them, and the RCx report links them to their air handler's finding)"
   }
  },
  "files": [
@@ -327,7 +336,7 @@
     },
     "equip": "VAV4",
     "class": "VAV",
-    "label": ""
+    "label": "rogue_zone"
    },
    {
     "id": "VAV5__rogue_static",
@@ -341,7 +350,7 @@
     },
     "equip": "VAV5",
     "class": "VAV",
-    "label": "rogue_zone"
+    "label": ""
    },
    {
     "id": "VAV6__rogue_static",
@@ -380,7 +389,7 @@
     },
     "equip": "VAV1",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV2__starved",
@@ -394,7 +403,7 @@
     },
     "equip": "VAV2",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV3__starved",
@@ -408,7 +417,7 @@
     },
     "equip": "VAV3",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV4__starved",
@@ -422,7 +431,7 @@
     },
     "equip": "VAV4",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV5__starved",
@@ -436,7 +445,7 @@
     },
     "equip": "VAV5",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV6__starved",
@@ -450,7 +459,7 @@
     },
     "equip": "VAV6",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "AHU__not_responding",
@@ -475,7 +484,7 @@
     },
     "equip": "VAV1",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV2__not_responding",
@@ -489,7 +498,7 @@
     },
     "equip": "VAV2",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV3__not_responding",
@@ -503,7 +512,7 @@
     },
     "equip": "VAV3",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV4__not_responding",
@@ -517,7 +526,7 @@
     },
     "equip": "VAV4",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV5__not_responding",
@@ -531,7 +540,7 @@
     },
     "equip": "VAV5",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "VAV6__not_responding",
@@ -545,7 +554,7 @@
     },
     "equip": "VAV6",
     "class": "VAV",
-    "label": ""
+    "label": "starved_by_air_handler"
    },
    {
     "id": "AHU__reheat",
@@ -846,13 +855,16 @@
    "cohort_airflow",
    "cohort_space_temp",
    "reheat_minimization_g36",
-   "zones_heat_cool_census"
+   "zones_heat_cool_census",
+   "unmet_setpoint_hours",
+   "airflow_tracking"
   ],
   "exercise": "workbook/zone-g36-fleet.md"
  },
  "known_issues": [
   "Synthetic: generated by CAMBER's own model of a VAV system, not measured. It shows what the rules see, not how a real system behaves; never cite it as evidence about real buildings.",
-  "The resets take one trim-and-respond cycle per trended hour, so reset_effectiveness reconstructs them exactly. A real controller cycles every few minutes; on an hourly trend of one, the rule's reconstruction is coarse.",
+  "The resets take three trim-and-respond cycles per trended hour (a 20-minute step; G36's default is 2 minutes) and the trend keeps the hour's last cycle, so reset_effectiveness reconstructs them from one request count per hour: closely, not exactly. A real controller cycles every few minutes; on an hourly trend of one, the rule's reconstruction is coarser still.",
+  "Generator version 3 (0.108, #226): the zones' loads rise and fall together, both resets hold their start value with the fan off, and a tier-1 request holds until the loop or the damper falls below 85 %, so the healthy air handler's zones are comfortable and its boxes track their airflow setpoint. In version 2 a lone perimeter zone sat 3-5 F warm for hours under a correct reset that ignores two requests, and unmet_setpoint_hours and airflow_tracking flagged the healthy boxes.",
   "The fleet rules (the rogue-zone and cohort-starvation censuses, cohort_airflow, cohort_space_temp, zones_heat_cool_census) report one finding for the whole facility, on <fleet>: camber datasets score cannot score them, and the census rules group the boxes under their air handler only through a served-by topology (the run template declares one).",
   "Each box trends its active airflow setpoint (ZN{n}_FLOW_SP, airflow_sp) and its minimum (ZN{n}_FLOW_MIN, airflow_min_sp) apart, and its heating and cooling loops (zone_heat_loop, zone_cool_loop) since generator version 2 (0.106). The cooling loop is the zone's cooling demand as a share of its cooling maximum: the box holds its minimum airflow below about 30 %, a simplification of G36's sequence, and the loop over 95 % is the same tier-1 SAT request the air handler's SAT_REQ counts.",
   "The fighting boxes of the heat_cool air handler report a heating loop at half their reheat valve (the dual-maximum valve range) together with a cooling loop that includes the reheat they add; a real controller with overlapping setpoints would show the two loops fighting the same way, though not with these exact values."

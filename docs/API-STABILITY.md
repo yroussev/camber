@@ -893,11 +893,34 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `camber.ingest.haystack.haystack_tz`. **Behaviour changes:** a landed part that agrees with
   the stored parts it overlaps is merged with them; a permanent sink rejection is counted and
   dead-lettered instead of blocking the spool; SDK sinks send a compact metadata subset; the
-  spool skips a batch already pending; the edge config refuses unknown keys, bad values and
+  spool skips a batch already pending; the edge config warns about unknown keys (refused from
+  0.109, see Deprecated) and refuses bad values and
   more secret shapes; `BacnetSource` refuses duplicate point names and `discovery_to_points`
   renames objects that share a name; `parse_his_grid` returns a tz-naive wall-clock index;
   `edge land` isolates per-object errors and exits 1 when one failed; `edge selftest` uses a
-  temporary spool.
+  temporary spool; a 401 / 403 from the sink is transient, stops the cycle and is never
+  dead-lettered (`camber.edge.sink.AUTH_STATUSES`, `is_auth_status`, `is_auth_error`,
+  `Spool.auth_failing`, `DrainResult.auth_failed`, the `auth_failing` and `config_warnings`
+  keys of `edge status --json`, and `EdgeConfig.warnings`).
+- **Zone-fleet rule fixes** (0.108; #238, #239, #241), additive and provisional:
+  `reheat_minimization_g36`'s `min_reheat_hours` parameter and its metric `n_reheat_samples`;
+  the `min_present_frac` parameter of `sat_` and `static_cohort_starvation` and of
+  `camber.g36_reset.cohort_starvation`, their metric `group_skipped_cycles` and the
+  `CohortStarvationResult.group_skipped_cycles` field; `zones_heat_cool_census`'s
+  `min_heating_frac`, `max_driver_zones` and `persistent_frac` parameters and its metrics
+  `heating_frac_when_mixed`, `persistent_heating_zones`, `driver_zones`,
+  `pct_hours_mixed_without_drivers` and `severity_capped`. **Behaviour changes:**
+  `reheat_minimization_g36`'s `n_reheat_hours` counts hours, not samples, and the rule reports
+  `info` below `min_reheat_hours`; the cohort censuses skip cycles with too few zones reporting;
+  the heating/cooling census caps a result one or two boxes drive at `warn`.
+- **G36 fleet generator version 3 and the RCx cause-chain entry** (0.108; #226), additive and
+  provisional: the catalog entry `synthetic-g36-rcx-chains` (generator `g36_rcx_chains`, its
+  run template and the workbook configs `rcx-cause-chains` and `rcx-cause-chains--no-topology`),
+  the mapping `synthetic_g36_chains_ahu.json`, and the fault labels `starved_by_air_handler`,
+  `warm_by_air_handler`, `stuck_damper`, `sat_too_warm`, `sat_too_cold` and `static_too_low`.
+  The generator modules are private; what an entry generates may change with its generator
+  version. **Behaviour change:** `synthetic-g36-vav-fleet` generates version 3, so its data and
+  every answer recorded on it change; its blocked inlet is on `VAV4__rogue_static`.
 
 ### The read API server: `camber.api.server`
 
@@ -949,6 +972,7 @@ Currently deprecated names and code paths, each with its replacement. Each emits
 | `mandv.caltrack.caltrack_savings_hourly` (a pooled TOWT, not CalTRACK Hourly) | 0.105 | 1.0 | `mandv.caltrack.towt_savings_hourly` (same numbers); for CalTRACK Hourly, `mandv.caltrack_hourly.caltrack_hourly_savings` |
 | `mandv.caltrack.HourlyNMECResult` | 0.105 | 1.0 | `mandv.caltrack.TOWTHourlyResult` |
 | `camber.mandv.degreeday.fit_degree_day` | 0.105 | 1.0 | `fit_mean_temp_degree_day` (same arguments and result) |
+| Unknown keys in an edge config file (`camber.edge.config.load_config`), ignored with a WARNING and a `FutureWarning` (the edge config is provisional, so its window is one minor) | 0.108 | 0.109 (refused) | the known key the warning names, or a `_`-prefixed key for a comment |
 | `camber.mandv.degreeday.DegreeDayModel` | 0.105 | 1.0 | `MeanTempDegreeDayModel` (stored models keep `"type": "DegreeDayModel"` and read back unchanged) |
 
 Stores opened **without** a facility (plain stores outside a portfolio workspace) are not
