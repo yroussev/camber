@@ -179,8 +179,11 @@ def test_no_sources_is_a_clean_empty_plan(tmp_path, capsys):
 
 
 def test_ambiguous_label_is_refused_and_nothing_is_written(tmp_path):
-    pf, (a, b) = _ws(tmp_path, "Annex", "Annex West")
-    pf.rename(b, "Annex", reason="both now display 'Annex'")
+    pf, (a,) = _ws(tmp_path, "Annex")
+    # 0.108 (#255): a rename onto another facility's name is refused; two facilities registered
+    # under the same name still make the label ambiguous
+    b = pf.add_facility("Annex", facility_id="annex-west", reason="onboard", activate=True)
+    b = b["facility_id"]
     fp = _legacy_faults(tmp_path / "faults.json", "Annex")
     before = _tree(tmp_path, skip_lock=True)
     r = pf.migrate([fp], apply=True, reason="try")

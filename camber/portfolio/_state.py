@@ -164,6 +164,11 @@ class SiteResolver:
     tombstoned (removed) facility is refused, because the history could be the old building's.
     As a last resort a label whose :func:`~camber.store.make_facility_id` is a known facility maps
     to it (that is how an un-pinned CSV config derives its id).
+
+    0.108 (#255): a facility's **own** labels -- its id, registered name and current display name
+    -- outrank another facility's *past* display names. A label that is one facility's own and
+    only a former display name of others maps to that facility, so a transient rename (made
+    before 0.108 refused colliding renames) no longer makes it ambiguous for ever.
     """
 
     def __init__(self, portfolio):
@@ -175,6 +180,7 @@ class SiteResolver:
         names: dict = {
             fid: {fid, e.get("name"), e.get("display_name")} for fid, e in self.live.items()
         }
+        own = {fid: {n for n in ns if n} for fid, ns in names.items()}
         for rec in portfolio.audit_log():
             fid = rec.get("facility_id")
             if fid not in names:
@@ -188,12 +194,32 @@ class SiteResolver:
         for fid, t in portfolio.registry.tombstones().items():
             tomb[fid] = {fid, (t or {}).get("name"), (t or {}).get("display_name")}
         self._names = {k: {n for n in v if n} for k, v in names.items()}
+        self._own = own
         self._tomb = {k: {n for n in v if n} for k, v in tomb.items()}
 
     def _hits(self, label: str, key) -> tuple:
         live = sorted(f for f, ns in self._names.items() if label in {key(n) for n in ns})
         dead = sorted(f for f, ns in self._tomb.items() if label in {key(n) for n in ns})
+        if len(live) > 1 and not dead:
+            # one facility's own label beats others' past display names (#255)
+            owners = [f for f in live if label in {key(n) for n in self._own.get(f, ())}]
+            if len(owners) == 1:
+                live = owners
         return live, dead
+
+    def carriers(self, label, *, exclude=None) -> list:
+        """Every facility (live or ``"<id> (tombstoned)"``) other than ``exclude`` that carries
+        ``label`` -- as its id, name, or a current or past display name -- compared exactly and
+        loosely (:func:`fold`). What :meth:`Portfolio.rename` refuses to collide with."""
+        label = str(label)
+        out = set()
+        for key, probe in ((lambda n: n, label), (fold, fold(label))):
+            out |= {f for f, ns in self._names.items() if probe in {key(n) for n in ns}}
+            out |= {
+                f"{f} (tombstoned)" for f, ns in self._tomb.items() if probe in {key(n) for n in ns}
+            }
+        out.discard(exclude)
+        return sorted(out)
 
     def resolve(self, label, mapping=None) -> dict:
         """``{"facility_id", "via", "candidates", "problem"}`` for one label.

@@ -15,8 +15,11 @@ this works without rdflib (the existing ``brick`` extra still applies for heavie
 
 from __future__ import annotations
 
+from urllib.parse import unquote
+
 from ..model.entities import Equip, Point, Site
 from ..model.roles import Role
+from .export import _brick_local
 
 # Role -> (QUDT quantity-kind local name, 223P medium individual). A clean-room mapping using
 # public QUDT / 223P vocabulary terms.
@@ -141,14 +144,14 @@ def equip_to_223(equip: Equip, *, profile: str = "minimal", include_relations: b
         if q is None and profile == "minimal":
             continue
         qk, medium = q if q is not None else ("Dimensionless", "Air")
-        pid = f"bldg:{equip.id}.{p.role.value}"
+        pid = f"bldg:{_brick_local(equip.id)}.{p.role.value}"  # 0.108 (#254): encoded id
         props.append(pid)
         decls.append(
             f"{pid} a s223:Property ;\n"
             f"    s223:hasQuantityKind qk:{qk} ;\n"
             f"    s223:ofMedium s223:{medium} ."
         )
-    head = [f"bldg:{equip.id} a s223:Equipment ;"]
+    head = [f"bldg:{_brick_local(equip.id)} a s223:Equipment ;"]
     if equip.equip_class:
         head.append(f'    rdfs:label "{equip.equip_class}" ;')
     if include_relations and props:
@@ -188,7 +191,7 @@ def site_from_223(ttl: str, *, site_id: str = "") -> Site:
     current = None
     for s in _strip_comments(ttl):
         if s.startswith("bldg:") and " a s223:Equipment" in s:
-            current = s.split()[0].split(":", 1)[1]
+            current = unquote(s.split()[0].split(":", 1)[1])
             equips.setdefault(current, {"class": "", "roles": set()})
         elif current and s.startswith("rdfs:label"):
             equips[current]["class"] = s.split('"')[1] if '"' in s else ""
@@ -196,6 +199,7 @@ def site_from_223(ttl: str, *, site_id: str = "") -> Site:
             ref = s.split()[0].split(":", 1)[1]  # "<equip>.<role>"
             if "." in ref:
                 eid, role_slug = ref.rsplit(".", 1)
+                eid = unquote(eid)
                 if role_slug in slug_to_role:
                     equips.setdefault(eid, {"class": "", "roles": set()})
                     equips[eid]["roles"].add(slug_to_role[role_slug])

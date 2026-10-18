@@ -824,6 +824,27 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V report fixes** (0.107; #208, #209, #210), additive and provisional:
   `NormalizedSavings.n_excluded`, `MeterChain.meter_unit` and the `model_label` field of the
   freeze and rebaseline plan rows.
+- **Legal holds and audit under the store primitives** (0.108; #250, #251, #252, #255, #256),
+  additive and provisional: the `reason=` keyword of `ParquetStore.drop_facility`, `prune` and
+  `drop_partition` (`FacilityRegistry.remove(reason=)` now defaults to `None`); the audit actions
+  `store.drop_facility`, `store.prune` and `store.drop_partition`; the `recover` action
+  `archive_blocked_legal_hold`; the `deletes` list of a restore plan from `archived`.
+  **Behaviour changes**, inside a portfolio workspace only: those four primitives need a reason
+  and refuse a facility under a legal hold (`LifecycleError`); `FacilityRegistry.register` (and
+  so a store write's metadata) refuses to change `private`, `display_name`, `archive`,
+  `offboarding` or `edge_devices`; `interop.openfdd.ingest_package` refuses a changed or forced
+  re-ingest of a held facility, and its state refusal is now a `LifecycleError` (still a
+  `ValueError`); a config run with a `faults` fold, and a drift or M&V baseline write, refuse an
+  archived, purged or held facility, whose report outputs are no longer recorded in its manifest;
+  `restore` empties the live trees its bundle does not list and, under a hold, refuses one that
+  would delete a live file; `Portfolio.rename` refuses another facility's id, name or past
+  display name; `recover` leaves a held facility's hot data. A plain store is unchanged.
+- **Ontology names** (0.108; #253, #254, #257), provisional. **Behaviour changes:** `to_brick`,
+  `site_to_ttl` and `site_to_223` percent-encode every character of a name outside
+  `[A-Za-z0-9_-]` in its local name and add an `rdfs:label` with the exact name (Brick); Brick
+  part nodes are per equipment (`bldg:<equip>.Cooling_Coil`). The Brick and 223P readers decode
+  percent-encoded local names. `roles_from_haystack` and `topology_from_haystack` read Haystack
+  JSON v3 and Hayson markers and refs.
 
 ### The read API server: `camber.api.server`
 

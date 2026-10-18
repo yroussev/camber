@@ -1,0 +1,31 @@
+{
+  "_kind": "grid",
+  "meta": {"ver": "3.0"},
+  "cols": [
+    {"name": "id"}, {"name": "dis"}, {"name": "equip"}, {"name": "ahu"}, {"name": "vav"},
+    {"name": "point"}, {"name": "his"}, {"name": "outside"}, {"name": "discharge"},
+    {"name": "zone"}, {"name": "air"}, {"name": "temp"}, {"name": "sensor"},
+    {"name": "equipRef"}, {"name": "ahuRef"}, {"name": "siteRef"}, {"name": "unit"}
+  ],
+  "rows": [
+    {"id": {"_kind": "ref", "val": "AHU_1", "dis": "AHU-1"}, "dis": "AHU-1",
+     "equip": {"_kind": "marker"}, "ahu": {"_kind": "marker"},
+     "siteRef": {"_kind": "ref", "val": "S1"}},
+    {"id": {"_kind": "ref", "val": "VAV_1", "dis": "VAV-1"}, "dis": "VAV-1",
+     "equip": {"_kind": "marker"}, "vav": {"_kind": "marker"},
+     "ahuRef": {"_kind": "ref", "val": "AHU_1", "dis": "AHU-1"},
+     "siteRef": {"_kind": "ref", "val": "S1"}},
+    {"id": {"_kind": "ref", "val": "p1", "dis": "OAT"}, "dis": "OAT",
+     "point": {"_kind": "marker"}, "his": {"_kind": "marker"}, "outside": {"_kind": "marker"},
+     "air": {"_kind": "marker"}, "temp": {"_kind": "marker"}, "sensor": {"_kind": "marker"},
+     "equipRef": {"_kind": "ref", "val": "AHU_1"}, "unit": "°F"},
+    {"id": {"_kind": "ref", "val": "p2", "dis": "AHU-1 DAT"}, "dis": "AHU-1 DAT",
+     "point": {"_kind": "marker"}, "his": {"_kind": "marker"}, "discharge": {"_kind": "marker"},
+     "air": {"_kind": "marker"}, "temp": {"_kind": "marker"}, "sensor": {"_kind": "marker"},
+     "equipRef": {"_kind": "ref", "val": "AHU_1"}, "unit": "°F"},
+    {"id": {"_kind": "ref", "val": "p3", "dis": "VAV-1 ZNT"}, "dis": "VAV-1 ZNT",
+     "point": {"_kind": "marker"}, "his": {"_kind": "marker"}, "zone": {"_kind": "marker"},
+     "air": {"_kind": "marker"}, "temp": {"_kind": "marker"}, "sensor": {"_kind": "marker"},
+     "equipRef": {"_kind": "ref", "val": "VAV_1"}, "unit": "°F"}
+  ]
+}

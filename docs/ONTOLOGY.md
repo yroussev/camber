@@ -71,6 +71,30 @@ flowchart LR
   never come from a Brick model).
 - **Whole-site round-trip** — `site_to_ttl` / `site_from_ttl` round-trip a Site→Equip→Point model
   (with relationships); minimal parser by default, rdflib used when the `[brick]` extra is present.
+  Since 0.108 each equipment has its **own part nodes** (`bldg:AHU_1.Cooling_Coil`,
+  `bldg:AHU_2.Cooling_Coil`, not one shared `bldg:Cooling_Coil`), so with several air handlers each
+  one gets back only its own valves, dampers and fan points. The importer reads a part's name as
+  what follows the last dot, so `AHU_1.Supply_Air_Fan` is still a supply fan.
+- **Names are encoded, labels are exact (0.108)** — real point and equipment names (`SA Temp`,
+  `AHU-1/SAT`, `SAT.`, `AHU_1:supply_air_temp`, non-ASCII) are written as valid Turtle local names:
+  letters, digits, `_` and `-` stay as they are, and every other character is percent-encoded
+  (`bldg:AHU%201`, `bldg:AHU-1%2FSAT`). Each node also carries its exact name as `rdfs:label`. Both
+  readers (rdflib and the minimal one) decode the local name back, so names round-trip exactly and
+  the default `Equip.from_roles` names of two air handlers no longer collide. A model written by
+  another tool is read as before; a percent-encoded name in it is decoded the same way. The
+  minimal 223P export (`site_to_223`) encodes equipment ids the same way.
+
+```python
+from camber.interop.export import to_brick
+from camber.interop.brick import roles_from_brick
+from camber.model.roles import Role
+
+ttl = to_brick(
+    "AHU 1", "AHU", [Role.SUPPLY_AIR_TEMP], point_names={Role.SUPPLY_AIR_TEMP: "SA Temp"}
+)
+assert "bldg:SA%20Temp" in ttl and 'rdfs:label "SA Temp"' in ttl
+assert roles_from_brick(ttl, backend="minimal") == {"SA Temp": Role.SUPPLY_AIR_TEMP}
+```
 - **Served-by topology** — `topology_from_brick(ttl)` builds a `Topology` (see
   [TOPOLOGY.md](TOPOLOGY.md)) from `brick:feeds` / `isFedBy`; `site_from_ttl` auto-populates
   `Site.topology` from those relations.
@@ -89,6 +113,24 @@ flowchart LR
   return and exhaust damper imported as a VAV-box damper. `camber/interop/haystack_semantic.py`.
 - **Served-by topology** — `topology_from_haystack(entities)` builds a `Topology` from `ahuRef` /
   `equipRef` reference tags (see [TOPOLOGY.md](TOPOLOGY.md)).
+- **JSON encodings (0.108)** — both functions take the rows of a Haystack `read` grid in any of
+  the standard JSON encodings. A marker is `true`, `"M"`, `"✓"`, Haystack JSON v3's `"m:"` or
+  Hayson's `{"_kind": "marker"}`. A ref is `"@id"`, v3's `"r:<id> <dis>"` or Hayson's
+  `{"_kind": "ref", "val": "<id>"}`, and it resolves to the bare id, for a point's `id` and for
+  `ahuRef` / `equipRef`. Before 0.108 the v3 and Hayson forms resolved nothing. The test fixtures
+  `tests/golden/haystack/read_v3.json` and `read_hayson.json` are one small site in each encoding.
+
+```python
+from camber.interop.haystack_semantic import roles_from_haystack
+from camber.model.roles import Role
+
+v3 = {"id": "r:p1 OAT", "point": "m:", "outside": "m:", "air": "m:", "temp": "m:", "sensor": "m:"}
+hayson = {
+    "id": {"_kind": "ref", "val": "p1"},
+    **{t: {"_kind": "marker"} for t in ("point", "outside", "air", "temp", "sensor")},
+}
+assert roles_from_haystack([v3]) == roles_from_haystack([hayson]) == {"p1": Role.OAT}
+```
 
 ## ASHRAE 223P (minimal profile)
 

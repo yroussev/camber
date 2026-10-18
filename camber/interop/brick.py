@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from urllib.parse import unquote
 
 from ..model.mapping import MappingProvider
 from ..model.roles import Role
@@ -187,21 +188,24 @@ _POINT_SUFFIXES = (
 
 
 def _local(token: str) -> str:
-    """Local name of a prefixed name or full IRI.
+    """Local name of a prefixed name or full IRI, percent-decoded.
 
     Handles ``bldg:OA_TEMP`` -> ``OA_TEMP`` and
     ``https://brickschema.org/schema/Brick#AHU`` -> ``AHU`` (splits on the last of
     ``#`` / ``/`` / ``:``), so it works for both the minimal parser's prefixed
-    tokens and rdflib's expanded URIs.
+    tokens and rdflib's expanded URIs. 0.108 (#254): a percent-encoded local name (what
+    :func:`camber.interop.export._brick_local` writes for a name with spaces, ``/``, ``:``,
+    ``.``) is decoded back to the exact name -- ``bldg:AHU%201`` -> ``AHU 1``.
     """
-    return token.strip().lstrip("<").rstrip(">").split("#")[-1].split("/")[-1].split(":")[-1]
+    raw = token.strip().lstrip("<").rstrip(">").split("#")[-1].split("/")[-1].split(":")[-1]
+    return unquote(raw) if "%" in raw else raw
 
 
 def parse_triples(ttl: str):
     """Parse the Brick-subset Turtle into (types, has_point).
 
     Returns ``types``: {subject_local -> class_local} and ``has_point``:
-    {part_local -> [point_local, ...]}. Handles ``a``/``;``/``,`` lists; ignores
+    {_part_local -> [point_local, ...]}. Handles ``a``/``;``/``,`` lists; ignores
     ``@prefix`` and comments. Not a general RDF parser.
     """
     lines = [
@@ -258,6 +262,10 @@ def _context_role(point: str, pcls: str, owner_cls: str, owner_name: str):
     when the class simply has no CAMBER role in that context).
     """
     oc, on = (owner_cls or ""), (owner_name or "")
+    # 0.108 (#253): CAMBER scopes a part by its equipment (``AHU_1.Supply_Air_Fan``); the part's
+    # own name is what follows the last dot
+    if not on.startswith("Supply") and "." in on:
+        on = on.rsplit(".", 1)[-1]
     # 0.92 (#15): the condenser-water tower-bypass valve (Brick Condenser_Water_Bypass_Valve)
     cw_bypass = "Bypass" in oc and "Condenser" in oc
     if pcls == "Bypass_Command_Context":

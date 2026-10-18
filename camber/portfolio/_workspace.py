@@ -598,7 +598,13 @@ class Portfolio:
         return {"facility_id": facility_id, "from_state": cur, "to_state": new}
 
     def rename(self, facility_id: str, display_name: str, *, reason: str) -> dict:
-        """Change a facility's ``display_name`` (its id and original ``name`` are unchanged)."""
+        """Change a facility's ``display_name`` (its id and original ``name`` are unchanged).
+
+        0.108 (#255): refused (``ValueError``) when the new name equals -- exactly or loosely
+        (case, Unicode form, spacing) -- another facility's id, registered name, current or past
+        display name, live or tombstoned. Such a name would make that label ambiguous, and the
+        other facility's site-keyed legacy faults and baselines would stop resolving.
+        """
         _need_reason(reason)
         display_name = str(display_name).strip()
         if not display_name:
@@ -609,6 +615,13 @@ class Portfolio:
             old = reg.get(facility_id)
             if old.get("state") == "purged":
                 raise LifecycleError(f"facility {facility_id!r} is purged; it cannot be renamed")
+            taken = SiteResolver(self).carriers(display_name, exclude=facility_id)
+            if taken:
+                raise ValueError(
+                    f"cannot rename {facility_id} to {display_name!r}: that label already "
+                    f"belongs to {', '.join(taken)} (an id, a name or a past display name), so "
+                    "site labels would no longer resolve to one facility. Pick a distinct name."
+                )
             reg._update(facility_id, {"display_name": display_name})
             self._audit(
                 "facility.rename",

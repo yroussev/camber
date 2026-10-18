@@ -413,15 +413,15 @@ def test_a_crash_before_the_prune_then_a_late_part_never_double_counts(pf, tmp_p
     first = _part("2026-06-01", 24 * 10, 1.0)
     _put(tmp_path / "a", _edge_key(A, first, 2026, 6), first)
     land(pf, tmp_path / "a", apply=True, reason="sweep")
-    real = ParquetStore.drop_partition
+    real = ParquetStore._drop_partition  # 0.108: retention's own (hold-checked) entry point
 
     def crash(self, *a, **k):
         raise KeyboardInterrupt("power cut after the rollup, before the prune")
 
-    monkeypatch.setattr(ParquetStore, "drop_partition", crash)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", crash)
     with pytest.raises(KeyboardInterrupt):
         pf.apply_retention(apply=True, reason="monthly", now="2026-08-15")
-    monkeypatch.setattr(ParquetStore, "drop_partition", real)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", real)
     assert _rollup_n(pf, "hourly", A, 2026, 6) == 240  # rolled up, raw still there
     late = _part("2026-06-20", 24 * 2, 5.0)  # lands before the re-run
     _put(tmp_path / "b", _edge_key(A, late, 2026, 6), late)

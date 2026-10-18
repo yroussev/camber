@@ -28,6 +28,13 @@ _FACILITIES = "_facilities.json"  # leading "_" -> ignored by pyarrow dataset di
 _TOMBSTONES = "_tombstones.json"  # ids removed from the registry; never reusable
 _WORKSPACE_MARKER = "_workspace.json"  # in a portfolio's store: points back at the workspace
 _LIFECYCLE_KEYS = ("state", "created_at", "state_changed_at")
+# 0.108 (#250): keys the portfolio's audited methods own inside a workspace -- the privacy flag
+# (Portfolio.set_private), the display name (rename), the lifecycle records (offboard/archive) and
+# the edge-device notes (note_edge_device). register() never changes them there.
+_WORKSPACE_KEYS = ("private", "display_name", "archive", "offboarding", "edge_devices")
+# ... of which a facility registered on its first write may start with these (the creation is
+# audited with them); the lifecycle records only ever come from the lifecycle.
+_WORKSPACE_CREATE_KEYS = ("private", "display_name")
 _CREATE_STATES = ("provisioning", "active")
 
 # A facility_id contains only path-safe characters (no "/", "=", whitespace, or unicode -- the
@@ -225,6 +232,7 @@ class FacilityRegistry:
         reason: str,
         meta=None,
         action: str = "facility.register",
+        details=None,
     ) -> dict:
         """Create a new entry (caller holds the lock); audited. Returns the normalized entry."""
         if state not in _CREATE_STATES:
@@ -243,7 +251,7 @@ class FacilityRegistry:
             facility_id=facility_id,
             to_state=state,
             reason=reason,
-            details={"name": name} if name is not None else {},
+            details={**({"name": name} if name is not None else {}), **(details or {})},
         )
         return _normalize(facility_id, entry)
 
@@ -256,12 +264,29 @@ class FacilityRegistry:
         way (a store write, a dataset ingest) starts ``active``; the lifecycle fields
         (``state``, ``created_at``, ``state_changed_at``) cannot be changed through ``register``
         -- use :class:`camber.portfolio.Portfolio` for that.
+
+        Inside a portfolio workspace (0.108, #250) the keys its audited methods own --
+        ``private``, ``display_name``, ``archive``, ``offboarding``, ``edge_devices`` -- are
+        refused (``ValueError``) whenever the call would change them: use
+        ``Portfolio.set_private`` / ``rename`` (``camber facility private|rename``) and the
+        lifecycle commands. A facility registered on its first write may start ``private`` or with
+        a ``display_name``; its ``facility.register`` audit line records them. A plain store keeps
+        accepting them.
         """
         require_facility_id(facility_id)
         with self._locked():
             data = self._raw()
+            in_ws = self._workspace() is not None
             if facility_id not in data:
                 bad = sorted(k for k in meta if k in _LIFECYCLE_KEYS and k != "state")
+                if in_ws:
+                    bad += sorted(
+                        k
+                        for k in meta
+                        if k in _WORKSPACE_KEYS
+                        and k not in _WORKSPACE_CREATE_KEYS
+                        and meta[k] is not None
+                    )
                 if bad:
                     raise ValueError(f"register() cannot set {', '.join(bad)}")
                 state = str(meta.pop("state", "active"))
@@ -271,6 +296,7 @@ class FacilityRegistry:
                     state=state,
                     reason="registered automatically on first write",
                     meta=meta,
+                    details={k: meta[k] for k in _WORKSPACE_CREATE_KEYS if k in meta},
                 )
                 return
             entry = dict(data[facility_id])
@@ -282,11 +308,20 @@ class FacilityRegistry:
                         f"not {name!r}"
                     )
                 entry["name"] = name
-            clash = sorted(k for k in meta if k in _LIFECYCLE_KEYS and meta[k] != entry.get(k))
+            owned = _LIFECYCLE_KEYS + (_WORKSPACE_KEYS if in_ws else ())
+            cur = _normalize(facility_id, entry)
+            cur["private"] = bool(entry.get("private", False))
+            clash = sorted(
+                k
+                for k in meta
+                if k in owned
+                and (bool(meta[k]) if k == "private" else meta[k]) != cur.get(k, entry.get(k))
+            )
             if clash:
                 raise ValueError(
                     f"register() cannot change {', '.join(clash)} of {facility_id!r}; "
-                    "lifecycle changes go through camber.portfolio (camber facility ...)"
+                    "lifecycle, privacy and display-name changes go through camber.portfolio "
+                    "(camber facility rename|private|offboard|...), which audits them"
                 )
             entry.update(meta)
             data[facility_id] = entry
@@ -328,14 +363,31 @@ class FacilityRegistry:
         tomb[facility_id] = {k: v for k, v in rec.items() if v is not None}
         _write_json(os.path.join(self.root, _TOMBSTONES), tomb, root=self.root)
 
-    def remove(self, facility_id: str, *, reason: str = "registry entry removed") -> bool:
+    def remove(self, facility_id: str, *, reason=None) -> bool:
         """Drop ``facility_id`` from the registry; returns whether it was present.
 
         The id is tombstoned (written *before* the entry is dropped, so a crash never leaves it
         reusable) and can never be registered again. Removing the entry does not touch stored
         data -- see :meth:`ParquetStore.drop_facility`.
+
+        Inside a portfolio workspace (0.108, #250) it needs a ``reason`` (audited on the
+        ``facility.remove`` line) and is refused (:class:`~camber.portfolio.LifecycleError`) for
+        a facility under a legal hold. A plain store's removal defaults its reason to
+        ``"registry entry removed"``.
         """
-        return self._forget(facility_id, had_data=False, reason=reason)
+        with self._locked():
+            from ..datasets._lifecycle import store_delete_gate  # lazy: datasets imports this
+
+            _pf, reason = store_delete_gate(
+                self.root,
+                [facility_id],
+                reason=reason,
+                by="`FacilityRegistry.remove`",
+                what="remove it from the registry",
+            )
+            return self._forget(
+                facility_id, had_data=False, reason=reason or "registry entry removed"
+            )
 
     def _forget(self, facility_id: str, *, had_data: bool, reason: str) -> bool:
         with self._locked():

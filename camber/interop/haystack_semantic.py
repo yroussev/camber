@@ -8,6 +8,11 @@ the Brick importer's part-context disambiguation (`interop.brick`), so e.g. ``�
 ``…temp sensor``.
 
 Zero dependencies (stdlib): a point is any ``(name, tags)`` pair or a Haystack-style tag dict.
+A tag dict may use any of the standard JSON encodings (0.108, #257): plain values (a marker as
+``true``, ``"M"`` or ``"✓"``, a ref as ``"@id"``), **Haystack JSON v3** -- the rows of a ``read``
+grid: a marker is ``"m:"``, a ref ``"r:<id> <dis>"``, a string ``"s:<text>"`` -- and **Hayson**
+(Haystack 4 JSON): a marker is ``{"_kind": "marker"}``, a ref ``{"_kind": "ref", "val": "<id>",
+"dis": ...}``. Refs resolve to their bare id in every encoding.
 """
 
 from __future__ import annotations
@@ -52,6 +57,32 @@ _NON_SEMANTIC = frozenset(
 )
 
 
+def _is_marker(value) -> bool:
+    """Whether a tag value is a Haystack marker in any JSON encoding: ``True``, ``"M"``,
+    ``"✓"``, the JSON v3 ``"m:"`` or Hayson's ``{"_kind": "marker"}`` (0.108, #257)."""
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value in ("M", "✓", "m:")
+    return isinstance(value, dict) and value.get("_kind") == "marker"
+
+
+def _scalar(value):
+    """A JSON v3 / Hayson string or ref as plain text: ``"s:OAT"`` -> ``"OAT"``, ``"r:p1 OAT"``
+    -> ``"p1"``, ``{"_kind": "ref", "val": "p1"}`` -> ``"p1"``; anything else unchanged."""
+    if isinstance(value, dict):
+        kind = value.get("_kind")
+        if kind in ("ref", "str", "uri", "symbol") and isinstance(value.get("val"), str):
+            return value["val"][1:] if value["val"].startswith("@") else value["val"]
+        return value
+    if isinstance(value, str):
+        if value.startswith("r:"):
+            return value[2:].split(" ", 1)[0]
+        if value.startswith(("s:", "u:", "y:")):
+            return value[2:]
+    return value
+
+
 def role_from_tags(tags) -> Role | None:
     """The role whose Haystack hint tags are a subset of ``tags`` (most-specific wins), or None.
 
@@ -72,12 +103,8 @@ def role_from_tags(tags) -> Role | None:
 def _point_tags(point) -> tuple:
     """Normalize a point to ``(name, tagset)``. Accepts ``(name, tags)`` or a Haystack tag dict."""
     if isinstance(point, dict):
-        name = point.get("id") or point.get("dis") or point.get("navName") or ""
-        tags = {
-            k
-            for k, v in point.items()
-            if k not in _NON_SEMANTIC and (v is True or v == "M" or v == "✓")
-        }
+        name = _entity_id(point)
+        tags = {k for k, v in point.items() if k not in _NON_SEMANTIC and _is_marker(v)}
         return str(name), frozenset(tags)
     try:
         name, tags = point  # (name, tags) pair
@@ -110,20 +137,29 @@ def mapping_from_haystack(points) -> MappingProvider:
 
 
 def _entity_id(entity) -> str:
-    """The subject id of a Haystack entity dict (``id`` / ``dis`` / ``navName``), or ``""``."""
+    """The subject id of a Haystack entity dict (``id`` / ``dis`` / ``navName``), or ``""``.
+
+    A JSON v3 or Hayson ref id (``"r:p1 OAT"``, ``{"_kind": "ref", "val": "p1"}``) is its bare
+    id (0.108, #257); a plain string id is kept as given."""
     if isinstance(entity, dict):
-        return str(entity.get("id") or entity.get("dis") or entity.get("navName") or "")
+        for key in ("id", "dis", "navName"):
+            val = _scalar(entity.get(key))
+            if val and isinstance(val, str):
+                return val
     return ""
 
 
 def _ref_target(value):
-    """Resolve a Haystack ``Ref`` to its target id (``"@AHU_1"`` or ``{"val": "@AHU_1"}`` -> id)."""
+    """Resolve a Haystack ``Ref`` to its target id: ``"@AHU_1"``, ``{"val": "@AHU_1"}``, the JSON
+    v3 ``"r:AHU_1 AHU"`` and Hayson ``{"_kind": "ref", "val": "AHU_1"}`` all give ``AHU_1``."""
     if isinstance(value, str):
+        if value.startswith("r:"):
+            return value[2:].split(" ", 1)[0] or None
         return value[1:] if value.startswith("@") else value or None
     if isinstance(value, dict):
         inner = value.get("val") or value.get("id")
         if isinstance(inner, str):
-            return inner[1:] if inner.startswith("@") else inner or None
+            return _ref_target(inner)
     return None
 
 
@@ -142,7 +178,7 @@ def topology_from_haystack(entities, *, parent_refs=("ahuRef", "equipRef")) -> T
         child = _entity_id(e)
         if not child:
             continue
-        is_equip = isinstance(e, dict) and e.get("equip") in (True, "M", "✓")
+        is_equip = isinstance(e, dict) and _is_marker(e.get("equip"))
         for ref in parent_refs:
             if not isinstance(e, dict) or ref not in e:
                 continue

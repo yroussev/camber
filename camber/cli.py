@@ -2237,6 +2237,8 @@ def _state_lock(ctx, *, write: bool = True):
 
     if not ctx.workspace or not write:
         return contextlib.nullcontext()
+    # 0.108 (#252): no baseline write for an archived, purged or legally held facility
+    ctx.require_writable("this baseline write")
     from .portfolio._lock import portfolio_lock
 
     return portfolio_lock(ctx.workspace, timeout=0.0)

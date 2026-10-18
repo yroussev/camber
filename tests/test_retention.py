@@ -537,7 +537,7 @@ def test_a_crash_between_rollup_and_prune_is_finished_by_the_next_run(tmp_path, 
     pf, fid = _ws(tmp_path)
     raw_before = pf.store.read_long(facility_id=fid)
     gone = int((pd.to_datetime(raw_before["ts"]) < "2024-08-01").sum())
-    real = ParquetStore.drop_partition
+    real = ParquetStore._drop_partition  # 0.108: retention's entry point
     n = []
 
     def boom(self, *a, **k):
@@ -546,10 +546,10 @@ def test_a_crash_between_rollup_and_prune_is_finished_by_the_next_run(tmp_path, 
             raise KeyboardInterrupt("simulated crash after the third rollup")
         return real(self, *a, **k)
 
-    monkeypatch.setattr(ParquetStore, "drop_partition", boom)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", boom)
     with pytest.raises(KeyboardInterrupt):
         pf.apply_retention(apply=True, now=NOW, reason="nightly")
-    monkeypatch.setattr(ParquetStore, "drop_partition", real)
+    monkeypatch.setattr(ParquetStore, "_drop_partition", real)
     r = pf.apply_retention(apply=True, now=NOW, reason="nightly")
     assert r["problems"] == []
     hourly = ParquetStore(os.path.join(pf.root, "rollups", "hourly")).read_long(facility_id=fid)

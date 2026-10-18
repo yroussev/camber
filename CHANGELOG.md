@@ -13,6 +13,82 @@ Releases before 0.103.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.108.0] — Unreleased
+
+### Changed
+- **Behaviour change: a legal hold refuses the store and registry delete primitives inside a
+  workspace (#250).** `ParquetStore.drop_facility`, `prune` and `drop_partition` and
+  `FacilityRegistry.remove` now refuse a facility under a legal hold (`LifecycleError`, nothing
+  deleted). They also need a `reason=` (`ValueError` without one) and are audited as
+  `store.drop_facility`, `store.prune` (one line per facility) and `store.drop_partition`, with
+  `facility.remove` carrying the reason given. The rule lives with the 0.107 dataset rules in
+  `camber.datasets._lifecycle`, so every caller shares it. There is no override flag: release the
+  hold first. A plain store outside a workspace is unchanged.
+- **Behaviour change: store writes cannot change a facility's privacy flag or display name inside
+  a workspace (#250).** `FacilityRegistry.register`, and so a store write's metadata, refuses to
+  change `private`, `display_name`, `archive`, `offboarding` or `edge_devices`. Before this,
+  `write_role_frame(..., private=False, display_name=...)` turned a private facility public and
+  renamed it, with no audit line. Use `camber facility private|rename`, which audit the change. A
+  facility created by its first write may still start `private` or with a display name; its
+  `facility.register` line records them.
+- **Behaviour change: config runs write no state for an archived, purged or held facility
+  (#252).** A run with a `faults` fold is refused up front (`LifecycleError`), and so are
+  `camber drift freeze|accept` and `camber mv freeze|rebaseline|adjust --apply`. A report such a
+  run writes is still written, but it is not recorded in the facility manifest, and a warning
+  says so. A run with no fault fold still runs.
+- **Behaviour change: `facility rename` refuses another facility's labels (#255).** The new name
+  may not equal, exactly or loosely, another facility's id, registered name, or current or past
+  display name, live or tombstoned.
+- **Behaviour change: the Brick export writes encoded names and per-equipment parts (#253,
+  #254).** `to_brick`, `site_to_ttl` and `site_to_223` percent-encode every character of a name
+  outside `[A-Za-z0-9_-]` in its local name (`bldg:SA%20Temp`). The Brick output adds an
+  `rdfs:label` with the exact name and names each part node after its equipment
+  (`bldg:AHU_1.Cooling_Coil`). Models written by other tools are read as before.
+
+### Fixed
+- **The store and registry primitives bypassed legal holds and the audit log (#250).** With a
+  facility under a hold, `drop_facility` deleted every row, `registry.remove` tombstoned it and
+  left the hold pointing at a removed id, and `prune` and `drop_partition` deleted partitions,
+  none of them audited. #212 had fixed this for the `camber datasets` path only.
+- **`interop openfdd ingest` replaced a held facility's data (#251).** A changed or forced
+  re-ingest now runs the same hold check as `camber datasets ingest` and is refused. An unchanged
+  re-ingest is still skipped.
+- **A config run wrote state for an archived facility, and the next restore failed half-way
+  (#252).** A folder or CSV config bound to an archived (even held) facility wrote
+  `state/<fid>/faults.json` and the manifest. The next restore then swapped the store partition
+  back in and failed its round-trip check on files the bundle did not hold, leaving the facility
+  `archived` with live data, and every retry failed the same way. Runs no longer write that state
+  (see Changed). Restore now stages every tree and re-hashes the staged files before the first
+  swap, so a mismatch leaves the live trees as they were. It also empties every live hot tree the
+  bundle does not list (its plan lists them under `deletes`), and under a legal hold it refuses a
+  restore that would delete or change a live file. A restore interrupted between two swaps leaves
+  the facility `archived`, and re-running it finishes the restore.
+- **Brick site export shared part nodes across equipment (#253).** Every air handler's valves
+  hung off one `bldg:Cooling_Coil`, so after `site_from_ttl(site_to_ttl(site))` each air handler
+  came back with every air handler's valves, dampers and fan points, with either backend. Each
+  equipment now has its own part nodes, and a test round-trips a two-air-handler site.
+- **The Brick export wrote invalid or mangled Turtle for real point names (#254).** A name with a
+  space was a syntax error for rdflib and returned nothing from the minimal reader, `AHU-1/SAT`
+  came back as `SAT`, `SAT.` did not parse, and the `AHU_1:supply_air_temp` names of
+  `Equip.from_roles` lost their prefix, so two air handlers' points collided. Names are now
+  percent-encoded local names with the exact name as `rdfs:label`, and both readers decode them.
+  The same applies to equipment ids in the minimal 223P export.
+- **A facility rename could permanently break another facility's site resolution (#255).**
+  Renaming B to A's name or id made A's labels ambiguous for ever, even after B was renamed back,
+  so A's site-keyed legacy faults and baselines stopped being adopted and `portfolio migrate`
+  blocked on them. Such renames are now refused (see Changed). A facility's own labels (id,
+  registered name, current display name) now outrank other facilities' past display names, so a
+  workspace that already holds such a rename resolves A's labels again.
+- **`portfolio recover` deleted a held facility's hot data when it finished an interrupted
+  archive (#256).** A hold placed after the crash now blocks the deletion: recover reports
+  `archive_blocked_legal_hold`, keeps the data, and finishes the archive once the hold is
+  released.
+- **Haystack JSON v3 and Hayson tags resolved nothing (#257).** `roles_from_haystack` and
+  `topology_from_haystack` counted only `true`, `"M"` and `"✓"` as markers and used ids as given.
+  They now read v3 markers (`"m:"`) and refs (`"r:<id> <dis>"`) and Hayson markers
+  (`{"_kind": "marker"}`) and refs (`{"_kind": "ref", "val": ...}`), for point ids, `ahuRef` and
+  `equipRef`. Fixtures in both encodings are under `tests/golden/haystack/`.
+
 ## [0.107.0] — 2026-10-17
 
 **0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).

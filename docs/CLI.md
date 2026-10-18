@@ -531,7 +531,8 @@ camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-
   sha256s, crosswalk version, zone, units) and prints the column coverage. An unchanged package
   is skipped. It holds the store lock while it writes (0.104 for a plain store; see
   [Store and cache locks](#store-and-cache-locks)). Into a workspace it does not wait by
-  default, like every workspace change.
+  default, like every workspace change. A changed or `--force` re-ingest of a facility under a
+  legal hold is refused (0.108), as `datasets ingest` refuses it.
 - **`inspect`** is the same read with nothing written.
 - **`findings`** runs a config (rules, M&V, drift) and writes one JSON document for a separate
   process to read back.
@@ -759,7 +760,9 @@ host. A change takes the workspace lock without waiting. A second concurrent cha
 with `portfolio is locked by <pid>@<host> since <ts>` (exit code 1).
 
 `add` creates a facility as `provisioning` unless `--activate` is given. Its id defaults to one
-derived from the name. Ids are never reused: a removed id is tombstoned.
+derived from the name. Ids are never reused: a removed id is tombstoned. `rename` (0.108) refuses
+a name that is another facility's id, registered name, or current or past display name, live or
+tombstoned, compared exactly and loosely (exit code 1).
 
 `offboard`, `archive`, `restore` and `purge` (0.95) are **dry runs unless `--apply`**: without it
 they print the plan (the footprint, the bundle, every path they would delete) and change nothing;
@@ -768,8 +771,11 @@ facility id (`--confirm ID`, or a prompt when stdin is a terminal). `purge` take
 id. `offboard` writes a verified export bundle to `archive/<fid>/` and starts a 30-day grace
 period; `archive` (after it, or with `--skip-grace`) deletes the hot data and keeps the bundle;
 `restore` brings a facility back, re-verifying every checksum; `purge` leaves only the tombstone
-and the audit record. A legal hold refuses `archive` and `purge`. See
-[PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging).
+and the audit record. A legal hold refuses `archive` and `purge`, and a `restore` from `archived`
+that would delete or change a live file (0.108; a restore also empties the live trees the bundle
+does not list, and its plan lists them under `deletes`). See
+[PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging) and
+[Legal holds on every path](PORTFOLIO.md#legal-holds-on-every-path).
 
 `retention apply` (0.95) enforces the retention policy: it rolls raw month partitions up into
 hourly and daily rollups, verifies the rollups against the raw row count, and only then prunes;

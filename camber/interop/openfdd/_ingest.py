@@ -204,8 +204,9 @@ def ingest_package(
     ``$CAMBER_LOCK_TIMEOUT``, else 30 s). A held lock raises ``PortfolioLocked`` /
     ``StoreLocked`` naming the holder.
     """
+    from ...datasets import _lifecycle
     from ...datasets._ingest import _staging_root, _swap_in, recover_staging
-    from ...portfolio import Portfolio, is_workspace
+    from ...portfolio import LifecycleError, Portfolio, is_workspace
 
     if (store is None) == (workspace is None):
         raise ValueError("give exactly one of store= (a store directory) or workspace=")
@@ -251,7 +252,7 @@ def ingest_package(
         if entry:
             state = reg.state(fid)
             if state not in _ACCEPTS_DATA:
-                raise ValueError(
+                raise LifecycleError(
                     f"facility {fid} is {state}: it accepts no new data "
                     "(resume or restore it first)"
                 )
@@ -273,6 +274,13 @@ def ingest_package(
             port.add_facility(disp, facility_id=fid, reason=why, activate=activate)
         else:
             reg._guard_write(fid)  # a tombstoned id or a case-variant: refused before any write
+        # 0.108 (#251): the datasets path's shared hold check -- a re-ingest replaces the
+        # partition, so a facility under a legal hold that has data is refused
+        held = _lifecycle.replace_blockers(
+            port, st.root, [fid], by="`camber interop openfdd ingest`"
+        )
+        if held:
+            raise LifecycleError("; ".join(held) + "; nothing was ingested")
         recover_staging(st)  # 0.107 (#213): what a crashed ingest left behind
         staging = _staging_root(st)
         try:

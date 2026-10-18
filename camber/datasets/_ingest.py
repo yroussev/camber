@@ -1205,7 +1205,8 @@ def _ingest_locked(
             result.facilities.append(fid)
             result.notes += [n for n in extra.get("quirks", []) if n not in result.notes]
         for fid in stale:  # a facility this subset no longer produces (e.g. a BDG2 site)
-            st.drop_facility(fid, forget=True)
+            # the lifecycle gate above checked it; the caller audits the ingest
+            st._drop_facility(fid, True, reason=f"datasets ingest {entry.id}: {sname} subset")
             result.dropped.append(fid)
         result.warnings += list(warns)
     finally:

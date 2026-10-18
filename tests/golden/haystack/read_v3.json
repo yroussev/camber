@@ -1,0 +1,20 @@
+{
+  "meta": {"ver": "3.0"},
+  "cols": [
+    {"name": "id"}, {"name": "dis"}, {"name": "equip"}, {"name": "ahu"}, {"name": "vav"},
+    {"name": "point"}, {"name": "his"}, {"name": "outside"}, {"name": "discharge"},
+    {"name": "zone"}, {"name": "air"}, {"name": "temp"}, {"name": "sensor"},
+    {"name": "equipRef"}, {"name": "ahuRef"}, {"name": "siteRef"}, {"name": "unit"}
+  ],
+  "rows": [
+    {"id": "r:AHU_1 AHU-1", "dis": "s:AHU-1", "equip": "m:", "ahu": "m:", "siteRef": "r:S1 Campus"},
+    {"id": "r:VAV_1 VAV-1", "dis": "s:VAV-1", "equip": "m:", "vav": "m:", "ahuRef": "r:AHU_1 AHU-1",
+     "siteRef": "r:S1 Campus"},
+    {"id": "r:p1 OAT", "dis": "s:OAT", "point": "m:", "his": "m:", "outside": "m:", "air": "m:",
+     "temp": "m:", "sensor": "m:", "equipRef": "r:AHU_1 AHU-1", "unit": "s:°F"},
+    {"id": "r:p2 AHU-1 DAT", "dis": "s:AHU-1 DAT", "point": "m:", "his": "m:", "discharge": "m:",
+     "air": "m:", "temp": "m:", "sensor": "m:", "equipRef": "r:AHU_1 AHU-1", "unit": "s:°F"},
+    {"id": "r:p3 VAV-1 ZNT", "dis": "s:VAV-1 ZNT", "point": "m:", "his": "m:", "zone": "m:",
+     "air": "m:", "temp": "m:", "sensor": "m:", "equipRef": "r:VAV_1 VAV-1", "unit": "s:°F"}
+  ]
+}

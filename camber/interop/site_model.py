@@ -28,7 +28,7 @@ import re
 
 from ..model.entities import Equip, Point, Site
 from . import brick as _brick
-from .export import ROLE_TO_BRICK_PART, to_brick
+from .export import _PREFIX, ROLE_TO_BRICK_PART, _brick_local, _turtle_literal, to_brick
 
 # Brick part classes the export layer interposes between an equipment and a
 # context-dependent point; they are not CAMBER equipment, so importing skips them.
@@ -38,9 +38,7 @@ _PART_CLASSES = frozenset(pc for _, pc, _ in ROLE_TO_BRICK_PART.values())
 # standard Brick inverse of the site's ``hasPart``; we read it back during import.
 _IS_PART_OF = "brick:isPartOf"
 
-_SITE_PREFIX = (
-    "@prefix bldg: <bldg#> .\n@prefix brick: <https://brickschema.org/schema/Brick#> .\n\n"
-)
+_SITE_PREFIX = _PREFIX  # bldg:, brick: and (0.108) rdfs: for the exact-name labels
 
 
 def _equip_fragment(equip: Equip) -> str:
@@ -59,8 +57,8 @@ def _equip_fragment(equip: Equip) -> str:
     body = body.lstrip("\n")
     if equip.site:
         # splice isPartOf onto the equipment node, before its first " ." or " ;".
-        anchor = f"bldg:{equip.id} a brick:{equip.equip_class}"
-        link = f" ;\n    {_IS_PART_OF} bldg:{equip.site}"
+        anchor = f"bldg:{_brick_local(equip.id)} a brick:{equip.equip_class}"
+        link = f" ;\n    {_IS_PART_OF} bldg:{_brick_local(equip.site)}"
         if anchor in body:
             body = body.replace(anchor, anchor + link, 1)
     return body
@@ -74,8 +72,16 @@ def site_to_ttl(site: Site) -> str:
     points (and any disambiguating part nodes). The result re-imports via
     :func:`site_from_ttl` to an equal model and re-imports point-wise via
     :func:`camber.interop.brick.roles_from_brick`.
+
+    0.108: every name -- site, equipment, point -- is a valid percent-encoded local name with
+    its exact text as ``rdfs:label`` (#254), and each equipment's part nodes are its own
+    (``bldg:AHU_1.Cooling_Coil``, #253), so two air handlers never share a coil's points.
     """
-    lines = [_SITE_PREFIX, f"bldg:{site.id} a brick:Site .\n\n"]
+    lines = [
+        _SITE_PREFIX,
+        f"bldg:{_brick_local(site.id)} a brick:Site ;\n"
+        f"    rdfs:label {_turtle_literal(site.id)} .\n\n",
+    ]
     for equip in site.equips:
         # ensure each equipment knows its site even if the field was left blank.
         eq = (
