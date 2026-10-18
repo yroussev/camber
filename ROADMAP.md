@@ -478,6 +478,14 @@ Version numbers are given only where a release is already planned.
     - [x] #212–#218 lifecycle and legal holds on every path, crash-safe ingest swap, one-line CLI errors, server error bodies;
     - [x] #221 `camber serve` token auth by default on loopback;
     - [x] #219, #220, #222–#224 docs checked by tests: examples, CLI flags, references, API-stability ledger.
+  - **0.108 — Audit II, 0.107 follow-ups, G36 fleet v3, three synthetic cases, sensor references** (released 2026-10-17). Closes #226, #228–#265, #267–#269:
+    - [x] #226, #238, #239, #241 G36 fleet generator v3, box rules on the fleet, zone-fleet rule fixes, `rcx-cause-chains`;
+    - [x] #228–#230, #233, #242–#249 edge: growing-month replace and merge, reconcile dedupe, inbox default, dead letters, BACnet and Haystack readers, config validation;
+    - [x] #234–#237, #240 plant, heat-pump and boiler rule fixes;
+    - [x] #250–#257 legal holds and lifecycle on every path, Brick and Haystack interop;
+    - [x] #258–#265 charts and reports: evidence shading, UTF-8, escaping, carpets;
+    - [x] #231, #232 a worked prose example; docstring citation check;
+    - [x] #267–#269 sensor references for any point, cost-only inputs at risk, reset target naming; `air-excess-oa-cost`, `data-sensor-conditional`.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
