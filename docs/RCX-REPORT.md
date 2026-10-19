@@ -91,8 +91,8 @@ default map because no site sequence is known. Those findings are shown as a ref
 are left out of the dollar totals, and their confidence is L. A declared sequence re-judges them
 against the site's own map. Each finding names its target by its source (0.108, #269): "vs G36 target", "vs
 site-sequence target" or "vs configured target" in its summary, `target_source` in its metrics
-(`pct_below_target`, `target_median` and `pct_above_target`; the `*_g36_target` names remain as
-aliases until 0.109) and in the cost basis (`sat-below-configured-target->reheat`).
+(`pct_below_target`, `target_median` and `pct_above_target`; the pre-0.108 `*_g36_target` aliases
+were removed in 0.109, #272) and in the cost basis (`sat-below-configured-target->reheat`).
 
 **Air side and plant links (0.91).** The air-side pages (economizer, SAT reset census, air
 distribution) cover air handlers only: a VAV box's discharge air, a heat pump's or a fan coil's is

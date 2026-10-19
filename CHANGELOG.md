@@ -14,6 +14,18 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Removed
+
+- **The `*_g36_target` SAT-reset metric aliases (#272), breaking.** `supply_air_reset_compliance`
+  findings no longer carry `pct_below_g36_target`, `g36_target_median` or
+  `pct_above_g36_target`, the pre-0.108 names 0.108 kept as aliases for one release. Read
+  `pct_below_target`, `target_median` and `pct_above_target` (the same values). The cost estimate
+  and the cause-chain linking read only `pct_below_target`, so a finding saved before 0.108 is no
+  longer priced from the old key. The `SATResetComplianceResult` fields of `camber.g36_reset` are
+  unchanged. The `air-sat-reset` workbook exercise reads the new key (same answers).
+
 ## [0.108.0] — 2026-10-17
 
 **0.108: a second audit and the 0.107 follow-ups — 42 issues across the rules, the edge and ingest path, legal holds and the facility lifecycle, interop, charts and reports — plus a redesigned synthetic G36 fleet, three new synthetic lab cases and sensor references for any point (#226, #228–#265, #267–#269).** **Behaviour changes (edge, #228, #233, #245, #249):** presigned uploads go to the bucket's `_inbox/` by default (`inbox=False` keeps the old layout); a growing month replaces its earlier part, an overlap that agrees is merged, and a conflicting overlap is quarantined; permanent sink errors dead-letter after five attempts (`edge requeue`), while a 401/403 is retried with an "auth failing" warning; unknown edge-config keys warn now and will be refused in 0.109. **Behaviour changes (lifecycle, #250–#252, #255, #256):** inside a workspace the store and registry deletes refuse a held or non-active facility, need a reason and are audited; config runs record no state for archived or purged facilities; restore is all-or-nothing; a rename cannot take another facility's name; crash recovery never deletes a held facility's data. **Behaviour changes (rules):** `chiller_staging` uses a size-relative run threshold (or compressor status) instead of a fixed 2 kW (#235); short-cycle rates are per observed day (#237); tower drift declines when its baseline was fitted on another load (#234); `zones_heat_cool_census` no longer faults a fleet on one or two boxes (#241). **Workbook:** the synthetic G36 fleet generates version 3, so the `zone-g36-fleet` answers are re-recorded (#226); new exercises `rcx-cause-chains`, `air-excess-oa-cost` and `data-sensor-conditional`. The RCx report takes a reference reading for any sensor (`report.rcx.references`, #267), and a distrusted cost-only input puts that issue's dollars at risk (#268). Also: BACnet trend logs read the newest records and keep devices apart (#243, #248), Haystack history reads cross DST (#244), Brick export round-trips names and parts (#253, #254), reports are written as UTF-8 with escaped point names (#259, #260), and evidence charts shade the samples their rule flagged (#258, #262). Changelog 0.103–0.105 archived.

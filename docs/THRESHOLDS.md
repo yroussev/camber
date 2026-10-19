@@ -1268,7 +1268,7 @@ How to calibrate:
 - `oat_min`: Set it to the outdoor temperature at or below which the sequence holds the warmest supply air. *Note:* Must be below oat_max. Samples at or above it are the warm-weather samples of the tracking check.
 - `oat_max`: Set it to the outdoor temperature at or above which the sequence holds min_clg_sat.
 - `tol_f`: Set it to the supply-air sensor's tolerance plus the loop's normal deadband; the mean_abs_error_f of a unit known to follow its reset shows the floor.
-- `warn_pct`: Read pct_below_g36_target on units known to follow the reset and set the warn level above their spread; scoring the same units you tuned on is circular. *Note:* Also the share of warm-weather samples above target that trips the NOT-tracking warn.
+- `warn_pct`: Read pct_below_target on units known to follow the reset and set the warn level above their spread; scoring the same units you tuned on is circular. *Note:* Also the share of warm-weather samples above target that trips the NOT-tracking warn.
 - `warn_gap_f`: Set it to the smallest mean below-target gap worth a reheat fix -- roughly the supply air change that moves reheat energy noticeably at the site (mean_gap_f reports it).
 - `track_gap_f`: Read mean_above_gap_f on units known to track their reset in warm weather; set it well above that.
 - `fan_gate`: Leave it on. Turn it off only when the fan signal is known to be wrong (stuck status, a speed point that reads 0 while running) and every trended sample is a running sample. *Note:* The fan is read from supply-fan status, else speed, else airflow; a unit with none of them is judged ungated and the finding says so (the fan_gate metric).

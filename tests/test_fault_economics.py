@@ -174,9 +174,7 @@ def test_total_cost_rollup():
 
 
 def test_sat_reset_compliance_costs_reheat():
-    f = _f(
-        "supply_air_reset_compliance", "AHU-1", "warn", pct_below_g36_target=60.0, mean_gap_f=5.0
-    )
+    f = _f("supply_air_reset_compliance", "AHU-1", "warn", pct_below_target=60.0, mean_gap_f=5.0)
     c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=200.0), PRICE)
     assert c.costed
     assert c.gas_therms > 0 and c.electricity_kwh == 0
@@ -187,12 +185,12 @@ def test_sat_reset_compliance_costs_reheat():
 def test_sat_reset_compliance_gap_scales_cost():
     load = EquipmentLoad(heating_capacity_kbtuh=200.0)
     full = estimate_cost(
-        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_target=60, mean_gap_f=5.0),
         load,
         PRICE,
     )
     half = estimate_cost(
-        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=2.5),
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_target=60, mean_gap_f=2.5),
         load,
         PRICE,
     )
@@ -201,7 +199,7 @@ def test_sat_reset_compliance_gap_scales_cost():
 
 def test_sat_reset_compliance_uncosted_without_capacity():
     c = estimate_cost(
-        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_target=60, mean_gap_f=5.0),
         EquipmentLoad(),
         PRICE,
     )
@@ -273,7 +271,7 @@ def test_reset_stuck_and_diverges_uncosted():
 def test_reset_family_flows_through_rank_by_cost():
     # a new model participates in the money ranker with zero extra wiring
     findings = [
-        _f("supply_air_reset_compliance", "AHU-1", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        _f("supply_air_reset_compliance", "AHU-1", "warn", pct_below_target=60, mean_gap_f=5.0),
         _f(
             "static_reset_effectiveness",
             "AHU-2",

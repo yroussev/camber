@@ -218,7 +218,7 @@ def test_sat_census_tier3_declines_and_keeps_g36_out_of_the_dollars(tmp_path, ca
     run = run_config(cfg, base_dir=str(tmp_path))
     fake = next(f for f in run.findings if f.rule == "supply_air_reset_compliance")
     fake.severity = "warn"
-    fake.metrics.update(pct_below_g36_target=90.0, mean_gap_f=4.0)
+    fake.metrics.update(pct_below_target=90.0, mean_gap_f=4.0)
     rep = build_rcx_report(run, options=RcxOptions.from_config(cfg["report"]))
     sat = next(s for s in rep.sections if s["id"] == "sat")
     banners = [b["text"] for b in sat["blocks"] if b["kind"] == "banner"]

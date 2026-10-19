@@ -64,7 +64,7 @@ def test_sat_far_above_target_is_not_tracking():
     assert f.severity == "warn"
     assert "NOT tracking" in f.summary and "tracks the G36" not in f.summary
     m = f.metrics
-    assert m["pct_above_g36_target"] == 100.0 and m["mean_above_gap_f"] > 15
+    assert m["pct_above_target"] == 100.0 and m["mean_above_gap_f"] > 15
     assert m["tracks_target"] is False and m["mean_abs_error_f"] > 15
 
 

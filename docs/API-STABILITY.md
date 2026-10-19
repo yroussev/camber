@@ -939,8 +939,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **The SAT-reset target named by its source** (0.108; #269), additive: the
   `supply_air_reset_compliance` metrics `target_source` (`"g36"`, `"site_sequence"` or
   `"configured"`), `pct_below_target`, `target_median` and `pct_above_target`. The pre-0.108
-  keys `pct_below_g36_target`, `g36_target_median` and `pct_above_g36_target` carry the same
-  values and are kept as aliases until 0.109. **Behaviour change:** the finding's summary and
+  keys `pct_below_g36_target`, `g36_target_median` and `pct_above_g36_target` carried the same
+  values as aliases in 0.108 and are removed in 0.109 (#272). **Behaviour change:** the finding's summary and
   the cost basis name the source ("vs configured target", `sat-below-configured-target->reheat`,
   `sat-below-site-sequence-target->reheat`); a G36-default map reads as before. The excess-OA
   estimate's assumptions on a missing-minimum decline now carry the `airflow_source` it would
@@ -950,6 +950,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   run templates, mappings and the workbook configs `air-excess-oa-cost` (and its `--no-min` and
   `--design-oa` variants) and `data-sensor-conditional` (and `--no-reference`), and the fault
   labels `excess_oa` and `sat_sensor_bias`.
+- **The `*_g36_target` SAT-reset metric aliases removed** (0.109; #272), **breaking:** the
+  `supply_air_reset_compliance` metrics no longer carry `pct_below_g36_target`,
+  `g36_target_median` or `pct_above_g36_target`; read `pct_below_target`, `target_median` and
+  `pct_above_target` (same values, since 0.108). The cost estimate and the cause-chain linking
+  read only `pct_below_target`, so a finding saved before 0.108 with only the old key is no
+  longer priced or linked as supply air too cold. The `SATResetComplianceResult` fields of
+  `camber.g36_reset` keep their names.
 
 ### The read API server: `camber.api.server`
 

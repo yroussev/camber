@@ -149,7 +149,7 @@ def test_rank_is_severity_then_dollars_with_uncosted_last_and_deterministic():
 
 
 def test_exclude_cost_and_costs_computed_from_loads():
-    f = _f("supply_air_reset_compliance", pct_below_g36_target=80.0, mean_gap_f=4.0)
+    f = _f("supply_air_reset_compliance", pct_below_target=80.0, mean_gap_f=4.0)
     loads = {"DemoAHU": EquipmentLoad(heating_capacity_kbtuh=500.0)}
     (costed,) = link_findings([f], rules=REG, loads=loads, price=EnergyPrice())
     assert costed.cost and costed.cost > 0

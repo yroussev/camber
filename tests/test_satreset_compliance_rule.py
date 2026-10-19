@@ -45,7 +45,7 @@ def test_ok_when_sat_tracks_g36_target():
     sat = oat_sat_setpoint(oat) + rng.normal(0, 0.3, n)  # SAT rides the G36 target
     frame = pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat, Role.OAT: oat}, index=_idx(n))
     f = SupplyAirResetCompliance().analyze("AHU_1", frame)
-    assert f.severity == "ok" and f.metrics["pct_below_g36_target"] < 15
+    assert f.severity == "ok" and f.metrics["pct_below_target"] < 15
 
 
 def test_warn_when_pinned_cold_vs_target():
@@ -56,7 +56,7 @@ def test_warn_when_pinned_cold_vs_target():
     frame = pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat, Role.OAT: oat}, index=_idx(n))
     f = SupplyAirResetCompliance().analyze("AHU_1", frame)
     assert f.severity == "warn"
-    assert f.metrics["pct_below_g36_target"] >= 40 and f.metrics["mean_gap_f"] > 0
+    assert f.metrics["pct_below_target"] >= 40 and f.metrics["mean_gap_f"] > 0
     assert "reheat/energy opportunity" in f.summary
 
 
@@ -70,7 +70,7 @@ def test_g36_params_honored_change_the_verdict():
     # a site whose G36 target is ~54 across this OAT band -> no gap -> ok
     rule = SupplyAirResetCompliance(min_clg_sat=54.0, t_max=54.0)
     f = rule.analyze("AHU_1", frame)
-    assert f.severity == "ok" and f.metrics["pct_below_g36_target"] < 15
+    assert f.severity == "ok" and f.metrics["pct_below_target"] < 15
 
 
 def test_gap_floor_suppresses_a_trivial_warn():
