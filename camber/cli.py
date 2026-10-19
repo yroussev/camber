@@ -533,6 +533,47 @@ def _cmd_edge_send_once(args) -> int:
     return 0
 
 
+def _edge_high_water(cfg) -> dict:
+    """0.109 (#266): the forwarder's high-water state for ``edge status`` (reads only)."""
+    from .edge.high_water import config_fingerprint, read_high_water
+
+    hw = read_high_water(cfg.spool_dir)
+    if hw["state"] == "ok":
+        hw["stale"] = hw.pop("fingerprint") != config_fingerprint(cfg)
+        marks = hw["marks"]
+        hw["points"] = len(marks)
+        if marks:
+            oldest = min(marks, key=lambda p: marks[p]["ts"])
+            newest = max(marks, key=lambda p: marks[p]["ts"])
+            hw["oldest"] = {"point": oldest, **marks[oldest]}
+            hw["newest"] = {"point": newest, **marks[newest]}
+    return hw
+
+
+def _print_edge_high_water(hw: dict) -> None:
+    if hw["state"] == "missing":
+        print("  high-water: none yet (the next poll reads the whole source window)")
+    elif hw["state"] == "unreadable":
+        print(
+            f"  high-water: UNREADABLE ({hw['error']}); the next poll reads the whole source "
+            "window and rewrites it"
+        )
+    elif hw["stale"]:
+        print(
+            f"  high-water: {hw['points']} point(s), STALE (the source or config changed); the "
+            "next poll resets it and reads the whole source window"
+        )
+    elif not hw["points"]:
+        print(f"  high-water: no point acknowledged yet ({hw['inflight']} part(s) in flight)")
+    else:
+        old, new = hw["oldest"], hw["newest"]
+        print(
+            f"  high-water: {hw['points']} point(s) acknowledged up to {new['ts']} "
+            f"({new['point']}); the oldest mark is {old['ts']} ({old['point']}); "
+            f"{hw['inflight']} part(s) in flight"
+        )
+
+
 def _cmd_edge_status(args) -> int:
     from .edge.config import load_config
     from .edge.spool import Spool
@@ -546,6 +587,7 @@ def _cmd_edge_status(args) -> int:
     dead = spool.dead_letters()
     retired = spool.retirement()
     auth = spool.auth_failing()  # 0.108: the sink refuses this device's credentials
+    high_water = _edge_high_water(cfg)
     if getattr(args, "json", False):
         import dataclasses
 
@@ -559,7 +601,7 @@ def _cmd_edge_status(args) -> int:
                     "dead": dead,
                     "retired": retired,
                     "auth_failing": auth,
-                    "config_warnings": list(cfg.warnings),
+                    "high_water": high_water,
                 },
                 indent=2,
                 default=str,
@@ -567,8 +609,7 @@ def _cmd_edge_status(args) -> int:
         )
         return 0
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
-    for note in cfg.warnings:  # 0.108: unknown config keys (refused from 0.109)
-        print(f"  CONFIG WARNING: {note}")
+    _print_edge_high_water(high_water)
     if auth:
         print(
             f"  AUTH FAILING since {auth.get('since', '?')} ({auth.get('failures', '?')} "
@@ -680,8 +721,6 @@ def _cmd_edge_selftest(args) -> int:
     from .edge.spool import read_retirement
 
     cfg = load_config(args.config)
-    for note in cfg.warnings:  # 0.108: unknown config keys (refused from 0.109)
-        print(f"edge selftest: CONFIG WARNING: {note}")
     retired = read_retirement(cfg.spool_dir)
     if retired is not None:
         print(

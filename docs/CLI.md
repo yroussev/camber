@@ -847,7 +847,8 @@ central side, where uploads land (see
 
 ```
 # on the edge device
-camber edge status <edge.json> [--json] [--limit N]   # pending, stuck and dead-lettered batches
+camber edge status <edge.json> [--json] [--limit N]   # pending, stuck and dead-lettered batches,
+                                                       # and the high-water mark (0.109)
 camber edge requeue <edge.json> [--key K]... [--apply] # queue dead-lettered batches again (0.108)
 camber edge compact <edge.json> [--dry-run] [--lock-timeout S] [--json]   # shrink the spool journal
                                      # (--lock-timeout: wait for a busy spool, default 30 s)
@@ -894,8 +895,9 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
   (default 20). `edge requeue` is a dry run without `--apply`; with it, the dead batches (or
   those named by `--key`) are queued again with a fresh count, and an unknown `--key` exits 1.
   A 401 or 403 from the sink is not a rejection: it stops the cycle with back-off and `edge
-  status` shows `AUTH FAILING since <time>`. `edge status` and `edge selftest` print a `CONFIG
-  WARNING` for each unknown config key (ignored in 0.108; refused from 0.109).
+  status` shows `AUTH FAILING since <time>`. An unknown config key is refused by every `edge`
+  command that reads the config, with the closest known key named (0.109, #271; 0.108 warned).
+  `edge status` shows the forwarder's high-water mark (0.109, #266; `high_water` in `--json`).
   `edge selftest` runs on a temporary spool and never touches the configured one (#242).
 - **Row duplicates already in the store (0.108, #229).** A store `reconcile` lists the groups of
   parts of one facility that hold identical rows under different keys (landed before the row

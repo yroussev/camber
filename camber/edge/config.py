@@ -124,16 +124,12 @@ class EdgeConfig:
     part_layout: str = "canonical"  # 0.107 (#142): "legacy" for a pre-0.107 cloud landing
     timezone: str | None = None  # 0.108 (#249): the site's IANA zone, passed to file sources
     dead_letter_after: int = 5  # 0.108 (#245): permanent rejections before a batch is dead
-    # 0.108: the unknown keys found in the file (each a message with a did-you-mean hint). They
-    # are ignored with a WARNING in 0.108 and will be refused from 0.109.
-    warnings: tuple = field(default=(), compare=False)
 
 
 # 0.108 (#249): the keys a config file may hold. Anything else (a typo such as ``spool_dri``,
-# which would leave the default silently in force) is warned about in 0.108 and will be refused
-# from 0.109. Keys that start with ``_`` and ``note`` / ``comment`` are free-form comments at any
-# level.
-CONFIG_KEYS = frozenset(EdgeConfig.__dataclass_fields__) - {"warnings"}
+# which would leave the default silently in force) is refused since 0.109 (#271; 0.108 warned).
+# Keys that start with ``_`` and ``note`` / ``comment`` are free-form comments at any level.
+CONFIG_KEYS = frozenset(EdgeConfig.__dataclass_fields__)
 _COMMENT_KEYS = frozenset({"note", "comment", "description"})
 _SINK_KEYS = {
     "collect": {"kind"},
@@ -155,8 +151,10 @@ def _is_comment(key) -> bool:
     return str(key).startswith("_") or str(key) in _COMMENT_KEYS
 
 
-def _check_keys(obj: dict, allowed, where: str, notes: list) -> None:
-    """Note the unknown keys of ``obj`` (0.108: ignored with a WARNING; refused from 0.109)."""
+def _check_keys(obj: dict, allowed, where: str) -> None:
+    """Refuse the unknown keys of ``obj``, naming the closest known key (0.109, #271).
+
+    0.108 ignored them with a WARNING; a typo then left the default silently in force."""
     unknown = sorted(str(k) for k in obj if k not in allowed and not _is_comment(k))
     if not unknown:
         return
@@ -164,10 +162,9 @@ def _check_keys(obj: dict, allowed, where: str, notes: list) -> None:
     for k in unknown:
         close = difflib.get_close_matches(k, sorted(allowed), n=1)
         hints.append(f"{k!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
-    notes.append(
-        f"unknown key(s) in the edge config {where}, ignored: {', '.join(hints)}; known keys: "
-        f"{', '.join(sorted(allowed))} (prefix a key with '_' to keep it as a comment). "
-        "CAMBER 0.109 will refuse unknown keys."
+    raise ValueError(
+        f"unknown key(s) in the edge config {where}: {', '.join(hints)}; known keys: "
+        f"{', '.join(sorted(allowed))} (prefix a key with '_' to keep it as a comment)"
     )
 
 
@@ -212,10 +209,10 @@ def _choice(value, name: str, choices) -> str:
     return value
 
 
-def _check_source(spec: dict, timezone, notes: list) -> None:
+def _check_source(spec: dict, timezone) -> None:
     kind = spec.get("kind")
     if kind in _FILE_SOURCE_KEYS:
-        _check_keys(spec, _FILE_SOURCE_KEYS[kind], f"'source' (kind {kind!r})", notes)
+        _check_keys(spec, _FILE_SOURCE_KEYS[kind], f"'source' (kind {kind!r})")
         for k in _FILE_SOURCE_REQUIRED[kind]:
             _text(spec.get(k), f"source.{k}")
         if "strict_timezone" in spec:
@@ -226,11 +223,11 @@ def _check_source(spec: dict, timezone, notes: list) -> None:
         check_timezone(spec["timezone"])
 
 
-def _check_sink(spec: dict, notes: list) -> None:
+def _check_sink(spec: dict) -> None:
     kind = spec.get("kind", "presigned")
     if kind not in _SINK_KEYS:
         raise ValueError(f"unknown sink kind {kind!r}; one of {', '.join(sorted(_SINK_KEYS))}")
-    _check_keys(spec, _SINK_KEYS[kind], f"'sink' (kind {kind!r})", notes)
+    _check_keys(spec, _SINK_KEYS[kind], f"'sink' (kind {kind!r})")
     for k in _SINK_REQUIRED.get(kind, ()):
         _text(spec.get(k), f"sink.{k}")
     if "timeout" in spec:
@@ -242,16 +239,15 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
 
     Since 0.108 (#249) the values are checked: ``interval`` and ``spool_max_bytes`` must be
     greater than 0, ``quality`` a boolean, ``wire_format`` / ``part_layout`` one of their choices,
-    ``timezone`` an IANA zone. An unknown key (a typo) is ignored with a WARNING (logged, a
-    :class:`FutureWarning`, and kept in :attr:`EdgeConfig.warnings` for ``edge status`` and
-    ``edge selftest``); CAMBER 0.109 will refuse it.
+    ``timezone`` an IANA zone. Since 0.109 (#271) an unknown key (a typo), at the top level or
+    in a file source or sink, is refused with a :class:`ValueError` that names it and the closest
+    known key; 0.108 ignored it with a WARNING.
     """
     from .forwarder import PART_LAYOUTS
 
     environ = os.environ if environ is None else environ
     path = path or environ.get("CAMBER_EDGE_CONFIG")
     raw: dict = {}
-    notes: list = []
     if path:
         from .._yaml import read_config_file  # 0.98 (#90): .yaml / .yml too (the [yaml] extra)
 
@@ -259,7 +255,7 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
         if not isinstance(raw, dict):
             raise ValueError(f"the edge config {path} must be a mapping (a JSON object)")
         _scan_secrets(raw)
-        _check_keys(raw, CONFIG_KEYS, "file", notes)
+        _check_keys(raw, CONFIG_KEYS, "file")
 
     facility_id = environ.get("CAMBER_EDGE_FACILITY_ID") or raw.get("facility_id")
     if not facility_id:
@@ -282,11 +278,8 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
         from ..tsparse import check_timezone
 
         check_timezone(timezone)
-    _check_source(source, timezone, notes)
-    _check_sink(sink, notes)
-    for note in notes:
-        _LOG.warning("edge.config %s", note)
-        warnings.warn(note, FutureWarning, stacklevel=2)
+    _check_source(source, timezone)
+    _check_sink(sink)
 
     resample = _text(environ.get("CAMBER_EDGE_RESAMPLE") or raw.get("resample", "1h"), "resample")
     try:
@@ -343,7 +336,6 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
         dead_letter_after=_num(
             raw.get("dead_letter_after", 5), "dead_letter_after", cast=int, minimum=1
         ),
-        warnings=tuple(notes),
     )
 
 
@@ -416,6 +408,7 @@ def build_forwarder(cfg: EdgeConfig, *, source=None, sink=None, environ=None):
     """
     from ..model.mapping import MappingProvider
     from .forwarder import Forwarder
+    from .high_water import config_fingerprint
     from .spool import Spool
 
     environ = os.environ if environ is None else environ
@@ -435,4 +428,5 @@ def build_forwarder(cfg: EdgeConfig, *, source=None, sink=None, environ=None):
         quality=cfg.quality,
         wire_format=cfg.wire_format,
         part_layout=cfg.part_layout,
+        high_water_id=config_fingerprint(cfg),  # 0.109 (#266): a config change resets the marks
     )

@@ -16,8 +16,38 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 
 ## [Unreleased]
 
-### Removed
+### Changed
+- **Breaking: an unknown edge-config key is refused (#271).** `load_config` raises a
+  `ValueError` for a key it does not know, at the top level or in a file source or sink, naming
+  the key and the closest known one (`'spool_dri' (did you mean 'spool_dir'?)`), so every
+  command that reads an edge config (`edge run`, `send-once`, `status`, `selftest`, `requeue`,
+  `compact`, `decommission`) exits 1 with that error before it builds anything. 0.108 ignored the
+  key with a WARNING and a `FutureWarning`. Fix the key, or prefix a comment key with `_` (`note`,
+  `comment` and `description` stay comments).
+- **Behaviour change: a forwarder poll sends only what is new (#266).** The forwarder keeps a
+  high-water mark per source point, the last observation the sink acknowledged, in
+  `<spool>/high_water.json`. A poll reads each point from the start of its mark's month and sends
+  a month only when one of its points has a newer observation or a revised last one; the open
+  month is still sent whole, so the landing replaces its stored part as in 0.108, and a revised
+  last observation (the hour that was in progress) is sent. An idle poll sends nothing.
+  `poll_once(since=...)` still reads and sends the window given. `Forwarder(high_water=False)`
+  keeps the pre-0.109 full read.
 
+### Added
+- **The forwarder's high-water mark (#266)** (`camber.edge.high_water`: `HighWater`,
+  `read_high_water`, `config_fingerprint`). The mark advances only when a drain acknowledges the
+  part (a part's marks wait in the file until then, and are dropped if the disk cap evicts it),
+  survives restarts and is written atomically under the spool lock. A missing file means a full
+  read, as before; an unreadable one, or a change of facility, source, mapping, `resample` or
+  `timezone`, is logged as a `WARNING edge.high_water`, read in full and rewritten. `edge status`
+  shows the mark (`high_water` in `--json`), and the poll result counts the `unchanged` months
+  and the points `advanced`. A source whose `load_points` accepts `since=` is given the earliest
+  month start, so it can read less. Delivery stays at-least-once.
+
+### Removed
+- `EdgeConfig.warnings` and the `config_warnings` key of `edge status --json`, which carried the
+  unknown config keys 0.108 ignored (#271); `edge status` and `edge selftest` no longer print
+  `CONFIG WARNING` lines.
 - **The `*_g36_target` SAT-reset metric aliases (#272), breaking.** `supply_air_reset_compliance`
   findings no longer carry `pct_below_g36_target`, `g36_target_median` or
   `pct_above_g36_target`, the pre-0.108 names 0.108 kept as aliases for one release. Read
