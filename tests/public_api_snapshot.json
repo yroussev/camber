@@ -531,6 +531,12 @@
     "Forwarder",
     "PART_LAYOUTS"
   ],
+  "camber.edge.high_water": [
+    "HIGH_WATER_FILE",
+    "HighWater",
+    "config_fingerprint",
+    "read_high_water"
+  ],
   "camber.edge.landing": [
     "ACCEPTING_STATES",
     "CATEGORIES",

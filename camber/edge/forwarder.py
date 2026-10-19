@@ -9,6 +9,8 @@ store's long shape with :func:`camber.store.role_frame_to_long`, serializes one 
 :class:`~camber.store.ParquetStore` Hive layout -- in the store's canonical part layout since
 0.107 (#142), so the same rows give the same bytes and key -- enqueues it on the
 durable :class:`~camber.edge.spool.Spool`, and drains the spool through the one-way ``Sink``.
+Since 0.109 (#266) a persisted per-point high-water mark (:mod:`camber.edge.high_water`) keeps a
+poll to each point's open month and skips the months with nothing new.
 
 Nothing here listens, binds, or writes to the BAS -- it only reads the source and pushes data out.
 All FDD/M&V analysis runs in the cloud on the landed store, which reads these part files with the
@@ -18,6 +20,7 @@ All FDD/M&V analysis runs in the cloud on the landed store, which reads these pa
 from __future__ import annotations
 
 import hashlib
+import inspect
 import io
 import logging
 from collections.abc import Callable
@@ -31,6 +34,7 @@ import pyarrow.parquet as pq
 from ..ingest.quality import assess
 from ..store.facilities import require_facility_id
 from ..store.parquet_store import _canonical_table, _write_part, role_frame_to_long
+from .high_water import HighWater, _fingerprint
 from .row_digest import rows_digest
 
 _LOG = logging.getLogger("camber.edge")
@@ -54,6 +58,33 @@ def _measure_of(token: str) -> str:
     return token.rsplit("_", 1)[1] if "_" in token else token
 
 
+def _apply_floors(frame: pd.DataFrame, floors: dict) -> pd.DataFrame:
+    """Blank each point before its high-water floor; drop the rows no point needs."""
+    start = min(floors.get(c, frame.index.min()) for c in frame.columns)
+    out = frame[frame.index >= start].copy()
+    for col in out.columns:
+        if col in floors:
+            out[col] = out[col].where(out.index >= floors[col])
+    return out
+
+
+def _month_lasts(frame: pd.DataFrame, points) -> dict:
+    """``{(year, month): {point: {"ts", "value"}}}``: each point's last observation per month."""
+    out: dict = {}
+    for point in dict.fromkeys(points):
+        s = frame[point].dropna()
+        if s.empty:
+            continue
+        idx = pd.DatetimeIndex(s.index)
+        last = s.groupby([idx.year, idx.month]).tail(1)
+        for ts, value in last.items():
+            out.setdefault((ts.year, ts.month), {})[point] = {
+                "ts": pd.Timestamp(ts),
+                "value": float(value),
+            }
+    return out
+
+
 @dataclass
 class BatchResult:
     """The outcome of one :meth:`Forwarder.poll_once`."""
@@ -68,6 +99,8 @@ class BatchResult:
     already_spooled: int = 0  # 0.108 (#246): batches skipped, the same bytes already queued
     rejected: int = 0  # 0.108 (#245): permanent rejections this cycle
     dead: list = field(default_factory=list)  # keys dead-lettered this cycle
+    unchanged: int = 0  # 0.109 (#266): month parts skipped, nothing past the high-water mark
+    advanced: int = 0  # 0.109 (#266): points whose high-water mark moved on an ack
 
 
 class Forwarder:
@@ -88,6 +121,8 @@ class Forwarder:
         wire_format: str = "parquet",
         part_layout: str = "canonical",
         clock: Callable[[], datetime] | None = None,
+        high_water: bool = True,
+        high_water_id: str | None = None,
     ):
         if wire_format not in _CONTENT_TYPE:
             raise ValueError(f"wire_format must be 'parquet' or 'ndjson', got {wire_format!r}")
@@ -106,6 +141,22 @@ class Forwarder:
         self.wire_format = wire_format
         self.part_layout = part_layout
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        # 0.109 (#266): the persisted per-point marks, loaded on the first poll (so building a
+        # forwarder for ``edge decommission`` never reads or resets them). ``high_water_id``
+        # names the source and its mapping; build_forwarder passes the config's fingerprint.
+        self.high_water = high_water
+        self.high_water_id = high_water_id or _fingerprint(
+            facility_id=facility_id,
+            source=f"{type(source).__module__}.{type(source).__qualname__}",
+            mapping=None
+            if mapping is None
+            else {
+                "aliases": sorted((k, str(v)) for k, v in getattr(mapping, "aliases", {}).items()),
+                "patterns": [(p, str(r)) for p, r in getattr(mapping, "patterns", [])],
+            },
+            resample=resample,
+        )
+        self._hw: HighWater | None = None
 
     # ------------------------------------------------------------------ serialize
     def _serialize(self, part: pd.DataFrame) -> tuple:
@@ -144,10 +195,37 @@ class Forwarder:
         return by_equip, unmapped
 
     # ------------------------------------------------------------------ the poll
+    def _high_water(self) -> HighWater | None:
+        if self.high_water and self._hw is None:
+            self._hw = HighWater(self.spool.root, self.high_water_id, clock=self._clock)
+        return self._hw
+
+    def _read(self, names: list, floors: dict):
+        """``load_points``; a source whose ``load_points`` takes ``since=`` gets the earliest
+        high-water floor (0.109, #266) when every point has one, so it can read less."""
+        since = min(floors.values()) if floors and len(floors) == len(names) else None
+        if since is not None:
+            try:
+                takes_since = "since" in inspect.signature(self.source.load_points).parameters
+            except (TypeError, ValueError):
+                takes_since = False
+            if takes_since:
+                return self.source.load_points(names, resample=self.resample, since=since)
+        return self.source.load_points(names, resample=self.resample)
+
     def poll_once(self, names=None, *, since=None, until=None) -> BatchResult:
-        """Read one window read-only, forward it one-way, return what was spooled/sent."""
+        """Read one window read-only, forward it one-way, return what was spooled/sent.
+
+        With the high-water mark on (0.109, #266) and no explicit ``since``, each point is read
+        from its mark's month and a month with nothing new is not sent; an explicit ``since``
+        (a backfill) reads and sends the window as given. The marks advance on the drain's acks."""
         names = list(names) if names is not None else list(self.source.point_names())
-        frame = self.source.load_points(names, resample=self.resample)
+        hw = self._high_water()
+        skip = hw is not None and since is None  # an explicit since is a backfill: send it all
+        floors: dict = {}
+        if skip and hw is not None:
+            floors = {n: f for n in names if (f := hw.floor(n)) is not None}
+        frame = self._read(names, floors)
         if frame is None or len(frame) == 0:
             return BatchResult(self.facility_id, 0, ("", ""), {})
         frame = frame.sort_index()
@@ -155,6 +233,14 @@ class Forwarder:
             frame = frame[frame.index >= pd.Timestamp(since)]
         if until is not None:
             frame = frame[frame.index <= pd.Timestamp(until)]
+        if floors and len(frame):
+            tz = getattr(frame.index, "tz", None)
+            floors = {n: f for n in floors if (f := hw.floor(n, tz)) is not None} if hw else {}
+            try:
+                frame = _apply_floors(frame, floors)
+            except TypeError:  # marks of another zone awareness than the index: read it all
+                _LOG.warning("edge.high_water marks do not compare with the index; full read")
+                floors = {}
         if len(frame) == 0:
             return BatchResult(self.facility_id, 0, ("", ""), {})
 
@@ -170,7 +256,10 @@ class Forwarder:
             )
             if self.quality:
                 for tok in rolemap.values():
-                    rep = assess(frame[tok], expected_freq=self.resample).as_dict()
+                    series = frame[tok]
+                    if tok in floors:  # 0.109 (#266): only the part of the window that is read
+                        series = series[series.index >= floors[tok]]
+                    rep = assess(series, expected_freq=self.resample).as_dict()
                     n_pts += 1
                     cov_sum += rep["coverage"]
                     if rep["score"] < min_score:
@@ -191,7 +280,9 @@ class Forwarder:
         queued = {e.key for e in self.spool.pending()} | {
             r.get("key") for r in self.spool.dead_letters()
         }
-        already = 0
+        already = unchanged = 0
+        mapped = [tok for rolemap in by_equip.values() for tok in rolemap.values()]
+        lasts = _month_lasts(frame, mapped) if hw is not None else {}
         if not long.empty:
             long = long.copy()
             ts = pd.to_datetime(long["ts"])
@@ -200,6 +291,10 @@ class Forwarder:
             # month-by-month retention never has to split an edge part (landing still reads the
             # year-only keys older forwarders wrote)
             for (year, month), grp in long.groupby(["_year", "_month"]):
+                month_lasts = lasts.get((int(year), int(month)), {})
+                if skip and hw and not any(hw.is_news(p, m) for p, m in month_lasts.items()):
+                    unchanged += 1  # 0.109 (#266): every point at its mark, nothing to send
+                    continue
                 part = grp[_LONG_COLS].reset_index(drop=True)
                 data, rows_sha = self._serialize(part)
                 sha = hashlib.sha256(data).hexdigest()
@@ -230,32 +325,48 @@ class Forwarder:
                     key, data, content_type=_CONTENT_TYPE[self.wire_format], metadata=manifest
                 )
                 keys.append(key)
+                if hw is not None:
+                    hw.note_sent(key, month_lasts)
 
-        drained = self.spool.drain(self.sink)
-        _LOG.info(
-            "edge.forward facility=%s rows=%d parts=%d already_spooled=%d forwarded=%d "
-            "rejected=%d dead=%d spool_remaining=%d",
-            self.facility_id,
-            len(long),
-            len(keys),
-            already,
-            drained.forwarded,
-            drained.rejected,
-            len(drained.dead),
-            drained.remaining,
-        )
-        return BatchResult(
+        res = BatchResult(
             facility_id=self.facility_id,
             rows=int(len(long)),
             window=window,
             quality=quality_summary,
             keys=keys,
             spooled=len(keys) - already,
-            forwarded=drained.forwarded,
             already_spooled=already,
-            rejected=drained.rejected,
-            dead=list(drained.dead),
+            unchanged=unchanged,
         )
+        return self._finish(res, hw)
+
+    def _finish(self, res: BatchResult, hw: HighWater | None) -> BatchResult:
+        """Drain the spool, advance the high-water marks on its acks, log, return ``res``."""
+        drained = self.spool.drain(self.sink)
+        res.forwarded = drained.forwarded
+        res.rejected = drained.rejected
+        res.dead = list(drained.dead)
+        if hw is not None:
+            still = {e.key for e in self.spool.pending()} | {
+                r.get("key") for r in self.spool.dead_letters()
+            }
+            res.advanced = hw.acknowledge(drained.keys, still)
+            with self.spool.lock():
+                hw.save()
+        _LOG.info(
+            "edge.forward facility=%s rows=%d parts=%d already_spooled=%d unchanged=%d "
+            "forwarded=%d rejected=%d dead=%d spool_remaining=%d",
+            self.facility_id,
+            res.rows,
+            len(res.keys),
+            res.already_spooled,
+            res.unchanged,
+            drained.forwarded,
+            drained.rejected,
+            len(drained.dead),
+            drained.remaining,
+        )
+        return res
 
     def run(self, interval: float, *, iterations: int | None = None, _sleep=None) -> None:
         """Daemon loop: ``poll_once`` then sleep ``interval`` s (``iterations`` bounds tests)."""

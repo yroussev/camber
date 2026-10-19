@@ -989,16 +989,43 @@ def test_edge_status_shows_auth_failing_since(tmp_path, capsys):
         ({"source": {"kind": "csv_wide", "path": "x.csv", "tz": "UTC"}}, "'tz'"),
     ],
 )
-def test_unknown_keys_warn_in_0108(tmp_path, caplog, extra, match):
+def test_unknown_keys_are_refused_from_0109(tmp_path, extra, match):
+    # 0.108 warned; 0.109 (#271) refuses, naming the key and the closest known one
     path = _write_cfg(tmp_path, {"facility_id": FID, **extra})
-    with caplog.at_level("WARNING", logger="camber.edge"):
-        with pytest.warns(FutureWarning, match="0.109 will refuse"):
-            cfg = load_config(path, environ={})
-    assert match in caplog.text and any(match in w for w in cfg.warnings)
-    assert cfg.spool_dir == "./camber-edge-spool"  # the typo is ignored, the default applies
+    with pytest.raises(ValueError, match="unknown key") as err:
+        load_config(path, environ={})
+    assert match in str(err.value)
 
 
-def test_unknown_keys_show_in_status_and_selftest_and_the_forwarder_runs(tmp_path, capsys):
+def test_unknown_key_refusal_names_the_key_when_nothing_is_close(tmp_path):
+    path = _write_cfg(tmp_path, {"facility_id": FID, "zzzz": 1})
+    with pytest.raises(ValueError, match="'zzzz'; known keys: ") as err:
+        load_config(path, environ={})
+    assert "did you mean" not in str(err.value)
+
+
+def test_unknown_key_beats_a_missing_required_key(tmp_path):
+    # a typo of a required key reports the typo, not "source.path must be a non-empty string"
+    path = _write_cfg(tmp_path, {"facility_id": FID, "source": {"kind": "csv_wide", "pth": "x"}})
+    with pytest.raises(ValueError, match="did you mean 'path'"):
+        load_config(path, environ={})
+
+
+def test_comment_keys_are_still_accepted(tmp_path):
+    path = _write_cfg(
+        tmp_path,
+        {
+            "facility_id": FID,
+            "_why": "a comment",
+            "note": "n",
+            "sink": {"kind": "collect", "comment": "c", "_x": 1},
+        },
+    )
+    assert load_config(path, environ={}).facility_id == FID
+
+
+@pytest.mark.parametrize("cmd", ["selftest", "send-once", "run", "status", "requeue", "compact"])
+def test_every_edge_command_refuses_an_unknown_key(tmp_path, capsys, cmd):
     spool_dir = str(tmp_path / "spool")
     cfg = _write_cfg(
         tmp_path,
@@ -1010,17 +1037,7 @@ def test_unknown_keys_show_in_status_and_selftest_and_the_forwarder_runs(tmp_pat
             "intervall": 60,
         },
     )
-    with pytest.warns(FutureWarning):
-        assert main(["edge", "selftest", cfg]) == 0
-    out = capsys.readouterr().out
-    assert "CONFIG WARNING" in out and "did you mean 'interval'" in out
-    assert "would send 1 object(s)" in out
-    with pytest.warns(FutureWarning):
-        assert main(["edge", "send-once", cfg]) == 0
-    capsys.readouterr()
-    with pytest.warns(FutureWarning):
-        assert main(["edge", "status", cfg]) == 0
-    assert "CONFIG WARNING" in capsys.readouterr().out
-    with pytest.warns(FutureWarning):
-        assert main(["edge", "status", cfg, "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["config_warnings"]
+    assert main(["edge", cmd, cfg]) == 1
+    err = capsys.readouterr().err
+    assert "unknown key" in err and "did you mean 'interval'" in err
+    assert not os.path.exists(spool_dir)  # refused before anything is built

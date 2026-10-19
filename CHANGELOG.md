@@ -14,6 +14,41 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Changed
+- **Breaking: an unknown edge-config key is refused (#271).** `load_config` raises a
+  `ValueError` for a key it does not know, at the top level or in a file source or sink, naming
+  the key and the closest known one (`'spool_dri' (did you mean 'spool_dir'?)`), so every
+  command that reads an edge config (`edge run`, `send-once`, `status`, `selftest`, `requeue`,
+  `compact`, `decommission`) exits 1 with that error before it builds anything. 0.108 ignored the
+  key with a WARNING and a `FutureWarning`. Fix the key, or prefix a comment key with `_` (`note`,
+  `comment` and `description` stay comments).
+- **Behaviour change: a forwarder poll sends only what is new (#266).** The forwarder keeps a
+  high-water mark per source point, the last observation the sink acknowledged, in
+  `<spool>/high_water.json`. A poll reads each point from the start of its mark's month and sends
+  a month only when one of its points has a newer observation or a revised last one; the open
+  month is still sent whole, so the landing replaces its stored part as in 0.108, and a revised
+  last observation (the hour that was in progress) is sent. An idle poll sends nothing.
+  `poll_once(since=...)` still reads and sends the window given. `Forwarder(high_water=False)`
+  keeps the pre-0.109 full read.
+
+### Added
+- **The forwarder's high-water mark (#266)** (`camber.edge.high_water`: `HighWater`,
+  `read_high_water`, `config_fingerprint`). The mark advances only when a drain acknowledges the
+  part (a part's marks wait in the file until then, and are dropped if the disk cap evicts it),
+  survives restarts and is written atomically under the spool lock. A missing file means a full
+  read, as before; an unreadable one, or a change of facility, source, mapping, `resample` or
+  `timezone`, is logged as a `WARNING edge.high_water`, read in full and rewritten. `edge status`
+  shows the mark (`high_water` in `--json`), and the poll result counts the `unchanged` months
+  and the points `advanced`. A source whose `load_points` accepts `since=` is given the earliest
+  month start, so it can read less. Delivery stays at-least-once.
+
+### Removed
+- `EdgeConfig.warnings` and the `config_warnings` key of `edge status --json`, which carried the
+  unknown config keys 0.108 ignored (#271); `edge status` and `edge selftest` no longer print
+  `CONFIG WARNING` lines.
+
 ## [0.108.0] — 2026-10-17
 
 **0.108: a second audit and the 0.107 follow-ups — 42 issues across the rules, the edge and ingest path, legal holds and the facility lifecycle, interop, charts and reports — plus a redesigned synthetic G36 fleet, three new synthetic lab cases and sensor references for any point (#226, #228–#265, #267–#269).** **Behaviour changes (edge, #228, #233, #245, #249):** presigned uploads go to the bucket's `_inbox/` by default (`inbox=False` keeps the old layout); a growing month replaces its earlier part, an overlap that agrees is merged, and a conflicting overlap is quarantined; permanent sink errors dead-letter after five attempts (`edge requeue`), while a 401/403 is retried with an "auth failing" warning; unknown edge-config keys warn now and will be refused in 0.109. **Behaviour changes (lifecycle, #250–#252, #255, #256):** inside a workspace the store and registry deletes refuse a held or non-active facility, need a reason and are audited; config runs record no state for archived or purged facilities; restore is all-or-nothing; a rename cannot take another facility's name; crash recovery never deletes a held facility's data. **Behaviour changes (rules):** `chiller_staging` uses a size-relative run threshold (or compressor status) instead of a fixed 2 kW (#235); short-cycle rates are per observed day (#237); tower drift declines when its baseline was fitted on another load (#234); `zones_heat_cool_census` no longer faults a fleet on one or two boxes (#241). **Workbook:** the synthetic G36 fleet generates version 3, so the `zone-g36-fleet` answers are re-recorded (#226); new exercises `rcx-cause-chains`, `air-excess-oa-cost` and `data-sensor-conditional`. The RCx report takes a reference reading for any sensor (`report.rcx.references`, #267), and a distrusted cost-only input puts that issue's dollars at risk (#268). Also: BACnet trend logs read the newest records and keep devices apart (#243, #248), Haystack history reads cross DST (#244), Brick export round-trips names and parts (#253, #254), reports are written as UTF-8 with escaped point names (#259, #260), and evidence charts shade the samples their rule flagged (#258, #262). Changelog 0.103–0.105 archived.
