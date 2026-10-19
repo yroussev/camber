@@ -293,13 +293,12 @@ and pushes, then exits — nothing stays resident and nothing listens.
   `sink.timeout` must be greater than 0 (a cap under 1 MiB is accepted with a warning),
   `quality` a JSON boolean (`"false"` is refused, not read as true), `wire_format`,
   `part_layout` and the sink kind one of their choices, `resample` a pandas frequency,
-  `timezone` an IANA zone, and `dead_letter_after` at least 1. An unknown key, at the top level
-  or in a file source or sink, is ignored with a WARNING naming the closest known key
-  (`spool_dri`: did you mean `spool_dir`?), so a typo no longer leaves a default in force
-  unnoticed: it is logged, raised as a `FutureWarning`, and shown by `edge status` and `edge
-  selftest` (`CONFIG WARNING`); the forwarder keeps running. **CAMBER 0.109 will refuse unknown
-  keys.** Keys that start with `_`, and `note`, `comment` and `description`, are comments at any
-  level.
+  `timezone` an IANA zone, and `dead_letter_after` at least 1. **An unknown key is refused**
+  (0.109, #271; 0.108 only warned), at the top level or in a file source or sink, by every
+  command that reads the config (`edge run`, `send-once`, `status`, `selftest`, `requeue`,
+  `compact`, `decommission`): the error names the key and the closest known one (`spool_dri`:
+  did you mean `spool_dir`?), so a typo can never leave a default in force. Keys that start with
+  `_`, and `note`, `comment` and `description`, are comments at any level.
 - **`timezone`** (0.108, #249): the site's IANA zone (or `CAMBER_EDGE_TIMEZONE`). File sources
   get it, so offset-bearing timestamps land on the site's wall clock; `source.timezone` (and
   `source.strict_timezone`) override it for the source.
@@ -350,11 +349,30 @@ INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 alread
 - **`edge status`** (0.108, #245) shows, beside the queue depth, the batches that failed delivery
   (`STUCK`: how many, the oldest one's key, queue time, attempts and last error) and the dead
   letters (`DEAD`, each with its error), `AUTH FAILING since <time>` while the sink answers 401 /
-  403, and `CONFIG WARNING` lines for unknown config keys; `--json` prints it all.
+  403, and the high-water mark (0.109, #266: how many points, the newest and oldest marks, the
+  parts waiting for an ack, or `STALE` / `UNREADABLE`); `--json` prints it all (`high_water`,
+  with every point's mark).
 - **Re-reading the same window while offline** (0.108, #246) → the forwarder reads its whole source
   window on each poll, but the spool skips a batch whose key and content sha256 are already
   pending (or dead-lettered), so an outage of k polls holds one copy of each month, not k. Only
   the month in progress, which changes between polls, queues a new batch.
+- **Re-reading the same window while online** (0.109, #266) → the forwarder keeps a high-water
+  mark per source point in `<spool>/high_water.json`: the last observation the sink acknowledged
+  (its time and value). A poll reads each point only from the start of the month holding its
+  mark, and sends a month only when some point in it has a newer observation or a revised last
+  one; an idle poll sends nothing. The open month is still sent whole, so the landing replaces
+  the stored part with it (§2), and the last observation, the hour that was in progress, is
+  re-read and its revision sent. The mark advances only when the sink acknowledges the part
+  (a part's marks wait in the file until then), survives restarts, and is written atomically
+  under the spool lock. When the file is missing the poll reads the whole window, as before
+  0.109; when it is unreadable, or the facility, source, mapping, `resample` or `timezone`
+  changed since it was written, the poll logs a `WARNING edge.high_water`, reads the whole
+  window and rewrites it. Delivery stays at-least-once: a crash or a lost write only leaves the
+  mark behind, which re-sends data and never skips it. A backfill older than a point's mark
+  month (history rewritten at the source) is not re-read: delete `high_water.json` to send the
+  whole window again. A source adapter whose `load_points` accepts `since=` is handed the
+  earliest month start so it can read less (for a rolling window such as a BACnet trend log,
+  fewer records).
 - **`edge selftest`** (0.108, #242) runs on a temporary spool, deleted afterwards: the configured
   spool, and a backlog waiting in it, is never read, drained or written. It refuses a retired
   spool (exit 1).

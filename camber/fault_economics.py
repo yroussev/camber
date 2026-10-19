@@ -330,7 +330,7 @@ def _est_sat_reset_compliance(m, load, price, P):
         load,
         price,
         P,
-        pct_keys=("pct_below_target", "pct_below_g36_target"),  # 0.108 (#269): the old name too
+        pct_keys=("pct_below_target",),
         with_cooling=False,
         intensity_scale=gap_scale,
     )

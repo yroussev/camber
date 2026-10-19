@@ -200,21 +200,18 @@ class SupplyAirResetCompliance:
         )
         severity = "warn" if (opportunity or not_tracking) else "ok"
         metrics = {
-            # 0.108 (#269): the target is named by its source; the *_g36_target keys are the
-            # pre-0.108 names of the same values, kept as aliases for one release
+            # 0.108 (#269): the target is named by its source; 0.109 (#272) dropped the
+            # pre-0.108 *_g36_target aliases
             "target_source": self.target_kind,
             "pct_below_target": res.pct_below_g36_target,
             "target_median": res.g36_target_median,
             "pct_above_target": res.pct_above_g36_target,
-            "pct_below_g36_target": res.pct_below_g36_target,
             "mean_gap_f": res.mean_gap_f,
             "actual_sat_median": res.actual_sat_median,
-            "g36_target_median": res.g36_target_median,
             "n": res.n,
             "warn_pct_threshold": self.warn_pct,
             "warn_gap_floor_f": self.warn_gap_f,
             "mean_abs_error_f": res.mean_abs_error_f,
-            "pct_above_g36_target": above,
             "mean_above_gap_f": above_gap,
             "n_warm": res.n_warm,
             "track_gap_f": self.track_gap_f,

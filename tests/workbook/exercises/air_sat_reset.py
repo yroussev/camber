@@ -140,7 +140,7 @@ EXERCISE = Exercise(
         Metric(
             "supply_air_reset_compliance",
             "AHU__fault_free",
-            "pct_below_g36_target",
+            "pct_below_target",
             71.0,
             0.5,
             on=REAL,
@@ -194,7 +194,7 @@ EXERCISE = Exercise(
         Metric(
             "supply_air_reset_compliance",
             "DDAHU__fault_free",
-            "pct_below_g36_target",
+            "pct_below_target",
             66.2,
             0.5,
             run="ddahu",

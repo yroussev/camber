@@ -1248,8 +1248,6 @@ def _below_target(f) -> bool:
         return float(v) if _num(v) else default
 
     pct, gap = num("pct_below_target"), num("mean_gap_f")
-    if pct is None:  # 0.108 (#269): a finding from before the rename
-        pct = num("pct_below_g36_target")
     if pct is None or gap is None:
         return False
     return pct >= num("warn_pct_threshold", 0.0) and gap >= num("warn_gap_floor_f", 1e-9)

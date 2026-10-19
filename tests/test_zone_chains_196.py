@@ -247,16 +247,16 @@ def test_compliance_above_its_target_is_not_supply_air_too_cold():
     above = _f(
         "supply_air_reset_compliance",
         "AHU-1",
-        pct_below_g36_target=5.0,
+        pct_below_target=5.0,
         mean_gap_f=-5.1,
         warn_pct_threshold=40.0,
         warn_gap_floor_f=1.0,
-        pct_above_g36_target=60.0,
+        pct_above_target=60.0,
     )
     below = _f(
         "supply_air_reset_compliance",
         "AHU-1",
-        pct_below_g36_target=55.0,
+        pct_below_target=55.0,
         mean_gap_f=3.0,
         warn_pct_threshold=40.0,
         warn_gap_floor_f=1.0,

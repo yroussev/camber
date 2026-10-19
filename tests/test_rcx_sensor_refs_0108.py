@@ -212,15 +212,15 @@ def test_the_reset_target_is_named_by_its_source(kwargs, kind, label):
     )
     m = f.metrics
     assert m["target_source"] == kind and f"vs {label} target" in f.summary
-    assert m["pct_below_target"] == m["pct_below_g36_target"]  # the old key is an alias
-    assert m["target_median"] == m["g36_target_median"]
-    assert m["pct_above_target"] == m["pct_above_g36_target"]
+    # 0.109 (#272): the pre-0.108 *_g36_target aliases are gone
+    assert {"pct_below_g36_target", "g36_target_median", "pct_above_g36_target"}.isdisjoint(m)
     load = EquipmentLoad(heating_capacity_kbtuh=400)
     c = estimate_cost(f, load)
     assert c.basis == f"sat-below-{kind.replace('_', '-')}-target->reheat", c.basis
 
 
-def test_an_old_finding_without_the_new_keys_still_prices():
+def test_an_old_finding_with_only_the_removed_alias_does_not_price():
+    """0.109 (#272): the pre-0.108 ``pct_below_g36_target`` key is no longer read."""
     f = SimpleNamespace(
         rule="supply_air_reset_compliance",
         equip="A",
@@ -228,7 +228,7 @@ def test_an_old_finding_without_the_new_keys_still_prices():
         metrics={"pct_below_g36_target": 60.0, "mean_gap_f": 5.0},
     )
     c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=400))
-    assert c.costed and c.basis == "sat-below-g36-target->reheat"
+    assert not c.costed
 
 
 def test_appendix_b_names_the_airflow_on_a_missing_minimum_decline(oa_store):

@@ -251,7 +251,7 @@ PARAM_DOCS["supply_air_reset_compliance"] = {
     "warn_pct": _P(
         "% of gated samples",
         "CAMBER judgment: screening-grade (docs/TR-RESET.md: provisional, untuned)",
-        "Read pct_below_g36_target on units known to follow the reset and set the warn level "
+        "Read pct_below_target on units known to follow the reset and set the warn level "
         "above their spread; scoring the same units you tuned on is circular.",
         (10.0, 80.0),
         "Also the share of warm-weather samples above target that trips the NOT-tracking warn.",

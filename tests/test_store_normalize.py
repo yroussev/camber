@@ -79,7 +79,9 @@ def _land_edge(root: str, tmp_path, fid: str = "demo-fac-1", layout: str = "lega
             return {"ok": True}
 
     spool = tmp_path / f"spool-{fid}-{layout}"
-    return _forwarder(spool, _Landing(), part_layout=layout).poll_once().keys
+    # a resend of the same batch, as a pre-0.109 forwarder does: no high-water mark (#266)
+    fwd = _forwarder(spool, _Landing(), part_layout=layout, high_water=False)
+    return fwd.poll_once().keys
 
 
 def _files(root: str) -> dict:

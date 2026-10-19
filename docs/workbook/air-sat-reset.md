@@ -85,7 +85,7 @@ Each config runs the supply-air rules only:
 3. **Shape.** For each unit, read `supply_air_reset`: its verdict, `slope_per_F` (°F of supply
    air per °F of outdoor air) and, on the two LBNL units, `sp_range_f` (how far the setpoint
    moved; on the dual-duct unit it is the cold-deck setpoint).
-4. **Target.** Read `supply_air_reset_compliance`: `pct_below_g36_target` and `mean_gap_f`.
+4. **Target.** Read `supply_air_reset_compliance`: `pct_below_target` and `mean_gap_f`.
 5. **Holding the setpoint.** Read `supply_air_control` on the single-duct runs: the share of
    occupied running hours too warm and too cold, and `occupancy_gate` (which hours it judged).
    Then set `"occupancy_gate": "off"` on the rule in `sat.json` (a rule entry becomes
@@ -110,7 +110,7 @@ Each config runs the supply-air rules only:
 
 - **Findings.** `camber run` prints one line per finding; `*_out/findings.json` holds every
   metric: `reset_direction`, `slope_per_F`, `sp_behaviour` and `sp_range_f` for
-  `supply_air_reset`; `pct_below_g36_target`, `mean_gap_f` and `tracks_target` for
+  `supply_air_reset`; `pct_below_target`, `mean_gap_f` and `tracks_target` for
   `supply_air_reset_compliance`; `too_warm_pct`, `too_cold_pct` and `occupancy_gate` for
   `supply_air_control`.
 - **Caveats.** A reset inferred from the supply air alone, with no setpoint trended, carries a
