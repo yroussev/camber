@@ -981,6 +981,18 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   Names, schemas and error codes may change in a minor release while the MCP (0.110) and A2A
   (0.112) adapters settle. `camber.capabilities._schema` (the JSON Schema subset validator) and
   `_policy` are private.
+- **The first read-only capability set and the built-in prompts** (0.110; #278), additive and
+  provisional: the capabilities `coverage`, `sensor_trust`, `rule_run`, `finding_detail`,
+  `rcx_report`, `mv_summary`, `drift`, `dataset_search`, `dataset_entry`, `rule_params` and
+  `check_citations` with their names, input and output schemas, fact-id contexts
+  (`F<n>@<capability>`) and the `finding_id` format (`<rule>@<equip>`, `#<n>` on repeats); the
+  prompts `triage_ahu`, `rcx_executive_summary`, `explain_finding`, `check_savings_claim`,
+  `data_quality_review`, `compare_equipment`, `sensor_trust_review` and `plan_site_visit` with
+  their arguments. Schemas, fact texts and prompt wording may change in a minor release while
+  the MCP and A2A adapters settle. The modules (`_cap_*`, `_common`) are private. **Behaviour
+  change:** the `data` of a `CapabilityError` a handler raises is now path-redacted like its
+  message, and an `invalid_params` refusal by the input schema keeps its JSON pointers
+  (`/facility_id: ...`) instead of redacting them as paths.
 
 ### The read API server: `camber.api.server`
 

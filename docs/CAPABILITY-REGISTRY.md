@@ -36,19 +36,72 @@ store.write_role_frame(
 
 ctx = CallContext(store="store", allowed_facilities=frozenset({"hq"}))
 reg = default_registry()
-print([c.name for c in reg.capabilities()])  # ['facilities', 'points']
+print(len(reg.capabilities()), len(reg.prompts()))  # 13 8
 res = reg.call("points", {"facility_id": "hq"}, ctx)
 print(res.text)  # hq stores 2 matching points on 1 equipment [F1@points].
 ```
 
 ## Built-in capabilities
 
-| Name | Arguments | Returns |
-|---|---|---|
-| `facilities` | none | the allowed facilities: id, name, lifecycle state, time zone, first and last stored sample, point and equipment counts |
-| `points` | `facility_id`; optional `equip`, `role`, `equip_class` | the facility's stored points (equipment, class, role), sorted, and their count |
+Thirteen capabilities, all read-only (0.110, #275 and #278). Each result's `text` cites fact ids
+`F<n>@<capability>` (`rcx_report` also returns the report's own fact index, `K1@summary`,
+`C1@<issue key>`, ...). A facility is named only by `facility_id`, so the allowlist and the
+research-only refusal apply to every one that reads building data. Lists are top-level, worst
+first where that means something, so a row cap keeps the rows that matter.
 
-More capabilities (rule runs, reports, history) follow in later releases (#278).
+| Name | Arguments | Returns | Cost |
+|---|---|---|---|
+| `facilities` | none | the allowed facilities: id, name, lifecycle state, time zone, first and last stored sample, point and equipment counts | cheap |
+| `points` | `facility_id`; optional `equip`, `role`, `equip_class` | the facility's stored points (equipment, class, role), sorted, and their count | cheap |
+| `coverage` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `group_by` (`point` / `equip`), `min_gap_hours` | per point the samples, first and last sample, interval, coverage and gaps; per equipment the mean and the worst point; the longest gaps | one timestamp scan |
+| `sensor_trust` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `view` (`rules` / `report`), `min_trust` | per point the trust score, verdict, flags and whether it is below the caller's trust floor (`ctx.min_trust`, or a higher `min_trust`), least trusted first | reads every trend |
+| `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics), worst first; counts per severity; the rules skipped for missing inputs | long-running |
+| `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default or overridden), its flagged hours as time spans (and per named sub-condition), and which evidence chart applies; no image | one rule |
+| `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n` | the RCx report as data: KPIs, ranked issues (cause, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
+| `mv_summary` | `facility_id`; optional `equips` | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty, triggers, method proposals, and which declined | seconds |
+| `drift` | `facility_id`; optional `baseline` `[start, end]`, `current`, `families`, `equips` | drift findings and per-equipment verdicts against a known-good baseline window (fitted for the call, never saved) or the run config's frozen baselines (read, never written), and the equipment not evaluated | long-running |
+| `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
+| `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
+| `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors, the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
+| `check_citations` | `text`, `facts`; optional `per_sentence` | a verdict per sentence of a drafted text (`supported`, `unknown_citation`, `uncited`, `unsupported_number`) against the facts of earlier results, and the text with the unsupported sentences removed | cheap |
+
+**Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
+caller's run config (`ctx.config`) when it names the facility -- its rules, parameters, mapping,
+topology and report options -- and otherwise a store-backed config with every stored equipment
+class (the facility's weather equipment, if any, as the shared outdoor-air temperature) and
+every built-in rule at its defaults, with a banner saying so. `mv_summary`, and `drift` without
+a `baseline`, need the caller's run config: an M&V project and frozen drift baselines are
+declared there. Every run goes through `run_config_for`, so it is no-persist and gets the trust
+floor. A configured OAT reference that fetches weather over the network is left out of
+`rcx_report` (a CSV reference is kept), and no prose is generated.
+
+**Finding ids.** A `rule_run` finding is `<rule>@<equip>` (`economizer_high_limit@AHU-1`), with
+`#2`, `#3` ... when a rule gives one equipment more than one finding. `finding_detail` re-runs that
+one rule with the arguments given, so pass the same `params`, `equips` and window as the
+`rule_run` call. A drift finding id carries its family (`ahu:coil_valve_drift@AHU-1`).
+
+**Catalog metadata is public.** `dataset_search` and `dataset_entry` list research-only entries
+too, each with its licence, `access` and a notice (and a banner) that this server refuses any
+facility ingested from it. Nothing is fetched or ingested: that is `camber datasets`, run by a
+person.
+
+## Built-in prompts
+
+Each prompt renders one user message naming the capabilities to call and in what order, asks
+for every sentence to end with the fact ids it rests on, forbids a number no cited fact carries,
+says a declined check or a refused call is not a pass, and ends by calling `check_citations` on
+the draft with the facts the calls returned. Argument values are reduced to one short line.
+
+| Name | Arguments | Calls |
+|---|---|---|
+| `triage_ahu` | `facility_id`, `equip` | `points`, `sensor_trust`, `rule_run`, `finding_detail` (the worst findings), `check_citations` |
+| `rcx_executive_summary` | `facility_id` | `rcx_report`, `check_citations` |
+| `explain_finding` | `facility_id`, `finding_id` | `finding_detail`, `rule_params`, `sensor_trust`, `check_citations` |
+| `check_savings_claim` | `facility_id`; optional `claim` | `mv_summary`, `check_citations` |
+| `data_quality_review` | `facility_id` | `coverage` (by equipment, then the worst), `sensor_trust`, `check_citations` |
+| `compare_equipment` | `facility_id`, `equips` (two or more, comma-separated) | `coverage`, `sensor_trust`, `rule_run`, `check_citations` |
+| `sensor_trust_review` | `facility_id` | `sensor_trust` (both views), `rule_run`, `check_citations` |
+| `plan_site_visit` | `facility_id` | `rcx_report`, `sensor_trust`, `finding_detail`, `check_citations` |
 
 ## The policy every call follows
 
@@ -80,8 +133,8 @@ More capabilities (rule runs, reports, history) follow in later releases (#278).
 7. **Citations.** `text` is checked against `facts` with `camber.agent.verify.check` (strict): a
    sentence that cites an unknown id or states a figure no cited fact carries is removed, with a
    banner.
-8. **No leaks.** Any other exception becomes `internal`, and no error message holds an absolute
-   local path.
+8. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
+   of an error a handler raises -- holds an absolute local path.
 
 **The timeout cannot stop a handler.** The handler runs in a worker thread; Python cannot kill a
 thread, so on a timeout the call returns `timeout` at once while the handler finishes in the

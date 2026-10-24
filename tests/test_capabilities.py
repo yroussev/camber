@@ -193,10 +193,11 @@ def test_registration_ordering_and_duplicates():
 
 def test_default_registry_is_deterministic():
     names = [c.name for c in default_registry().capabilities()]
-    assert names == ["facilities", "points"]
+    assert {"facilities", "points"} <= set(names) and names == sorted(names)
     assert names == [c.name for c in default_registry().capabilities()]
     for cap in default_registry().capabilities():
-        assert cap.description and cap.input_schema["type"] == "object" and not cap.long_running
+        assert cap.description and cap.input_schema["type"] == "object"
+    # the full set (#278) is pinned in tests/test_capabilities_278.py
 
 
 def test_call_context_validation(store):

@@ -137,6 +137,11 @@ class CapabilityError(Exception):
         return f"{self.code}: {self.message}"
 
 
+class _SchemaError(CapabilityError):
+    """An ``invalid_params`` refusal of the arguments by the input schema: its JSON pointers
+    (``/facility_id: ...``) are not paths, so it is not redacted."""
+
+
 @dataclass(frozen=True)
 class Capability:
     """One read-only operation."""
@@ -275,8 +280,11 @@ class Registry:
         ]
         try:
             return self._call(name, arguments, ctx)
+        except _SchemaError as e:  # built from the schema and the caller's own arguments
+            raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
-            raise CapabilityError(e.code, redact(e.message, *secrets), data=e.data) from None
+            data = _redact_data(e.data, secrets)
+            raise CapabilityError(e.code, redact(e.message, *secrets), data=data) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
             msg = redact(f"{type(e).__name__}: {e}", *secrets)
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
@@ -293,7 +301,7 @@ class Registry:
             raise CapabilityError("invalid_params", "arguments must be an object")
         errors = validate(arguments, cap.input_schema)
         if errors:
-            raise CapabilityError(
+            raise _SchemaError(
                 "invalid_params", "; ".join(errors[:5]), data={"errors": errors[:50]}
             )
         check_arguments(ctx, arguments)
@@ -358,6 +366,22 @@ class Registry:
                 raise RuntimeError(f"the handler raised {type(err).__name__}")
             raise err
         return box["result"]
+
+
+def _redact_data(data, secrets: list, depth: int = 0):
+    """``data`` (an error's ``data``) with every string in it path-redacted like the message."""
+    if depth > 20:
+        return None
+    if isinstance(data, str):
+        return redact(data, *secrets)
+    if isinstance(data, dict):
+        return {
+            redact(k, *secrets) if isinstance(k, str) else k: _redact_data(v, secrets, depth + 1)
+            for k, v in data.items()
+        }
+    if isinstance(data, (list, tuple)):
+        return [_redact_data(v, secrets, depth + 1) for v in data]
+    return data
 
 
 def _grounded(text: str, facts: list) -> tuple[str, list]:

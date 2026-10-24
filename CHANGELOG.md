@@ -37,6 +37,30 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   the CLI: `camber run --no-persist` and `camber report --no-persist` (the `--out` file is still
   written). A run inside the private `camber._nopersist.no_persist()` scope is always no-persist;
   the capability registry uses it.
+- **The first read-only capabilities and prompts (#278), provisional.** `default_registry()` now
+  carries 13 capabilities for the MCP server: `coverage` (samples, interval, coverage and gaps
+  per point and equipment), `sensor_trust` (trust scores and flags per point against the
+  caller's trust floor), `rule_run` (the FDD findings of a facility, worst first, through the
+  caller's run config or every built-in rule), `finding_detail` (one finding's metrics, the
+  parameters it ran with, its flagged hours as time spans and which evidence chart applies),
+  `rcx_report` (the RCx report as data with its fact index, no file), `mv_summary` (the M&V
+  results of a configured project), `drift` (against a known-good baseline window or the
+  configured frozen baselines), `dataset_search` and `dataset_entry` (catalog metadata;
+  research-only entries are listed with their licence and a notice that their data is refused),
+  `rule_params` (the rules and their tunable parameters) and `check_citations` (per-sentence
+  verdicts of a drafted text against the facts of earlier results), besides `facilities` and
+  `points`. Every result cites `F<n>@<capability>` fact ids, and nothing is written: runs are
+  no-persist and a configured network weather fetch is left out of the RCx report. Eight
+  prompts package workflows -- `triage_ahu`, `rcx_executive_summary`, `explain_finding`,
+  `check_savings_claim`, `data_quality_review`, `compare_equipment`, `sensor_trust_review` and
+  `plan_site_visit` -- each naming the capabilities to call, asking for cited fact ids and
+  ending with `check_citations` on the draft. See docs/CAPABILITY-REGISTRY.md.
+
+### Fixed
+- **Capability errors keep no local path in their `data` either (#278).** `Registry.call`
+  path-redacted a handler's `CapabilityError` message but passed its `data` through; it is now
+  redacted the same way. An `invalid_params` refusal by the input schema no longer has its JSON
+  pointers (`/facility_id: expected string`) mistaken for paths and redacted.
 
 ## [0.109.1] — 2026-10-24
 
