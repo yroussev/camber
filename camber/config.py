@@ -286,6 +286,9 @@ class RunResult:
     # :class:`camber.rules.base.RuleSkip` records (missing inputs, no data, no verdict). Kept out of
     # ``findings`` (and so out of findings.json) on purpose; the RCx report lists them.
     rules_skipped: list = field(default_factory=list)
+    # -- 0.110 (#276): False for a no-persist run (``persist=False``): its ``faults`` fold was
+    # computed in memory and not saved, and no report file or manifest entry was written
+    persisted: bool = True
 
 
 def _path(base: str, p: str) -> str:
@@ -420,8 +423,11 @@ def _state_path(ctx: _FacilityCtx, fname: str):
 
 
 def _record_outputs(ctx, paths: dict) -> None:
-    """List files a run wrote for its facility in the workspace manifest (no-op outside one)."""
-    if ctx is None or not (ctx.workspace and ctx.facility_id):
+    """List files a run wrote for its facility in the workspace manifest (no-op outside one, and
+    inside a no-persist scope, 0.110, #276)."""
+    from ._nopersist import persisting
+
+    if ctx is None or not (ctx.workspace and ctx.facility_id) or not persisting():
         return
     why = ctx.write_blockers()
     if why:  # 0.108 (#252): the artifact is written, but the frozen facility state is not
@@ -2517,7 +2523,7 @@ def _param_basis(name: str, params: dict, basis) -> dict | None:
     return {k: {"value": params.get(k, defaults.get(k)), "basis": str(v)} for k, v in basis.items()}
 
 
-def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
+def run_config(config: dict, *, base_dir: str = ".", persist: bool = True) -> RunResult:
     """Execute a config dict: discover equipment, run the named rules, build a report.
 
     Paths in the config resolve against ``base_dir``. Unknown rule names raise
@@ -2527,8 +2533,27 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     state) is refused up front (:class:`~camber.portfolio.LifecycleError`, nothing written) for
     an archived or purged facility (held or not); such a facility's report outputs are written
     but not recorded in its manifest (a warning says so) (0.108, #252).
+
+    ``persist=False`` (0.110, #276) computes the same findings and report but writes nothing: the
+    ``faults`` fold runs in memory against the stored history and is not saved (``faults`` still
+    says what it would have recorded, with ``"persisted": False``), the config's
+    ``report.out_text`` / ``out_html`` files are not written, nothing is recorded in a workspace
+    manifest, the store's catalog cache is not written back, and an M&V billing entry fetches no
+    weather. A run inside :func:`camber._nopersist.no_persist` (the capability registry's) is
+    always no-persist. ``RunResult.persisted`` says which it was.
     """
-    if config.get("faults") is not None:
+    from ._nopersist import no_persist, persisting
+
+    persist = bool(persist) and persisting()
+    if not persist:
+        with no_persist():
+            return _run_config(config, base_dir, persist=False)
+    return _run_config(config, base_dir, persist=True)
+
+
+def _run_config(config: dict, base_dir: str, *, persist: bool) -> RunResult:
+    """:func:`run_config`'s body; ``persist`` is already resolved."""
+    if persist and config.get("faults") is not None:
         with warnings.catch_warnings():  # _prepare repeats the context, with its warnings
             warnings.simplefilter("ignore")
             early = _facility_context(config, base_dir)
@@ -2676,7 +2701,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     faults = None
     if config.get("faults") is not None:
-        faults = _fold_faults(config, base_dir, prep, findings)
+        faults = _fold_faults(config, base_dir, prep, findings, persist=persist)
 
     report = None
     outputs: dict = {}
@@ -2697,11 +2722,11 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             if sf is not None:
                 findings.append(sf)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
-        if rep.get("out_text"):
+        if rep.get("out_text") and persist:
             with open(_path(base_dir, rep["out_text"]), "w", encoding="utf-8") as fh:
                 fh.write(report.to_text())
             outputs[_path(base_dir, rep["out_text"])] = "report"
-        if rep.get("out_html"):
+        if rep.get("out_html") and persist:
             # optional advisory action plan (findings + $ + recommendation) in the HTML report
             price = None
             if rep.get("price"):
@@ -2738,6 +2763,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         topology=topology,
         topology_source=topology_source,
         rules_skipped=skipped,
+        persisted=persist,
     )
 
 
@@ -2835,8 +2861,13 @@ def _frame_resolver(prep: _Prepared) -> Callable:
     return frame_for
 
 
-def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -> dict:
-    """Fold a run's findings into the config's fault lifecycle store and save it."""
+def _fold_faults(
+    config: dict, base_dir: str, prep: _Prepared, findings: list, *, persist: bool = True
+) -> dict:
+    """Fold a run's findings into the config's fault lifecycle store and save it.
+
+    ``persist=False`` (0.110, #276) folds into an in-memory copy of the stored history and saves
+    nothing (no lock, no manifest entry); the result is what a persisting fold would report."""
     import contextlib
 
     from .faultlifecycle import FaultLifecycle
@@ -2851,10 +2882,11 @@ def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -
             "faults.store is required outside a portfolio workspace (inside one it defaults to "
             "state/<facility_id>/faults.json)"
         )
-    ctx.require_writable("folding the run's faults")
+    if persist:
+        ctx.require_writable("folding the run's faults")
     run_id = str(spec.get("run_id") or _dt.datetime.now(_dt.timezone.utc).isoformat("seconds"))
     lock: contextlib.AbstractContextManager = contextlib.nullcontext()
-    if ctx.workspace:
+    if ctx.workspace and persist:
         from .portfolio._lock import portfolio_lock
 
         lock = portfolio_lock(ctx.workspace, timeout=30.0)
@@ -2868,12 +2900,19 @@ def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -
             site=prep.site,
             auto_resolve_absent=bool(spec.get("auto_resolve_absent", False)),
         )
-        lc.save()
-        _record_outputs(ctx, {path: "faults"})
+        if persist:
+            lc.save()
+            _record_outputs(ctx, {path: "faults"})
     from ._statefile import save_path
 
     where = save_path(path, facility_id=ctx.bound)
-    return {**out, "store": where, "run_id": run_id, "legacy_adopted": lc.legacy_adopted}
+    return {
+        **out,
+        "store": where,
+        "run_id": run_id,
+        "legacy_adopted": lc.legacy_adopted,
+        "persisted": persist,
+    }
 
 
 def data_sources(config: dict, *, base_dir: str = ".") -> list:
@@ -3072,9 +3111,13 @@ def load_config(path: str) -> dict:
     return _check_config_shape(read_config_file(path), where=os.fspath(path))
 
 
-def run_config_file(path: str) -> RunResult:
-    """Load and run a config file; paths resolve relative to the file's directory."""
-    return run_config(load_config(path), base_dir=os.path.dirname(os.path.abspath(path)))
+def run_config_file(path: str, *, persist: bool = True) -> RunResult:
+    """Load and run a config file; paths resolve relative to the file's directory.
+
+    ``persist=False`` writes nothing (see :func:`run_config`, 0.110, #276)."""
+    return run_config(
+        load_config(path), base_dir=os.path.dirname(os.path.abspath(path)), persist=persist
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

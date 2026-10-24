@@ -192,8 +192,11 @@ def billing_oat(entry: dict, prep, *, base_dir: str = ".", window=None):
         s = load_point(_path(base_dir, spec["file"]), "oat", timezone=tz)
         return s, f"file {os.path.basename(str(spec['file']))}"
     if spec.get("fetch"):
+        from ._nopersist import persisting
         from .weather_source import oat_reference_auto
 
+        if not persisting():  # 0.110 (#276): no network, no weather cache, no audit line
+            return None, "no outdoor temperature: a no-persist run fetches no weather (oat.file)"
         if window is None:
             return None, "no bill dates to fetch weather for"
         cache = spec.get("cache_dir")

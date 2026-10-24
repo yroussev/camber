@@ -14,6 +14,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Added
+- **A no-persist config run (#276).** `run_config(..., persist=False)` and
+  `run_config_file(..., persist=False)` compute the same findings, drift and report but write
+  nothing: the `faults` fold runs against an in-memory copy of the stored history and is not saved
+  (`run.faults["persisted"]` is `False`), the config's `report.out_text` / `out_html` files are not
+  written, nothing is listed in a workspace manifest, the store does not write back its catalog
+  cache, and an M&V billing entry fetches no weather. `RunResult.persisted` says which it was. On
+  the CLI: `camber run --no-persist` and `camber report --no-persist` (the `--out` file is still
+  written). A run inside the private `camber._nopersist.no_persist()` scope is always no-persist;
+  the capability registry uses it.
+
 ## [0.109.1] — 2026-10-24
 
 **0.109.1: a store fix (#274).** An append now stages its Parquet parts and renames each into place, so a process reading the store while another writes to it can no longer open a half-written part.

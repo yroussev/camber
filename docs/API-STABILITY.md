@@ -968,6 +968,11 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   refused with a `ValueError` (deprecated in 0.108 with a one-minor window). Removed:
   `EdgeConfig.warnings` and the `config_warnings` key of `edge status --json`, which only carried
   the unknown keys.
+- **No-persist config runs** (0.110; #276), additive and provisional: the `persist=` keyword of
+  `camber.config.run_config` and `run_config_file`, the `RunResult.persisted` field, the
+  `"persisted"` key of `RunResult.faults`, and the CLI flag `--no-persist` of `camber run` and
+  `camber report`. `camber._nopersist` is private. **Behaviour change:** none for a persisting run
+  (the default).
 
 ### The read API server: `camber.api.server`
 

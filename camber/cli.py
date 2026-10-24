@@ -95,7 +95,7 @@ def _print_findings(findings) -> None:
 def _cmd_run(args) -> int:
     from .config import run_config_file
 
-    res = run_config_file(args.config)
+    res = run_config_file(args.config, persist=not getattr(args, "no_persist", False))
     print(f"Site '{res.site}': {res.equipment} equipment, {len(res.rules_run)} rules run")
     _print_findings(res.findings)
     if args.out:
@@ -114,6 +114,7 @@ def _cmd_run(args) -> int:
         print(
             f"faults: {len(f['new'])} new, {len(f['ongoing'])} ongoing, "
             f"{len(f['reopened'])} reopened, {len(f['absent'])} absent -> {f['store']}"
+            + ("" if f.get("persisted", True) else " (not saved: --no-persist)")
         )
         # ---- 0.96 (#76): site-keyed faults whose site can't be told are never auto-resolved
         if f.get("unscoped"):
@@ -128,7 +129,7 @@ def _record(res, paths: dict) -> None:
     """List a command's output files in the facility's workspace manifest (no-op outside one)."""
     from .config import _FacilityCtx, _record_outputs
 
-    if getattr(res, "workspace", None):
+    if getattr(res, "workspace", None) and getattr(res, "persisted", True):
         _record_outputs(_FacilityCtx(res.facility_id, res.workspace, res.site), paths)
 
 
@@ -159,7 +160,7 @@ def _cmd_report(args) -> int:
             file=sys.stderr,
         )
         return 2
-    res = run_config(cfg, base_dir=base)
+    res = run_config(cfg, base_dir=base, persist=not getattr(args, "no_persist", False))
     if layout == "audit":
         html = _audit_html(res, cfg, base)
     else:
@@ -236,7 +237,7 @@ def _report_rcx(args, cfg, base) -> int:
     notes_path = args.notes or rcx_cfg.get("notes")
     if notes_path and not os.path.isabs(notes_path) and not args.notes:
         notes_path = os.path.join(base, notes_path)
-    res = run_config(cfg, base_dir=base)
+    res = run_config(cfg, base_dir=base, persist=not getattr(args, "no_persist", False))
     rep = build_rcx_report(
         res, options=options, notes=load_notes(notes_path), client=_client_from_args(args)
     )
@@ -3056,6 +3057,13 @@ def _build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="run a config and print/write findings")
     pr.add_argument("config", help="a .json config, or .yaml / .yml (the [yaml] extra)")
     pr.add_argument("--out", help="output dir for findings.json")
+    pr.add_argument(
+        "--no-persist",
+        dest="no_persist",
+        action="store_true",
+        help="record no fault history, report file or workspace manifest entry (--out is still "
+        "written)",
+    )
     pr.set_defaults(func=_cmd_run)
 
     prep = sub.add_parser("report", help="run a config and write an HTML report")
@@ -3079,6 +3087,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--notes-template", dest="notes_template", help="rcx: write an empty notes file here"
     )
     prep.add_argument("--paper", choices=("letter", "a4"), help="rcx: printed page size")
+    prep.add_argument(
+        "--no-persist",
+        dest="no_persist",
+        action="store_true",
+        help="record no fault history or workspace manifest entry (--out is still written)",
+    )
     prep.add_argument(
         "--lifecycle",
         action="store_true",

@@ -116,6 +116,22 @@ older than its **resolve** SLA is `"resolve"`-overdue. SLAs are per severity and
 | `overdue` | `ack_sla_hours` / `resolve_sla_hours` | `{}` | per-severity SLA hours |
 | `resolve`/`suppress` | `note` | `None` | append a note when changing state |
 
+## No-persist runs
+
+A config run with `persist=False` (0.110, #276) folds its findings into an in-memory copy of the
+stored history and saves nothing: `run.faults` says what a persisting run would have recorded,
+with `"persisted": False`, and the fault store, the facility's workspace state and its manifest
+are left byte-identical (`camber run --no-persist` on the CLI). The capability registry makes
+every run this way, so a question from an assistant never changes a facility's fault history.
+
+<!-- fence: skip (fragment) -->
+```python
+from camber.config import load_config, run_config
+
+run = run_config(load_config("site.json"), base_dir=".", persist=False)
+assert run.persisted is False and run.faults["persisted"] is False
+```
+
 ## Persistence
 
 State is a single JSON document written atomically (`save`) and reloaded with `load` — no

@@ -509,10 +509,12 @@ class ParquetStore:
         when known, so :meth:`equipment` needs no scan either. With ``check``, the catalog is
         written only if ``gen`` is still current just before the rename; a write that lands in the
         window after that check carries the old ``gen`` and is never served. Best effort: returns
-        False (nothing cached) when skipped or the store is not writable -- the caller already
-        holds its result.
+        False (nothing cached) when skipped, inside a no-persist scope (0.110, #276) or when the
+        store is not writable -- the caller already holds its result.
         """
-        if gen is _GEN_UNKNOWN:
+        from .._nopersist import persisting
+
+        if gen is _GEN_UNKNOWN or not persisting():  # 0.110 (#276): a no-persist reader
             return False
         rows = sorted({(k.facility_id, k.equip, k.role) for k in keys})
         payload: dict = {"points": [{"facility_id": s, "equip": e, "role": r} for s, e, r in rows]}

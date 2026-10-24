@@ -4,9 +4,10 @@ The `camber` console script (installed with the package; also `python -m camber.
 analysis pipeline and the grounded agent as subcommands.
 
 ```
-camber run     <config.json> [--out DIR]        # run a config, print/write findings
+camber run     <config.json> [--out DIR] [--no-persist]   # run a config, print/write findings
 camber report  <config.json> --out site.html    # run + write an HTML audit report
                [--layout audit|rcx|<plugin>]    # rcx: the printable retro-commissioning layout
+               [--no-persist]                   # record no fault history or manifest entry
 camber explain <config.json> [--llm-cmd CMD] [--no-strict]   # grounded explanation of findings
 camber ask "<question>" --config <config.json> [--llm-cmd CMD] [--no-strict]   # grounded Q&A
 camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] [--no-strict]   # rollup + triage
@@ -164,6 +165,13 @@ A rule's own `elevation_ft` or `pressure_psia` param wins over it, and a measure
 ignores it. Without it a derived wet-bulb is caveated as sea-level. Set it before freezing a
 drift baseline: a baseline frozen at one elevation and scored at another shifts by the wet-bulb
 difference (about 2.6 °F at 1,600 m in hot, dry air).
+
+`--no-persist` (0.110, #276) on `camber run` and `camber report` computes the same findings and
+report but records nothing: the config's `faults` fold is computed in memory and not saved (the
+summary line ends "not saved: --no-persist"), the config's `report.out_text` / `out_html` files
+are not written, nothing is listed in a workspace manifest, and an M&V billing entry fetches no
+weather. The `--out` file you name is still written. In the API it is `run_config(...,
+persist=False)`; see [Fault lifecycle](FAULT-LIFECYCLE.md#no-persist-runs).
 
 ## Report layouts
 
