@@ -17,6 +17,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Added
+- **The capability registry, `camber.capabilities` (#275), provisional.** One read-only core the
+  MCP server and, later, the A2A server expose as thin adapters. A `Capability` has JSON Schema
+  2020-12 input and output schemas and a handler returning a `CapabilityResult` (`data`, a `text`
+  citing `[F1@ctx]` fact ids, `facts`, `banners`, `truncated`). `Registry.call` enforces the
+  policy in one place: input validation, a required per-caller facility allowlist
+  (`not_allowed`), research-only (NC/ND) data refused with no override (`refused_licence`),
+  no-persist runs, a `min_trust` floor of 0.5, caps on rows (truncated with a banner), bytes
+  (`too_large`) and run time (`timeout`), citations checked with `camber.agent.verify`, and any
+  other failure reported as `internal` with no local path in the message. `default_registry()`
+  carries two capabilities, `facilities` and `points`; adding one is a single `_cap_<name>.py`
+  module. See docs/CAPABILITY-REGISTRY.md.
 - **A no-persist config run (#276).** `run_config(..., persist=False)` and
   `run_config_file(..., persist=False)` compute the same findings, drift and report but write
   nothing: the `faults` fold runs against an in-memory copy of the stored history and is not saved

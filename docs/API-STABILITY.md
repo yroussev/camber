@@ -973,6 +973,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `"persisted"` key of `RunResult.faults`, and the CLI flag `--no-persist` of `camber run` and
   `camber report`. `camber._nopersist` is private. **Behaviour change:** none for a persisting run
   (the default).
+- **The capability registry** (0.110; #275), new and provisional: the package
+  `camber.capabilities` (`Caps`, `CallContext`, `CapabilityResult`, `CapabilityError`,
+  `ERROR_CODES`, `Capability`, `PromptArg`, `Prompt`, `Registry`, `default_registry`,
+  `research_only`, `run_config_for`), the error codes, the built-in capabilities `facilities` and
+  `points` with their input and output schemas, and the `_cap_<name>.py` module convention.
+  Names, schemas and error codes may change in a minor release while the MCP (0.110) and A2A
+  (0.112) adapters settle. `camber.capabilities._schema` (the JSON Schema subset validator) and
+  `_policy` are private.
 
 ### The read API server: `camber.api.server`
 

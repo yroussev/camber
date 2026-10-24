@@ -121,8 +121,9 @@ older than its **resolve** SLA is `"resolve"`-overdue. SLAs are per severity and
 A config run with `persist=False` (0.110, #276) folds its findings into an in-memory copy of the
 stored history and saves nothing: `run.faults` says what a persisting run would have recorded,
 with `"persisted": False`, and the fault store, the facility's workspace state and its manifest
-are left byte-identical (`camber run --no-persist` on the CLI). The capability registry makes
-every run this way, so a question from an assistant never changes a facility's fault history.
+are left byte-identical (`camber run --no-persist` on the CLI). The
+[capability registry](CAPABILITY-REGISTRY.md) makes every run this way, so a question from an
+assistant never changes a facility's fault history.
 
 <!-- fence: skip (fragment) -->
 ```python

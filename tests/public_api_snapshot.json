@@ -138,6 +138,20 @@
     "register_calendar",
     "registered"
   ],
+  "camber.capabilities": [
+    "CallContext",
+    "Capability",
+    "CapabilityError",
+    "CapabilityResult",
+    "Caps",
+    "ERROR_CODES",
+    "Prompt",
+    "PromptArg",
+    "Registry",
+    "default_registry",
+    "research_only",
+    "run_config_for"
+  ],
   "camber.carbon": [
     "DEFAULT_FACTORS",
     "Emissions",
