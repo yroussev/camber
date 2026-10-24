@@ -1,0 +1,553 @@
+[
+  {
+    "note": "ping before initialize",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "ping"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {}
+    }
+  },
+  {
+    "note": "a request before initialize",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/list"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: _meta is missing io.modelcontextprotocol/protocolVersion (2026-07-28), and no initialize handshake was made (2025-11-25)"
+      }
+    }
+  },
+  {
+    "note": "initialize",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "roots": {
+            "listChanged": true
+          }
+        },
+        "clientInfo": {
+          "name": "legacy-client",
+          "version": "0.9"
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {
+          "tools": {},
+          "prompts": {}
+        },
+        "serverInfo": {
+          "name": "camber",
+          "title": "CAMBER",
+          "version": "TEST"
+        },
+        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Lines starting with NOTICE are licence, trust or truncation notices: always show them to the user."
+      }
+    }
+  },
+  {
+    "note": "initialized",
+    "send": {
+      "jsonrpc": "2.0",
+      "method": "notifications/initialized"
+    },
+    "raw": false,
+    "expect": null
+  },
+  {
+    "note": "ping",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "ping"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "result": {}
+    }
+  },
+  {
+    "note": "tools/list: no resultType, no cache hints; the array-output tool has no outputSchema",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "method": "tools/list"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "result": {
+        "tools": [
+          {
+            "name": "boom",
+            "title": "Boom",
+            "description": "Always fails inside.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Boom",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "facilities",
+            "title": "Facilities",
+            "description": "List the facilities this server may read.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "properties": {
+                "facilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "facilities"
+              ]
+            },
+            "annotations": {
+              "title": "Facilities",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "ids",
+            "title": "Ids",
+            "description": "A result that is a JSON array.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Ids",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "noisy",
+            "title": "Noisy",
+            "description": "Writes to stdout while it runs.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Noisy",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "rows",
+            "title": "Rows",
+            "description": "Up to three rows of one facility.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "facility": {
+                  "type": "string"
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "facility"
+              ],
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Rows",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "note": "tools/call success",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "tools/call",
+      "params": {
+        "name": "facilities",
+        "arguments": {}
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "3 facilities are visible [F1@ctx]."
+          },
+          {
+            "type": "text",
+            "text": "{\"facilities\": [\"annex\", \"empty\", \"hq\"]}"
+          }
+        ],
+        "isError": false,
+        "structuredContent": {
+          "facilities": [
+            "annex",
+            "empty",
+            "hq"
+          ]
+        },
+        "_meta": {
+          "camber/facts": [
+            {
+              "id": "F1@ctx",
+              "kind": "count",
+              "value": 3
+            }
+          ],
+          "camber/banners": [],
+          "camber/truncated": false
+        }
+      }
+    }
+  },
+  {
+    "note": "domain error",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "elsewhere"
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "not_allowed: facility 'elsewhere' is not in this server's allowlist"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "not_allowed"
+          }
+        }
+      }
+    }
+  },
+  {
+    "note": "unknown tool",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "method": "tools/call",
+      "params": {
+        "name": "nope",
+        "arguments": {}
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "error": {
+        "code": -32602,
+        "message": "Unknown tool: nope"
+      }
+    }
+  },
+  {
+    "note": "invalid params",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": "hq"
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: \"arguments\" must be an object"
+      }
+    }
+  },
+  {
+    "note": "a non-object result: no structuredContent in 2025-11-25",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "method": "tools/call",
+      "params": {
+        "name": "ids"
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "two ids"
+          },
+          {
+            "type": "text",
+            "text": "[\"a\", \"b\"]"
+          }
+        ],
+        "isError": false,
+        "_meta": {
+          "camber/facts": [],
+          "camber/banners": [],
+          "camber/truncated": false
+        }
+      }
+    }
+  },
+  {
+    "note": "prompts/list",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "method": "prompts/list"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "result": {
+        "prompts": [
+          {
+            "name": "triage",
+            "title": "Triage a facility",
+            "description": "Walk through one facility's open findings.",
+            "arguments": [
+              {
+                "name": "facility",
+                "description": "facility id",
+                "required": true
+              },
+              {
+                "name": "focus",
+                "description": "what to look at first",
+                "required": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "note": "prompts/get",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage",
+        "arguments": {
+          "facility": "hq",
+          "focus": "cooling"
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "result": {
+        "description": "Walk through one facility's open findings.",
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "Triage facility hq, focusing on cooling."
+            }
+          },
+          {
+            "role": "assistant",
+            "content": {
+              "type": "text",
+              "text": "I will start with the facilities tool."
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "note": "server/discover is not a 2025-11-25 method",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 13,
+      "method": "server/discover"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 13,
+      "error": {
+        "code": -32601,
+        "message": "Method not found: server/discover"
+      }
+    }
+  },
+  {
+    "note": "a modern request in the same process is served statelessly",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 14,
+      "method": "tools/call",
+      "params": {
+        "name": "facilities",
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 14,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "3 facilities are visible [F1@ctx]."
+          },
+          {
+            "type": "text",
+            "text": "{\"facilities\": [\"annex\", \"empty\", \"hq\"]}"
+          }
+        ],
+        "isError": false,
+        "structuredContent": {
+          "facilities": [
+            "annex",
+            "empty",
+            "hq"
+          ]
+        },
+        "_meta": {
+          "camber/facts": [
+            {
+              "id": "F1@ctx",
+              "kind": "count",
+              "value": 3
+            }
+          ],
+          "camber/banners": [],
+          "camber/truncated": false,
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "an unknown method",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 15,
+      "method": "logging/setLevel",
+      "params": {
+        "level": "info"
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 15,
+      "error": {
+        "code": -32601,
+        "message": "Method not found: logging/setLevel"
+      }
+    }
+  }
+]
