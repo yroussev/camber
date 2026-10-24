@@ -14,7 +14,9 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [Unreleased]
+## [0.109.1] — 2026-10-24
+
+**0.109.1: a store fix (#274).** An append now stages its Parquet parts and renames each into place, so a process reading the store while another writes to it can no longer open a half-written part.
 
 ### Fixed
 - **A concurrent reader can no longer open a half-written Parquet part (#274).** An append wrote

@@ -490,6 +490,7 @@ Version numbers are given only where a release is already planned.
     - [x] #271 unknown edge-config keys refused;
     - [x] #272 the `*_g36_target` metric aliases removed;
     - [x] #266 a persisted per-point high-water mark, so a forwarder poll sends only what is new.
+  - **0.109.1 — store fix** (released 2026-10-24). Closes #274: a concurrent reader never opens a half-written part.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
