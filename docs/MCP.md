@@ -120,6 +120,7 @@ truncation flag in `_meta["camber/truncated"]`.
 
 ## From Python
 
+<!-- fence: skip (blocks on stdin; needs a store) -->
 ```python
 from camber.capabilities import default_registry
 from camber.mcp import McpServer, build_context, serve_stdio
