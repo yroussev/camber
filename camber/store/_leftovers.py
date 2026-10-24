@@ -41,7 +41,8 @@ def staging_leftovers(root: str) -> list:
     interrupted ``_swap-facility_id=*`` replace), ``"trash"`` (an interrupted partition delete,
     ``_trash-facility_id=*``), ``"aside"`` (a partition a pre-0.107 swap
     moved to ``_staging/<fid>.old-<pid>``) or ``"scratch"`` (an ingest's ``_staging/ingest-*``
-    working directory, or an append's ``_staging/append-*`` one). ``alive`` says whether the process that made it may still be running.
+    working directory, or an append's ``_staging/append-*`` one). ``alive`` says whether the
+    process that made it may still be running.
     """
     out: list = []
     if not os.path.isdir(root):
