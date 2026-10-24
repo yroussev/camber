@@ -21,6 +21,7 @@ camber bacnet-discover [--config bacnet.yml] [--device ADDR]... [--out inventory
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
+camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F] [--min-trust T]   # MCP server (stdio)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
@@ -695,6 +696,27 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   (exit 2, 0.107).
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
+
+## MCP server: `camber mcp` (provisional, 0.110)
+
+```
+camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-active)
+           [--config PATH] [--min-trust 0.5]
+```
+
+A [Model Context Protocol](MCP.md) server on stdin / stdout, for AI clients such as Claude
+Desktop and the `claude` command line: CAMBER's read-only capabilities as tools and prompts. The
+client starts it; you do not run it by hand.
+
+- `--store` is the store the tools read (a portfolio workspace root works too).
+- `--allow` (repeatable) names the facilities the tools may read; `--allow-all-active` allows the
+  store's active facilities at startup. One of the two is required; every other facility is
+  refused, and so is research-only data.
+- `--config` is a run or report config for the tools that need one; `--min-trust` (0 to 1,
+  default 0.5) is the trust floor.
+- Logs go to stderr; stdout carries protocol messages only. It exits when stdin closes.
+
+See [MCP.md](MCP.md) for client setup and the protocol details.
 
 ## Store and cache locks
 

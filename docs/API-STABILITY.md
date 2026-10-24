@@ -994,6 +994,16 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   message, and an `invalid_params` refusal by the input schema keeps its JSON pointers
   (`/facility_id: ...`) instead of redacting them as paths.
 
+- **`camber.mcp`** (added in 0.110, provisional, #277) -- the Model Context Protocol server
+  behind `camber mcp`: `McpServer` (`handle`, `handle_line`), `serve`, `serve_stdio`,
+  `build_context`, `launch`, `LaunchError` and the constants `SUPPORTED_VERSIONS`,
+  `MODERN_VERSIONS`, `LEGACY_VERSIONS`, `TOOL_ERROR_CODES`, `LIST_TTL_MS`, `CACHE_SCOPE`,
+  `MAX_MESSAGE_BYTES`; the `camber mcp` options `--store`, `--allow`, `--allow-all-active`,
+  `--config` and `--min-trust`; the `mcp` extra (empty). The wire behaviour follows the MCP
+  revisions it speaks (2026-07-28, 2025-11-25, 2025-06-18); the CAMBER-specific parts of a
+  result -- the two text blocks, the `NOTICE:` lines and the `_meta` keys `camber/facts`,
+  `camber/banners`, `camber/truncated` and `camber/error` -- are provisional too.
+
 ### The read API server: `camber.api.server`
 
 The HTTP server behind `camber serve` (#134 records its surface). Its public names and their
