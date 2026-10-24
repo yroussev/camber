@@ -41,8 +41,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import tempfile
 import threading
+import uuid
 from collections import OrderedDict
 from contextlib import nullcontext as _nullcontext
 from dataclasses import dataclass
@@ -54,6 +56,7 @@ import pyarrow.dataset as ds
 
 from .._deprecation import deprecated
 from ..model.roles import Role
+from ._leftovers import STAGING_DIR
 from .facilities import FacilityRegistry, require_facility_id
 
 # Stable column schema for the long-form store.
@@ -372,12 +375,36 @@ class ParquetStore:
         df[_MONTH] = df[_TS].dt.month.astype("int32")
         table = _canonical_table(df)
         seq = self._next_seq(facility_id)
+        # Written under _staging/ (unseen by readers: pyarrow skips "_" names) and renamed into
+        # place file by file, so a concurrent reader never opens a part that is half written.
+        stage = os.path.join(self.root, STAGING_DIR, f"append-{os.getpid()}-{uuid.uuid4().hex}")
+        os.makedirs(stage)
+        try:
+            self._write_parts(table, stage, seq)
+            for dirpath, _dirs, files in os.walk(stage):
+                dst_dir = os.path.join(self.root, os.path.relpath(dirpath, stage))
+                for fname in sorted(files):
+                    os.makedirs(dst_dir, exist_ok=True)
+                    os.replace(os.path.join(dirpath, fname), os.path.join(dst_dir, fname))
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+            try:
+                os.rmdir(os.path.dirname(stage))  # an empty _staging/ is left by nothing
+            except OSError:
+                pass  # an ingest's scratch is in it
+        # Invalidate the cached catalog (cheap, O(1)); the next points() rebuilds it once.
+        # (Merging keys into the catalog on every write would be O(n^2) over a bulk load.)
+        self._invalidate_catalog()
+        return len(df)
+
+    @staticmethod
+    def _write_parts(table, root, seq) -> None:
         # Single-threaded (so batches keep their order), one row group per part: the default
         # threaded write lands batches in completion order, so the same rows would give different
         # bytes (#130).
         ds.write_dataset(
             table,
-            self.root,
+            root,
             format="parquet",
             partitioning=[_FACILITY, _YEAR, _MONTH],
             partitioning_flavor="hive",
@@ -388,10 +415,6 @@ class ParquetStore:
             min_rows_per_group=_ROWS_PER_GROUP,
             max_rows_per_group=_ROWS_PER_GROUP,
         )
-        # Invalidate the cached catalog (cheap, O(1)); the next points() rebuilds it once.
-        # (Merging keys into the catalog on every write would be O(n^2) over a bulk load.)
-        self._invalidate_catalog()
-        return len(df)
 
     def write_role_frame(
         self,

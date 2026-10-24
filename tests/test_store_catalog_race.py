@@ -200,3 +200,35 @@ def test_concurrent_writers_and_readers_leave_a_correct_catalog(tmp_path):
     assert cached == _keys(scanned)
     assert store.equipment() == equipment
     assert len({k[1] for k in cached}) == 1 + _WRITERS * _PER_WRITER
+
+
+def test_an_append_never_exposes_a_half_written_part(tmp_path, monkeypatch):
+    # The parts are written under _staging/ and renamed into place: while pyarrow is still
+    # writing, the store's own partitions hold no new file a reader could open.
+    root = str(tmp_path / "store")
+    store = ParquetStore(root)
+    _write(store, "seed", facility_id="F0")
+    before = sorted(_part_files(root))
+    seen = []
+    real = ParquetStore._write_parts
+
+    def spy(table, stage_root, seq):
+        real(table, stage_root, seq)
+        seen.append(sorted(_part_files(root)))
+        assert os.path.basename(stage_root).startswith("append-")
+
+    monkeypatch.setattr(ParquetStore, "_write_parts", staticmethod(spy))
+    _write(store, "next", facility_id="F0")
+    assert seen == [before]
+    assert len(_part_files(root)) > len(before)
+    assert not os.path.exists(os.path.join(root, "_staging"))
+
+
+def _part_files(root):
+    return [
+        os.path.relpath(os.path.join(d, f), root)
+        for d, _dirs, files in os.walk(root)
+        if not os.path.relpath(d, root).startswith("_")
+        for f in files
+        if f.endswith(".parquet")
+    ]
