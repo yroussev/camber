@@ -336,6 +336,29 @@ def _cmd_serve(args) -> int:  # pragma: no cover - blocking server loop
     return 0
 
 
+def _unit_interval(value: str) -> float:
+    """argparse ``type`` for ``--min-trust`` (``mcp``, 0.110): a number from 0 to 1."""
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from None
+    if not 0.0 <= x <= 1.0:
+        raise argparse.ArgumentTypeError(f"must be from 0 to 1 (got {value})")
+    return x
+
+
+def _cmd_mcp(args) -> int:  # pragma: no cover - blocking stdio loop (run in a subprocess)
+    from .mcp import launch
+
+    return launch(
+        args.store,
+        allow=args.allow,
+        allow_all_active=args.allow_all_active,
+        config=args.config,
+        min_trust=args.min_trust,
+    )
+
+
 def _cmd_explain(args) -> int:
     from .agent import explain
     from .config import run_config_file
@@ -3183,6 +3206,37 @@ def _build_parser() -> argparse.ArgumentParser:
         "token on loopback (the default host), none on any other bind (with a warning)",
     )
     psv.set_defaults(func=_cmd_serve)
+
+    # ----- mcp (0.110, #277)
+    pmcp = sub.add_parser(
+        "mcp",
+        help="Model Context Protocol server on stdio for AI clients (read-only; docs/MCP.md)",
+    )
+    pmcp.add_argument(
+        "--store",
+        required=True,
+        help="the ParquetStore directory the tools read (or a portfolio workspace: its store)",
+    )
+    allow = pmcp.add_mutually_exclusive_group(required=True)
+    allow.add_argument(
+        "--allow",
+        action="append",
+        metavar="FACILITY",
+        help="a facility id the tools may read (repeatable); every other facility is refused",
+    )
+    allow.add_argument(
+        "--allow-all-active",
+        action="store_true",
+        help="allow the store's active facilities, as they are at startup",
+    )
+    pmcp.add_argument("--config", help="run/report config the tools use (JSON or YAML)")
+    pmcp.add_argument(
+        "--min-trust",
+        type=_unit_interval,
+        default=0.5,
+        help="minimum data-trust score, 0-1, the tools apply to the data they read (default 0.5)",
+    )
+    pmcp.set_defaults(func=_cmd_mcp)
 
     pb = sub.add_parser(
         "bacnet-discover",

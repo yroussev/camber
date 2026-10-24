@@ -1,0 +1,1282 @@
+[
+  {
+    "note": "discover",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "server/discover",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "supportedVersions": [
+          "2026-07-28",
+          "2025-11-25",
+          "2025-06-18"
+        ],
+        "capabilities": {
+          "tools": {},
+          "prompts": {}
+        },
+        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Lines starting with NOTICE are licence, trust or truncation notices: always show them to the user.",
+        "ttlMs": 300000,
+        "cacheScope": "private",
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        }
+      }
+    }
+  },
+  {
+    "note": "tools/list: registry order, schemas, read-only annotations",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "result": {
+        "tools": [
+          {
+            "name": "boom",
+            "title": "Boom",
+            "description": "Always fails inside.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Boom",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "facilities",
+            "title": "Facilities",
+            "description": "List the facilities this server may read.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object",
+              "properties": {
+                "facilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "facilities"
+              ]
+            },
+            "annotations": {
+              "title": "Facilities",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "ids",
+            "title": "Ids",
+            "description": "A result that is a JSON array.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "annotations": {
+              "title": "Ids",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "noisy",
+            "title": "Noisy",
+            "description": "Writes to stdout while it runs.",
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Noisy",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          },
+          {
+            "name": "rows",
+            "title": "Rows",
+            "description": "Up to three rows of one facility.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "facility": {
+                  "type": "string"
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "facility"
+              ],
+              "additionalProperties": false
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "annotations": {
+              "title": "Rows",
+              "readOnlyHint": true,
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false
+            }
+          }
+        ],
+        "ttlMs": 300000,
+        "cacheScope": "private",
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        }
+      }
+    }
+  },
+  {
+    "note": "tools/call success",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "tools/call",
+      "params": {
+        "name": "facilities",
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "3 facilities are visible [F1@ctx]."
+          },
+          {
+            "type": "text",
+            "text": "{\"facilities\": [\"annex\", \"empty\", \"hq\"]}"
+          }
+        ],
+        "isError": false,
+        "structuredContent": {
+          "facilities": [
+            "annex",
+            "empty",
+            "hq"
+          ]
+        },
+        "_meta": {
+          "camber/facts": [
+            {
+              "id": "F1@ctx",
+              "kind": "count",
+              "value": 3
+            }
+          ],
+          "camber/banners": [],
+          "camber/truncated": false,
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "tools/call success with a truncation banner; NaN becomes null",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "hq",
+          "n": 5
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 4,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "NOTICE: truncated to 3 of 5 rows\n\n3 rows for hq [F1@ctx]."
+          },
+          {
+            "type": "text",
+            "text": "{\"facility\": \"hq\", \"rows\": [{\"i\": 0, \"value\": 0.0}, {\"i\": 1, \"value\": 1.5}, {\"i\": 2, \"value\": 3.0}], \"nan\": null}"
+          }
+        ],
+        "isError": false,
+        "structuredContent": {
+          "facility": "hq",
+          "rows": [
+            {
+              "i": 0,
+              "value": 0.0
+            },
+            {
+              "i": 1,
+              "value": 1.5
+            },
+            {
+              "i": 2,
+              "value": 3.0
+            }
+          ],
+          "nan": null
+        },
+        "_meta": {
+          "camber/facts": [
+            {
+              "id": "F1@ctx",
+              "kind": "rows",
+              "value": 3
+            }
+          ],
+          "camber/banners": [
+            "truncated to 3 of 5 rows"
+          ],
+          "camber/truncated": true,
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "domain error: facility outside the allowlist",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "elsewhere"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "not_allowed: facility 'elsewhere' is not in this server's allowlist"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "not_allowed"
+          },
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "domain error: research-only data",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "research-only"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "refused_licence: research-only data (CC BY-NC-ND) is never served to an AI client"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "refused_licence",
+            "data": {
+              "facility": "research-only",
+              "licence": "CC-BY-NC-ND-4.0"
+            }
+          },
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "domain error: arguments that fail the input schema",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "hq",
+          "n": "five"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 7,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "invalid_params: n must be of type integer"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "invalid_params"
+          },
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "domain error: nothing found",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "empty"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 8,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "not_found: no rows for facility 'empty'"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "not_found"
+          },
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "domain error: too large",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": {
+          "facility": "hq",
+          "n": 5000
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 9,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "too_large: 5000 rows exceed the cap of 1000"
+          }
+        ],
+        "isError": true,
+        "_meta": {
+          "camber/error": {
+            "code": "too_large"
+          },
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "unknown tool: a protocol error",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "method": "tools/call",
+      "params": {
+        "name": "no_such_tool",
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 10,
+      "error": {
+        "code": -32602,
+        "message": "Unknown tool: no_such_tool"
+      }
+    }
+  },
+  {
+    "note": "invalid params: arguments not an object",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "method": "tools/call",
+      "params": {
+        "name": "rows",
+        "arguments": [
+          "hq"
+        ],
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 11,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: \"arguments\" must be an object"
+      }
+    }
+  },
+  {
+    "note": "invalid params: no tool name",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "method": "tools/call",
+      "params": {
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 12,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: \"name\" must be a string"
+      }
+    }
+  },
+  {
+    "note": "internal error: nothing of the exception leaks",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 13,
+      "method": "tools/call",
+      "params": {
+        "name": "boom",
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 13,
+      "error": {
+        "code": -32603,
+        "message": "Internal error: the capability failed"
+      }
+    }
+  },
+  {
+    "note": "a non-object structured result (allowed in 2026-07-28)",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 14,
+      "method": "tools/call",
+      "params": {
+        "name": "ids",
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 14,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "two ids"
+          },
+          {
+            "type": "text",
+            "text": "[\"a\", \"b\"]"
+          }
+        ],
+        "isError": false,
+        "structuredContent": [
+          "a",
+          "b"
+        ],
+        "_meta": {
+          "camber/facts": [],
+          "camber/banners": [],
+          "camber/truncated": false,
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        },
+        "resultType": "complete"
+      }
+    }
+  },
+  {
+    "note": "prompts/list",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 15,
+      "method": "prompts/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 15,
+      "result": {
+        "prompts": [
+          {
+            "name": "triage",
+            "title": "Triage a facility",
+            "description": "Walk through one facility's open findings.",
+            "arguments": [
+              {
+                "name": "facility",
+                "description": "facility id",
+                "required": true
+              },
+              {
+                "name": "focus",
+                "description": "what to look at first",
+                "required": false
+              }
+            ]
+          }
+        ],
+        "ttlMs": 300000,
+        "cacheScope": "private",
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        }
+      }
+    }
+  },
+  {
+    "note": "prompts/get",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 16,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage",
+        "arguments": {
+          "facility": "hq"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 16,
+      "result": {
+        "description": "Walk through one facility's open findings.",
+        "messages": [
+          {
+            "role": "user",
+            "content": {
+              "type": "text",
+              "text": "Triage facility hq, focusing on everything."
+            }
+          },
+          {
+            "role": "assistant",
+            "content": {
+              "type": "text",
+              "text": "I will start with the facilities tool."
+            }
+          }
+        ],
+        "resultType": "complete",
+        "_meta": {
+          "io.modelcontextprotocol/serverInfo": {
+            "name": "camber",
+            "title": "CAMBER",
+            "version": "TEST"
+          }
+        }
+      }
+    }
+  },
+  {
+    "note": "prompts/get: a required argument missing",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 17,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage",
+        "arguments": {},
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 17,
+      "error": {
+        "code": -32602,
+        "message": "Missing required argument(s) for prompt triage: facility"
+      }
+    }
+  },
+  {
+    "note": "prompts/get: unknown prompt",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 18,
+      "method": "prompts/get",
+      "params": {
+        "name": "nope",
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 18,
+      "error": {
+        "code": -32602,
+        "message": "Unknown prompt: nope"
+      }
+    }
+  },
+  {
+    "note": "prompts/get: a non-string argument",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 19,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage",
+        "arguments": {
+          "facility": 3
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 19,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: \"arguments\" must map names to strings"
+      }
+    }
+  },
+  {
+    "note": "prompts/get: an unknown argument",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 20,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage",
+        "arguments": {
+          "facility": "hq",
+          "colour": "red"
+        },
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 20,
+      "error": {
+        "code": -32602,
+        "message": "Unknown argument(s) for prompt triage: colour"
+      }
+    }
+  },
+  {
+    "note": "unsupported protocol version",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 21,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "1900-01-01",
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 21,
+      "error": {
+        "code": -32022,
+        "message": "Unsupported protocol version",
+        "data": {
+          "supported": [
+            "2026-07-28",
+            "2025-11-25",
+            "2025-06-18"
+          ],
+          "requested": "1900-01-01"
+        }
+      }
+    }
+  },
+  {
+    "note": "modern request without clientCapabilities",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 22,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 22,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: _meta is missing io.modelcontextprotocol/clientCapabilities"
+      }
+    }
+  },
+  {
+    "note": "no _meta and no handshake",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 23,
+      "method": "tools/list",
+      "params": {}
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 23,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: _meta is missing io.modelcontextprotocol/protocolVersion (2026-07-28), and no initialize handshake was made (2025-11-25)"
+      }
+    }
+  },
+  {
+    "note": "a legacy version in _meta without the handshake",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 24,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2025-11-25",
+          "io.modelcontextprotocol/clientCapabilities": {}
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 24,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: protocol version 2025-11-25 needs the initialize handshake first"
+      }
+    }
+  },
+  {
+    "note": "ping was removed in 2026-07-28",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 25,
+      "method": "ping",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 25,
+      "error": {
+        "code": -32601,
+        "message": "Method not found: ping"
+      }
+    }
+  },
+  {
+    "note": "resources are not offered",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 26,
+      "method": "resources/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 26,
+      "error": {
+        "code": -32601,
+        "message": "Method not found: resources/list"
+      }
+    }
+  },
+  {
+    "note": "a cursor this server never issued",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 27,
+      "method": "tools/list",
+      "params": {
+        "cursor": "abc",
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 27,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: unknown cursor"
+      }
+    }
+  },
+  {
+    "note": "a notification gets no reply",
+    "send": {
+      "jsonrpc": "2.0",
+      "method": "notifications/cancelled",
+      "params": {
+        "requestId": 3
+      }
+    },
+    "raw": false,
+    "expect": null
+  },
+  {
+    "note": "malformed JSON",
+    "send": "{\"jsonrpc\": \"2.0\", \"id\": 28,",
+    "raw": true,
+    "expect": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32700,
+        "message": "Parse error: Invalid JSON"
+      }
+    }
+  },
+  {
+    "note": "a batch",
+    "send": [
+      {
+        "jsonrpc": "2.0",
+        "id": 29,
+        "method": "tools/list",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "golden-client",
+              "version": "1.0.0"
+            }
+          }
+        }
+      }
+    ],
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32600,
+        "message": "Invalid Request: batches are not supported"
+      }
+    }
+  },
+  {
+    "note": "a null id",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": null,
+      "method": "tools/list",
+      "params": {
+        "_meta": {
+          "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities": {},
+          "io.modelcontextprotocol/clientInfo": {
+            "name": "golden-client",
+            "version": "1.0.0"
+          }
+        }
+      }
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "error": {
+        "code": -32600,
+        "message": "Invalid Request: \"id\" must be a string or integer"
+      }
+    }
+  },
+  {
+    "note": "wrong jsonrpc version",
+    "send": {
+      "jsonrpc": "1.0",
+      "id": 30,
+      "method": "tools/list"
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 30,
+      "error": {
+        "code": -32600,
+        "message": "Invalid Request: \"jsonrpc\" must be \"2.0\""
+      }
+    }
+  },
+  {
+    "note": "params not an object",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 31,
+      "method": "tools/list",
+      "params": [
+        1
+      ]
+    },
+    "raw": false,
+    "expect": {
+      "jsonrpc": "2.0",
+      "id": 31,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: \"params\" must be an object"
+      }
+    }
+  },
+  {
+    "note": "a response from the client is ignored",
+    "send": {
+      "jsonrpc": "2.0",
+      "id": 99,
+      "result": {}
+    },
+    "raw": false,
+    "expect": null
+  }
+]

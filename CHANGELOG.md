@@ -14,6 +14,24 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Added
+- **`camber mcp`: a Model Context Protocol server over stdio (#277, provisional).** AI clients
+  such as Claude Desktop and the `claude` command line start it as a subprocess and see CAMBER's
+  capability registry as read-only tools and prompts. It speaks both 2026-07-28 (stateless: the version and
+  client capabilities in each request's `_meta`, `server/discover`, `resultType` on every result,
+  `ttlMs` and `cacheScope` on the list results) and 2025-11-25 (the `initialize` handshake;
+  2025-06-18 accepted too), so newer and older clients both connect. The store, the facility
+  allowlist (`--allow FACILITY`, repeatable, or `--allow-all-active`, one of them required),
+  `--config` and `--min-trust` come from the launch, never from the client. A refused or failed
+  call the model can act on (a facility outside the allowlist, research-only data, bad
+  arguments, nothing found, too large, timed out) is a tool result with `isError: true`; an
+  unknown tool or a malformed request is a JSON-RPC error. Standard library only (the `mcp` extra
+  is an empty marker); stdout carries protocol messages only, logs go to stderr. New package
+  `camber.mcp` (`McpServer`, `serve`, `serve_stdio`, `build_context`, `launch`). See
+  docs/MCP.md.
+
 ## [0.109.1] — 2026-10-24
 
 **0.109.1: a store fix (#274).** An append now stages its Parquet parts and renames each into place, so a process reading the store while another writes to it can no longer open a half-written part.

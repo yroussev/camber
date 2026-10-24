@@ -118,6 +118,7 @@ nav:
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md
+      - "MCP server: camber mcp": MCP.md
   - Platform:
       - CLI: CLI.md
       # BEGIN 098-thresholds (#90)

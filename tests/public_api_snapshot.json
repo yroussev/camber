@@ -1546,6 +1546,21 @@
     "profile_series",
     "template_scores"
   ],
+  "camber.mcp": [
+    "CACHE_SCOPE",
+    "LEGACY_VERSIONS",
+    "LIST_TTL_MS",
+    "LaunchError",
+    "MAX_MESSAGE_BYTES",
+    "MODERN_VERSIONS",
+    "McpServer",
+    "SUPPORTED_VERSIONS",
+    "TOOL_ERROR_CODES",
+    "build_context",
+    "launch",
+    "serve",
+    "serve_stdio"
+  ],
   "camber.model": [
     "Completeness",
     "Equip",
