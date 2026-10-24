@@ -12,7 +12,7 @@ keys. A call returns a `CapabilityResult`:
 | Field | What it holds |
 |---|---|
 | `data` | the structured result, valid against the capability's output schema |
-| `text` | a short summary that cites fact ids such as `[F1@points]` |
+| `text` | a short summary that cites fact ids such as `[F1@points-1a2b3c]` (one token per call) |
 | `facts` | the fact index those ids name: `{"id", "kind", "value", "text", ...}` |
 | `banners` | licence, truncation and citation notices, always shown to the user |
 | `truncated` | `True` when a list was cut to the caller's row limit |
@@ -42,15 +42,24 @@ ctx = CallContext(store="store", allowed_facilities=frozenset({"hq"}))
 reg = default_registry()
 print(len(reg.capabilities()), len(reg.prompts()))  # 13 8
 res = reg.call("points", {"facility_id": "hq"}, ctx)
-print(res.text)  # hq stores 2 matching points on 1 equipment [F1@points].
+print(res.text)  # hq stores 2 matching points on 1 equipment [F1@points-<token>].
 ```
 
 ## Built-in capabilities
 
 Thirteen capabilities, all read-only (0.110, #275 and #278). Each result's `text` cites fact ids
-`F<n>@<capability>` and repeats the cited values next to them (`hq is active with 6 points
-[F3@facilities]`), so a model that reads only the text has them (`rcx_report` also returns the report's own fact index, `K1@summary`,
-`C1@<issue key>`, ...). A facility is named only by `facility_id`, so the allowlist and the
+`F<n>@<capability>-<token>` and repeats the cited values next to them (`hq is active with 6
+points [F3@facilities-1a2b3c]`), so a model that reads only the text has them (`rcx_report` also
+returns the report's own fact index, `K1@summary-<token>`, `C1@<issue key>-<token>`, ...).
+
+**Fact ids are unique per call.** `Registry.call` appends a token to the context of every fact id
+a handler returns -- in `facts`, in the `[id]` citations of `text` and wherever `data` names a
+fact id (a row's `fact`, the RCx fact index). The token is six hex digits of SHA-256 over the
+capability name, the canonical JSON of the validated arguments and the sorted allowlist, so the
+same call always gives the same ids and two different calls give different ones: a model cannot
+cite `F1@rule_run` from one call while meaning another, and the facts of several calls can be
+merged for `check_citations` without a clash. A handler writes plain ids (`F1@rule_run`); the
+registry scopes them. A facility is named only by `facility_id`, so the allowlist and the
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.
 

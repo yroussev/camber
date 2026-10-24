@@ -7,6 +7,7 @@ example data is touched.
 import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -65,6 +66,12 @@ def store(tmp_path):
 
 def _ctx(store, allowed=("hq", "annex", "nc-lab"), **kw):
     return CallContext(store=store.root, allowed_facilities=frozenset(allowed), **kw)
+
+
+def _u(text: str) -> str:
+    """``text`` with the per-call token taken off every fact id (``F1@points-1a2b3c`` ->
+    ``F1@points``)."""
+    return re.sub(r"(@[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*?)-[0-9a-f]{6}\b", r"\1", text)
 
 
 def _tree(root) -> dict:
@@ -415,9 +422,9 @@ def test_citations_are_checked(store):
     reg.register(_cap("good", cites("There are 4 boxes [F1@t].")))
     reg.register(_cap("bad", cites("There are 4 boxes [F1@t]. And 9 pumps [F7@t].")))
     good = reg.call("good", {}, _ctx(store))
-    assert good.text == "There are 4 boxes [F1@t]." and not good.banners
+    assert _u(good.text) == "There are 4 boxes [F1@t]." and not good.banners
     bad = reg.call("bad", {}, _ctx(store))
-    assert bad.text == "There are 4 boxes [F1@t]." and "removed" in bad.banners[0]
+    assert _u(bad.text) == "There are 4 boxes [F1@t]." and "removed" in bad.banners[0]
 
 
 # --------------------------------------------------------------------------- the capabilities
@@ -432,9 +439,9 @@ def test_facilities_capability(store):
     assert hq["start"] == "2024-03-01T00:00:00" and hq["end"] == "2024-03-01T23:00:00"
     assert (hq["n_points"], hq["n_equipment"]) == (6, 2)
     assert (rows["annex"]["n_points"], rows["annex"]["n_equipment"]) == (3, 1)
-    assert res.text.startswith("2 facilities are visible [F1@facilities].")
-    assert "hq is active with 6 points [F3@facilities]." in res.text
-    assert [f["id"] for f in res.facts] == ["F1@facilities", "F2@facilities", "F3@facilities"]
+    assert _u(res.text).startswith("2 facilities are visible [F1@facilities].")
+    assert "hq is active with 6 points [F3@facilities]." in _u(res.text)
+    assert [_u(f["id"]) for f in res.facts] == ["F1@facilities", "F2@facilities", "F3@facilities"]
     assert not res.truncated and len(res.banners) == 1  # the research-only notice only
     json.dumps(res.data)
 
@@ -454,7 +461,7 @@ def test_points_capability_filters(store):
     res = reg.call("points", {"facility_id": "hq"}, ctx)
     assert res.data["count"] == 6 and res.data["n_equipment"] == 2
     assert res.data["points"][0] == {"equip": "AHU-1", "equip_class": "AHU", "role": "heat_valve"}
-    assert res.text == "hq stores 6 matching points on 2 equipment [F1@points]."
+    assert _u(res.text) == "hq stores 6 matching points on 2 equipment [F1@points]."
     one = reg.call(
         "points", {"facility_id": "hq", "equip": "AHU-2", "role": "supply_air_temp"}, ctx
     )

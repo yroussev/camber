@@ -994,7 +994,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   message, and an `invalid_params` refusal by the input schema keeps its JSON pointers
   (`/facility_id: ...`) instead of redacting them as paths. `Registry.register` refuses an
   `output_schema` whose root is not `"type": "object"`, and `Registry.get` (so `Registry.call`)
-  raises the new code `unknown_capability` for an unknown name instead of `not_found`.
+  raises the new code `unknown_capability` for an unknown name instead of `not_found`. Fact ids
+  carry a per-call token in their context (`F<n>@<capability>-<6 hex>`), added by
+  `Registry.call`.
 
 - **`camber.mcp`** (added in 0.110, provisional, #277) -- the Model Context Protocol server
   behind `camber mcp`: `McpServer` (`handle`, `handle_line`), `serve`, `serve_stdio`,

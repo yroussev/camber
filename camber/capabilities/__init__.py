@@ -18,6 +18,9 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
 - **caps**: a list longer than ``caps.max_rows`` is cut (``truncated=True`` and a banner), data
   whose JSON is larger than ``caps.max_bytes`` is ``too_large``, and a call that runs longer than
   ``caps.max_seconds`` is ``timeout``;
+- **fact ids unique per call**: every fact id's context gets a token (:func:`call_token`, a hash
+  of the name, the arguments and the allowlist), ``F1@points`` -> ``F1@points-1a2b3c``, in
+  ``facts``, ``text`` and ``data``;
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
   (strict: an unknown ``[id]`` or a figure no cited fact carries is removed, with a banner);
 - **no leaks**: any other exception becomes ``CapabilityError("internal")`` whose message holds
@@ -43,6 +46,7 @@ docs/CAPABILITY-REGISTRY.md.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import importlib
 import json
 import os
@@ -312,6 +316,8 @@ class Registry:
         if not isinstance(res, CapabilityResult):
             raise TypeError(f"handler returned {type(res).__name__}, not a CapabilityResult")
         data, banners = _truncate(res.data, ctx.caps.max_rows)
+        token = call_token(cap.name, arguments, ctx)
+        facts, text_in, data = _scoped(list(res.facts or []), str(res.text or ""), data, token)
         errors = validate(data, cap.output_schema)
         if errors:
             raise ValueError("result does not match the output schema: " + "; ".join(errors[:3]))
@@ -326,12 +332,12 @@ class Registry:
                 f"{ctx.caps.max_bytes:,}; narrow the query",
                 data={"bytes": size, "max_bytes": ctx.caps.max_bytes},
             )
-        text, cite_banners = _grounded(res.text, res.facts)
+        text, cite_banners = _grounded(text_in, facts)
         return replace(
             res,
             data=data,
             text=text,
-            facts=list(res.facts),
+            facts=facts,
             banners=[*res.banners, *banners, *cite_banners],
             truncated=bool(res.truncated or banners),
         )
@@ -368,6 +374,55 @@ class Registry:
                 raise RuntimeError(f"the handler raised {type(err).__name__}")
             raise err
         return box["result"]
+
+
+def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
+    """Six hex digits of SHA-256 over the capability name, the canonical JSON of the validated
+    arguments and the sorted allowlist: the same call always gives the same token, and two
+    different calls (almost surely) different ones."""
+    payload = json.dumps(
+        [name, arguments, sorted(ctx.allowed_facilities)],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:6]
+
+
+def _scoped(facts: list, text: str, data, token: str) -> tuple:
+    """Fact ids made unique to one call: ``F1@rule_run`` becomes ``F1@rule_run-<token>`` (an id
+    with no context gets ``@<token>``), in ``facts``, in the ``[id]`` citations of ``text`` and
+    wherever ``data`` holds an id as a string value (a row's ``fact``, a fact index's ``id``)."""
+    from ..agent.verify import _CITE
+
+    mapping: dict = {}
+    out: list = []
+    for f in facts:
+        fid = f.get("id") if isinstance(f, dict) else None
+        if not isinstance(fid, str) or not fid:
+            out.append(f)  # refused by the citation check as malformed
+            continue
+        base, _sep, where = fid.partition("@")
+        new = f"{base}@{where}-{token}" if where else f"{base}@{token}"
+        mapping[fid] = new
+        out.append({**f, "id": new})
+
+    def sub(m):
+        return f"[{mapping.get(m.group(1), m.group(1))}]"
+
+    def walk(x, depth=0):
+        if depth > 20:
+            return x
+        if isinstance(x, str):
+            return mapping.get(x, x)
+        if isinstance(x, dict):
+            return {k: walk(v, depth + 1) for k, v in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [walk(v, depth + 1) for v in x]
+        return x
+
+    return out, _CITE.sub(sub, text), walk(data) if mapping else data
 
 
 def _redact_data(data, secrets: list, depth: int = 0):

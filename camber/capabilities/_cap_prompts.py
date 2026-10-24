@@ -16,8 +16,9 @@ from . import CapabilityError, Prompt, PromptArg
 
 _CITE_RULES = (
     "Rules for the answer: state only what the tool results say. End every sentence with the "
-    "fact id(s) it rests on in square brackets, exactly as the results give them (for example "
-    "[F2@rule_run]). Copy every number exactly as a cited fact states it and state no number "
+    "fact id(s) it rests on in square brackets, exactly as the results give them, token "
+    "included (for example [F2@rule_run-1a2b3c]; each call's ids carry their own token). "
+    "Copy every number exactly as a cited fact states it and state no number "
     "that is not in a fact you cite. A declined check, a skipped rule or an unevaluated "
     "equipment is not a pass: say it was not judged. If a call is refused (not_allowed, "
     "refused_licence), say so and stop; do not work around it."
@@ -81,7 +82,8 @@ def rcx_executive_summary(args: dict) -> list:
             "Write one or two paragraphs for a building owner: how many issues, the top issues "
             "with their equipment and cost (or why they are uncosted), what is conditional on a "
             "sensor fix, and how much of the data the verdicts rest on. Cite the report's own "
-            "fact ids (K1@summary, C1@<issue key>, ...) or the F ids of the result.",
+            "fact ids (K1@summary-<token>, C1@<issue key>-<token>, ...) or the F ids of the "
+            "result.",
         ),
         _CITE_RULES,
         _FINISH,

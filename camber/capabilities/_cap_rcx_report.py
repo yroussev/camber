@@ -129,7 +129,7 @@ OUTPUT_SCHEMA = {
         "fact_index": {
             "type": "array",
             "items": _FACT,
-            "description": "the report's fact index (ids such as K1@summary, C1@<issue key>); "
+            "description": "the report's fact index (ids such as K1@summary-<token>); "
             "every entry is also in the result's facts",
         },
     },
@@ -258,8 +258,9 @@ CAPABILITIES = (
             "Build the retro-commissioning (RCx) report for one facility and return it as data: "
             "the KPIs (issue counts, annual cost, data coverage), the ranked issues (cause, "
             "equipment, severity, rules, annual cost or why uncosted, hours, confidence and its "
-            "reasons), the section list, and the report's fact index (ids such as K1@summary "
-            "and C1@<issue key>, also returned as facts) for writing a cited executive summary. "
+            "reasons), the section list, and the report's fact index (ids such as "
+            "K1@summary-<token> and C1@<issue key>-<token>, also returned as facts) for "
+            "writing a cited executive summary. "
             "No file and no charts are returned. Uses the caller's run config for the facility "
             "when there is one. Cost: a full rule run plus the report's analysis -- the slowest "
             "capability; prefer rule_run for a quick look. Needs facility_id."

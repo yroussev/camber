@@ -58,6 +58,9 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   schema (`Registry.register` refuses any other, as MCP 2025-11-25 allows only an object
   `structuredContent`), each `text` repeats the cited values next to the fact ids, and an
   unknown capability name is the new error code `unknown_capability`, no longer `not_found`.
+  Fact ids are unique per call: the registry appends a token (a hash of the capability, its
+  arguments and the allowlist) to each id's context, `F1@rule_run-1a2b3c`, so the same call
+  gives the same ids and the facts of several calls never clash.
   See docs/CAPABILITY-REGISTRY.md.
 - **`camber mcp`: a Model Context Protocol server over stdio (#277, provisional).** AI clients
   such as Claude Desktop and the `claude` command line start it as a subprocess and see CAMBER's

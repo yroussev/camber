@@ -136,6 +136,11 @@ def _ctx(site, allowed=(FID, "annex", "nc-lab", "gap-site", "mv-site"), **kw):
     return CallContext(store=site["store"].root, allowed_facilities=frozenset(allowed), **kw)
 
 
+def _id(res, prefix: str) -> str:
+    """The id of the fact ``prefix@...`` of a result (its context carries a per-call token)."""
+    return next(f["id"] for f in res.facts if f["id"].split("@")[0] == prefix)
+
+
 def _tree(root) -> dict:
     out = {}
     for dirpath, dirs, files in os.walk(root):
@@ -224,7 +229,7 @@ def test_every_result_matches_its_schema_and_cites_its_facts(results):
         ids = [f["id"] for f in res.facts]
         assert len(ids) == len(set(ids)), label
         assert all(re.fullmatch(r"[A-Za-z]+\d+@[A-Za-z0-9_\-]+", i) for i in ids), label
-        assert ids[0] == f"F1@{name}", label
+        assert re.fullmatch(rf"F1@{name}-[0-9a-f]{{6}}", ids[0]), label
         cited = re.findall(r"\[([A-Za-z]+\d+@[\w\-]+)\]", res.text)
         assert cited and set(cited) <= set(ids), label
         assert not any("removed" in b for b in res.banners), (label, res.banners)
@@ -368,7 +373,7 @@ def test_rule_run(results):
     assert any("default parameters" in b for b in res.banners)
     # the text carries the cited values, for a reader of the text alone
     assert "DemoAHU2 simultaneous_heat_cool (fault): DemoAHU2: both coils open 26.7%" in res.text
-    assert "[F3@rule_run]." in res.text
+    assert f"[{_id(res, 'F3')}]." in res.text
 
 
 def test_rule_run_narrowed_with_params(site):
@@ -448,7 +453,8 @@ def test_rcx_report(results):
     assert d["kpis"]["n_issues"] == len(d["issues"]) >= 1
     assert [i["rank"] for i in d["issues"]] == list(range(1, len(d["issues"]) + 1))
     ids = {f["id"] for f in res.facts}
-    assert {f["id"] for f in d["fact_index"]} <= ids and "K1@summary" in ids
+    assert {f["id"] for f in d["fact_index"]} <= ids
+    assert any(re.fullmatch(r"K1@summary-[0-9a-f]{6}", i) for i in ids)
     assert any(s["id"] == "summary" for s in d["sections"])
     # the configured network weather fetch was left out, and said so
     assert any("fetches weather over the network" in b for b in res.banners)
@@ -568,10 +574,11 @@ def test_rule_params(results, site):
 def test_check_citations_judges_each_sentence(results, site):
     run = results["rule_run"][1]
     cov = results["coverage"][1]
+    r3, c1 = _id(run, "F3"), _id(cov, "F1")  # facts merged from two calls
     text = (
-        "DemoAHU2 heats and cools at once [F3@rule_run]. "
-        "Coverage is 100.0% [F1@coverage]. "
-        "It wastes 42% of its energy [F3@rule_run]. "
+        f"DemoAHU2 heats and cools at once [{r3}]. "
+        f"Coverage is 100.0% [{c1}]. "
+        f"It wastes 42% of its energy [{r3}]. "
         "The building is old. "
         "See [F99@rule_run]."
     )
@@ -589,9 +596,9 @@ def test_check_citations_judges_each_sentence(results, site):
     ]
     assert res.data["grounded"] is False and res.data["n_supported"] == 2
     assert res.data["verified_text"] == (
-        "DemoAHU2 heats and cools at once [F3@rule_run]. Coverage is 100.0% [F1@coverage]."
+        f"DemoAHU2 heats and cools at once [{r3}]. Coverage is 100.0% [{c1}]."
     )
-    assert res.data["cited"] == ["F3@rule_run", "F1@coverage"] and res.banners
+    assert res.data["cited"] == [r3, c1] and res.banners
     loose = reg.call(
         "check_citations",
         {"text": text, "facts": run.facts + cov.facts, "per_sentence": False},
@@ -607,7 +614,9 @@ def test_check_citations_judges_each_sentence(results, site):
     clash = [dict(run.facts[0]), {**run.facts[0], "text": "something else"}]
     with pytest.raises(CapabilityError) as e:
         reg.call(
-            "check_citations", {"text": "x [F1@rule_run].", "facts": clash}, _ctx(site, allowed=())
+            "check_citations",
+            {"text": f"x [{_id(run, 'F1')}].", "facts": clash},
+            _ctx(site, allowed=()),
         )
     assert e.value.code == "invalid_params"
     with pytest.raises(CapabilityError) as e:
@@ -744,3 +753,28 @@ def test_finding_detail_of_a_fleet_finding_has_no_chart(site):
     d = reg.call("finding_detail", {"facility_id": FID, "finding_id": fid}, ctx).data
     assert d["finding"]["equip"] == "<fleet>"
     assert d["chart"] is None and d["violations"] is None and d["conditions"] == []
+
+
+def test_fact_ids_are_unique_per_call(site):
+    reg, ctx = default_registry(), _ctx(site)
+    a = reg.call("points", {"facility_id": FID}, ctx)
+    again = reg.call("points", {"facility_id": FID}, ctx)
+    other = reg.call("points", {"facility_id": FID, "equip": "DemoAHU"}, ctx)
+    gap = reg.call("points", {"facility_id": "gap-site"}, ctx)
+    narrower = reg.call("points", {"facility_id": FID}, _ctx(site, allowed=(FID,)))
+    ids = [{f["id"] for f in r.facts} for r in (a, other, gap, narrower)]
+    assert [f["id"] for f in again.facts] == [f["id"] for f in a.facts]  # same call, same ids
+    assert again.text == a.text
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            assert not ids[i] & ids[j], (i, j)  # different arguments or allowlist: disjoint
+    token = a.facts[0]["id"].split("-")[-1]
+    assert re.fullmatch(r"[0-9a-f]{6}", token) and a.text.endswith(f"[F1@points-{token}].")
+    # the rows that name their fact carry the scoped id too
+    run = reg.call("rule_run", {"facility_id": FID, "rules": ["simultaneous_heat_cool"]}, ctx)
+    assert {r["fact"] for r in run.data["findings"]} <= {f["id"] for f in run.facts}
+    # check_citations accepts the facts of several calls merged, ids never clashing
+    merged = a.facts + other.facts + gap.facts + run.facts
+    text = " ".join([a.text, other.text, gap.text, run.text])
+    res = reg.call("check_citations", {"text": text, "facts": merged}, _ctx(site, allowed=()))
+    assert res.data["grounded"] is True
