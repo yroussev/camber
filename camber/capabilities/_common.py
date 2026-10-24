@@ -322,6 +322,12 @@ COUNTS = {
 }
 
 
+def cite(fact: dict) -> str:
+    """A summary sentence carrying ``fact``'s own text and its id, so a reader of the text alone
+    has the cited values: ``AHU-1 economizer_high_limit (fault): ... [F2@rule_run].``"""
+    return f"{str(fact['text']).rstrip(' .;')} [{fact['id']}]."
+
+
 def finding_fact(fact_id: str, row: dict) -> dict:
     """The fact that cites one finding row."""
     return {

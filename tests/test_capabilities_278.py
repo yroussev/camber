@@ -228,6 +228,7 @@ def test_every_result_matches_its_schema_and_cites_its_facts(results):
         cited = re.findall(r"\[([A-Za-z]+\d+@[\w\-]+)\]", res.text)
         assert cited and set(cited) <= set(ids), label
         assert not any("removed" in b for b in res.banners), (label, res.banners)
+        assert isinstance(res.data, dict), label  # MCP structuredContent is an object
 
 
 def test_no_capability_writes_anything(results):
@@ -365,7 +366,9 @@ def test_rule_run(results):
     assert {"simultaneous_heat_cool@DemoAHU2", "economizer_high_limit@DemoAHU"} <= ids
     assert d["counts"]["fault"] == 2 and d["counts"]["ok"] > 0
     assert any("default parameters" in b for b in res.banners)
-    assert "DemoAHU2: simultaneous_heat_cool is fault" in res.text
+    # the text carries the cited values, for a reader of the text alone
+    assert "DemoAHU2 simultaneous_heat_cool (fault): DemoAHU2: both coils open 26.7%" in res.text
+    assert "[F3@rule_run]." in res.text
 
 
 def test_rule_run_narrowed_with_params(site):
@@ -677,7 +680,8 @@ def test_handler_error_data_is_path_redacted_like_its_message(site, tmp_path):
         )
 
     reg = Registry()
-    reg.register(Capability("boom", "Boom", "a test capability", {"type": "object"}, {}, boom))
+    obj = {"type": "object"}
+    reg.register(Capability("boom", "Boom", "a test capability", obj, obj, boom))
     with pytest.raises(CapabilityError) as e:
         reg.call("boom", {}, _ctx(site))
     assert e.value.message == "nothing at <path>"

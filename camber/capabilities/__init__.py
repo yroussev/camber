@@ -72,6 +72,7 @@ __all__ = [
 #: every :attr:`CapabilityError.code`
 ERROR_CODES = (
     "invalid_params",
+    "unknown_capability",
     "not_found",
     "not_allowed",
     "refused_licence",
@@ -150,7 +151,7 @@ class Capability:
     title: str
     description: str  # written for an LLM tool picker: what, when, what it returns
     input_schema: dict  # JSON Schema 2020-12 object schema
-    output_schema: dict  # JSON Schema 2020-12 schema of CapabilityResult.data
+    output_schema: dict  # JSON Schema 2020-12 object schema of CapabilityResult.data
     handler: Callable[[CallContext, dict], CapabilityResult]
     long_running: bool = False  # a candidate for MCP Tasks (0.111) / A2A tasks (0.112)
 
@@ -203,8 +204,8 @@ class _Facts:
 
 
 def _truncate(data, max_rows: int) -> tuple[Any, list]:
-    """Cut ``data`` (a list) or each top-level list in ``data`` (an object) to ``max_rows``;
-    returns the data and a banner per cut list."""
+    """Cut each top-level list in ``data`` (an object) to ``max_rows``; returns the data and a
+    banner per cut list."""
     banners: list = []
 
     def cut(rows, label):
@@ -216,8 +217,6 @@ def _truncate(data, max_rows: int) -> tuple[Any, list]:
         )
         return list(rows[:max_rows])
 
-    if isinstance(data, (list, tuple)):
-        return cut(data, "result"), banners
     if isinstance(data, dict):
         out = {k: cut(v, f"'{k}'") if isinstance(v, (list, tuple)) else v for k, v in data.items()}
         return out, banners
@@ -242,8 +241,10 @@ class Registry:
             raise ValueError(f"capability name {cap.name!r} must be snake_case")
         check_schema(cap.input_schema, f"{cap.name}.input_schema")
         check_schema(cap.output_schema, f"{cap.name}.output_schema")
-        if cap.input_schema.get("type") != "object":
-            raise ValueError(f"{cap.name}.input_schema must be an object schema")
+        for which in ("input_schema", "output_schema"):
+            # MCP (2025-11-25) takes only an object outputSchema / structuredContent
+            if getattr(cap, which).get("type") != "object":
+                raise ValueError(f"{cap.name}.{which} must be an object schema")
         self._caps[cap.name] = cap
 
     def register_prompt(self, prompt: Prompt) -> None:
@@ -261,10 +262,11 @@ class Registry:
         return [self._prompts[n] for n in sorted(self._prompts)]
 
     def get(self, name: str) -> Capability:
-        """The capability ``name``; ``CapabilityError("not_found")`` when there is none."""
+        """The capability ``name``; ``CapabilityError("unknown_capability")`` when there is none
+        (``not_found`` is a capability's own "nothing found")."""
         cap = self._caps.get(name) if isinstance(name, str) else None
         if cap is None:
-            raise CapabilityError("not_found", f"no capability named {name!r}")
+            raise CapabilityError("unknown_capability", f"no capability named {name!r}")
         return cap
 
     def call(self, name: str, arguments: dict, ctx: CallContext) -> CapabilityResult:

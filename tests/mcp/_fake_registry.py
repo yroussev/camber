@@ -102,7 +102,7 @@ class Registry:
 
     def get(self, name):
         if name not in self._caps:
-            raise CapabilityError("not_found", f"no capability {name!r}")
+            raise CapabilityError("unknown_capability", f"no capability {name!r}")
         return self._caps[name]
 
     def call(self, name, arguments, ctx):

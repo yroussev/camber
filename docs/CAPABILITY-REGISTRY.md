@@ -5,7 +5,9 @@ servers expose: the MCP server (0.110) and the A2A server (0.112) are thin adapt
 the rules about what a caller may see and do are enforced in one place.
 
 A **capability** is a named, read-only operation with JSON Schema 2020-12 input and output
-schemas and a handler. A call returns a `CapabilityResult`:
+schemas and a handler. Both schemas are object schemas (MCP 2025-11-25 takes only an object
+`outputSchema` and `structuredContent`), so `data` is always an object whose lists sit under
+keys. A call returns a `CapabilityResult`:
 
 | Field | What it holds |
 |---|---|
@@ -15,8 +17,10 @@ schemas and a handler. A call returns a `CapabilityResult`:
 | `banners` | licence, truncation and citation notices, always shown to the user |
 | `truncated` | `True` when a list was cut to the caller's row limit |
 
-A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`, `not_found`,
-`not_allowed`, `refused_licence`, `too_large`, `timeout` or `internal`.
+A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
+`unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
+e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`
+or `internal`.
 
 ```python
 import pandas as pd
@@ -44,7 +48,8 @@ print(res.text)  # hq stores 2 matching points on 1 equipment [F1@points].
 ## Built-in capabilities
 
 Thirteen capabilities, all read-only (0.110, #275 and #278). Each result's `text` cites fact ids
-`F<n>@<capability>` (`rcx_report` also returns the report's own fact index, `K1@summary`,
+`F<n>@<capability>` and repeats the cited values next to them (`hq is active with 6 points
+[F3@facilities]`), so a model that reads only the text has them (`rcx_report` also returns the report's own fact index, `K1@summary`,
 `C1@<issue key>`, ...). A facility is named only by `facility_id`, so the allowlist and the
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.

@@ -15,6 +15,7 @@ from ._common import (
     EQUIPS,
     FACILITY,
     RULE_SECTIONS,
+    cite,
     facility_config,
     jsonable,
     narrow,
@@ -197,7 +198,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "kpis": jsonable(k),
     }
     issues = []
-    text = [f"The RCx report for {fid} ranks {n} issue(s) [F1@rcx_report]."]
+    text = [cite(head)]
     for i, iss in enumerate(d["issues"], start=2):
         fact_id = f"F{i}@rcx_report"
         cost_v = jsonable(iss.get("cost"))
@@ -233,10 +234,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
             }
         )
         if i - 1 <= _LISTED:
-            text.append(
-                f"Issue {row['rank']} is {row['cause'] or row['title']} on {row['equip']} "
-                f"[{fact_id}]."
-            )
+            text.append(cite(facts[-1]))
     facts.insert(0, head)
     data = {
         "facility_id": fid,

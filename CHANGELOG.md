@@ -54,7 +54,11 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   prompts package workflows -- `triage_ahu`, `rcx_executive_summary`, `explain_finding`,
   `check_savings_claim`, `data_quality_review`, `compare_equipment`, `sensor_trust_review` and
   `plan_site_visit` -- each naming the capabilities to call, asking for cited fact ids and
-  ending with `check_citations` on the draft. See docs/CAPABILITY-REGISTRY.md.
+  ending with `check_citations` on the draft. Every capability's output schema is an object
+  schema (`Registry.register` refuses any other, as MCP 2025-11-25 allows only an object
+  `structuredContent`), each `text` repeats the cited values next to the fact ids, and an
+  unknown capability name is the new error code `unknown_capability`, no longer `not_found`.
+  See docs/CAPABILITY-REGISTRY.md.
 - **`camber mcp`: a Model Context Protocol server over stdio (#277, provisional).** AI clients
   such as Claude Desktop and the `claude` command line start it as a subprocess and see CAMBER's
   capability registry as read-only tools and prompts. It speaks both 2026-07-28 (stateless: the version and

@@ -9,6 +9,7 @@ appear in a fact it cites. Reads no store and no facility.
 from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
+from ._common import cite
 
 _VERDICTS = ("supported", "unknown_citation", "uncited", "unsupported_number")
 
@@ -171,7 +172,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
             f"nothing and {bad['unsupported_number']} state a number no cited fact carries",
         }
     ]
-    text = f"{n_ok} of {len(sentences)} sentence(s) are supported [F1@check_citations]."
+    text = cite(facts[0])
     banners = []
     if n_ok < len(sentences):
         banners.append(

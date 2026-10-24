@@ -16,6 +16,7 @@ from ._common import (
     FINDING_ROW,
     by_severity,
     caller_config,
+    cite,
     finding_fact,
     finding_ids,
     finding_row,
@@ -108,7 +109,7 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         r["fact"] = fact_id
         facts.append(finding_fact(fact_id, r))
         if i - 1 <= _LISTED and r["rule"] in ("mv_savings", "mv_trigger"):
-            text.append(f"{r['equip']}: {r['rule']} is {r['severity']} [{fact_id}].")
+            text.append(cite(facts[-1]))
     data = {
         "facility_id": fid,
         "entries": len(config.get("mv") or []),

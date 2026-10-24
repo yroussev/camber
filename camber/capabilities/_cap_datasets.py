@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 from . import Capability, CapabilityError, CapabilityResult
+from ._common import cite
 
 _KINDS = ("simulated", "real", "lab", "synthetic")
 
@@ -155,7 +156,7 @@ def dataset_search(ctx, arguments: dict) -> CapabilityResult:
             }
         )
         if i - 1 <= 10:
-            text.append(f"{r['id']} is {r['access']} under {r['licence']} [{fact_id}].")
+            text.append(cite(facts[-1]))
     banners = (
         [REFUSED.replace("Research-only dataset", f"{n_ro} research-only dataset(s)")]
         if n_ro
@@ -286,10 +287,7 @@ def dataset_entry(ctx, arguments: dict) -> CapabilityResult:
             + ("" if data["download_bytes"] else " (generated locally)"),
         },
     ]
-    text = (
-        f"{e.id} is a {e.kind} dataset under {e.licence}, access {data['access']} "
-        "[F1@dataset_entry]."
-    )
+    text = " ".join(cite(f) for f in facts)
     banners = [REFUSED] if e.research_only else []
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
 

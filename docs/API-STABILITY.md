@@ -992,7 +992,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   the MCP and A2A adapters settle. The modules (`_cap_*`, `_common`) are private. **Behaviour
   change:** the `data` of a `CapabilityError` a handler raises is now path-redacted like its
   message, and an `invalid_params` refusal by the input schema keeps its JSON pointers
-  (`/facility_id: ...`) instead of redacting them as paths.
+  (`/facility_id: ...`) instead of redacting them as paths. `Registry.register` refuses an
+  `output_schema` whose root is not `"type": "object"`, and `Registry.get` (so `Registry.call`)
+  raises the new code `unknown_capability` for an unknown name instead of `not_found`.
 
 - **`camber.mcp`** (added in 0.110, provisional, #277) -- the Model Context Protocol server
   behind `camber mcp`: `McpServer` (`handle`, `handle_line`), `serve`, `serve_stdio`,

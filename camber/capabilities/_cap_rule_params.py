@@ -9,7 +9,7 @@ import re
 from functools import lru_cache
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import jsonable
+from ._common import cite, jsonable
 
 
 @lru_cache(maxsize=1)
@@ -174,7 +174,7 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
             }
         )
         if named and i - 1 <= 10:
-            text.append(f"The defaults of {r['rule']} are listed [F{i}@rule_params].")
+            text.append(cite(facts[-1]))
     data = {"count": len(rows), "rules": rows}
     return CapabilityResult(data=data, text=" ".join(text), facts=facts)
 

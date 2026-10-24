@@ -25,6 +25,7 @@ from ._common import (
     TEXT,
     by_severity,
     caller_config,
+    cite,
     finding_fact,
     finding_ids,
     finding_row,
@@ -312,7 +313,7 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         r["fact"] = fact_id
         facts.append(finding_fact(fact_id, r))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
-            text.append(f"{r['equip']}: {r['rule']} is {r['severity']} [{fact_id}].")
+            text.append(cite(facts[-1]))
     banners = []
     if source == "baseline_period":
         banners.append(

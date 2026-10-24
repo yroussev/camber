@@ -87,7 +87,7 @@ def _cap(name="echo", handler=None, input_schema=None, output_schema=None):
         title=name.title(),
         description="a test capability",
         input_schema=input_schema or {"type": "object", "additionalProperties": True},
-        output_schema=output_schema or {},
+        output_schema=output_schema or {"type": "object"},
         handler=handler or (lambda ctx, a: CapabilityResult(data=a, text="", facts=[])),
     )
 
@@ -167,8 +167,12 @@ def test_registration_ordering_and_duplicates():
     for bad in ("Bad", "has-dash", ""):
         with pytest.raises(ValueError, match="snake_case"):
             reg.register(_cap(bad))
-    with pytest.raises(ValueError, match="must be an object schema"):
+    with pytest.raises(ValueError, match="input_schema must be an object schema"):
         reg.register(_cap("arr", input_schema={"type": "array"}))
+    # MCP 2025-11-25 allows only an object outputSchema / structuredContent
+    for out in ({"type": "array"}, {"properties": {}}, {"type": ["object", "null"]}):
+        with pytest.raises(ValueError, match="output_schema must be an object schema"):
+            reg.register(_cap("arr_out", output_schema=out))
     with pytest.raises(ValueError, match="unsupported"):
         reg.register(_cap("anyof", output_schema={"anyOf": []}))
 
@@ -185,7 +189,7 @@ def test_registration_ordering_and_duplicates():
 
     with pytest.raises(CapabilityError) as e:
         reg.get("nope")
-    assert e.value.code == "not_found" and str(e.value).startswith("not_found:")
+    assert e.value.code == "unknown_capability" and str(e.value).startswith("unknown_capability:")
     with pytest.raises(ValueError, match="unknown capability error code"):
         CapabilityError("oops", "x")
     assert set(ERROR_CODES) >= {"invalid_params", "refused_licence", "timeout", "internal"}
@@ -225,7 +229,7 @@ def test_invalid_params(store):
     assert e.value.data == {"errors": ["/facility_id: expected string, got integer"]}
     with pytest.raises(CapabilityError) as e:
         reg.call("nope", {}, _ctx(store))
-    assert e.value.code == "not_found"
+    assert e.value.code == "unknown_capability"
 
 
 def test_facility_allowlist(store):
@@ -315,9 +319,9 @@ def test_rows_are_truncated_with_a_banner(store):
     assert full.truncated is False and len(full.data["points"]) == 6 and not full.banners
 
     reg = Registry()
-    reg.register(_cap("rows", lambda ctx, a: CapabilityResult(list(range(5)), "", [])))
+    reg.register(_cap("rows", lambda ctx, a: CapabilityResult({"rows": list(range(5))}, "", [])))
     res = reg.call("rows", {}, ctx)
-    assert res.data == [0, 1] and res.truncated and "result truncated" in res.banners[0]
+    assert res.data == {"rows": [0, 1]} and res.truncated and "'rows' truncated" in res.banners[0]
 
 
 def test_too_large(store):
@@ -386,7 +390,7 @@ def test_internal_errors_never_leak_local_paths(store, tmp_path):
             r.call("bad", {}, _ctx(store))
         assert e.value.code == "internal"
     r = Registry()
-    r.register(_cap("typed", output_schema={"type": "array"}))
+    r.register(_cap("typed", output_schema={"type": "object", "required": ["x"]}))
     with pytest.raises(CapabilityError) as e:
         r.call("typed", {}, _ctx(store))
     assert e.value.code == "internal" and "output schema" in e.value.message

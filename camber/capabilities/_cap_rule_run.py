@@ -19,6 +19,7 @@ from ._common import (
     SEVERITIES,
     SEVERITY,
     by_severity,
+    cite,
     facility_config,
     finding_fact,
     finding_ids,
@@ -179,7 +180,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         r["fact"] = fact_id
         facts.append(finding_fact(fact_id, r))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
-            text.append(f"{r['equip']}: {r['rule']} is {r['severity']} [{fact_id}].")
+            text.append(cite(facts[-1]))
     banners = []
     if not from_caller:
         banners.append(
@@ -401,7 +402,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
 
     row["fact"] = "F1@finding_detail"
     facts = [finding_fact("F1@finding_detail", row)]
-    text = [f"{row['equip']}: {row['rule']} is {row['severity']} [F1@finding_detail]."]
+    text = [cite(facts[0])]
     if viol is not None:
         facts.append(
             {
@@ -413,10 +414,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "share": viol["share"],
             }
         )
-        text.append(
-            f"The rule flagged {viol['hours']:g} hours in {viol['n_spans']} span(s) "
-            "[F2@finding_detail]."
-        )
+        text.append(cite(facts[-1]))
     if params:
         listed = ", ".join(
             f"{p['name']} = {p['value']}" + (" (set for this run)" if p["overridden"] else "")
@@ -431,7 +429,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "text": f"{rule} ran with {listed}",
             }
         )
-        text.append(f"The parameters it ran with are listed [F{n}@finding_detail].")
+        text.append(cite(facts[-1]))
     if chart is not None:
         n = len(facts) + 1
         facts.append(
@@ -442,6 +440,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "text": f"Evidence chart: {chart['description']}",
             }
         )
+        text.append(cite(facts[-1]))
     data = {
         "facility_id": fid,
         "finding": row,
