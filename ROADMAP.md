@@ -486,6 +486,10 @@ Version numbers are given only where a release is already planned.
     - [x] #258–#265 charts and reports: evidence shading, UTF-8, escaping, carpets;
     - [x] #231, #232 a worked prose example; docstring citation check;
     - [x] #267–#269 sensor references for any point, cost-only inputs at risk, reset target naming; `air-excess-oa-cost`, `data-sensor-conditional`.
+  - **0.109 — the 0.108 removals, edge high-water mark** (released 2026-10-24). Closes #266, #271, #272:
+    - [x] #271 unknown edge-config keys refused;
+    - [x] #272 the `*_g36_target` metric aliases removed;
+    - [x] #266 a persisted per-point high-water mark, so a forwarder poll sends only what is new.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.

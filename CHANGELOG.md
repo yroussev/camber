@@ -14,7 +14,9 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [Unreleased]
+## [0.109.0] — 2026-10-24
+
+**0.109: the promised 0.108 removals and a forwarder that sends only what is new (#266, #271, #272).** **Breaking (#271):** an unknown edge-config key is refused with an error that names it and the closest known key, on every `camber edge` command; 0.108 only warned. **Breaking (#272):** `supply_air_reset_compliance` findings no longer carry the `pct_below_g36_target`, `g36_target_median` and `pct_above_g36_target` aliases; read `pct_below_target`, `target_median` and `pct_above_target`. **Behaviour change (#266):** the edge forwarder keeps a per-point high-water mark of the last acknowledged observation in `<spool>/high_water.json`, so an idle poll sends nothing and a poll sends only the months with a newer or revised observation; delivery stays at-least-once, and `Forwarder(high_water=False)` keeps the full read.
 
 ### Changed
 - **Breaking: an unknown edge-config key is refused (#271).** `load_config` raises a
