@@ -491,10 +491,15 @@ Version numbers are given only where a release is already planned.
     - [x] #272 the `*_g36_target` metric aliases removed;
     - [x] #266 a persisted per-point high-water mark, so a forwarder poll sends only what is new.
   - **0.109.1 — store fix** (released 2026-10-24). Closes #274: a concurrent reader never opens a half-written part.
+  - **0.110 — an MCP server over a capability registry** (released 2026-10-25). Closes #275–#278:
+    - [x] #275 the read-only capability registry, with the allowlist, NC/ND refusal, trust floor, caps and citation checks in one place;
+    - [x] #276 no-persist runs (`persist=False`, `--no-persist`);
+    - [x] #277 `camber mcp` over stdio, MCP 2026-07-28 and 2025-11-25;
+    - [x] #278 13 read-only capabilities and 8 prompts.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
-- **On hold — an MCP server** for CAMBER.
+- **Next — MCP Tasks (0.111, #279) and an A2A server (0.112, #280)** over the same capability registry.
 
 
 ## Road to 1.0

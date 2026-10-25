@@ -14,7 +14,9 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [Unreleased]
+## [0.110.0] — 2026-10-25
+
+**0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.
 
 ### Added
 - **The capability registry, `camber.capabilities` (#275), provisional.** One read-only core the
@@ -26,8 +28,7 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   no-persist runs, a `min_trust` floor of 0.5, caps on rows (truncated with a banner), bytes
   (`too_large`) and run time (`timeout`), citations checked with `camber.agent.verify`, and any
   other failure reported as `internal` with no local path in the message. `default_registry()`
-  carries two capabilities, `facilities` and `points`; adding one is a single `_cap_<name>.py`
-  module. See docs/CAPABILITY-REGISTRY.md.
+  carries the built-in capabilities (below); adding one is a single `_cap_<name>.py` module. See docs/CAPABILITY-REGISTRY.md.
 - **A no-persist config run (#276).** `run_config(..., persist=False)` and
   `run_config_file(..., persist=False)` compute the same findings, drift and report but write
   nothing: the `faults` fold runs against an in-memory copy of the stored history and is not saved
