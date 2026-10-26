@@ -14,6 +14,34 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Fixed
+
+- **A store or data problem is a tool error a model can act on, not an internal error** (#301).
+  Over MCP these were JSON-RPC -32603 "internal error" responses; they are now `isError` tool
+  results with the new, documented code `unavailable`, whose data says whether a retry will
+  likely work and names the facility:
+  - a truncated, empty or non-Parquet part file, or an unreadable facility directory, affects
+    only that facility (`unavailable`, not retryable). Calls on other facilities keep working,
+    and `facilities` still lists every facility, marking the unreadable one.
+  - a read while `camber datasets ingest --force` rewrites a facility no longer fails reads of
+    other facilities: a read of one facility lists only that facility's files, and the catalog
+    scan goes one facility at a time. A part file that vanishes during a read is retried once,
+    then reported as `unavailable` (retryable).
+- `coverage` with a `start` after the last stored sample (or an `end` before the first) returns
+  an empty result with a notice instead of an internal error; `sensor_trust` adds the same
+  notice. A date the calendar does not have, such as `2025-02-30` or `2025-13-45`, is
+  `invalid_params` in every capability that takes a `start` / `end` (#301).
+
+### Changed
+
+- Capability date arguments accept only valid months (01-12), days (01-31), hours (00-23) and
+  minutes (00-59) in their schema pattern (#301).
+- A handler's `OSError` is reported as `unavailable` rather than `internal`, and a failed store
+  read raises `camber.store.parquet_store.StoreReadError` (an `OSError`) instead of pyarrow's
+  `ArrowInvalid` or a bare `FileNotFoundError` (#301).
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.

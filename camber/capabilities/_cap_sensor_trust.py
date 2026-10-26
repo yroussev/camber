@@ -141,13 +141,14 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         raise CapabilityError("not_found", f"facility {fid!r} has no stored data")
     classes = store.equipment(facility_id=fid).get(fid) or {}
     want_eq, want_roles = arguments.get("equips"), arguments.get("roles")
-    rows = []
+    rows, read_any = [], False
     for equip in sorted(classes):
         if want_eq is not None and equip not in want_eq:
             continue
         frame = store.read_role_frame(facility_id=fid, equip=equip, start=start, end=end)
         if frame.empty:
             continue
+        read_any = True
         for role, t in _health(frame, view).items():
             slug = str(jsonable(role))
             if want_roles is not None and slug not in want_roles:
@@ -214,6 +215,12 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 f"[F{i}@sensor_trust]."
             )
     banners = []
+    if not read_any and (start or end):
+        banners.append(
+            "No stored sample of these equipment falls in the requested window, so no point was "
+            "judged; the facilities capability lists the first and last stored sample of each "
+            "facility."
+        )
     if counts["below_floor"]:
         banners.append(
             f"{counts['below_floor']} point(s) score below the trust floor {floor:g}: a rule that "

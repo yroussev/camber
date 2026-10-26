@@ -2598,6 +2598,7 @@
   "camber.store.parquet_store": [
     "ParquetStore",
     "PointKey",
+    "StoreReadError",
     "role_frame_to_long"
   ],
   "camber.synth": [

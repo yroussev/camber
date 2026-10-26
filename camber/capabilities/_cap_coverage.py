@@ -151,7 +151,7 @@ def _point(ts: pd.DatetimeIndex, w0, w1) -> tuple:
             "last": None,
             "interval_minutes": None,
             "coverage": 0.0,
-        }, ([(w0, w1)] if w0 is not None else [])
+        }, ([(w0, w1)] if w0 is not None and w1 is not None else [])
     step = infer_freq(ts) if n > 1 else None
     step = step if step is not None and step > pd.Timedelta(0) else pd.Timedelta(hours=1)
     expected = int((w1 - w0) / step) + 1
@@ -203,7 +203,7 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
     points, gaps = [], []
     for equip, role in keys:
         ts = groups.get((equip, role), pd.DatetimeIndex([]))
-        fields, pgaps = _point(ts, w0, w1)  # w0 is None only when no point has data
+        fields, pgaps = _point(ts, w0, w1)  # w0 / w1 is None only when no point has data
         step = fields.pop("_step", pd.Timedelta(0))
         hours = [((b - a - step) / pd.Timedelta(hours=1), a, b) for a, b in pgaps]
         hours = [(max(h, 0.0), a, b) for h, a, b in hours]
@@ -253,7 +253,11 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
         "start": w0.isoformat() if w0 is not None else None,
         "end": w1.isoformat() if w1 is not None else None,
     }
-    span = f" from {win['start']} to {win['end']}" if w0 is not None else ""
+    span = (
+        f" from {win['start'] or 'the first sample'} to {win['end'] or 'the last sample'}"
+        if w0 is not None or w1 is not None
+        else ""
+    )
     facts = [
         {
             "id": "F1@coverage",
@@ -296,6 +300,12 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
         "gaps": gaps[:_MAX_GAPS],
     }
     banners = []
+    if ts_all.empty and keys:
+        banners.append(
+            "No valid stored sample of these points falls in the requested window, so every "
+            "point shows 0% coverage; the facilities capability lists the first and last stored "
+            "sample of each facility."
+        )
     if len(gaps) > _MAX_GAPS:
         banners.append(
             f"'gaps' lists the longest {_MAX_GAPS} of {len(gaps)} gaps (raise min_gap_hours or "
