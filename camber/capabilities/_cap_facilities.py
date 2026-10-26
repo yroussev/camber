@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import Capability, CapabilityResult
-from ._policy import open_store, research_only
+from ._policy import open_store
 
 _ROW = {
     "type": "object",
@@ -33,12 +33,17 @@ INPUT_SCHEMA = {
 OUTPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["facilities", "count", "withheld_research_only"],
+    "required": ["facilities", "count", "withheld_research_only", "withheld_unverified"],
     "additionalProperties": False,
     "properties": {
         "facilities": {"type": "array", "items": _ROW},
         "count": {"type": "integer", "minimum": 0},
         "withheld_research_only": {"type": "integer", "minimum": 0},
+        "withheld_unverified": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "allowed facilities whose licence or lifecycle cannot be established",
+        },
     },
 }
 
@@ -54,19 +59,29 @@ def _span(store, fid: str) -> tuple:
 
 
 def facilities(ctx, arguments: dict) -> CapabilityResult:
-    """The allowed facilities in the store, with name, state, date range and point counts."""
+    """The allowed facilities in the store, with name, state, date range and point counts.
+
+    A facility is listed only when :func:`camber._servable.refusal` clears it (0.111, #290): the
+    registry read here is the fail-closed one, so a damaged registry lists nothing.
+    """
     from .._provenance import facility_timezone
+    from .._servable import read_registry, refusal
 
     store = open_store(ctx)
-    meta = store.facilities_meta()
+    registry = read_registry(store.root)
+    meta = registry[0]
     known = set(store.facilities()) | set(meta)
     points = store.points()
     equipment = store.equipment()
-    rows, withheld = [], 0
+    rows, withheld, unverified = [], 0, 0
     for fid in sorted(f for f in ctx.allowed_facilities if f in known):
         m = meta.get(fid) or {}
-        if research_only(m):
-            withheld += 1
+        why = refusal(fid, store.root, registry)
+        if why is not None:
+            if why[0] == "research_only":
+                withheld += 1
+            else:
+                unverified += 1
             continue
         start, end = _span(store, fid)
         rows.append(
@@ -112,7 +127,18 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
             f"{withheld} allowed facility(ies) hold research-only (non-commercial / "
             "no-derivatives) data and are not listed: such data is never served here."
         )
-    data = {"facilities": rows, "count": len(rows), "withheld_research_only": withheld}
+    if unverified:
+        banners.append(
+            f"{unverified} allowed facility(ies) are not listed because their licence or "
+            "lifecycle cannot be established from the store's facility registry; they are not "
+            "served until it is repaired."
+        )
+    data = {
+        "facilities": rows,
+        "count": len(rows),
+        "withheld_research_only": withheld,
+        "withheld_unverified": unverified,
+    }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
 

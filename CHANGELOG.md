@@ -14,6 +14,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Security
+
+- **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.

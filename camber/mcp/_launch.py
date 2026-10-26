@@ -31,12 +31,21 @@ def resolve_store(path: str) -> str:
 
 
 def resolve_allowlist(store: str, allow: list | None, allow_all_active: bool) -> frozenset:
-    """The facility allowlist: the ``--allow`` ids, or the store's active facilities right now."""
+    """The facility allowlist: the ``--allow`` ids, or the store's active facilities right now.
+
+    0.111 (#290): both read the facility registry fail-closed (:mod:`camber._servable`). With
+    ``--allow-all-active`` a missing or damaged registry means no facility is active (a warning,
+    and the server starts with nothing to serve); with ``--allow``, a warning names each facility
+    that will be refused: research-only data, or a licence that cannot be established.
+    """
+    from .._servable import active_facilities, read_registry, refusal, registry_banner
     from ..store import ParquetStore
 
     if allow_all_active:
-        active = ParquetStore(store).active_facilities()
-        if not active:
+        active, warnings = active_facilities(store)
+        for w in warnings:
+            log.warning("--allow-all-active: %s", w)
+        if not active and not warnings:
             raise LaunchError(f"--allow-all-active: the store {store} has no active facility")
         return frozenset(active)
     ids = [str(a).strip() for a in (allow or [])]
@@ -47,6 +56,14 @@ def resolve_allowlist(store: str, allow: list | None, allow_all_active: bool) ->
     present = set(ParquetStore(store).facilities())
     for fid in sorted(set(ids) - present):
         log.warning("--allow %s: no such facility in the store (yet)", fid)
+    registry = read_registry(store)
+    if registry[1] is not None:
+        log.warning("%s", registry_banner(registry[1]))
+    for fid in sorted(set(ids)):
+        why = refusal(fid, store, registry)
+        if why is None or (why[0] != "research_only" and (registry[1] or fid not in present)):
+            continue  # a registry problem is warned about once; a missing id above
+        log.warning("--allow %s: %s; every call naming it is refused", fid, why[1])
     return frozenset(ids)
 
 

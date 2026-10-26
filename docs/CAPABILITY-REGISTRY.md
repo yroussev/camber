@@ -135,6 +135,18 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    an assistant. The check reads the facility's recorded dataset block (`access`,
    `redistribution`, `licence`) and, by its `dataset_id`, the catalog's current terms. A listing
    leaves such facilities out and says how many it withheld.
+
+   The check fails closed (0.111, #290). A facility named for a catalog dataset (`ds-<base>` or
+   `ds-<base>-<group>`, the names `camber datasets ingest` gives) is checked against the
+   catalog by its name too, independent of the registry, so a registry entry that is missing or
+   records an open licence cannot unlock a research-only dataset. A facility whose licence or
+   lifecycle cannot be established is also `refused_licence`, with
+   `data["reason"] == "licence_unverified"`: every facility while the store's facility registry
+   is missing (in a store holding `ds-` facilities), unreadable, empty or malformed, and a `ds-`
+   facility the registry has no entry for or that neither the catalog nor its entry records.
+   While the registry is damaged, every result carries a banner saying so, and the `facilities`
+   listing counts such facilities in `withheld_unverified`. A store of your own data with no
+   registry is not damaged: its unregistered facilities are served as before.
 4. **No-persist.** The handler runs inside the no-persist scope (#276): a config run folds no
    fault history, writes no report file or manifest entry, writes back no store cache and
    fetches no weather. See [Fault lifecycle](FAULT-LIFECYCLE.md#no-persist-runs).
