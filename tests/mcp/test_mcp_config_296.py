@@ -75,6 +75,8 @@ _REFUSED = [
 
 @pytest.mark.parametrize("fname, content, message", _REFUSED, ids=[c[0] for c in _REFUSED])
 def test_a_config_camber_run_refuses_stops_the_server(store, tmp_path, fname, content, message):
+    if fname.endswith((".yaml", ".yml")):
+        pytest.importorskip("yaml")  # without PyYAML a YAML config is refused for that instead
     path = _file(tmp_path, fname, content)
     with pytest.raises(LaunchError, match="--config") as e:
         build_context(
