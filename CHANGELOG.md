@@ -21,6 +21,18 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `run_config` failed with `isoformat() argument 1 must be a unicode character, not str` when a
   config's `faults` section left out `run_id`; the default run id is now the run's UTC time to the
   second, as documented.
+- Path redaction no longer garbles normal text: the `refused_licence` message reads
+  "non-commercial / no-derivatives" again (not "non-commercial <path> no-derivatives"), and an
+  internal error shows one `<path>`, not `<path><path>` (#302).
+
+### Security
+- Capabilities and `camber mcp` no longer leak parts of a local path that has a space or a comma
+  in it: a run config whose store is not the `--store` one gave `rule_run`, `rcx_report` and
+  `finding_detail` errors that named the folders after the first space. The store, the config
+  and its directory, the stores and folders the config reads, the dataset data directory, home,
+  temp, the working directory and the Python prefix are now redacted first, by exact prefix and
+  in quoted, `repr` and JSON forms; any other quoted path is redacted whole. A result's `text`
+  and banners are redacted too (#302).
 
 ## [0.110.0] — 2026-10-25
 
