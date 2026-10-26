@@ -46,6 +46,44 @@ def _run(args, stdin: bytes, env_extra=None, timeout=60):
     )
 
 
+def _session(args, messages, *, replies=None, timeout=60):
+    """A real client: write each message and, when it expects a reply (``replies[i]``, by
+    default every message with an ``id``), read that reply before the next; then close stdin.
+
+    ``camber mcp`` stops every call still running when stdin closes (#292), so a client reads
+    its answers first. Returns ``(returncode, [reply], stderr bytes)``.
+    """
+    env = dict(os.environ)
+    env.pop("CAMBER_TEST_NO_REGISTRY", None)
+    proc = subprocess.Popen(
+        [sys.executable, DRIVER, "mcp", *args],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    got = []
+    try:
+        for i, raw in enumerate(messages):
+            proc.stdin.write(raw)
+            proc.stdin.flush()
+            wants = replies[i] if replies is not None else b'"id"' in raw
+            if wants:
+                line = proc.stdout.readline()
+                assert line.endswith(b"\n"), proc.stderr.read().decode()
+                got.append(json.loads(line))
+        proc.stdin.close()
+        rest = proc.stdout.read()
+        err = proc.stderr.read()
+        rc = proc.wait(timeout)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    assert rest == b""
+    return rc, got, err
+
+
 def _lines(stdout: bytes):
     text = stdout.decode("utf-8")
     assert text == "" or text.endswith("\n")
@@ -68,40 +106,39 @@ def _req(id_, method, params=None):
 def test_the_transcripts_over_pipes(tmp_path, name):
     store = _store(tmp_path, "hq", "annex", "empty")
     steps = load(name)
-    proc = _run(
+    rc, got, err = _session(
         ["--store", store, "--allow", "hq", "--allow", "annex", "--allow", "empty"],
-        b"".join(wire(s) for s in steps),
+        [wire(s) for s in steps],
+        replies=[s["expect"] is not None for s in steps],
     )
-    assert proc.returncode == 0, proc.stderr.decode()
+    assert rc == 0, err.decode()
     expected = [s["expect"] for s in steps if s["expect"] is not None]
-    assert [normalize(r) for r in _lines(proc.stdout)] == expected
-    assert b"end of input" in proc.stderr  # logs go to stderr
+    assert [normalize(r) for r in got] == expected
+    assert b"end of input" in err  # logs go to stderr
 
 
 def test_stdout_carries_only_messages_even_when_a_tool_prints(tmp_path):
     store = _store(tmp_path, "hq")
     msgs = [_req(1, "tools/call", {"name": "noisy", "arguments": {}}), _req(2, "tools/list")]
-    proc = _run(
-        ["--store", store, "--allow", "hq"], b"".join(json.dumps(m).encode() + b"\n" for m in msgs)
+    rc, out, err = _session(
+        ["--store", store, "--allow", "hq"], [json.dumps(m).encode() + b"\n" for m in msgs]
     )
-    assert proc.returncode == 0
-    out = _lines(proc.stdout)
+    assert rc == 0
     assert [r["id"] for r in out] == [1, 2]
     assert out[0]["result"]["structuredContent"] == {"ok": True}
-    assert b"stray print from a capability" in proc.stderr
-    assert b"stray bytes on fd 1" in proc.stderr
+    assert b"stray print from a capability" in err  # printed in the worker process
+    assert b"stray bytes on fd 1" in err
 
 
 def test_allow_all_active_reads_the_store_at_startup(tmp_path):
     store = _store(tmp_path, "north", "south")
-    proc = _run(
+    rc, (resp,), err = _session(
         ["--store", store, "--allow-all-active"],
-        json.dumps(_req(1, "tools/call", {"name": "facilities"})).encode() + b"\n",
+        [json.dumps(_req(1, "tools/call", {"name": "facilities"})).encode() + b"\n"],
     )
-    assert proc.returncode == 0, proc.stderr.decode()
-    (resp,) = _lines(proc.stdout)
+    assert rc == 0, err.decode()
     assert resp["result"]["structuredContent"] == {"facilities": ["north", "south"]}
-    assert b"2 facilities allowed" in proc.stderr
+    assert b"2 facilities allowed" in err
 
 
 def test_refuses_to_start_without_an_allowlist(tmp_path):
@@ -369,10 +406,19 @@ def test_build_context_refuses_a_directory_that_is_not_a_store(tmp_path, fake_ca
 
 def test_launch(tmp_path, fake_capabilities, monkeypatch, capsys):
     served = []
-    monkeypatch.setattr(launch_mod, "serve_stdio", lambda server: served.append(server) or 0)
+    monkeypatch.setattr(
+        launch_mod, "serve_stdio", lambda server, **kw: served.append((server, kw)) or 0
+    )
     store = _store(tmp_path, "hq")
     assert launch(store, allow=["hq"]) == 0
-    assert served[0].context.allowed_facilities == frozenset({"hq"})
+    server, kw = served[0]
+    assert server.context.allowed_facilities == frozenset({"hq"})
+    pool = kw["workers"]  # tool calls run in worker processes that build the same registry
+    assert (pool.registry_factory, pool.max_concurrent, pool.max_queued) == (
+        "_fake_registry:default_registry",
+        2,
+        8,
+    )
     assert launch(store, allow_all_active=True, min_trust=2) == 1
     assert "--min-trust" in capsys.readouterr().err
 

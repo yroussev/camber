@@ -21,7 +21,7 @@ camber bacnet-discover [--config bacnet.yml] [--device ADDR]... [--out inventory
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
-camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F] [--min-trust T]   # MCP server (stdio)
+camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F] [--min-trust T] [--max-concurrent N] [--max-queued N]   # MCP server (stdio)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)

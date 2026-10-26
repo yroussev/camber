@@ -1570,6 +1570,8 @@
     "McpServer",
     "SUPPORTED_VERSIONS",
     "TOOL_ERROR_CODES",
+    "ToolCall",
+    "WorkerPool",
     "build_context",
     "launch",
     "serve",

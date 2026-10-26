@@ -217,10 +217,13 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    from the sentence, so quote paths in messages). The JSON pointers of an
    `invalid_params` refusal by the input schema (`/facility_id: ...`) are left as they are.
 
-**The timeout cannot stop a handler.** The handler runs in a worker thread; Python cannot kill a
-thread, so on a timeout the call returns `timeout` at once while the handler finishes in the
-background and its result is thrown away. Handlers are read-only and run no-persist, so a late
-finish changes nothing.
+**In-process, the timeout cannot stop a handler.** The handler runs in a worker thread; Python
+cannot kill a thread, so on a timeout the call returns `timeout` at once while the handler
+finishes in the background and its result is thrown away. Handlers are read-only and run
+no-persist, so a late finish changes nothing, but it holds its CPU and memory until then.
+`camber mcp` therefore runs every call in a worker process (`camber.mcp.WorkerPool`, 0.111) that
+calls `Registry.call` exactly as here and is killed on a timeout, a cancel or a disconnect; a
+transport that serves untrusted or many callers should do the same.
 
 ## Adding a capability
 

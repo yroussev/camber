@@ -37,7 +37,7 @@ Nothing else is offered: no resources, subscriptions, roots, sampling or logging
 
 ```
 camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-active)
-           [--config PATH] [--min-trust 0.5]
+           [--config PATH] [--min-trust 0.5] [--max-concurrent 2] [--max-queued 8]
 ```
 
 - `--store PATH` is the ParquetStore directory the tools read. A
@@ -59,13 +59,31 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
 - `--config PATH` is a run or report config (JSON, or YAML with the `yaml` extra) for the tools
   that run rules or reports.
 - `--min-trust` is a number from 0 to 1 (default 0.5).
+- `--max-concurrent N` is how many tool calls run at once (default 2), each in its own worker
+  process; `--max-queued N` is how many more may wait for a free worker (default 8). A call
+  beyond that is refused at once with the tool error `busy` (retry shortly). Each worker holds
+  the memory of the call it runs, so raise these with care on a large store.
 
 The configuration is fixed for the life of the process. The client cannot change the store, the
 allowlist or the trust floor; to serve something else, start another server.
 
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
-with the outcome and the time taken) goes to stderr. It exits when the client closes stdin.
-Anything a tool prints by mistake is sent to stderr as well, so it cannot corrupt the stream.
+with the outcome and the time taken) goes to stderr. Anything a tool prints by mistake is sent to
+stderr as well, so it cannot corrupt the stream.
+
+**Concurrency, cancellation and shutdown.** Each tool call runs in a worker process (a fresh
+Python that loads the tools once and is reused, about half a second to start and 110 MB idle;
+one is started with the server and a replacement is started as soon as one is killed). Every
+other message -- `ping`, `server/discover`, `initialize`, the lists, `prompts/get` and
+`notifications/cancelled` -- is answered at once, even while long calls run, so replies to
+concurrent requests may come in a different order from the requests; each carries its own id.
+The worker of a call is killed, and its CPU and memory released, when:
+
+- the call runs past its time cap (120 s): the reply is `timeout`;
+- the client sends `notifications/cancelled` for it: there is no reply, as the specification
+  asks (a call still waiting for a worker is simply dropped);
+- the client closes stdin, or closes its end of stdout: every running call is stopped and the
+  server exits within about a second. Read the replies you want before closing stdin.
 
 No extra is needed: the server uses the standard library only. `pip install "camber-toolkit[mcp]"`
 is accepted and installs nothing more; it marks the intent.
@@ -127,8 +145,9 @@ an object that repeats a key, and a string holding a lone UTF-16 surrogate escap
 
 **Errors.** Following the specification, a problem the model can fix by changing its call is a
 tool result with `isError: true` and a `code: message` text (`invalid_params`, `not_found`,
-`not_allowed`, `refused_licence`, `too_large`, `timeout`, `unavailable`); the code is also in
-`_meta["camber/error"]`. `unavailable` means the stored data could not be read: its `data` says
+`not_allowed`, `refused_licence`, `too_large`, `timeout`, `unavailable`, `busy`); the code is also
+in `_meta["camber/error"]`. `busy` means the server is already running and queueing as many calls
+as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "max_queued": M}`. `unavailable` means the stored data could not be read: its `data` says
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
 `camber datasets ingest` replaced) or not (a damaged or unreadable file), and names the facility.
 A date the calendar does not have (`2025-02-30`) is `invalid_params`; a window outside the
@@ -166,4 +185,8 @@ serve_stdio(McpServer(default_registry(), ctx))
 ```
 
 `McpServer.handle(message)` answers one decoded message without any I/O, for embedding the server
-in another transport.
+in another transport. Used like this, `serve` and `serve_stdio` answer one message at a time in
+the calling process, as before; pass `workers=WorkerPool("camber.capabilities:default_registry")`
+for what `camber mcp` does (tool calls in killable worker processes, built from that registry
+factory). `handle(message, defer=True)` returns a tool call as a `ToolCall` instead of running
+it, and `McpServer.finish(call, outcome)` turns the outcome into the reply.
