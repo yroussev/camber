@@ -19,8 +19,8 @@ keys. A call returns a `CapabilityResult`:
 
 A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
 `unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
-e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`
-or `internal`.
+e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`,
+`unavailable` (the stored data could not be read; see below) or `internal`.
 
 ```python
 import pandas as pd
@@ -159,7 +159,19 @@ the draft with the facts the calls returned. Argument values are reduced to one 
 7. **Citations.** `text` is checked against `facts` with `camber.agent.verify.check` (strict): a
    sentence that cites an unknown id or states a figure no cited fact carries is removed, with a
    banner.
-8. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
+8. **Store errors.** A read of stored data that fails -- a truncated, empty or non-Parquet part
+   file, an unreadable facility directory, or a part file a concurrent ingest replaced between
+   listing and opening it (the store retries such a read once first) -- or any other `OSError`
+   is `unavailable`, never `internal` (0.111, #301). Its `data` is `{"retryable": bool}`, plus
+   `"facility_id"` when the read was of one facility the caller may see: `retryable` is `true`
+   for a file that went missing (retry the call) and `false` for a damaged or unreadable one (a
+   retry will not help until it is repaired or the facility re-ingested). The message names no
+   path and no facility outside the allowlist. One facility's damaged file does not affect
+   another facility's calls, and the `facilities` listing still lists it, with
+   `"unavailable": {"retryable": ...}` and a null `start` / `end` -- while the store's point
+   catalog is current. A stale catalog (after a write) is rebuilt by scanning every facility, so
+   until it is rebuilt a damaged file anywhere makes calls that need the catalog `unavailable`.
+9. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
    of an error a handler raises, nor a result's `text` or `banners` -- holds an absolute local
    path. The known roots (the store, the config, its directory and the stores or folders it
    reads, the dataset data directory, home, temp, the working directory and the Python prefix)

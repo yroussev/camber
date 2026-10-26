@@ -358,16 +358,25 @@ def test_internal_errors_never_leak_local_paths(store, tmp_path):
     secret = str(tmp_path / "private" / "client-site" / "trends.csv")
 
     def boom(ctx, a):
-        raise OSError(f"cannot open '{secret}' under {ctx.store} (also ~/x and C:\\data\\y)")
+        raise RuntimeError(f"cannot open '{secret}' under {ctx.store} (also ~/x and C:\\data\\y)")
 
     reg = Registry()
     reg.register(_cap("boom", boom))
     with pytest.raises(CapabilityError) as e:
         reg.call("boom", {}, _ctx(store))
     msg = e.value.message
-    assert e.value.code == "internal" and msg.startswith("capability 'boom' failed: OSError")
+    assert e.value.code == "internal" and msg.startswith("capability 'boom' failed: RuntimeError")
     assert str(tmp_path) not in msg and "client-site" not in msg and "data" not in msg
     assert e.value.__cause__ is None and e.value.__suppress_context__
+
+    def io_error(ctx, a):  # an I/O error is "unavailable" (#301), its message never repeated
+        raise OSError(f"cannot open '{secret}' under {ctx.store}")
+
+    reg.register(_cap("io_error", io_error))
+    with pytest.raises(CapabilityError) as e:
+        reg.call("io_error", {}, _ctx(store))
+    assert e.value.code == "unavailable" and e.value.data == {"retryable": False}
+    assert str(tmp_path) not in e.value.message and "client-site" not in e.value.message
 
     def handler_error(ctx, a):
         raise CapabilityError("not_found", f"nothing at {ctx.store}")

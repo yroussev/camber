@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ..store.parquet_store import StoreReadError
 from . import Capability, CapabilityResult
 from ._policy import open_store
 
@@ -20,6 +21,14 @@ _ROW = {
         "end": {"type": ["string", "null"], "description": "last stored sample (ISO)"},
         "n_points": {"type": "integer", "minimum": 0},
         "n_equipment": {"type": "integer", "minimum": 0},
+        "unavailable": {
+            "type": "object",
+            "required": ["retryable"],
+            "additionalProperties": False,
+            "properties": {"retryable": {"type": "boolean"}},
+            "description": "present when the facility's stored data could not be read for this "
+            "listing (start and end are then null); retryable: a retry will likely succeed",
+        },
     },
 }
 
@@ -83,7 +92,11 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
             else:
                 unverified += 1
             continue
-        start, end = _span(store, fid)
+        broken = None
+        try:
+            start, end = _span(store, fid)
+        except StoreReadError as e:  # one facility's damaged file must not hide the others (#301)
+            start, end, broken = None, None, {"retryable": bool(e.retryable)}
         rows.append(
             {
                 "facility_id": fid,
@@ -94,6 +107,7 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
                 "end": end,
                 "n_points": sum(1 for k in points if k.facility_id == fid),
                 "n_equipment": len(equipment.get(fid) or {}),
+                **({"unavailable": broken} if broken else {}),
             }
         )
     facts = [
@@ -106,7 +120,10 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
     ]
     text = [f"{len(rows)} facilities are visible [F1@facilities]."]
     for i, r in enumerate(rows, start=2):
-        span = f"data from {r['start']} to {r['end']}" if r["start"] else "no stored data"
+        if r.get("unavailable"):
+            span = "stored data that cannot be read right now"
+        else:
+            span = f"data from {r['start']} to {r['end']}" if r["start"] else "no stored data"
         facts.append(
             {
                 "id": f"F{i}@facilities",
@@ -122,6 +139,12 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
                 f"{r['facility_id']} is {r['state']} with {r['n_points']} points [F{i}@facilities]."
             )
     banners = []
+    unreadable = [r["facility_id"] for r in rows if r.get("unavailable")]
+    if unreadable:
+        banners.append(
+            f"The stored data of {', '.join(unreadable)} cannot be read right now (a damaged "
+            "file or a concurrent ingest); calls on it return the error code unavailable."
+        )
     if withheld:
         banners.append(
             f"{withheld} allowed facility(ies) hold research-only (non-commercial / "

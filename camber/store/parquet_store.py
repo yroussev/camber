@@ -142,6 +142,26 @@ _MIGRATED = "_migrated.json"
 _FRAG_INDEX_MAX = 16
 _FRAG_INDEX: OrderedDict = OrderedDict()
 _FRAG_LOCK = threading.Lock()
+_NO_PARTITION = object()  # ParquetStore._scoped_dataset: the facility has no partition directory
+
+
+class StoreReadError(OSError):
+    """Stored data could not be read (0.111, #301).
+
+    ``facility_id`` is the facility the read was scoped to (``None`` for a store-wide read).
+    ``retryable`` is True when a part file went missing between listing and opening it -- a
+    concurrent ingest or prune replaced it, and the same read retried once already -- so a later
+    call will likely succeed; False for a damaged (truncated, empty, not Parquet) or unreadable
+    file, which a retry does not fix. ``reason`` is a short description that names no path; the
+    exception text adds the underlying error.
+    """
+
+    def __init__(self, reason: str, *, facility_id=None, retryable: bool = False, cause=None):
+        detail = f" ({type(cause).__name__}: {cause})" if cause is not None else ""
+        super().__init__(f"{reason}{detail}")
+        self.reason = reason
+        self.facility_id = facility_id
+        self.retryable = retryable
 
 
 # Canonical part layout (#130): the same rows written by the same CAMBER and pyarrow versions give
@@ -548,10 +568,15 @@ class ParquetStore:
         return keys, equipment
 
     def _scan(self):
-        """One projected scan (no ts/value payload) -> (point keys, equipment classes)."""
-        long = self.read_long(columns=[_FACILITY, _EQUIP, _CLASS, _ROLE])
-        if long.empty:
+        """A projected scan (no ts/value payload) -> (point keys, equipment classes), one facility
+        partition at a time, so an ingest that replaces one facility's files fails (and retries)
+        only that facility's part of the scan (#301)."""
+        cols = [_FACILITY, _EQUIP, _CLASS, _ROLE]
+        parts = [self.read_long(facility_id=f, columns=cols) for f in self.facilities()]
+        parts = [p for p in parts if not p.empty]
+        if not parts:
             return [], {}
+        long = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
         uniq = long.drop_duplicates([_FACILITY, _EQUIP, _ROLE])
         keys = [
             PointKey(facility_id=f, equip=e, role=r)
@@ -581,9 +606,38 @@ class ParquetStore:
     def _dataset(self):
         return ds.dataset(self.root, format="parquet", partitioning="hive")
 
+    def _scoped_dataset(self, facility_id):
+        """A dataset over only ``facility_id``'s partition directory, its partition keys parsed
+        from the store root (the same columns and types a full-dataset read gives);
+        :data:`_NO_PARTITION` when the facility has no directory or no part file; ``None`` to
+        read the full dataset. Listing one facility's files only means an ingest that replaces
+        another facility's files cannot fail this read (#301)."""
+        if not isinstance(facility_id, str) or "/" in facility_id or os.sep in facility_id:
+            return None
+        root = os.path.abspath(self.root)
+        fdir = os.path.join(root, f"{_FACILITY}={facility_id}")
+        if not os.path.isdir(fdir):
+            return _NO_PARTITION
+        # typed keys, not inferred from one facility's values: an id such as "123" stays a string
+        keys = [pa.field(_FACILITY, pa.string()), pa.field(_YEAR, pa.int32())]
+        if any(
+            m.startswith(f"{_MONTH}=")
+            for y in os.listdir(fdir)
+            if y.startswith(f"{_YEAR}=") and os.path.isdir(os.path.join(fdir, y))
+            for m in os.listdir(os.path.join(fdir, y))
+        ):
+            keys.append(pa.field(_MONTH, pa.int32()))
+        dataset = ds.dataset(
+            fdir,
+            format="parquet",
+            partitioning=ds.partitioning(pa.schema(keys), flavor="hive"),
+            partition_base_dir=root,
+        )
+        return dataset if dataset.files else _NO_PARTITION
+
     def _facility_dataset(self, facility_id, equips):
         """A dataset over only the part files of ``facility_id`` that hold one of ``equips`` (in
-        the full dataset's file order and schema), or ``None`` to read the full dataset.
+        the facility dataset's file order and schema), or ``None`` to read without pruning.
 
         Filtering this dataset gives exactly the rows, order and types that filtering the full
         dataset does -- the files left out hold none of ``equips`` -- without opening every file of
@@ -604,7 +658,10 @@ class ParquetStore:
                 entry = None
         if entry is None:
             try:
-                full = self._dataset()
+                full = self._scoped_dataset(facility_id)
+                if full is _NO_PARTITION:
+                    return None
+                full = self._dataset() if full is None else full
                 frags = [
                     (f, _fragment_equips(f))
                     for f in full.get_fragments(filter=ds.field(_FACILITY) == facility_id)
@@ -676,13 +733,43 @@ class ParquetStore:
         empty_cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _FACILITY, _YEAR]
         if not os.path.isdir(self.root):
             return pd.DataFrame(columns=empty_cols)
-        dataset = None
         if equips is not None:
             equips = list(equips)
+        kw = dict(facility_id=facility_id, equips=equips, roles=roles, start=start, end=end)
+        scope = facility_id if isinstance(facility_id, str) else None
+        try:
+            try:
+                return self._read_long(empty_cols, columns, **kw)
+            except FileNotFoundError:
+                # a part file listed by this read was replaced before it was opened (a concurrent
+                # ingest or prune): list again and retry once (#301)
+                with _FRAG_LOCK:
+                    _FRAG_INDEX.pop((os.path.abspath(self.root), str(facility_id)), None)
+                return self._read_long(empty_cols, columns, **kw)
+        except FileNotFoundError as e:
+            raise StoreReadError(
+                "a stored file went missing while it was read (most likely a concurrent ingest)",
+                facility_id=scope,
+                retryable=True,
+                cause=e,
+            ) from e
+        except (OSError, pa.ArrowInvalid) as e:
+            if isinstance(e, StoreReadError):
+                raise
+            raise StoreReadError(
+                "a stored file is damaged or unreadable", facility_id=scope, cause=e
+            ) from e
+
+    def _read_long(self, empty_cols, columns, *, facility_id, equips, roles, start, end):
+        dataset = None
+        if equips is not None:
             if isinstance(facility_id, str) and all(isinstance(e, str) for e in equips):
                 dataset = self._facility_dataset(facility_id, equips)
         if dataset is None:
-            dataset = self._dataset()
+            dataset = self._scoped_dataset(facility_id)
+            if dataset is _NO_PARTITION:  # no such facility (or a writer just removed it)
+                return pd.DataFrame(columns=empty_cols)
+            dataset = self._dataset() if dataset is None else dataset
             if _FACILITY not in dataset.schema.names:  # no partition left (every facility dropped)
                 return pd.DataFrame(columns=empty_cols)
         filt = self._build_filter(

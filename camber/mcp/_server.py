@@ -62,7 +62,15 @@ _SERVER_INFO = "io.modelcontextprotocol/serverInfo"
 #: CapabilityError codes reported to the model as a tool result with ``isError: true`` (a tool
 #: execution error it can act on); ``internal`` is a server error and a JSON-RPC -32603.
 TOOL_ERROR_CODES = frozenset(
-    {"invalid_params", "not_found", "not_allowed", "refused_licence", "too_large", "timeout"}
+    {
+        "invalid_params",
+        "not_found",
+        "not_allowed",
+        "refused_licence",
+        "too_large",
+        "timeout",
+        "unavailable",
+    }
 )
 
 _INSTRUCTIONS = (

@@ -125,8 +125,12 @@ an object that repeats a key, and a string holding a lone UTF-16 surrogate escap
 
 **Errors.** Following the specification, a problem the model can fix by changing its call is a
 tool result with `isError: true` and a `code: message` text (`invalid_params`, `not_found`,
-`not_allowed`, `refused_licence`, `too_large`, `timeout`); the code is also in
-`_meta["camber/error"]`. Everything else is a JSON-RPC error:
+`not_allowed`, `refused_licence`, `too_large`, `timeout`, `unavailable`); the code is also in
+`_meta["camber/error"]`. `unavailable` means the stored data could not be read: its `data` says
+whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
+`camber datasets ingest` replaced) or not (a damaged or unreadable file), and names the facility.
+A date the calendar does not have (`2025-02-30`) is `invalid_params`; a window outside the
+stored data is an ordinary, empty result with a notice. Everything else is a JSON-RPC error:
 
 | Code | When |
 |---|---|

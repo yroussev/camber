@@ -25,6 +25,9 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   ``facts``, ``text`` and ``data``;
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
   (strict: an unknown ``[id]`` or a figure no cited fact carries is removed, with a banner);
+- **store errors**: a read of stored data that fails (a damaged or unreadable part file, or one a
+  concurrent ingest replaced) or any other ``OSError`` is ``unavailable``, with ``data``
+  ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it);
 - **no leaks**: any other exception becomes ``CapabilityError("internal")`` whose message holds
   no absolute local path.
 
@@ -83,6 +86,7 @@ ERROR_CODES = (
     "refused_licence",
     "too_large",
     "timeout",
+    "unavailable",
     "internal",
 )
 
@@ -295,6 +299,9 @@ class Registry:
             data = _redact_data(e.data, secrets)
             raise CapabilityError(e.code, redact(e.message, *secrets), data=data) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
+            store_err = _unavailable(e, ctx)
+            if store_err is not None:
+                raise store_err from None
             msg = redact(f"{type(e).__name__}: {e}", *secrets)
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
 
@@ -378,6 +385,32 @@ class Registry:
                 raise RuntimeError(f"the handler raised {type(err).__name__}")
             raise err
         return box["result"]
+
+
+def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
+    """``CapabilityError("unavailable")`` for a store read that failed (#301): a
+    :class:`~camber.store.parquet_store.StoreReadError` or any other ``OSError``; ``None`` for
+    anything else. The message names no path and no facility the caller may not see."""
+    from ..store.parquet_store import StoreReadError
+
+    if isinstance(exc, StoreReadError):
+        fid, retryable, reason = exc.facility_id, exc.retryable, exc.reason
+    elif isinstance(exc, OSError):
+        fid, retryable = None, isinstance(exc, FileNotFoundError)
+        reason = f"the store could not be read ({type(exc).__name__})"
+    else:
+        return None
+    named = fid if fid in getattr(ctx, "allowed_facilities", frozenset()) else None
+    data: dict = {"retryable": retryable}
+    if named is not None:
+        data["facility_id"] = named
+    where = f"the stored data of facility {named!r}" if named else "the stored data"
+    hint = (
+        "retry the call"
+        if retryable
+        else "a retry will not help until the file is repaired or the facility is re-ingested"
+    )
+    return CapabilityError("unavailable", f"{where} cannot be read: {reason}; {hint}", data=data)
 
 
 def call_token(name: str, arguments: dict, ctx: CallContext) -> str:

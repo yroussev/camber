@@ -996,7 +996,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `output_schema` whose root is not `"type": "object"`, and `Registry.get` (so `Registry.call`)
   raises the new code `unknown_capability` for an unknown name instead of `not_found`. Fact ids
   carry a per-call token in their context (`F<n>@<capability>-<6 hex>`), added by
-  `Registry.call`.
+  `Registry.call`. **Changed in 0.111 (#301):** the error code `unavailable` (in `ERROR_CODES`
+  and `camber.mcp.TOOL_ERROR_CODES`) for a store read that fails, which was `internal`; the
+  `DATE` arguments (`start`, `end`, a drift `baseline` / `current`) accept only calendar-valid
+  months, days, hours and minutes; the `facilities` row gains the optional `unavailable` field.
+- **`StoreReadError`** (0.111; #301), additive and provisional:
+  `camber.store.parquet_store.StoreReadError`, an `OSError` that `ParquetStore.read_long` (so `read_role_frame`, `points`
+  and every read) raises when stored data cannot be read, with `facility_id`, `retryable` and
+  `reason`. **Behaviour change:** such a read used to raise pyarrow's `ArrowInvalid` (a
+  `ValueError`) or a bare `FileNotFoundError`; a read of one facility now lists only that
+  facility's partition directory, retries once when a listed part file has vanished, and returns
+  an empty frame when the facility's directory is gone.
 
 - **`camber.mcp`** (added in 0.110, provisional, #277) -- the Model Context Protocol server
   behind `camber mcp`: `McpServer` (`handle`, `handle_line`), `serve`, `serve_stdio`,

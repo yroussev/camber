@@ -35,6 +35,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   and banners are redacted too (#302).
 - **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
+### Changed
+- Capability date arguments accept only valid months (01-12), days (01-31), hours (00-23) and
+  minutes (00-59) in their schema pattern (#301).
+- A handler's `OSError` is reported as `unavailable` rather than `internal`, and a failed store
+  read raises `camber.store.parquet_store.StoreReadError` (an `OSError`) instead of pyarrow's
+  `ArrowInvalid` or a bare `FileNotFoundError` (#301).
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.

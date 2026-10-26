@@ -20,7 +20,10 @@ from . import CapabilityError
 #: an ISO date or date-time (``2024-03-01``, ``2024-03-01T06:00``, ``2024-03-01 06:00:00``)
 DATE = {
     "type": "string",
-    "pattern": r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?$",
+    "pattern": (
+        r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])"
+        r"([T ]([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?)?$"
+    ),
     "description": "an ISO date or date-time in the site's wall clock (e.g. 2024-03-01)",
 }
 TEXT = {"type": "string", "minLength": 1, "maxLength": 200}
@@ -92,11 +95,25 @@ def scalars(d) -> dict:
     return out
 
 
+def parse_date(name: str, value) -> pd.Timestamp | None:
+    """``value`` (a :data:`DATE` string, or ``None``) as a timestamp; ``invalid_params`` naming
+    ``name`` for a date the pattern lets through but the calendar has not (``2025-02-30``)."""
+    if not value:
+        return None
+    try:
+        return pd.Timestamp(value)
+    except (ValueError, OverflowError):
+        raise CapabilityError(
+            "invalid_params", f"{name} {value!r} is not a valid date", data={"argument": name}
+        ) from None
+
+
 def window(arguments: dict) -> tuple:
-    """``(start, end)`` from ``arguments`` (either may be ``None``); ``invalid_params`` when the
-    end is before the start."""
+    """``(start, end)`` from ``arguments`` (either may be ``None``); ``invalid_params`` for a
+    date that does not exist or an end before the start."""
     start, end = arguments.get("start"), arguments.get("end")
-    if start and end and pd.Timestamp(end) < pd.Timestamp(start):
+    t0, t1 = parse_date("start", start), parse_date("end", end)
+    if t0 is not None and t1 is not None and t1 < t0:
         raise CapabilityError("invalid_params", "end is before start")
     return start, end
 
