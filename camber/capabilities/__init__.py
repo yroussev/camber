@@ -17,9 +17,13 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   writes no fault history, report file, manifest entry or cache (#276);
 - **trust floor**: ``ctx.min_trust`` (0.5 by default) reaches trust-aware code through
   :func:`run_config_for`;
-- **caps**: a list longer than ``caps.max_rows`` is cut (``truncated=True`` and a banner), data
-  whose JSON is larger than ``caps.max_bytes`` is ``too_large``, and a call that runs longer than
-  ``caps.max_seconds`` is ``timeout``;
+- **pages and caps** (0.111, #299): a capability returns a model-sized page of each list by
+  default (``limit`` / ``offset`` arguments ask for others) and cuts a list only through
+  :func:`camber.capabilities._page.page`, which records a notice; every recorded notice is a
+  banner and sets ``truncated=True``. A list longer than ``caps.max_rows`` is cut the same way, a
+  result whose JSON (``data``, ``text``, ``facts`` and ``banners`` together) is larger than
+  ``caps.max_bytes`` is ``too_large``, and a call that runs longer than ``caps.max_seconds`` is
+  ``timeout``;
 - **fact ids unique per call**: every fact id's context gets a token (:func:`call_token`, a hash
   of the name, the arguments, the allowlist, the run config, the trust floor and the store
   generation, #295), ``F1@points`` -> ``F1@points-1a2b3c``, in ``facts``, ``text`` and ``data``;
@@ -70,6 +74,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from ._page import collect
 from ._policy import known_roots, redact, redact_value, research_only, run_config_for
 from ._sanitize import cap_strings, finish, hide_spans, lead, one_line, show_spans, unmark
 
@@ -107,7 +112,7 @@ class Caps:
     """Limits on one call."""
 
     max_rows: int = 5000  # rows in any tabular part of a result
-    max_bytes: int = 2_000_000  # serialized JSON size of CapabilityResult.data
+    max_bytes: int = 2_000_000  # serialized JSON size of the whole result (and an MCP reply)
     max_seconds: float = 120.0  # wall-clock budget of one call
 
 
@@ -334,10 +339,11 @@ class Registry:
             )
         check_arguments(ctx, arguments)
 
-        res = self._run(cap, ctx, dict(arguments))
+        res, cuts = self._run(cap, ctx, dict(arguments))
         if not isinstance(res, CapabilityResult):
             raise TypeError(f"handler returned {type(res).__name__}, not a CapabilityResult")
         data, banners = _truncate(res.data, ctx.caps.max_rows)
+        banners = [*cuts, *(b for b in banners if b not in cuts)]
         token = call_token(cap.name, arguments, ctx)
         facts_in, text_in, data = _sanitized(res, data)
         facts, text_in, data = _scoped(facts_in, text_in, data, token)
@@ -347,36 +353,33 @@ class Registry:
         stray = outside_allowlist(data, ctx.allowed_facilities)
         if stray is not None:
             raise ValueError(f"result names facility {stray!r} outside the allowlist")
-        size = len(json.dumps(data, allow_nan=False, sort_keys=True).encode("utf-8"))
-        if size > ctx.caps.max_bytes:
-            raise CapabilityError(
-                "too_large",
-                f"the result is {size:,} bytes, over this caller's limit of "
-                f"{ctx.caps.max_bytes:,}; narrow the query",
-                data={"bytes": size, "max_bytes": ctx.caps.max_bytes},
-            )
+        json.dumps(data, allow_nan=False)  # NaN / inf in data is the handler's bug: internal
         hidden, spans = hide_spans(text_in)  # a quoted data value is one word to the filter
         text, cite_banners = _grounded(hidden, facts)
         text = lead(unmark(show_spans(text, spans)))
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
-        own = [unmark(finish(b)) for b in res.banners or []]
-        return replace(
+        own = [unmark(finish(b)) for b in [*(res.banners or []), *banners]]
+        out = replace(
             res,
             data=data,
             text=text,
             facts=facts,
-            banners=[*([notice] if notice else []), *own, *banners, *cite_banners],
+            banners=[*([notice] if notice else []), *own, *cite_banners],
             truncated=bool(res.truncated or banners),
         )
+        _too_large(_result_bytes(out), ctx.caps.max_bytes)
+        return out
 
     @staticmethod
-    def _run(cap: Capability, ctx: CallContext, arguments: dict) -> CapabilityResult:
-        """The handler in a worker thread, no-persist, within ``ctx.caps.max_seconds``."""
+    def _run(cap: Capability, ctx: CallContext, arguments: dict) -> tuple:
+        """``(result, notices)``: the handler in a worker thread, no-persist, within
+        ``ctx.caps.max_seconds``, and the notices of what its pages left out."""
         from .._nopersist import no_persist
 
         box: dict = {}
 
         def work():
+            box["cuts"], _token = collect()
             try:
                 with no_persist():
                     box["result"] = cap.handler(ctx, arguments)
@@ -400,7 +403,25 @@ class Registry:
             if not isinstance(err, Exception):  # SystemExit, KeyboardInterrupt from a handler
                 raise RuntimeError(f"the handler raised {type(err).__name__}")
             raise err
-        return box["result"]
+        return box["result"], list(box["cuts"])
+
+
+def _result_bytes(res: CapabilityResult) -> int:
+    """The size of ``res`` as compact JSON: its data, text, facts and banners together."""
+    whole = {"data": res.data, "text": res.text, "facts": res.facts, "banners": res.banners}
+    text = json.dumps(whole, ensure_ascii=False, separators=(",", ":"), default=str)
+    return len(text.encode("utf-8", "backslashreplace"))
+
+
+def _too_large(size: int, max_bytes: int) -> None:
+    """``CapabilityError("too_large")`` when ``size`` bytes is over ``max_bytes``."""
+    if size > max_bytes:
+        raise CapabilityError(
+            "too_large",
+            f"the result is {size:,} bytes, over this caller's limit of {max_bytes:,}; ask for "
+            "a smaller page (limit) or narrow the query",
+            data={"bytes": size, "max_bytes": max_bytes},
+        )
 
 
 def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:

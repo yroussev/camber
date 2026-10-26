@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import check_selection
+from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
 
 _TEXT = {"type": "string", "minLength": 1, "maxLength": 200}
+#: points per page by default (#299)
+_PAGE = 250
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19,6 +22,8 @@ INPUT_SCHEMA = {
         "equip": {**_TEXT, "description": "only this equipment id (exact match)"},
         "role": {**_TEXT, "description": "only this point role (e.g. supply_air_temp)"},
         "equip_class": {**_TEXT, "description": "only equipment of this class (e.g. AHU)"},
+        "limit": limit_arg(_PAGE, "points"),
+        "offset": OFFSET,
     },
 }
 
@@ -40,8 +45,8 @@ OUTPUT_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "facility_id": {"type": "string"},
-        "points": {"type": "array", "items": _ROW},
-        "count": {"type": "integer", "minimum": 0, "description": "matches before any cap"},
+        "points": {"type": "array", "items": _ROW, "description": "by equipment and role; a page"},
+        "count": {"type": "integer", "minimum": 0, "description": "matches before paging"},
         "n_equipment": {"type": "integer", "minimum": 0},
     },
 }
@@ -84,7 +89,8 @@ def points(ctx, arguments: dict) -> CapabilityResult:
         }
     ]
     text = f"{fid} stores {len(rows)} matching points on {n_eq} equipment [F1@points]."
-    data = {"facility_id": fid, "points": rows, "count": len(rows), "n_equipment": n_eq}
+    shown = page(rows, arguments, default=_PAGE, what="points", more="or filter by equip or role")
+    data = {"facility_id": fid, "points": shown, "count": len(rows), "n_equipment": n_eq}
     return CapabilityResult(data=data, text=text, facts=facts)
 
 
@@ -93,10 +99,10 @@ CAPABILITIES = (
         name="points",
         title="Points of a facility",
         description=(
-            "List the stored points (trend series) of one facility: each point's equipment id, "
-            "equipment class and role (what the point measures, e.g. supply_air_temp). Filter "
-            "by equip, role or equip_class to narrow a large site. Use it to see what data a "
-            "facility has before asking for an analysis. Needs facility_id (see facilities)."
+            "List one facility's stored points (trend series): equipment id, equipment class and "
+            "role (what the point measures, e.g. supply_air_temp). Filter by equip, role or "
+            "equip_class. Use it to see what data a facility has before asking for an analysis. "
+            "Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

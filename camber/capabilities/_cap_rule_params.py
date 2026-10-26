@@ -10,6 +10,12 @@ from functools import lru_cache
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite, jsonable
+from ._page import OFFSET, page
+
+#: rules per page by default (#299): without and with detail
+_PAGE, _PAGE_DETAIL = 25, 10
+#: the parameter fields a rule's fact carries (the figures a sentence may cite)
+_FACT_FIELDS = ("name", "default", "unit", "range")
 
 
 @lru_cache(maxsize=1)
@@ -43,6 +49,13 @@ INPUT_SCHEMA = {
             "description": "include each parameter's basis, calibration advice and note "
             "(default true when rules are named, else false)",
         },
+        "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": f"rules per page (default {_PAGE}, or {_PAGE_DETAIL} with detail)",
+        },
+        "offset": OFFSET,
     },
 }
 
@@ -88,8 +101,8 @@ OUTPUT_SCHEMA = {
     "required": ["count", "rules"],
     "additionalProperties": False,
     "properties": {
-        "count": {"type": "integer", "minimum": 0},
-        "rules": {"type": "array", "items": _RULE},
+        "count": {"type": "integer", "minimum": 0, "description": "matches before paging"},
+        "rules": {"type": "array", "items": _RULE, "description": "one page, by name"},
     },
 }
 
@@ -142,22 +155,30 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
             continue
         if not detail:
             row["params"] = [
-                {k: v for k, v in p.items() if k in ("name", "default", "unit", "range")}
-                for p in row["params"]
+                {k: v for k, v in p.items() if k in _FACT_FIELDS} for p in row["params"]
             ]
         rows.append(row)
     if named and not rows:
         raise CapabilityError("not_found", "no named rule matches the query")
     n_params = sum(len(r["params"]) for r in rows)
+    matched = len(rows)
+    rows = page(
+        rows,
+        arguments,
+        default=_PAGE_DETAIL if detail else _PAGE,
+        what="rules",
+        order="by name",
+        more="or filter with rules or query",
+    )
     facts = [
         {
             "id": "F1@rule_params",
             "kind": "rule_count",
-            "value": len(rows),
-            "text": f"{len(rows)} rule(s) match, with {n_params} tunable parameter(s) between them",
+            "value": matched,
+            "text": f"{matched} rule(s) match, with {n_params} tunable parameter(s) between them",
         }
     ]
-    text = [f"{len(rows)} rule(s) match, with {n_params} tunable parameter(s) [F1@rule_params]."]
+    text = [f"{matched} rule(s) match, with {n_params} tunable parameter(s) [F1@rule_params]."]
     for i, r in enumerate(rows[:200], start=2):
         listed = ", ".join(
             f"{p['name']} = {p['default']!r}" + (f" {p['unit']}" if p.get("unit") else "")
@@ -170,12 +191,12 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
                 "rule": r["rule"],
                 "value": len(r["params"]),
                 "text": f"{r['rule']} ({r['kind']}) defaults: {listed or 'no tunable parameters'}",
-                "params": r["params"],
+                "params": [{k: v for k, v in p.items() if k in _FACT_FIELDS} for p in r["params"]],
             }
         )
         if named and i - 1 <= 10:
             text.append(cite(facts[-1]))
-    data = {"count": len(rows), "rules": rows}
+    data = {"count": matched, "rules": rows}
     return CapabilityResult(data=data, text=" ".join(text), facts=facts)
 
 
@@ -184,12 +205,11 @@ CAPABILITIES = (
         name="rule_params",
         title="Rule parameters",
         description=(
-            "List CAMBER's fault-detection rules (and opt-in drift detectors), the equipment "
-            "families each is written for, and their tunable parameters with defaults, units "
-            "and sensible ranges; with detail, also where each default comes from (a standard, "
-            "a public source, judgment or a calibration) and how to calibrate it. Use it to "
-            "choose rules and params for rule_run, or to explain a threshold. Filter by rule "
-            "names or query words. Cheap (no data read)."
+            "CAMBER's fault-detection rules and opt-in drift detectors: the equipment families "
+            "each is written for and its tunable parameters (default, unit, range); with detail, "
+            "where each default comes from and how to calibrate it. Use it to choose rules and "
+            "params for rule_run, or to explain a threshold. Filter by rules or query words. "
+            "Cheap: no data read."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

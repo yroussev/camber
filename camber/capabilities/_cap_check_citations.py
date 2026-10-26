@@ -10,8 +10,11 @@ from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite
+from ._page import OFFSET, limit_arg, page
 
 _VERDICTS = ("supported", "unknown_citation", "uncited", "unsupported_number")
+#: sentences (and cited ids) per page by default (#299)
+_PAGE = 50
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -49,6 +52,13 @@ INPUT_SCHEMA = {
             "facts that sentence cites (default true); false: numbers may trace to any fact the "
             "text cites, and an uncited sentence without numbers passes",
         },
+        "detail": {
+            "type": "boolean",
+            "description": "list every sentence and return verified_text (default false: only "
+            "the sentences that fail, so the result stays small)",
+        },
+        "limit": limit_arg(_PAGE, "sentences, cited"),
+        "offset": OFFSET,
     },
 }
 
@@ -68,21 +78,32 @@ _SENTENCE = {
 OUTPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["grounded", "n_sentences", "n_supported", "verified_text", "sentences", "cited"],
+    "required": ["grounded", "n_sentences", "n_supported", "verdicts", "sentences", "cited"],
     "additionalProperties": False,
     "properties": {
         "grounded": {"type": "boolean", "description": "every sentence is supported"},
         "n_sentences": {"type": "integer", "minimum": 0},
         "n_supported": {"type": "integer", "minimum": 0},
+        "verdicts": {
+            "type": "object",
+            "required": list(_VERDICTS),
+            "additionalProperties": False,
+            "properties": {v: {"type": "integer", "minimum": 0} for v in _VERDICTS},
+            "description": "sentences per verdict",
+        },
         "verified_text": {
             "type": "string",
-            "description": "the text with every unsupported sentence removed",
+            "description": "with detail: the text with every unsupported sentence removed",
         },
-        "sentences": {"type": "array", "items": _SENTENCE},
+        "sentences": {
+            "type": "array",
+            "items": _SENTENCE,
+            "description": "the failing sentences (with detail: every sentence); a page",
+        },
         "cited": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "known fact ids the text cites, in order",
+            "description": "known fact ids the text cites, each once, in order; a page",
         },
     },
 }
@@ -153,15 +174,20 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
             }
         )
     n_ok = sum(1 for s in sentences if s["verdict"] == "supported")
-    bad = {v: sum(1 for s in sentences if s["verdict"] == v) for v in _VERDICTS[1:]}
+    bad = {v: sum(1 for s in sentences if s["verdict"] == v) for v in _VERDICTS}
+    detail = bool(arguments.get("detail"))
+    listed = sentences if detail else [s for s in sentences if s["verdict"] != "supported"]
+    cited = list(dict.fromkeys(c for c in extract_cites(arguments["text"]) if c in known))
     data = {
         "grounded": n_ok == len(sentences),
         "n_sentences": len(sentences),
         "n_supported": n_ok,
-        "verified_text": whole.text,
-        "sentences": sentences,
-        "cited": [c for c in extract_cites(arguments["text"]) if c in known],
+        "verdicts": bad,
+        "sentences": page(listed, arguments, default=_PAGE, what="sentences", order="in order"),
+        "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
     }
+    if detail:
+        data["verified_text"] = whole.text
     facts = [
         {
             "id": "F1@check_citations",
@@ -177,7 +203,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     if n_ok < len(sentences):
         banners.append(
             "Some sentences are not supported by the facts they cite: fix or remove them "
-            "(verified_text has them removed) before sharing the text."
+            "before sharing the text (with detail, verified_text has them removed)."
         )
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
 
@@ -187,13 +213,11 @@ CAPABILITIES = (
         name="check_citations",
         title="Check citations",
         description=(
-            "Verify a drafted text (a summary, an email, a report paragraph) against the facts "
-            "of earlier results before showing it: pass the text and the 'facts' arrays those "
-            "results returned. Each sentence gets a verdict -- supported, unknown_citation (an "
-            "id that is not among the facts), uncited (no [id] at all) or unsupported_number (a "
-            "figure no cited fact carries) -- and verified_text keeps only the supported ones. "
-            "Call it last, on your own draft, and fix what it flags. Reads no building data. "
-            "Cheap."
+            "Check a drafted text against the facts of earlier results before showing it: pass "
+            "the text and those results' 'facts'. Each sentence is supported, unknown_citation "
+            "(an id not among the facts), uncited (no [id]) or unsupported_number (a figure no "
+            "cited fact carries); the failing ones are listed (detail: every sentence, plus "
+            "verified_text). Call it last, on your own draft. Cheap: reads no building data."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

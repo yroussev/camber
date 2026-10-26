@@ -25,16 +25,16 @@ DATE = {
         r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])"
         r"([T ]([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?)?$"
     ),
-    "description": "an ISO date or date-time in the site's wall clock (e.g. 2024-03-01)",
+    "description": "ISO date or date-time, site wall clock",
 }
 TEXT = {"type": "string", "minLength": 1, "maxLength": 200}
-FACILITY = {**TEXT, "description": "a facility_id from the facilities capability"}
+FACILITY = {**TEXT, "description": "a facility_id from facilities"}
 EQUIPS = {
     "type": "array",
     "items": TEXT,
     "minItems": 1,
     "maxItems": 200,
-    "description": "only these equipment ids (exact match; see the points capability)",
+    "description": "only these equipment ids (exact; see points)",
 }
 SEVERITIES = ("fault", "warn", "info", "ok")
 SEVERITY = {"type": "string", "enum": list(SEVERITIES)}

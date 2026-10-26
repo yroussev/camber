@@ -21,8 +21,12 @@ from ._common import (
     jsonable,
     window,
 )
+from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
+
+#: points per page by default (#299)
+_PAGE = 100
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -53,6 +57,8 @@ INPUT_SCHEMA = {
             "maximum": 1,
             "description": "flag points below this trust; never lower than the caller's floor",
         },
+        "limit": limit_arg(_PAGE, "points"),
+        "offset": OFFSET,
     },
 }
 
@@ -111,8 +117,8 @@ OUTPUT_SCHEMA = {
                 for k in ("trusted", "suspect", "untrusted", "below_floor")
             },
         },
-        "n_points": {"type": "integer", "minimum": 0},
-        "points": {"type": "array", "items": _ROW, "description": "least trusted first"},
+        "n_points": {"type": "integer", "minimum": 0, "description": "points before paging"},
+        "points": {"type": "array", "items": _ROW, "description": "least trusted first; a page"},
     },
 }
 
@@ -206,7 +212,8 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         f"Of {len(rows)} points on {fid}, {counts['below_floor']} are below the trust floor "
         f"{floor:g} [F1@sensor_trust]."
     ]
-    for i, r in enumerate(rows[:_FACTS], start=2):
+    shown = page(rows, arguments, default=_PAGE, what="points", order="least trusted first")
+    for i, r in enumerate(shown[:_FACTS], start=2):
         if r["verdict"] == "trusted" and not r["below_floor"]:
             break
         why = ", ".join(r["flags"]) or "no single flag"
@@ -244,7 +251,7 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         "min_trust": floor,
         "counts": counts,
         "n_points": len(rows),
-        "points": rows,
+        "points": shown,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
@@ -254,14 +261,13 @@ CAPABILITIES = (
         name="sensor_trust",
         title="Sensor trust",
         description=(
-            "Score how far each stored point of a facility can be trusted (0-1, with a verdict "
-            "trusted / suspect / untrusted) from coverage, flatlines and stuck runs, outliers, "
-            "physical range and cross-point checks, with the flags that explain the score. "
-            "Least trusted first; below_floor marks points under the caller's trust floor, the "
+            "Score each stored point of a facility for trust (0-1: trusted / suspect / untrusted)"
+            " from coverage, flatlines, stuck runs, outliers, physical range and cross-point "
+            "checks, with the flags behind the score. Least trusted first; below_floor marks the "
             "inputs a rule run declines on. Use it before believing a fault, or to list sensors "
-            "to calibrate. view='report' reads duct points with the fan on and plant points "
-            "while running, as the RCx report does. Cost: reads every trend of the facility "
-            "(narrow with equips, roles or a window). Needs facility_id."
+            "to calibrate. view='report' judges duct points with the fan on, as the RCx report "
+            "does. Cost: reads every trend (narrow with equips, roles or a window). Needs "
+            "facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

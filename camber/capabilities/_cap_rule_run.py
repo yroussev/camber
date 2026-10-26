@@ -36,6 +36,7 @@ from ._common import (
     window,
     with_rules,
 )
+from ._page import OFFSET, limit_arg, page
 
 _RULES = {
     "type": "array",
@@ -61,6 +62,9 @@ _RUN_ARGS = {
     "end": DATE,
 }
 
+#: findings (and skipped rules) per page by default (#299): about 60 KB on the wire
+_PAGE = 25
+
 RULE_RUN_INPUT = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -73,6 +77,8 @@ RULE_RUN_INPUT = {
             "description": "list findings at least this severe (default info: ok verdicts are "
             "counted, not listed)",
         },
+        "limit": limit_arg(_PAGE, "findings, skipped"),
+        "offset": OFFSET,
     },
 }
 
@@ -121,9 +127,9 @@ RULE_RUN_OUTPUT = {
         "rules_run": {"type": "array", "items": {"type": "string"}},
         "n_equipment": {"type": "integer", "minimum": 0},
         "counts": COUNTS,
-        "count": {"type": "integer", "minimum": 0, "description": "listed findings before caps"},
-        "findings": {"type": "array", "items": FINDING_ROW},
-        "skipped": {"type": "array", "items": _SKIP},
+        "count": {"type": "integer", "minimum": 0, "description": "findings before paging"},
+        "findings": {"type": "array", "items": FINDING_ROW, "description": "one page"},
+        "skipped": {"type": "array", "items": _SKIP, "description": "one page"},
     },
 }
 
@@ -154,7 +160,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     counts = severity_counts(rows)
     floor = SEVERITIES.index(arguments.get("min_severity") or "info")
     listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= floor]
-    skipped = sorted(
+    every_skip = sorted(
         (
             {
                 "rule": str(s.rule),
@@ -166,6 +172,8 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         ),
         key=lambda s: (s["rule"], s["equip"]),
     )
+    shown = page(listed, arguments, default=_PAGE, what="findings", order="worst first")
+    skipped = page(every_skip, arguments, default=_PAGE, what="skipped")
     n_rules = len(res.rules_run)
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
     declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
@@ -178,7 +186,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "counts": counts,
             "text": f"{n_rules} rules ran on {res.equipment} equipment of {fid}: "
             f"{counts['fault']} fault, {counts['warn']} warn, {counts['info']} info and "
-            f"{counts['ok']} ok findings, {len(skipped)} rule(s) skipped for missing inputs"
+            f"{counts['ok']} ok findings, {len(every_skip)} rule(s) skipped for missing inputs"
             f"{declined}",
         }
     ]
@@ -186,7 +194,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         f"{n_rules} rules ran on {res.equipment} equipment of {fid}, with {counts['fault']} "
         f"fault and {counts['warn']} warn findings{declined} [F1@rule_run]."
     ]
-    for i, r in enumerate(listed[:_FACTS], start=2):
+    for i, r in enumerate(shown[:_FACTS], start=2):
         fact_id = f"F{i}@rule_run"
         r["fact"] = fact_id
         facts.append(finding_fact(fact_id, r))
@@ -204,7 +212,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         "n_equipment": int(res.equipment),
         "counts": counts,
         "count": len(listed),
-        "findings": listed,
+        "findings": shown,
         "skipped": skipped,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
@@ -516,15 +524,12 @@ CAPABILITIES = (
         name="rule_run",
         title="Run the FDD rules",
         description=(
-            "Run CAMBER's fault-detection rules on one facility and return the findings, worst "
-            "first: each with a finding_id, rule, equipment, severity (fault / warn / info / ok), "
-            "a one-line summary, caveats and its scalar metrics, plus counts per severity and the "
-            "rules skipped for missing inputs. Uses the caller's run config for the facility when "
-            "there is one (its rules, parameters and mapping), else every built-in rule on every "
-            "stored equipment class. Narrow it with rules, equips, a start / end window and "
-            "per-rule params (see rule_params). Nothing is saved. Cost: reads the facility's "
-            "trends and runs every rule -- seconds on a small site, minutes on a large one; "
-            "narrow it when you can. Needs facility_id (see facilities)."
+            "Run the fault-detection rules on one facility: the findings worst first (finding_id,"
+            " rule, equipment, severity fault / warn / info / ok, summary, caveats, scalar "
+            "metrics), the counts per severity and the rules skipped for missing inputs. Uses the"
+            " caller's run config when there is one, else every built-in rule on every stored "
+            "equipment class. Narrow with rules, equips, start / end and per-rule params (see "
+            "rule_params). Nothing is saved. Cost: seconds to minutes. Needs facility_id."
         ),
         input_schema=RULE_RUN_INPUT,
         output_schema=RULE_RUN_OUTPUT,
@@ -535,15 +540,12 @@ CAPABILITIES = (
         name="finding_detail",
         title="Finding detail and evidence",
         description=(
-            "Explain one finding from rule_run: its full metrics, the parameter values the rule "
-            "ran with (default, overridden or the rule's built-in fallback), the hours it "
-            "flagged as contiguous time spans (and per named sub-condition, e.g. G36 fault "
-            "conditions; for an event rule the events counted, apart from the hours), or why "
-            "there are none (violations_note), and which evidence chart applies (renderer, the "
-            "roles plotted, what it shows). Returns no image. Pass the finding_id and the same "
-            "facility_id, rules, params, equips and window as the rule_run call: the finding is "
-            "read from the same run, so it matches rule_run's. Cost: the same rule run as "
-            "rule_run."
+            "Explain one rule_run finding: all its metrics, the parameter values the rule ran "
+            "with (default, overridden or built-in fallback), the hours it flagged as time spans "
+            "(also per named sub-condition such as a G36 fault condition, and any events counted)"
+            " or why there are none, and which evidence chart applies. No image. Pass the "
+            "finding_id with the same facility_id, rules, params, equips and window as the "
+            "rule_run call. Cost: the same rule run."
         ),
         input_schema=DETAIL_INPUT,
         output_schema=DETAIL_OUTPUT,

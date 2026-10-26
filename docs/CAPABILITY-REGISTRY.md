@@ -15,7 +15,7 @@ keys. A call returns a `CapabilityResult`:
 | `text` | a short summary that cites fact ids such as `[F1@points-1a2b3c]` (one token per call) |
 | `facts` | the fact index those ids name: `{"id", "kind", "value", "text", ...}` |
 | `banners` | licence, truncation and citation notices, always shown to the user |
-| `truncated` | `True` when a list was cut to the caller's row limit |
+| `truncated` | `True` when any list in `data` is not the whole list: a page (see **Pages** below), or a list cut to the row cap |
 
 A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
 `unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
@@ -69,21 +69,38 @@ registry scopes them. A facility is named only by `facility_id`, so the allowlis
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.
 
+**Pages** (0.111, #299). A list-returning capability returns one model-sized page of each list
+by default, so a typical result stays under about 100 KB (25k tokens) on the wire, and takes
+`limit` (the page size, up to 1,000) and `offset` (rows to skip) to ask for others; the counts
+in `data` (`count`, `n_points`, the KPIs ...) are always of the whole list. A page that is not
+the whole list sets `truncated` and adds a banner such as
+`'findings' shows rows 1-25 of 159 (worst first): call again with offset=25 for the next page,
+or a larger limit (up to 1000)`. The default pages: `facilities` 100, `points` 250, `coverage`
+50 per list (equipment, points, gaps), `sensor_trust` 100 points, `rule_run` 25 findings and 25
+skipped rules, `drift` 25 per list, `rule_params` 25 rules (10 with `detail`), `check_citations`
+50 sentences; `rcx_report` returns `top_n` ranked issues (default the config's, else 8; `offset`
+for the next ones) with only their facts and sections, and the first 20 entries of the fact
+index's appendix A (declines and data gaps; `limit` for more).
+
+A capability cuts a list only with `camber.capabilities._page.page`, which records the notice in
+the call; `Registry.call` turns every recorded notice into a banner and sets `truncated`, so a
+capability cannot cut a list and leave the flag false.
+
 | Name | Arguments | Returns | Cost |
 |---|---|---|---|
-| `facilities` | none | the allowed facilities: id, name, lifecycle state, time zone, first and last stored sample, point and equipment counts | cheap |
+| `facilities` | optional `limit`, `offset` | the allowed facilities: id, name, lifecycle state, time zone, first and last stored sample, point and equipment counts | cheap |
 | `points` | `facility_id`; optional `equip`, `role`, `equip_class` | the facility's stored points (equipment, class, role), sorted, and their count | cheap |
 | `coverage` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `group_by` (`point` / `equip`), `min_gap_hours` | per point the samples, first and last sample, interval, coverage and gaps; per equipment the mean and the worst point; the longest gaps | one timestamp scan |
 | `sensor_trust` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `view` (`rules` / `report`), `min_trust` | per point the trust score, verdict, flags and whether it is below the caller's trust floor (`ctx.min_trust`, or a higher `min_trust`), least trusted first | reads every trend |
 | `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics), worst first; counts per severity; the rules skipped for missing inputs | long-running |
 | `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default, overridden or the rule's built-in fallback), its flagged hours as contiguous time spans (and per named sub-condition; an event rule's events counted apart from the hours) or why there are none (`violations_note`), and which evidence chart applies; no image | the same run as `rule_run` |
-| `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n` | the RCx report as data: KPIs, ranked issues (cause, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
+| `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n`, `offset`, `limit` | the RCx report as data: KPIs, the `top_n` ranked issues (cause, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
 | `mv_summary` | `facility_id`; optional `equips` | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty, triggers, method proposals, and which declined | seconds |
 | `drift` | `facility_id`; optional `baseline` `[start, end]`, `current`, `families`, `equips` | drift findings and per-equipment verdicts against a known-good baseline window (fitted for the call, never saved) or the run config's frozen baselines (read, never written), and the equipment not evaluated | long-running |
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors, the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
-| `check_citations` | `text`, `facts`; optional `per_sentence` | a verdict per sentence of a drafted text (`supported`, `unknown_citation`, `uncited`, `unsupported_number`) against the facts of earlier results, and the text with the unsupported sentences removed | cheap |
+| `check_citations` | `text`, `facts`; optional `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `uncited`, `unsupported_number`) of a drafted text's sentences against the facts of earlier results, and the sentences that fail; with `detail`, every sentence and the text with the unsupported sentences removed | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
@@ -187,9 +204,9 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    untrusted inputs, and their summary and first fact give the count (0.111, #297): a declined
    check is not a pass.
 6. **Caps** (`ctx.caps`). A list in the result longer than `max_rows` (5,000) is cut, with
-   `truncated=True` and a banner that says how many rows there were; a result whose JSON is
-   larger than `max_bytes` (2 MB) is `too_large`; a call that runs longer than `max_seconds`
-   (120 s) is `timeout`.
+   `truncated=True` and a banner that says how many rows there were; a result whose JSON --
+   `data`, `text`, `facts` and `banners` together (0.111, #299) -- is larger than `max_bytes`
+   (2 MB) is `too_large`; a call that runs longer than `max_seconds` (120 s) is `timeout`.
 7. **Citations.** `text` is checked against `facts` with `camber.agent.verify.check` (strict): a
    sentence that states a figure no cited fact carries is removed, and a citation of an id the
    result has no fact for is removed (its sentence kept), each with a banner that says which
