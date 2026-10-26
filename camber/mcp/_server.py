@@ -59,6 +59,9 @@ _CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 _SERVER_INFO = "io.modelcontextprotocol/serverInfo"
 
+#: what this server offers: tools, prompts and completion of the prompts' arguments (#304)
+_CAPABILITIES: dict[str, dict] = {"tools": {}, "prompts": {}, "completions": {}}
+
 #: CapabilityError codes reported to the model as a tool result with ``isError: true`` (a tool
 #: execution error it can act on); ``internal`` is a server error and a JSON-RPC -32603.
 TOOL_ERROR_CODES = frozenset(
@@ -490,7 +493,7 @@ class McpServer:
             result = self._cacheable(
                 {
                     "supportedVersions": list(SUPPORTED_VERSIONS),
-                    "capabilities": {"tools": {}, "prompts": {}},
+                    "capabilities": dict(_CAPABILITIES),
                     "instructions": self.instructions,
                 }
             )
@@ -506,6 +509,8 @@ class McpServer:
             result = self._cacheable({"prompts": [self._prompt_def(p) for p in self._prompts]})
         elif method == "prompts/get":
             result = self._get_prompt(params)
+        elif method == "completion/complete":
+            result = self._complete_argument(params)
         else:
             raise _RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
         return self._complete(result)
@@ -532,6 +537,8 @@ class McpServer:
             return {"prompts": [self._prompt_def(p) for p in self._prompts]}
         if method == "prompts/get":
             return self._get_prompt(params)
+        if method == "completion/complete":
+            return self._complete_argument(params)
         raise _RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
 
     # ------------------------------------------------------------------ lifecycle (legacy)
@@ -564,7 +571,7 @@ class McpServer:
         )
         return {
             "protocolVersion": version,
-            "capabilities": {"tools": {}, "prompts": {}},
+            "capabilities": dict(_CAPABILITIES),
             "serverInfo": dict(self.server_info),
             "instructions": self.instructions,
         }
@@ -738,6 +745,53 @@ class McpServer:
             "camber/truncated": bool(res.truncated),
         }
         return out
+
+    def _complete_argument(self, params: dict) -> dict:
+        """``completion/complete`` for a prompt argument (0.111, #304): facility ids from the
+        allowlist, equipment ids from the store for an allowed facility in
+        ``context.arguments`` (see ``camber.capabilities.Registry.complete``)."""
+        ref = params.get("ref")
+        if not isinstance(ref, dict) or ref.get("type") != "ref/prompt":
+            raise _RpcError(
+                INVALID_PARAMS, 'Invalid params: "ref" must be a ref/prompt (no resources here)'
+            )
+        name = ref.get("name")
+        if not isinstance(name, str) or name not in self._prompt_by_name:
+            raise _RpcError(INVALID_PARAMS, f"Unknown prompt: {_printable(str(name))}")
+        arg = params.get("argument")
+        if not (
+            isinstance(arg, dict)
+            and isinstance(arg.get("name"), str)
+            and isinstance(arg.get("value", ""), str)
+        ):
+            raise _RpcError(
+                INVALID_PARAMS, 'Invalid params: "argument" needs a string name and value'
+            )
+        context = params.get("context") or {}
+        given = context.get("arguments") if isinstance(context, dict) else None
+        given = given if isinstance(given, dict) else {}
+        given = {k: v for k, v in given.items() if isinstance(k, str) and isinstance(v, str)}
+        complete = getattr(self.registry, "complete", None)
+        if complete is None:
+            values, total = [], 0
+        else:
+            try:
+                values, total = complete(
+                    name, arg["name"], arg.get("value", ""), given, self.context
+                )
+            except Exception as exc:
+                cap_err = _capability_error(exc)
+                if cap_err is not None and cap_err[0] == "invalid_params":
+                    raise _RpcError(INVALID_PARAMS, f"Invalid params: {cap_err[1]}") from None
+                log.exception("completion for prompt %s failed", name)
+                raise _RpcError(INTERNAL_ERROR, "Internal error") from None
+        return {
+            "completion": {
+                "values": list(values),
+                "total": int(total),
+                "hasMore": total > len(values),
+            }
+        }
 
     def _get_prompt(self, params: dict) -> dict:
         name = params.get("name")

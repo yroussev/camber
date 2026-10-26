@@ -114,6 +114,23 @@ def show_spans(text: str, spans: list) -> str:
     return re.sub(f"{OPEN}[a-z]+{CLOSE}", sub, text)
 
 
+#: CAMBER's own references in its prose: a module path ``(camber/iaq.py)`` and a release or issue
+#: tag ``(0.98, #85)`` / ``(#94)`` -- meaningless to a model or a building owner (0.111, #304)
+_INTERNAL = re.compile(
+    r"\s*\((?:camber/[\w./-]+\.py(?:,\s*camber/[\w./-]+\.py)*"
+    r"|(?:\d+\.\d+(?:\.\d+)?,\s*)?#\d+(?:,\s*#\d+)*)\)"
+)
+
+
+def plain(text: str) -> str:
+    """``text`` without CAMBER's internal references (:data:`_INTERNAL`); a quoted span (a name
+    from the data) is left as it is."""
+    if "(" not in text:
+        return text
+    parts = re.split(f"({_SPAN.pattern})", text)
+    return "".join(p if p.startswith(OPEN) else _INTERNAL.sub("", p) for p in parts)
+
+
 def unmark(text: str) -> str:
     """``text`` without the marks of its quoted spans (the quotes stay)."""
     return text.replace(OPEN, "").replace(CLOSE, "")

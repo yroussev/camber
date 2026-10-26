@@ -949,6 +949,7 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     sup = support_of(base["oat"].values, quantile=policy.support_quantile)
     verdict = "meets" if st.accept else "does not meet"
     from .mandv.names import model_label  # 0.105 (#163): the summary shows the registry label
+    from .mandv.stats import _fmt
 
     metrics = {
         "model": model.kind,
@@ -989,8 +990,9 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
             severity="ok" if st.accept else "info",
             metrics=metrics,
             summary=(
-                f"{label}: {model_label(model)} billing baseline (days-weighted), R2 {st.r2:.2f}, "
-                f"CV(RMSE) {st.cv_rmse:.1%} over {st.n} bills ({int(days_b.sum())} days) -- "
+                f"{label}: {model_label(model)} billing baseline (days-weighted), R2 "
+                f"{_fmt(st.r2, '.2f')}, CV(RMSE) {_fmt(st.cv_rmse, '.1%')} over {st.n} "
+                f"bills ({int(days_b.sum())} days) -- "
                 f"{verdict} monthly G14 acceptance" + (_auto_suffix(fitted, model) if auto else "")
             ),
             caveats=list(notes) + base_notes,

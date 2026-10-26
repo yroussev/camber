@@ -28,7 +28,8 @@
         ],
         "capabilities": {
           "tools": {},
-          "prompts": {}
+          "prompts": {},
+          "completions": {}
         },
         "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Long lists come a page at a time (limit and offset arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
         "ttlMs": 300000,

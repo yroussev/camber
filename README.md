@@ -100,7 +100,7 @@ The core is dependency-light (numpy / pandas / pyarrow / matplotlib). Everything
 **optional extra**, lazy-imported so the core never pays for it: `brick`, `haystack`, `modbus`,
 `mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `yaml`, `pdf`, `docs`,
 `dev`.
-Install what you use.
+Install what you use, or every runtime extra with `pip install "camber-toolkit[all]"`.
 
 ```sh
 pip install -e .            # the package (editable)

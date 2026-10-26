@@ -51,7 +51,7 @@ def standin(store) -> None:
 def _rooms(ctx) -> None:
     """The fleet finding: ROOM_B's units fight, ROOM_A's work together (the rooms come from the
     config's topology, each unit's parent being its room)."""
-    f = ctx.finding(_ROOM, "fleet")
+    f = ctx.finding(_ROOM, "<fleet>")
     assert f is not None and f.severity == "fault", f
     rooms = f.metrics["rooms"]
     assert sorted(rooms) == ["ROOM_A", "ROOM_B"], sorted(rooms)

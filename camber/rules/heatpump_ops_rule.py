@@ -70,6 +70,8 @@ BAND_TOL_F = 1.0  # the zone must be this far past a setpoint to count as outsid
 #: A cooling run (mode from the compressor and the valve) no longer than this, with heating on both
 #: sides, is a defrost (0.106, #185). Defrosts end on a coil temperature or a 10-14 minute timer.
 MAX_DEFROST_MIN = 15.0
+#: the equipment of the one room-imbalance finding over every shared room (the fleet rules' id)
+_FLEET = "<fleet>"
 
 
 def infer_hp_mode(
@@ -522,7 +524,7 @@ class HPRoomImbalance(_HPBase):
         if not groups:
             return Finding(
                 rule=self.name,
-                equip="fleet",
+                equip=_FLEET,
                 severity="info",
                 metrics={"declined": True, "reason": "no_rooms", "n_rooms": 0},
                 summary="fleet: declined -- no room served by two or more heat pumps is declared",
@@ -592,7 +594,7 @@ class HPRoomImbalance(_HPBase):
                 f"differ by {r['active_spread_pct']:.0f} points, zone sensors by "
                 f"{r['zone_sensor_spread_f']:.1f}°F"
             )
-        return Finding(self.name, "fleet", worst, metrics, summary, caveats=caveats)
+        return Finding(self.name, _FLEET, worst, metrics, summary, caveats=caveats)
 
 
 #: The capacity verdicts that two units fighting in one room produce on their own (0.106, #185).
@@ -614,7 +616,7 @@ def _defer_capacity_to_room_fight(findings: list) -> int:
     """
     rooms: dict = {}
     for f in findings:
-        if f.rule == HPRoomImbalance.name and f.equip == "fleet":
+        if f.rule == HPRoomImbalance.name and f.equip in (_FLEET, "fleet"):
             rooms = (f.metrics or {}).get("rooms") or {}
     fighting = {
         unit: (room, r) for room, r in rooms.items() if r.get("fights") for unit in r["units"]

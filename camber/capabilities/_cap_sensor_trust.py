@@ -89,7 +89,16 @@ _ROW = {
         "verdict": {"type": "string", "enum": ["trusted", "suspect", "untrusted"]},
         "below_floor": {"type": "boolean"},
         "flags": {"type": "array", "items": {"type": "string"}},
-        "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "the share of the point's own span (from its first valid sample to "
+            "the window end) that holds a value; for a plant point trended only while its "
+            "equipment runs, of its running hours. A late start is the late_start flag, not low "
+            "coverage. The coverage capability measures over the whole window instead, so the "
+            "two can differ for one point",
+        },
         "flatline_frac": {"type": "number", "minimum": 0, "maximum": 1},
         "outlier_frac": {"type": "number", "minimum": 0, "maximum": 1},
         "range_violation_frac": {"type": ["number", "null"]},
@@ -225,7 +234,7 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 "role": r["role"],
                 "value": r["trust"],
                 "text": f"{name(r['equip'])} {name(r['role'])}: trust {r['trust']:.2f} "
-                f"({r['verdict']}; {why}); coverage {r['coverage']:.0%}",
+                f"({r['verdict']}; {why}); coverage {r['coverage']:.0%} of its own span",
             }
         )
         if i - 1 <= _LISTED:

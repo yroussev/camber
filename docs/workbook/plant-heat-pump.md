@@ -105,7 +105,7 @@ camber run hp20.json --out hp20_out
    `cooling_while_cold_hours`, `wrong_mode_pct_of_running`, `mode_source`) and
    `hp_capacity_shortfall` (`heating_outside_pct`, `cooling_outside_pct`, `verdict`, `side`).
    Plot the zone and discharge-air temperatures of each unit that fires.
-4. **The rooms.** Read the `hp_room_imbalance` finding (its equipment is `fleet`): `rooms` has
+4. **The rooms.** Read the `hp_room_imbalance` finding (its equipment is `<fleet>`): `rooms` has
    one entry per room, with `fight_pct`, `active_pct`, `zone_sensor_spread_f` and a severity.
    Plot the zone temperatures of `WSHP__window_side` and `WSHP__door_side` together.
 5. **Stages and the loop.** Read `compressor_staging` (`stage_changes_per_day`) for the six
@@ -142,7 +142,7 @@ camber run hp20.json --out hp20_out
 ## What CAMBER shows
 
 - **Findings.** `camber run` prints one line per finding: one per rule and unit, and one
-  `fleet` finding for `hp_room_imbalance`.
+  `<fleet>` finding for `hp_room_imbalance`.
 - **Defrost.** `heatpump_defrost` counts every change of the reversing valve (into a defrost
   and out of it, and every heating/cooling changeover) and reports `reversals_per_day`,
   `n_reversals` and `max_reversals_per_day`. It warns at the limit (24) and faults at twice it.

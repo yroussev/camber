@@ -611,9 +611,11 @@ estimated size. Exit codes: `2` checksum mismatch (a download is kept as `.bad`;
 `--from-dir` file is left untouched), `3` licence gate, `4` not enough disk, `1` any other error
 (including a manual entry named to `fetch`, a missing extra, a busy lock or a read-only cache).
 
-**Locks and a read-only cache (0.103).** `fetch`, `ingest` and `remove` take a single-writer
-lock on the cache (`<dir>/_lock`) and, for `ingest` and `remove --purge-store`, on the store
-(`<store>/_lock`, or the portfolio workspace's lock for a workspace store). A second writer waits
+**Locks and a read-only cache (0.103).** `fetch` and `remove` take a single-writer lock on the
+cache (`<dir>/_lock`); `ingest` takes it only while it writes to the cache (placing `--from-dir` files,
+extracting an archive member that is not there yet, or recording a licence acknowledgement), so
+ingests that only read the cache run side by side. `ingest` and `remove --purge-store` also take the store's lock
+(`<store>/_lock`, or the portfolio workspace's lock for a workspace store) for the whole write. A second writer waits
 up to 30 seconds (`--lock-timeout SECONDS` or `$CAMBER_LOCK_TIMEOUT` changes that; see
 [Store and cache locks](#store-and-cache-locks)), then exits 1 with
 `dataset cache … is locked by <pid>@<host> since <time>` (or `store … is locked by …`). Reads such

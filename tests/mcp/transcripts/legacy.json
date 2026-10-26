@@ -57,7 +57,8 @@
         "protocolVersion": "2025-11-25",
         "capabilities": {
           "tools": {},
-          "prompts": {}
+          "prompts": {},
+          "completions": {}
         },
         "serverInfo": {
           "name": "camber",

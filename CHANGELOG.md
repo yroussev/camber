@@ -105,6 +105,41 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   config's store while the others read `--store`. A config whose store is not the `--store`
   directory (any spelling of the same directory is fine) is now refused at startup.
 
+- **MCP and CLI papercuts from the 0.110.0 acceptance test (#304).**
+  - `camber mcp --store ""` is refused instead of reading the current directory, and
+    `--min-trust -inf` (or `-1e3`) gets the "from 0 to 1" message instead of "expected one
+    argument".
+  - `rule_run`'s headline no longer counts rule x equipment pairs as rules: it says how many
+    rules were run, how many of them gave findings, and how many rule-equipment pairs (over how
+    many rules) were skipped for missing inputs.
+  - `drift` always states how many detector checks declined, so "0 equipment were not evaluated"
+    no longer reads as everything judged.
+  - `supply_air_reset` without outdoor air temperature says what its warn is about ("COLD SAT
+    MOST COOLING HOURS; RESET NOT EVALUATED (no OAT)") instead of only "RESET NOT EVALUATED".
+  - A `rule_run` call naming a drift detector, or any value outside a long list of allowed
+    values, gets a short error with the closest names (and "drift detectors run with the drift
+    capability") instead of a 3 KB list of every rule.
+  - `rcx_report` issues list the `finding_ids` behind them (and each rule once), so the
+    `plan_site_visit` prompt's `finding_detail` calls no longer need a guess or an extra
+    `rule_run`.
+  - `mv_summary` says what unit a saving is in (the meter's own units unless the run config has a
+    `units` block) and, when the baseline fails G14 acceptance, that the saving is for
+    information only, in the text and in a notice. M&V summaries print "undefined" instead of
+    "nan" for a statistic that cannot be computed, and a baseline that fails acceptance says
+    which criterion it failed.
+  - Model-facing text no longer cites CAMBER's own module paths or release and issue tags
+    ("(camber/oafraction.py)", "(0.98, #85)").
+  - The heat-pump room-imbalance finding is on `<fleet>`, like every other fleet rule's, not
+    `fleet`; an `equips` of `<fleet>` gets a `not_found` that explains a fleet finding.
+  - `coverage` and `sensor_trust` say what their coverage is of (the whole window, or the
+    point's own span or running hours), so one point reading 35% in one and 100% in the other
+    is explained; the `data_quality_review` prompt says so too.
+  - `camber mcp` keeps matplotlib's font cache in a temporary directory removed at exit (unless
+    `MPLCONFIGDIR` is set): an `rcx_report` call wrote it under `$HOME`.
+  - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
+    docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
+    cache, as it always has.
+
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
   Equipment, point and facility names were copied verbatim into a capability result's summary:
@@ -154,6 +189,24 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   no config is used.
 - Every `camber mcp` launch mistake (a bad store, `--min-trust` out of range, an empty `--allow`,
   a bad config) exits 2, like the argument parser's usage errors; it was 1 (#296).
+- `camber run` and `camber mcp --config` warn about a top-level config key no run reads (a typo
+  such as `"rule"` was silently ignored); keys starting with `_` are notes. Neither refuses the
+  config (#304).
+- `rule_params` rows carry `run_with` (`rule_run` or `drift`), and an `rcx_report` issue's
+  `finding_ids`; the `equip` of a heat-pump room-imbalance finding is now `<fleet>`, so its
+  finding id is `hp_room_imbalance@<fleet>` (#304).
+
+### Added
+- **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and
+  answers `completion/complete` in both protocol revisions: `facility_id` from the allowed
+  facilities a call would read (never a research-only one) and `equip` / `equips` from the stored
+  equipment of the facility already chosen, so a person starting a prompt no longer has to know
+  the ids. `Registry.complete` gives the same to any adapter.
+- **`pip install "camber-toolkit[all]"`** installs every optional runtime extra (not `dev` or
+  `docs`) (#304).
+- `camber datasets list` marks a dataset that needs an optional extra (`[needs xlsx]`, with the
+  install command), and `camber datasets info` says whether it is installed, before anyone
+  fetches it; docs/DATASETS.md marks `ornl-frp-vav` as needing the `xlsx` extra (#304).
 
 ## [0.110.0] — 2026-10-25
 

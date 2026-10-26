@@ -165,7 +165,7 @@ synthetic-chw-plant-staging (see "Adding a synthetic entry"). -->
 | `sdu-ou44` | 3 rooms, Denmark: CO2, VAV damper, occupant counts (44 shuffled days) | real | no | CC0-1.0 | all 3 rooms |
 | `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather and all 10 boxes x 2 scenarios |
 | `ornl-supermarket-fdd` | CO2 booster refrigeration rack, 6 faults (reference only) | lab | yes | CC-BY-4.0 | 2 fault / baseline pairs |
-| `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests | real | yes | CC-BY-4.0 | one damper test set (7 days) |
+| `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests (`xlsx` extra) | real | yes | CC-BY-4.0 | one damper test set (7 days) |
 | `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 (**research-only**: see [Licences](#licences)) | 8 runs |
 | `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
 | `cofactor-drammen` | 45 Norwegian public buildings (schools, kindergartens, nursing homes, offices): hourly electricity import, sub-meters and district heat, 4 years | real | no | CC-BY-4.0 | every building's import meters (48 meters) |
@@ -407,7 +407,9 @@ pip install "camber-toolkit[xlsx]"      # openpyxl, imported only when a workboo
 ```
 
 Such an entry lists `"requires_extras": ["xlsx"]` (the validator requires it whenever a run reads a
-workbook), and `ingest` stops with that install command when the extra is missing. `camber lab`
+workbook): today `nist-heatpump-fdd` and `ornl-frp-vav`. `camber datasets list` marks its row
+`[needs xlsx]`, `camber datasets info` says whether the extra is installed (0.111), and `ingest`
+stops with that install command when the extra is missing. `camber lab`
 shows the extra on the entry's row and, when it is missing, refuses the fetch before downloading
 anything (0.103). A run names its
 worksheet with `"sheet"` (default: the first). Legacy `.xls` files are **not** covered by the extra:

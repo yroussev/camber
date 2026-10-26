@@ -3,9 +3,11 @@
 `camber mcp` lets an AI client read CAMBER's analyses. It is a
 [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server: a client such as Claude
 Desktop or the `claude` command line starts it as a subprocess and talks to it over stdin and
-stdout. The client sees CAMBER's capabilities as **tools** (list the facilities, run the rules,
-read trends, and so on) and a few **prompts** (ready-made starting points such as a facility
-triage). Every tool reads; none writes.
+stdout. The client sees CAMBER's capabilities as **tools** (list the facilities and their points,
+check data coverage and sensor trust, run the rules, read the RCx report, and so on) and a few
+**prompts** (ready-made starting points such as a facility triage). Every tool reads the store;
+none writes. No tool returns raw time-series values: results are analyses, counts and time spans,
+so to look at the samples behind a span, plot the trend in your own tools.
 
 > `camber mcp` and its Python API (`camber.mcp`) are **provisional** (0.110): names, options and
 > the result layout may still change in a minor release. See [API-STABILITY.md](API-STABILITY.md).
@@ -34,6 +36,15 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   values in the result. The token after the context depends on the call, the allowlist, the run
   config, the trust floor and the stored data, so two servers (or one server before and after an
   ingest) never give one id to different values (0.111, #295).
+
+**Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
+answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
+allowed facilities a call would read (never a research-only one), `equip` and `equips` (its last
+comma-separated id) from the stored equipment of the facility already chosen
+(`context.arguments.facility_id`), at most 100 values, those starting with what was typed first.
+A name that is not one clean line of at most 200 characters is never offered, and any other
+argument completes to nothing. A host shows these to the person filling in a prompt. The model
+itself cannot list or start a prompt in most hosts, only a person can.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
 
@@ -93,6 +104,10 @@ Any other launch mistake (a missing or unreadable store, `--min-trust` out of ra
 The configuration is fixed for the life of the process. The client cannot change the store, the
 allowlist or the trust floor; to serve something else, start another server.
 
+Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary directory removed when
+the server exits, unless `MPLCONFIGDIR` is set, so a call writes nothing under your home
+directory (0.111, #304).
+
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
 with the outcome and the time taken) goes to stderr. Anything a tool prints by mistake is sent to
 stderr as well, so it cannot corrupt the stream.
@@ -100,8 +115,8 @@ stderr as well, so it cannot corrupt the stream.
 **Concurrency, cancellation and shutdown.** Each tool call runs in a worker process (a fresh
 Python that loads the tools once and is reused, about half a second to start and 110 MB idle;
 one is started with the server and a replacement is started as soon as one is killed). Every
-other message -- `ping`, `server/discover`, `initialize`, the lists, `prompts/get` and
-`notifications/cancelled` -- is answered at once, even while long calls run, so replies to
+other message -- `ping`, `server/discover`, `initialize`, the lists, `prompts/get`,
+`completion/complete` and `notifications/cancelled` -- is answered at once, even while long calls run, so replies to
 concurrent requests may come in a different order from the requests; each carries its own id.
 The worker of a call is killed, and its CPU and memory released, when:
 
@@ -184,7 +199,7 @@ stored data is an ordinary, empty result with a notice. Everything else is a JSO
 | -32700 | the line is not JSON or not UTF-8 |
 | -32600 | not a JSON-RPC 2.0 request object: a batch, a line over 1 MiB, a duplicate key, a lone surrogate, an integer too long to read, `jsonrpc` not `"2.0"`, a missing `method`, an `id` that is not a string or integer, a second `initialize` |
 | -32601 | an unknown method, or one the request's protocol revision does not have |
-| -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown or not a string, an unknown cursor |
+| -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown or not a string, an unknown cursor, a completion `ref` that is not a known prompt (`ref/resource` included) or an unknown argument |
 | -32022 | `UnsupportedProtocolVersion`, with the supported versions in `data` |
 | -32603 | an internal failure, including a reply that could not be serialised; names no local path |
 

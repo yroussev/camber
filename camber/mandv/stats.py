@@ -97,6 +97,17 @@ def _time_array(index) -> np.ndarray:
     return np.asarray(index)
 
 
+def _fmt(x, spec: str) -> str:
+    """``x`` formatted with ``spec``, or ``"undefined"`` when it is missing or not finite (a
+    constant meter has no R2): a summary never says "nan" (0.111, #304)."""
+    try:
+        if x is not None and np.isfinite(float(x)):
+            return format(float(x), spec)
+    except (TypeError, ValueError):
+        pass
+    return "undefined"
+
+
 def fit_stats(
     y,
     yhat,
@@ -170,11 +181,11 @@ def fit_stats(
     )
     notes = []
     if not (np.isfinite(cv_rmse) and cv_rmse <= cv_rmse_max):
-        notes.append(f"CV(RMSE) {cv_rmse:.1%} > {cv_rmse_max:.0%}")
+        notes.append(f"CV(RMSE) {_fmt(cv_rmse, '.1%')} > {cv_rmse_max:.0%}")
     if not (np.isfinite(r2) and r2 >= r2_min):
-        notes.append(f"R2 {r2:.2f} < {r2_min}")
+        notes.append(f"R2 {_fmt(r2, '.2f')} < {r2_min}")
     if not (np.isfinite(nmbe) and abs(nmbe) <= nmbe_max):
-        notes.append(f"|NMBE| {abs(nmbe):.2%} > {nmbe_max:.1%}")
+        notes.append(f"|NMBE| {_fmt(abs(nmbe), '.2%')} > {nmbe_max:.1%}")
     f_p = _f_sf(f_stat, p - 1, n - p) if (p > 1 and np.isfinite(f_stat)) else float("nan")
     adj = 1.0 - (1.0 - r2) * (n - 1) / (n - p) if np.isfinite(r2) else float("nan")
     return FitStats(

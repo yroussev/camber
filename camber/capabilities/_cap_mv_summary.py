@@ -66,6 +66,13 @@ OUTPUT_SCHEMA = {
 #: config sections an M&V run does not need
 _DROP = ("rules", "drift", "report", "faults", "soo", "ventilation", "topology")
 _LISTED = 10
+#: the caveat an mv_savings finding carries when its baseline fails acceptance
+_INFO_ONLY = "this saving is for information only"
+#: the unit of a saving when the run config has no ``units`` block
+_METER_UNITS = (
+    "the meter's own units (its trended rate summed over hours; the run config names no "
+    "energy unit)"
+)
 
 
 def mv_summary(ctx, arguments: dict) -> CapabilityResult:
@@ -108,11 +115,24 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         f"M&V for {fid} covers {len(meters)} meter(s) with {kinds['mv_savings']} savings "
         f"result(s), {declined} declined [F1@mv_summary]."
     ]
+    unitless = info_only = 0
     for i, r in enumerate(rows, start=2):
         fact_id = f"F{i}@mv_summary"
         r["fact"] = fact_id
-        facts.append(finding_fact(fact_id, r))
-        if i - 1 <= _LISTED and r["rule"] in ("mv_savings", "mv_trigger"):
+        fact = finding_fact(fact_id, r)
+        # 0.111 (#304): a saving says what unit it is in and whether it may be relied on
+        if r["rule"] == "mv_savings" and not r["metrics"].get("declined"):
+            if not r["metrics"].get("energy_unit"):
+                unitless += 1
+                fact["text"] += f"; energy in {_METER_UNITS}"
+            if any(_INFO_ONLY in c for c in r["caveats"]):
+                info_only += 1
+                fact["text"] += (
+                    "; the baseline does not meet G14 acceptance, so this saving is for "
+                    "information only"
+                )
+        facts.append(fact)
+        if i - 1 <= _LISTED and r["rule"] in ("mv_baseline", "mv_savings", "mv_trigger"):
             text.append(cite(facts[-1]))
     data = {
         "facility_id": fid,
@@ -124,6 +144,16 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         "findings": rows,
     }
     banners = [config_notice] if config_notice else []
+    if info_only:
+        banners.append(
+            f"{info_only} saving(s) rest on a baseline that does not meet G14 acceptance: for "
+            "information only, not a verified saving."
+        )
+    if unitless:
+        banners.append(
+            f"{unitless} saving(s) are in {_METER_UNITS}; add a units block to the run config "
+            "to report kWh or kBtu."
+        )
     if declined:
         banners.append(
             f"{declined} M&V result(s) declined to state a figure; read their declined_reason "

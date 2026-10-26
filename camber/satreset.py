@@ -161,7 +161,12 @@ def analyze_satreset(
     # reset direction -- say so, never assert a confident direction.
     direction: str | None = None
     if np.isnan(slope):
-        verdict = "RESET NOT EVALUATED (no OAT)"
+        # #304: the cold-SAT check needs no OAT; say what a warn on it is about
+        verdict = (
+            "COLD SAT MOST COOLING HOURS; RESET NOT EVALUATED (no OAT)"
+            if pct_low >= 50.0
+            else "RESET NOT EVALUATED (no OAT)"
+        )
     elif flat and tight:
         # "pinned low" only when the held level really is cold; a flat, tight SAT held at 68 F is
         # "no reset" at a *warm* level -- a different fault story (no overcooling/reheat driver)

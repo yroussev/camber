@@ -76,7 +76,16 @@ from typing import Any
 
 from ._page import collect
 from ._policy import known_roots, redact, redact_value, research_only, run_config_for
-from ._sanitize import cap_strings, finish, hide_spans, lead, one_line, show_spans, unmark
+from ._sanitize import (
+    cap_strings,
+    finish,
+    hide_spans,
+    lead,
+    one_line,
+    plain,
+    show_spans,
+    unmark,
+)
 
 __all__ = [
     "ERROR_CODES",
@@ -286,6 +295,48 @@ class Registry:
         """Every prompt, sorted by name."""
         return [self._prompts[n] for n in sorted(self._prompts)]
 
+    def complete(
+        self, prompt: str, argument: str, value: str, context: dict | None, ctx: CallContext
+    ) -> tuple[list[str], int]:
+        """``(values, total)`` completing a prompt argument (MCP ``completion/complete``, 0.111,
+        #304): at most :data:`MAX_COMPLETIONS` values starting with ``value``, then those
+        containing it, case-insensitive.
+
+        ``facility_id`` completes from ``ctx.allowed_facilities`` (less the facilities a call
+        would refuse); ``equip`` and ``equips`` (its last comma-separated id) from the stored
+        equipment of ``context["facility_id"]`` when a call could read that facility, else to
+        nothing. A name that is not one clean line of at most 200 characters is never offered
+        (the prompt could not take it whole). Any other argument completes to nothing; an
+        unknown prompt or argument is ``CapabilityError("invalid_params")``.
+        """
+        p = self._prompts.get(prompt) if isinstance(prompt, str) else None
+        if p is None:
+            raise CapabilityError("invalid_params", f"no prompt named {prompt!r}")
+        if argument not in {a.name for a in p.arguments}:
+            raise CapabilityError(
+                "invalid_params", f"prompt {prompt!r} has no argument {argument!r}"
+            )
+        value = str(value or "")
+        head = ""
+        if argument == "equips":
+            head, _, value = value.rpartition(",")
+            head = ", ".join(e.strip() for e in head.split(",") if e.strip())
+            head, value = (f"{head}, " if head else ""), value.strip()
+        if argument == "facility_id":
+            pool = [f for f in ctx.allowed_facilities if _readable(ctx, f)]
+        elif argument in ("equip", "equips"):
+            fid = str((context or {}).get("facility_id") or "")
+            pool = _equipment(ctx, fid) if fid and _readable(ctx, fid) else []
+        else:
+            pool = []
+        pool = [s for s in pool if s == one_line(s) and 0 < len(s) <= 200 and "," not in s]
+        low = value.lower()
+        hits = sorted(
+            (s for s in pool if low in s.lower()),
+            key=lambda s: (not s.lower().startswith(low), s.lower(), s),
+        )
+        return [head + s for s in hits[:MAX_COMPLETIONS]], len(hits)
+
     def get(self, name: str) -> Capability:
         """The capability ``name``; ``CapabilityError("unknown_capability")`` when there is none
         (``not_found`` is a capability's own "nothing found")."""
@@ -404,6 +455,35 @@ class Registry:
                 raise RuntimeError(f"the handler raised {type(err).__name__}")
             raise err
         return box["result"], list(box["cuts"])
+
+
+#: the most values one completion returns (the MCP limit)
+MAX_COMPLETIONS = 100
+
+
+def _readable(ctx: CallContext, facility_id: str) -> bool:
+    """Whether a call naming ``facility_id`` gets past the allowlist and the licence check: a
+    completion never offers what a call would refuse."""
+    from ._policy import check_facility
+
+    try:
+        check_facility(ctx, facility_id)
+    except Exception:  # noqa: BLE001 - refused, or a store problem: nothing to offer
+        return False
+    return True
+
+
+def _equipment(ctx: CallContext, facility_id: str) -> list:
+    """The stored equipment ids of one facility, read without writing anything."""
+    from .._nopersist import no_persist
+    from ._policy import open_store
+
+    try:
+        with no_persist():
+            eqs = open_store(ctx).equipment(facility_id=facility_id).get(facility_id) or {}
+    except Exception:  # noqa: BLE001 - a store problem: nothing to offer
+        return []
+    return [str(e) for e in eqs]
 
 
 def _result_bytes(res: CapabilityResult) -> int:
@@ -562,10 +642,12 @@ def _sanitized(res: CapabilityResult, data) -> tuple:
     facts = cap_strings(list(res.facts or []))
     own = {f["id"] for f in facts if isinstance(f, dict) and isinstance(f.get("id"), str)}
     facts = [
-        {**f, "text": unmark(finish(f["text"]))} if isinstance(f, dict) and "text" in f else f
+        {**f, "text": unmark(plain(finish(f["text"])))}
+        if isinstance(f, dict) and "text" in f
+        else f
         for f in facts
     ]
-    return facts, finish(str(res.text or ""), known_ids=own), cap_strings(data)
+    return facts, plain(finish(str(res.text or ""), known_ids=own)), cap_strings(data)
 
 
 def _redact_data(data, secrets: list, depth: int = 0):

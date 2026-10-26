@@ -18,8 +18,10 @@ from ._common import (
     check_run_selection,
     cite,
     facility_config,
+    finding_ids,
     jsonable,
     narrow,
+    rule_names,
     run,
     trust_banner,
     trust_declines,
@@ -27,7 +29,7 @@ from ._common import (
     with_rules,
 )
 from ._page import MAX_LIMIT, OFFSET, limit_arg, page
-from ._sanitize import name
+from ._sanitize import name, plain
 
 #: appendix A facts (declines and data gaps) returned by default (#299)
 _APPENDIX = 20
@@ -63,6 +65,7 @@ _ISSUE = {
         "equip",
         "severity",
         "rules",
+        "finding_ids",
         "annual_cost_usd",
         "cost_basis_note",
         "hours",
@@ -81,6 +84,12 @@ _ISSUE = {
         "equip": {"type": "string"},
         "severity": {"type": "string"},
         "rules": {"type": "array", "items": {"type": "string"}},
+        "finding_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "the rule findings behind the issue, for finding_detail (the same "
+            "ids rule_run gives); [] for an issue of drift or report checks only",
+        },
         "annual_cost_usd": {"type": ["number", "null"]},
         "cost_basis_note": {"type": "string"},
         "hours": {"type": ["number", "null"]},
@@ -220,7 +229,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
     for f in every_fact:
         if f.id.partition("@")[2] in left_out and f.id not in kept:
             continue
-        index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": f.text})
+        index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": plain(f.text)})
         facts.append(
             {
                 "id": f.id,
@@ -247,6 +256,17 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "text": f"The RCx report for {fid} ranks {n} issue(s) with {cost_txt}{declined}",
         "kpis": jsonable(k),
     }
+    # #304: each issue names its findings' ids, so finding_detail needs no extra rule_run
+    id_of = {id(f): i for f, i in zip(res.findings, finding_ids(res.findings))}
+    rule_set = set(rule_names())
+    by_key = {str(i.key): i for i in rep.issues}
+
+    def _ids(key: str) -> list:
+        iss = by_key.get(key)
+        found = [getattr(iss, "root", None), *(getattr(iss, "members", None) or ())]
+        ids = [id_of[id(f)] for f in found if id(f) in id_of and f.rule in rule_set]
+        return list(dict.fromkeys(ids))[:20]
+
     issues = []
     text = [cite(head)]
     for i, iss in enumerate(shown, start=2):
@@ -257,17 +277,18 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
             "key": str(iss["key"]),
             "rank": int(iss["rank"]),
             "title": str(iss.get("title") or ""),
-            "cause": str(iss.get("cause") or ""),
+            "cause": plain(str(iss.get("cause") or "")),
             "equip": str(iss.get("equip") or ""),
             "severity": str(iss.get("severity") or ""),
-            "rules": [str(r) for r in iss.get("rules") or []],
+            "rules": list(dict.fromkeys(str(r) for r in iss.get("rules") or [])),
+            "finding_ids": _ids(str(iss["key"])),
             "annual_cost_usd": cost_v,
-            "cost_basis_note": str(iss.get("cost_basis_note") or ""),
+            "cost_basis_note": plain(str(iss.get("cost_basis_note") or "")),
             "hours": jsonable(iss.get("hours_union")),
             "pct_runtime": jsonable(iss.get("pct_runtime")),
             "confidence": str(iss.get("confidence") or ""),
             "conditional_on": [str(c) for c in iss.get("conditional_on") or []],
-            "why": [str(w) for w in iss.get("why") or []],
+            "why": [plain(str(w)) for w in iss.get("why") or []],
             "fact": fact_id,
         }
         issues.append(row)
@@ -316,7 +337,8 @@ CAPABILITIES = (
         description=(
             "The retro-commissioning (RCx) report of one facility as data: the KPIs (issue "
             "counts, annual cost, coverage), the top_n ranked issues (cause, equipment, severity,"
-            " rules, cost or why uncosted, hours, confidence and its reasons), the section list "
+            " rules and the finding ids for finding_detail, cost or why uncosted, hours, "
+            "confidence and its reasons), the section list "
             "and the report's fact index (K1@summary-<token>, C1@<issue key>-<token>; also in "
             "facts) for a cited executive summary. No file or charts. Uses the caller's run "
             "config when there is one. Cost: a full rule run plus the analysis, the slowest tool;"

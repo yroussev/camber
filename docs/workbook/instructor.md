@@ -1577,7 +1577,7 @@ bypass stuck open, five times the design flow past the plant's sensors.
    `control`: the unit was cooling 0% of that time, heating 41% and idle 59%
    (`cooling_opposite_pct` 41.04), and the summary gives that split. A unit heating a room that
    needs cooling is a stuck valve or changeover, not a capacity problem.
-5. *Rooms.* The `fleet` finding is a **fault** for `ROOM_B`: one unit heats while the other cools
+5. *Rooms.* The `<fleet>` finding is a **fault** for `ROOM_B`: one unit heats while the other cools
    62.12% of the co-occupied time, and their sensors differ by 3.9 °F (median). `ROOM_A` is `ok`:
    0.0% fight, sensors 0.4 °F apart. Each unit in `ROOM_B` does what its own sensor asks, so
    `hp_mode_vs_need` passes both. `hp_capacity_shortfall` sees each unit's sensor out of band

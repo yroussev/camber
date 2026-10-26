@@ -122,6 +122,12 @@ edge-gcs = ["google-cloud-storage>=2"]
 # `camber mcp` (0.110, #277), the Model Context Protocol server over stdio, is standard library only,
 # so `mcp` is an empty marker, like `edge`. The official MCP SDK is not a dependency.
 mcp = []
+# Every optional runtime extra at once (0.111, #304): `pip install "camber-toolkit[all]"`. Not dev or
+# docs. Some need more than pip: pdf the Pango libraries, energyplus an EnergyPlus engine.
+all = [
+    "camber-toolkit[brick,xlsx,yaml,pdf,haystack,tariff,better,psychro,pv,energyplus]",
+    "camber-toolkit[modbus,mqtt,bacnet,bacnet-vendor,opcua,ml,edge-s3,edge-azure,edge-gcs]",
+]
 
 [project.scripts]
 camber = "camber.cli:main"

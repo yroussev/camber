@@ -23,6 +23,8 @@ def resolve_store(path: str) -> str:
     from ..api.server import _store_problem
     from ..portfolio import Portfolio, is_workspace
 
+    if not str(path).strip():  # #304: "" is not the current directory
+        raise LaunchError("--store: give the store directory (an empty path names none)")
     if is_workspace(path):
         return Portfolio(path).store_root
     problem = _store_problem(path)
@@ -88,7 +90,7 @@ def check_config(path: str, store: str, allowed: frozenset) -> str:
     ``allowed``; and a store source reads the ``--store`` directory (``store``), whatever path
     spells it (a different store would serve data the operator did not name).
     """
-    from ..config import _config_facility, _preflight_config, load_config
+    from ..config import _config_facility, _preflight_config, _unknown_keys_note, load_config
 
     where = f"--config {path}"
     if not str(path).lower().endswith(CONFIG_SUFFIXES):
@@ -129,6 +131,9 @@ def check_config(path: str, store: str, allowed: frozenset) -> str:
     except (KeyError, ValueError, TypeError) as exc:
         why = exc.args[0] if isinstance(exc, KeyError) and exc.args else exc
         raise LaunchError(f"{where}: {why}") from None
+    note = _unknown_keys_note(config)  # #304: a warning, as camber run gives
+    if note:
+        log.warning("%s: %s", where, note)
     return fid
 
 
@@ -211,6 +216,25 @@ def _log_templates(ctx) -> None:
         pass
 
 
+def isolate_matplotlib() -> str | None:
+    """Point matplotlib's config and font cache at a fresh temporary directory for this server and
+    its worker processes, unless ``MPLCONFIGDIR`` is already set; the directory (to remove at
+    exit), or ``None``.
+
+    0.111 (#304): rcx_report draws its charts with matplotlib, which otherwise writes its font
+    cache under ``$HOME`` on first use: the only file a read-only server would leave behind."""
+    import tempfile
+
+    if os.environ.get("MPLCONFIGDIR"):
+        return None
+    try:
+        path = tempfile.mkdtemp(prefix="camber-mcp-mpl-")
+    except OSError:
+        return None
+    os.environ["MPLCONFIGDIR"] = path
+    return path
+
+
 def _setup_logging() -> None:
     """INFO lines on stderr, unless the host process already configured logging."""
     logger = logging.getLogger("camber.mcp")
@@ -259,6 +283,7 @@ def launch(
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _log_templates(ctx)
+    mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
     server = McpServer(capabilities.default_registry(), ctx)
     # the workers build the same registry: the module this process imported it from
     workers = WorkerPool(
@@ -278,4 +303,10 @@ def launch(
         workers.max_concurrent,
         workers.max_queued,
     )
-    return serve_stdio(server, workers=workers)
+    try:
+        return serve_stdio(server, workers=workers)
+    finally:
+        if mpl_dir is not None:
+            import shutil
+
+            shutil.rmtree(mpl_dir, ignore_errors=True)

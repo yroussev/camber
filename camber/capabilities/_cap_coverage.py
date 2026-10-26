@@ -16,6 +16,14 @@ from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
 
+#: what ``coverage`` means here; sensor_trust's differs (#304: one point read 35% and 100%)
+_COVERAGE = (
+    "the share of the samples expected at the point's own interval that are present over the "
+    "whole window (start to end; by default the facility's first to last sample), so a point "
+    "that starts late or ends early counts the missing stretch. sensor_trust's coverage is over "
+    "the point's own span instead (from its first sample), or over its equipment's running hours"
+)
+
 #: rows per list and page by default (#299)
 _PAGE = 50
 
@@ -77,7 +85,12 @@ _POINT = {
         "first": {"type": ["string", "null"]},
         "last": {"type": ["string", "null"]},
         "interval_minutes": {"type": ["number", "null"]},
-        "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": _COVERAGE,
+        },
         "n_gaps": {"type": "integer", "minimum": 0},
         "longest_gap_hours": {"type": "number", "minimum": 0},
     },
@@ -273,7 +286,8 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
             "facility_id": fid,
             "value": round(mean * 100, 1),
             "text": f"{fid}: {len(points)} points on {len(equipment)} equipment have a mean "
-            f"coverage of {mean * 100:.1f}%{span}; {low} point(s) are below 90% and "
+            f"coverage of {mean * 100:.1f}% of the whole window{span}; {low} point(s) are below "
+            "90% and "
             f"{len(gaps)} gap(s) are listed",
         }
     ]
@@ -292,7 +306,8 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "equip_coverage",
                 "equip": e["equip"],
                 "value": round(e["coverage"] * 100, 1),
-                "text": f"{name(e['equip'])}: mean coverage {e['coverage'] * 100:.1f}% over "
+                "text": f"{name(e['equip'])}: mean coverage {e['coverage'] * 100:.1f}% of the "
+                f"window over "
                 f"{e['n_points']} points; worst {name(e['worst_role'])} at "
                 f"{e['worst_coverage'] * 100:.1f}%",
             }

@@ -827,6 +827,12 @@ def _mv_window(entry: dict, key: str):
     return win
 
 
+def _fmt_stat(x, spec: str) -> str:
+    from .mandv.stats import _fmt
+
+    return _fmt(x, spec)
+
+
 def _finite_or_none(x):
     import math
 
@@ -1512,6 +1518,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         sup = support_of(daily["oat"].values, quantile=policy.support_quantile)
         verdict = "meets" if st.accept else "does not meet"
         from .mandv.names import model_label  # 0.105 (#163): the registry's label, not the code
+        from .mandv.stats import _fmt
 
         # the baseline-length rule fit_version (camber mv freeze) enforces, as a caveat here (#59)
         win = period or [daily.index.min(), daily.index.max()]
@@ -1542,9 +1549,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                 summary=(
                     f"{ref.equip}: {model_label(model)}"
                     + (f" + {'/'.join(model.driver_names)}" if _mvform.metrics(model) else "")
-                    + f" baseline, R2 {st.r2:.2f}, CV(RMSE) "
-                    f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily acceptance (G14 "
-                    "criteria; the 30% daily CV(RMSE) tier is CAMBER's)"
+                    + f" baseline, R2 {_fmt(st.r2, '.2f')}, CV(RMSE) "
+                    f"{_fmt(st.cv_rmse, '.1%')} over {st.n} days -- {verdict} daily "
+                    "acceptance (G14 criteria; the 30% daily CV(RMSE) tier is CAMBER's)"
+                    # 0.111 (#304): which criterion failed
+                    + ("" if st.accept else f": {st.notes}")
                     + (" (short baseline)" if short_why else "")
                 ),
                 caveats=list(base_caveats),
@@ -1965,8 +1974,9 @@ def _mv_versioned_findings(
             },
             summary=(
                 f"{equip}: frozen M&V baseline {label} ({model_label(model)}, "
-                f"{live_rec.period_start}..{live_rec.period_end}), R2 {st.r2:.2f}, CV(RMSE) "
-                f"{st.cv_rmse:.1%} -- read from the versioned store, not refitted"
+                f"{live_rec.period_start}..{live_rec.period_end}), R2 {_fmt_stat(st.r2, '.2f')}, "
+                f"CV(RMSE) {_fmt_stat(st.cv_rmse, '.1%')} -- read from the versioned store, not "
+                "refitted"
             ),
             caveats=caveats,
         )
@@ -2521,6 +2531,51 @@ def _param_basis(name: str, params: dict, basis) -> dict | None:
     if unknown:
         raise ValueError(f"rule {name!r}: 'basis' names unknown parameter(s) {', '.join(unknown)}")
     return {k: {"value": params.get(k, defaults.get(k)), "basis": str(v)} for k, v in basis.items()}
+
+
+#: the top-level keys a run config may have (``_comment`` and any other ``_``-key is a note)
+_CONFIG_KEYS = frozenset(
+    {
+        "site",
+        "facility_id",
+        "workspace",
+        "source",
+        "mapping",
+        "include_inactive",
+        "resample",
+        "shared_oat",
+        "site_elevation_ft",
+        "equipment",
+        "rules",
+        "soo",
+        "drift",
+        "mv",
+        "mv_store",
+        "report",
+        "faults",
+        "topology",
+        "ventilation",
+        "trust_gate",
+        "units",
+        "private",
+        "weather",
+    }
+)
+
+
+def _unknown_keys_note(config) -> str | None:
+    """A warning naming the top-level keys of ``config`` that no run reads (a typo such as
+    ``"rule"`` is otherwise silently ignored), or ``None``. Keys starting with ``_`` are notes.
+    0.111 (#304): ``camber run`` and ``camber mcp --config`` print it; neither refuses."""
+    if not isinstance(config, dict):
+        return None
+    unknown = sorted(str(k) for k in config if not str(k).startswith("_") and k not in _CONFIG_KEYS)
+    if not unknown:
+        return None
+    return (
+        f"unknown top-level key(s) {', '.join(repr(k) for k in unknown)} are ignored (the keys "
+        f"a run reads: {', '.join(sorted(_CONFIG_KEYS))})"
+    )
 
 
 def _config_facility(config: dict) -> str:

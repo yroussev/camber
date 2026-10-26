@@ -308,7 +308,9 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
     diagnoses.sort(key=lambda d: (d["family"], d["equip"]))
     unevaluated.sort(key=lambda u: (u["family"], u["equip"]))
     counts = severity_counts(rows)
-    declined = sum(1 for r in rows if "declined" in r["summary"])
+    declined = sum(
+        1 for r in rows if r["metrics"].get("declined") is True or "declined" in r["summary"]
+    )
     facts = [
         {
             "id": "F1@drift",
@@ -317,20 +319,19 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
             "value": len(rows),
             "text": f"Drift on {fid} ({source.replace('_', ' ')}): {len(fams)} family run(s), "
             f"{counts['fault']} fault and {counts['warn']} warn findings, {declined} "
-            f"declined, {len(unevaluated)} equipment not evaluated",
+            f"detector check(s) declined, {len(unevaluated)} equipment with no detector run",
         }
     ]
     declines, floor = trust_declines(f for fam in fams_raw for f in fam.findings)  # 0.111 (#297)
     untrusted = f" ({len(declines)} on untrusted input(s))" if declines else ""
     if declines:
         facts[0]["text"] += f" ({len(declines)} declined on untrusted input(s))"
+    # #304: a declined detector is a check not made, so the count is always stated (a bare
+    # "0 equipment were not evaluated" read as everything judged)
     text = [
         f"Drift on {fid} gave {counts['fault']} fault and {counts['warn']} warn findings; "
-        f"{declined} check(s) declined{untrusted}; {len(unevaluated)} equipment were not "
-        "evaluated [F1@drift]."
-        if declines
-        else f"Drift on {fid} gave {counts['fault']} fault and {counts['warn']} warn findings; "
-        f"{len(unevaluated)} equipment were not evaluated [F1@drift]."
+        f"{declined} detector check(s) declined{untrusted}; {len(unevaluated)} equipment had no "
+        "detector run at all [F1@drift]."
     ]
     rows = page(rows, arguments, default=_PAGE, what="findings", order="worst first")
     for i, r in enumerate(rows[:_FACTS], start=2):

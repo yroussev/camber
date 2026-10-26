@@ -11,6 +11,7 @@ from functools import lru_cache
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite, jsonable
 from ._page import OFFSET, page
+from ._sanitize import plain
 
 #: rules per page by default (#299): without and with detail
 _PAGE, _PAGE_DETAIL = 25, 10
@@ -77,11 +78,17 @@ _PARAM = {
 
 _RULE = {
     "type": "object",
-    "required": ["rule", "kind", "equip_families", "params"],
+    "required": ["rule", "kind", "run_with", "equip_families", "params"],
     "additionalProperties": False,
     "properties": {
         "rule": {"type": "string"},
         "kind": {"type": "string", "enum": ["rule", "drift"]},
+        "run_with": {
+            "type": "string",
+            "enum": ["rule_run", "drift"],
+            "description": "the capability that runs it: a rule with rule_run (and "
+            "finding_detail), a drift detector with drift (rule_run refuses it)",
+        },
         "equip_families": {
             "type": "array",
             "items": {"type": "string"},
@@ -132,11 +139,16 @@ def _describe(name: str) -> dict:
     out = {
         "rule": name,
         "kind": kind,
+        "run_with": "rule_run" if kind == "rule" else "drift",
         "equip_families": sorted(str(f) for f in RULE_EQUIP_CLASSES.get(name, ())),
-        "params": [jsonable(p) for p in d["params"]],
+        # #304: no module paths or issue tags in what a model reads
+        "params": [
+            {k: plain(v) if isinstance(v, str) else v for k, v in jsonable(p).items()}
+            for p in d["params"]
+        ],
     }
     if d.get("fixed_in_code"):
-        out["fixed_in_code"] = str(d["fixed_in_code"])
+        out["fixed_in_code"] = plain(str(d["fixed_in_code"]))
     return out
 
 
@@ -190,7 +202,8 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "rule_params",
                 "rule": r["rule"],
                 "value": len(r["params"]),
-                "text": f"{r['rule']} ({r['kind']}) defaults: {listed or 'no tunable parameters'}",
+                "text": f"{r['rule']} ({r['kind']}, run with {r['run_with']}) defaults: "
+                f"{listed or 'no tunable parameters'}",
                 "params": [{k: v for k, v in p.items() if k in _FACT_FIELDS} for p in r["params"]],
             }
         )

@@ -102,7 +102,8 @@ def explain_finding(args: dict) -> list:
             "Call rule_params with the finding's rule to read what each parameter means and "
             "where its default comes from.",
             f"Call sensor_trust with {_j(facility_id=fid)} and equips set to the finding's "
-            "equipment, to check the inputs it rests on.",
+            "equipment (for a '<fleet>' finding, the units its metrics name), to check the "
+            "inputs it rests on.",
             "Explain in plain words what the rule checks, what it saw (the hours and the time "
             "spans), the threshold it used, how far the inputs can be trusted, and which "
             "evidence chart shows it.",
@@ -139,7 +140,9 @@ def data_quality_review(args: dict) -> list:
         _steps(
             f"Call coverage with {_j(facility_id=fid, group_by='equip')}, then again for the "
             "worst equipment with their equips to see the points and gaps.",
-            f"Call sensor_trust with {_j(facility_id=fid)}.",
+            f"Call sensor_trust with {_j(facility_id=fid)}. Its coverage is over each point's "
+            "own span (from its first sample); the coverage tool's is over the whole window, so "
+            "one point can read differently in the two: say which one you quote.",
             "Write a review: overall coverage, the equipment and points with the worst gaps, "
             "the untrusted or suspect sensors and their flags, and what to fix first (trend "
             "setup, sensor calibration or replacement).",
@@ -194,8 +197,10 @@ def plan_site_visit(args: dict) -> list:
         _steps(
             f"Call rcx_report with {_j(facility_id=fid)} for the ranked issues.",
             f"Call sensor_trust with {_j(facility_id=fid)} for the sensors to verify.",
-            "For the top three issues, call finding_detail on one finding of each (rule_run "
-            "lists the finding ids) to get the time spans to reproduce on site.",
+            "For the top three issues, call finding_detail with the same facility_id and one of "
+            "the issue's finding_ids (each rcx_report issue lists them) to get the time spans to "
+            "reproduce on site; an issue with no finding_ids rests on drift or report checks "
+            "only.",
             "Write the plan: a walk order by equipment, for each stop what to check and what "
             "reading would confirm or rule out the issue, the sensors to spot-check with a "
             "reference instrument, and the trends to pull before leaving.",

@@ -200,7 +200,7 @@ def _cap(equip, severity, verdict, side="heating"):
 def test_a_fighting_room_takes_the_cause_off_capacity():
     fleet = Finding(
         HPRoomImbalance.name,
-        "fleet",
+        "<fleet>",
         "fault",
         {
             "rooms": {

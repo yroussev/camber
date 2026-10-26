@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import CapabilityError
-from ._sanitize import defang, name
+from ._sanitize import defang, name, plain
 
 #: an ISO date or date-time (``2024-03-01``, ``2024-03-01T06:00``, ``2024-03-01 06:00:00``)
 DATE = {
@@ -48,7 +48,11 @@ FINDING_ROW = {
     "properties": {
         "finding_id": {"type": "string", "description": "pass to finding_detail"},
         "rule": {"type": "string"},
-        "equip": {"type": "string", "description": "'<fleet>' / 'fleet' for a fleet finding"},
+        "equip": {
+            "type": "string",
+            "description": "'<fleet>' for a fleet finding (one finding over many units; its "
+            "metrics name them)",
+        },
         "severity": SEVERITY,
         "summary": {"type": "string"},
         "caveats": {"type": "array", "items": {"type": "string"}},
@@ -141,6 +145,10 @@ def _safe(values) -> list:
     return [clip(defang(one_line(v)), MAX_NAME, key=v) for v in sorted(values)[:_AVAILABLE]]
 
 
+#: the ``equip`` of a fleet rule's finding (one finding over many equipment)
+FLEET = "<fleet>"
+
+
 def check_selection(store, facility_id: str, arguments: dict) -> None:
     """``not_found`` for an ``equips`` / ``equip`` id, a ``roles`` / ``role`` or an
     ``equip_class`` in ``arguments`` that ``facility_id`` does not store, naming what it does.
@@ -171,10 +179,17 @@ def check_selection(store, facility_id: str, arguments: dict) -> None:
             have = set(classes.values()) if arg == "equip_class" else set(classes)
         unknown = [w for w in dict.fromkeys(want) if w not in have]
         if unknown:
+            # #304: a fleet finding's equip is no stored equipment; its metrics name the units
+            fleet = (
+                f"; {FLEET!r} is the equipment of a fleet finding (one finding over many units), "
+                "not stored equipment: use the units its metrics name"
+                if FLEET in unknown and not arg.startswith("role")
+                else ""
+            )
             raise CapabilityError(
                 "not_found",
                 f"facility {facility_id!r} stores no {what} {_listing(unknown)}; its "
-                f"{plural} are {_listing(have)} (exact match; see the points capability)",
+                f"{plural} are {_listing(have)} (exact match; see the points capability){fleet}",
                 data={"argument": arg, "unknown": _safe(unknown), "available": _safe(have)},
             )
 
@@ -504,8 +519,8 @@ def finding_row(fid: str, f) -> dict:
         "rule": str(getattr(f, "rule", "")),
         "equip": str(getattr(f, "equip", "")),
         "severity": sev if sev in _RANK else "info",
-        "summary": " ".join(str(getattr(f, "summary", "") or "").split()),
-        "caveats": [str(c) for c in getattr(f, "caveats", None) or []],
+        "summary": plain(" ".join(str(getattr(f, "summary", "") or "").split())),
+        "caveats": [plain(str(c)) for c in getattr(f, "caveats", None) or []],
         "metrics": scalars(getattr(f, "metrics", None)),
     }
 

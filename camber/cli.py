@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 __all__ = [
@@ -93,7 +94,14 @@ def _print_findings(findings) -> None:
 
 
 def _cmd_run(args) -> int:
-    from .config import run_config_file
+    from .config import _unknown_keys_note, load_config, run_config_file
+
+    try:  # 0.111 (#304): a key no run reads is a warning; a broken config fails below as before
+        note = _unknown_keys_note(load_config(args.config))
+    except Exception:  # noqa: BLE001
+        note = None
+    if note:
+        print(f"warning: {args.config}: {note}", file=sys.stderr)
 
     res = run_config_file(args.config, persist=not getattr(args, "no_persist", False))
     print(f"Site '{res.site}': {res.equipment} equipment, {len(res.rules_run)} rules run")
@@ -938,12 +946,20 @@ def _cmd_datasets_list(args) -> int:
             f"{'generated' if e.synthetic else _mb(e.download_bytes()):>9s}  "
             f"{e.title}{' [manual download]' if e.manual else ''}"
             f"{' [synthetic: generated locally]' if e.synthetic else ''}"
+            # 0.111 (#304): an optional extra the data needs, before anyone fetches it
+            f"{''.join(f' [needs {x}]' for x in e.requires_extras)}"
         )
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
     if any(e.synthetic for e in rows):  # 0.103 (#133)
         print(
             "synthetic: CAMBER generates the data on this computer (nothing is downloaded); it "
             "describes no real building."
+        )
+    extras = sorted({x for e in rows for x in e.requires_extras})
+    if extras:
+        print(
+            "needs <extra>: reading the data needs an optional extra: "
+            + "; ".join(f'pip install "camber-toolkit[{x}]"' for x in extras)
         )
     if any(e.research_only for e in rows):
         print(
@@ -952,6 +968,18 @@ def _cmd_datasets_list(args) -> int:
             "carries a non-commercial / do-not-redistribute banner."
         )
     return 0
+
+
+def _extra_state(name: str) -> str:
+    """Whether a dataset's optional extra is installed, and how to add it when it is not."""
+    import importlib.util
+
+    from .datasets._readers import EXTRAS
+
+    module, hint = EXTRAS.get(name, (name, f'pip install "camber-toolkit[{name}]"'))
+    if importlib.util.find_spec(module) is not None:
+        return "installed"
+    return f"not installed: {hint}"
 
 
 def _ds_tier(e) -> str:
@@ -992,6 +1020,8 @@ def _cmd_datasets_info(args) -> int:
     if e.dois:
         print(f"doi       : {', '.join(e.dois)}")
     print(f"kind      : {e.kind}; labelled faults: {'yes' if e.labeled_faults else 'no'}")
+    for x in e.requires_extras:  # 0.111 (#304): said before a fetch, not only at ingest
+        print(f"needs     : the {x!r} extra ({_extra_state(x)})")
     if e.synthetic:  # 0.103 (#133)
         gen = e.generator or {}
         print(
@@ -3267,6 +3297,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="run/report config (JSON or YAML) for one facility; repeat it for more (one per "
         "facility). Checked at startup: a config camber run refuses is refused here",
     )
+    # #304: "-inf" / "-1e3" are values, not options, so they reach the range check
+    pmcp._negative_number_matcher = re.compile(r"^-(?:\d|\.\d|inf|nan)", re.IGNORECASE)
     pmcp.add_argument(
         "--min-trust",
         type=_unit_interval,

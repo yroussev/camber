@@ -40,11 +40,16 @@ from ._page import OFFSET, limit_arg, page
 
 _RULES = {
     "type": "array",
-    "items": {"type": "string", "enum": list(rule_names())},
+    "items": {
+        "type": "string",
+        "enum": list(rule_names()),
+        "description": "a rule name (rule_params kind 'rule'); a drift detector (kind 'drift') "
+        "runs with the drift capability",
+    },
     "minItems": 1,
     "maxItems": 100,
     "description": "only these rules (see rule_params); default: the run config's rules, or "
-    "every built-in rule",
+    "every built-in rule. Drift detectors run with the drift capability",
 }
 _PARAMS = {
     "type": "object",
@@ -175,6 +180,14 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     shown = page(listed, arguments, default=_PAGE, what="findings", order="worst first")
     skipped = page(every_skip, arguments, default=_PAGE, what="skipped")
     n_rules = len(res.rules_run)
+    # #304: rules, not rule x equipment pairs: how many gave a finding, and the skipped pairs
+    # with the number of distinct rules among them
+    n_found = len({r["rule"] for r in rows})
+    n_skip_rules = len({s["rule"] for s in every_skip})
+    skips = (
+        f"{len(every_skip)} rule-equipment pair(s) ({n_skip_rules} rule(s)) skipped for missing "
+        "inputs"
+    )
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
     declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
     facts = [
@@ -184,15 +197,15 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "facility_id": fid,
             "value": len(rows),
             "counts": counts,
-            "text": f"{n_rules} rules ran on {res.equipment} equipment of {fid}: "
-            f"{counts['fault']} fault, {counts['warn']} warn, {counts['info']} info and "
-            f"{counts['ok']} ok findings, {len(every_skip)} rule(s) skipped for missing inputs"
-            f"{declined}",
+            "text": f"{n_rules} rules were run on {res.equipment} equipment of {fid} and "
+            f"{n_found} of them gave findings: {counts['fault']} fault, {counts['warn']} warn, "
+            f"{counts['info']} info and {counts['ok']} ok; {skips}{declined}",
         }
     ]
     text = [
-        f"{n_rules} rules ran on {res.equipment} equipment of {fid}, with {counts['fault']} "
-        f"fault and {counts['warn']} warn findings{declined} [F1@rule_run]."
+        f"{n_rules} rules were run on {res.equipment} equipment of {fid} and {n_found} of them "
+        f"gave findings, with {counts['fault']} fault and {counts['warn']} warn findings"
+        f"{declined} [F1@rule_run]."
     ]
     for i, r in enumerate(shown[:_FACTS], start=2):
         fact_id = f"F{i}@rule_run"

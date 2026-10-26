@@ -125,7 +125,7 @@ def validate(instance, schema, path: str = "") -> list:
         if not any(_is_type(instance, n) for n in names):
             return [f"{where}: expected {' or '.join(names)}, got {_json_type(instance)}"]
     if "enum" in schema and not any(_same(instance, v) for v in schema["enum"]):
-        errors.append(f"{where}: must be one of {', '.join(repr(v) for v in schema['enum'])}")
+        errors.append(_not_in_enum(where, instance, schema))
     if "const" in schema and not _same(instance, schema["const"]):
         errors.append(f"{where}: must be {schema['const']!r}")
     if isinstance(instance, str):
@@ -167,6 +167,27 @@ def validate(instance, schema, path: str = "") -> list:
             elif isinstance(extra, dict):
                 errors += validate(instance[k], extra, sub)
     return errors
+
+
+#: an enum this long is not listed in an error, only counted (0.111, #304: a 3 KB message)
+_LIST_ENUM = 12
+
+
+def _not_in_enum(where: str, instance, schema: dict) -> str:
+    """The error for a value outside ``enum``: the values when there are few, else their count,
+    the closest few and the schema's ``description`` (where the values are listed)."""
+    import difflib
+
+    values = schema["enum"]
+    if len(values) <= _LIST_ENUM:
+        return f"{where}: must be one of {', '.join(repr(v) for v in values)}"
+    msg = f"{where}: {str(instance)[:100]!r} is not one of the {len(values)} allowed values"
+    close = difflib.get_close_matches(str(instance), [str(v) for v in values], n=3)
+    if close:
+        msg += f" (closest: {', '.join(close)})"
+    if schema.get("description"):
+        msg += f"; {schema['description']}"
+    return msg
 
 
 def _json_type(value) -> str:
