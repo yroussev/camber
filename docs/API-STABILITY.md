@@ -1013,7 +1013,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `build_context`, `launch`, `LaunchError` and the constants `SUPPORTED_VERSIONS`,
   `MODERN_VERSIONS`, `LEGACY_VERSIONS`, `TOOL_ERROR_CODES`, `LIST_TTL_MS`, `CACHE_SCOPE`,
   `MAX_MESSAGE_BYTES`; the `camber mcp` options `--store`, `--allow`, `--allow-all-active`,
-  `--config` and `--min-trust`; the `mcp` extra (empty). The wire behaviour follows the MCP
+  `--config` and `--min-trust`; the `mcp` extra (empty). **Added in 0.111 (#292):**
+  `WorkerPool`, the `workers=` argument of `serve` / `serve_stdio`, `McpServer.handle(...,
+  defer=True)` with `ToolCall` and `McpServer.finish`, the tool error code `busy` (in `TOOL_ERROR_CODES`) and the
+  options `--max-concurrent` and `--max-queued`. **Behaviour change:** `camber mcp` answers
+  messages concurrently (replies may come out of order), sends no reply to a cancelled call, and
+  stops the calls still running when stdin closes instead of finishing them. The wire behaviour follows the MCP
   revisions it speaks (2026-07-28, 2025-11-25, 2025-06-18); the CAMBER-specific parts of a
   result -- the two text blocks, the `NOTICE:` lines and the `_meta` keys `camber/facts`,
   `camber/banners`, `camber/truncated` and `camber/error` -- are provisional too.

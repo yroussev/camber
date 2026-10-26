@@ -70,6 +70,7 @@ TOOL_ERROR_CODES = frozenset(
         "too_large",
         "timeout",
         "unavailable",
+        "busy",
     }
 )
 
@@ -81,6 +82,27 @@ _INSTRUCTIONS = (
     "them when you repeat a number. Lines starting with NOTICE are licence, trust or truncation "
     "notices: always show them to the user."
 )
+
+
+@dataclasses.dataclass
+class ToolCall:
+    """A ``tools/call`` request that passed every check of the message layer, ready to run
+    elsewhere (a worker process, #292): :meth:`McpServer.handle` with ``defer=True`` returns it
+    instead of calling the registry, and :meth:`McpServer.finish` turns its outcome into the
+    response, the same bytes the in-process call would have given."""
+
+    id: Any
+    name: str
+    arguments: dict
+    context: Any
+    caller: str
+    modern: bool
+
+
+class _Deferred(Exception):
+    def __init__(self, call: ToolCall):
+        super().__init__(call.name)
+        self.call = call
 
 
 class _RpcError(Exception):
@@ -248,7 +270,9 @@ class McpServer:
 
     :meth:`handle` takes one decoded JSON value and returns the response (``None`` for a
     notification); :meth:`handle_line` does the same for one raw line. The transport loop is
-    :func:`camber.mcp.serve` / :func:`camber.mcp.serve_stdio`.
+    :func:`camber.mcp.serve` / :func:`camber.mcp.serve_stdio`. With ``defer=True`` a tool call is
+    returned as a :class:`ToolCall` for the transport to run (:meth:`finish` answers it), and
+    ``notifications/cancelled`` calls :attr:`on_cancel` with the request id.
     """
 
     def __init__(
@@ -277,10 +301,13 @@ class McpServer:
         self.legacy_version: str | None = None
         self.legacy_client: Any = None
         self.legacy_initialized = False
+        #: ``on_cancel(request_id)`` for ``notifications/cancelled`` (set by the transport)
+        self.on_cancel: Any = None
+        self._defer = False
 
     # ------------------------------------------------------------------ entry points
 
-    def handle_line(self, line: bytes | str) -> dict | None:
+    def handle_line(self, line: bytes | str, *, defer: bool = False) -> dict | ToolCall | None:
         """The response to one raw message line, or ``None`` (a notification or a blank line)."""
         if isinstance(line, bytes):
             try:
@@ -302,10 +329,18 @@ class McpServer:
             )
         except (ValueError, RecursionError):
             return _error(None, PARSE_ERROR, "Parse error: Invalid JSON")
-        return self.handle(msg)
+        return self.handle(msg, defer=defer)
 
-    def handle(self, msg: Any) -> dict | None:
-        """The response to one decoded JSON-RPC message, or ``None`` for a notification."""
+    def handle(self, msg: Any, *, defer: bool = False) -> dict | ToolCall | None:
+        """The response to one decoded JSON-RPC message, or ``None`` for a notification; with
+        ``defer``, a valid tool call is returned as a :class:`ToolCall` instead of being run."""
+        self._defer = defer
+        try:
+            return self._handle(msg)
+        finally:
+            self._defer = False
+
+    def _handle(self, msg: Any) -> dict | ToolCall | None:
         if isinstance(msg, list):
             # JSON-RPC batching was removed in 2025-06-18 and is absent from both revisions served
             return _error(None, INVALID_REQUEST, "Invalid Request: batches are not supported")
@@ -340,6 +375,9 @@ class McpServer:
             )
         try:
             return {"jsonrpc": "2.0", "id": id_, "result": self._request(method, msg)}
+        except _Deferred as d:
+            d.call.id = id_
+            return d.call
         except _RpcError as e:
             return _error(id_, e.code, e.message, e.data)
         except Exception:  # a bug here must not end the session
@@ -351,8 +389,13 @@ class McpServer:
     def _notification(self, method: str, params: Any) -> None:
         if method == "notifications/initialized":
             self.legacy_initialized = True
-        # notifications/cancelled: requests are answered one at a time, so a cancelled one has
-        # already been answered or has not been read yet; anything else is ignored (no reply)
+        elif method == "notifications/cancelled" and self.on_cancel is not None:
+            # the transport stops the call (#292); answered one at a time (no on_cancel), a
+            # cancelled request has already been answered or has not been read yet
+            rid = params.get("requestId") if isinstance(params, dict) else None
+            if _valid_id(rid):
+                self.on_cancel(rid)
+        # anything else is ignored (no reply)
         log.debug("notification %s", method)
 
     def _request(self, method: str, msg: dict) -> dict:
@@ -431,6 +474,10 @@ class McpServer:
             result = self._get_prompt(params)
         else:
             raise _RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
+        return self._complete(result)
+
+    def _complete(self, result: dict) -> dict:
+        """A 2026-07-28 result: ``resultType`` and the server info in ``_meta``."""
         result["resultType"] = "complete"
         result["_meta"] = {**result.get("_meta", {}), _SERVER_INFO: dict(self.server_info)}
         return result
@@ -551,22 +598,52 @@ class McpServer:
             raise _RpcError(INVALID_PARAMS, 'Invalid params: "arguments" must be an object')
         if name not in self._tool_names:
             raise _RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
+        call = ToolCall(None, name, arguments, self._context_for(caller), caller, modern)
+        if self._defer:
+            raise _Deferred(call)
         t0 = time.monotonic()
         try:
-            res = self.registry.call(name, arguments, self._context_for(caller))
+            res = self.registry.call(name, arguments, call.context)
         except Exception as exc:
-            took = time.monotonic() - t0
-            cap_err = _capability_error(exc)
+            return self._call_outcome(call, exc, t0)
+        return self._call_outcome(call, res, t0)
+
+    def _call_outcome(self, call: ToolCall, outcome: Any, t0: float) -> dict:
+        """The tool result for a registry call's outcome (a result, or the exception it raised)."""
+        name, caller, took = call.name, call.caller, time.monotonic() - t0
+        if isinstance(outcome, BaseException):
+            cap_err = _capability_error(outcome)
             if cap_err is None:  # the contract says this never happens
-                log.exception("tool %s (%s) raised; answered as an internal error", name, caller)
+                log.error(
+                    "tool %s (%s) raised; answered as an internal error",
+                    name,
+                    caller,
+                    exc_info=outcome,
+                )
                 raise _RpcError(INTERNAL_ERROR, "Internal error") from None
             code, message, data = cap_err
             log.info("tool %s (%s): %s after %.2fs", name, caller, code, took)
             if code not in TOOL_ERROR_CODES:
                 raise _RpcError(INTERNAL_ERROR, f"Internal error: {message}") from None
             return self._tool_error(code, message, data)
-        log.info("tool %s (%s): ok in %.2fs", name, caller, time.monotonic() - t0)
-        return self._tool_result(res, modern=modern)
+        log.info("tool %s (%s): ok in %.2fs", name, caller, took)
+        return self._tool_result(outcome, modern=call.modern)
+
+    def finish(self, call: ToolCall, outcome: Any, started: float | None = None) -> dict:
+        """The response to a deferred ``call`` given its outcome: what ``Registry.call`` returned,
+        or the exception it raised (``started`` is the ``time.monotonic()`` for the log line)."""
+        try:
+            result = self._call_outcome(
+                call, outcome, time.monotonic() if started is None else started
+            )
+            if call.modern:
+                result = self._complete(result)
+            return {"jsonrpc": "2.0", "id": call.id, "result": result}
+        except _RpcError as e:
+            return _error(call.id, e.code, e.message, e.data)
+        except Exception:  # a bug here must not end the session
+            log.exception("internal error answering tools/call")
+            return _error(call.id, INTERNAL_ERROR, "Internal error")
 
     @staticmethod
     def _tool_error(code: str, message: str, data: Any) -> dict:

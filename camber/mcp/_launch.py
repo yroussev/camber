@@ -9,6 +9,7 @@ from typing import Any
 
 from ._server import SUPPORTED_VERSIONS, McpServer
 from ._stdio import serve_stdio
+from ._workers import WorkerPool
 
 log = logging.getLogger("camber.mcp")
 
@@ -109,8 +110,14 @@ def launch(
     allow_all_active: bool = False,
     config: str | None = None,
     min_trust: float = 0.5,
+    max_concurrent: int = 2,
+    max_queued: int = 8,
 ) -> int:
-    """Run ``camber mcp`` until the client closes stdin; the exit status."""
+    """Run ``camber mcp`` until the client closes stdin; the exit status.
+
+    Tool calls run in at most ``max_concurrent`` worker processes, with up to ``max_queued`` more
+    waiting (#292); see :class:`WorkerPool`.
+    """
     _setup_logging()
     try:
         import camber.capabilities as capabilities
@@ -128,17 +135,28 @@ def launch(
             config=config,
             min_trust=min_trust,
         )
+        if int(max_concurrent) < 1 or int(max_queued) < 0:
+            raise LaunchError("--max-concurrent must be 1 or more and --max-queued 0 or more")
     except LaunchError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     server = McpServer(capabilities.default_registry(), ctx)
+    # the workers build the same registry: the module this process imported it from
+    workers = WorkerPool(
+        f"{capabilities.__name__}:default_registry",
+        max_concurrent=max_concurrent,
+        max_queued=max_queued,
+    )
     log.info(
-        "store %s; %d facilit%s allowed; %d tools, %d prompts; protocol %s; reading stdin",
+        "store %s; %d facilit%s allowed; %d tools, %d prompts; protocol %s; "
+        "%d concurrent call(s), %d queued; reading stdin",
         ctx.store,
         len(ctx.allowed_facilities),
         "y" if len(ctx.allowed_facilities) == 1 else "ies",
         len(server._tools),
         len(server._prompts),
         ", ".join(SUPPORTED_VERSIONS),
+        workers.max_concurrent,
+        workers.max_queued,
     )
-    return serve_stdio(server)
+    return serve_stdio(server, workers=workers)

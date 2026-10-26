@@ -12,6 +12,10 @@ library only: the ``mcp`` extra is an empty marker.
   logging). The store, the facility allowlist and the trust floor come from the launch
   configuration, never from the client.
 - Logs go to stderr; stdout carries MCP messages only.
+- ``camber mcp`` runs each tool call in a killable worker process (:class:`WorkerPool`, #292): a
+  bounded number at once, a bounded queue, ``busy`` beyond it; a call that times out, is
+  cancelled (``notifications/cancelled``) or whose client has gone is stopped, and every other
+  message is answered at once. In-process use (no ``workers``) answers one message at a time.
 
 ::
 
@@ -35,13 +39,17 @@ from ._server import (
     SUPPORTED_VERSIONS,
     TOOL_ERROR_CODES,
     McpServer,
+    ToolCall,
 )
 from ._stdio import MAX_MESSAGE_BYTES, serve, serve_stdio
+from ._workers import WorkerPool
 
 __all__ = [
     "McpServer",
+    "ToolCall",
     "serve",
     "serve_stdio",
+    "WorkerPool",
     "launch",
     "build_context",
     "LaunchError",

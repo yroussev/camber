@@ -348,6 +348,21 @@ def _unit_interval(value: str) -> float:
     return x
 
 
+def _at_least(low: int):
+    """argparse ``type``: an integer of at least ``low`` (``mcp --max-concurrent``, 0.111)."""
+
+    def parse(value: str) -> int:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            raise argparse.ArgumentTypeError(f"not a whole number: {value!r}") from None
+        if n < low:
+            raise argparse.ArgumentTypeError(f"must be {low} or more (got {value})")
+        return n
+
+    return parse
+
+
 def _cmd_mcp(args) -> int:  # pragma: no cover - blocking stdio loop (run in a subprocess)
     from .mcp import launch
 
@@ -357,6 +372,8 @@ def _cmd_mcp(args) -> int:  # pragma: no cover - blocking stdio loop (run in a s
         allow_all_active=args.allow_all_active,
         config=args.config,
         min_trust=args.min_trust,
+        max_concurrent=args.max_concurrent,
+        max_queued=args.max_queued,
     )
 
 
@@ -3249,6 +3266,21 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_unit_interval,
         default=0.5,
         help="minimum data-trust score, 0-1, the tools apply to the data they read (default 0.5)",
+    )
+    pmcp.add_argument(
+        "--max-concurrent",
+        type=_at_least(1),
+        default=2,
+        metavar="N",
+        help="tool calls run at once, each in its own worker process (default 2)",
+    )
+    pmcp.add_argument(
+        "--max-queued",
+        type=_at_least(0),
+        default=8,
+        metavar="N",
+        help="tool calls that may wait for a free worker; beyond that a call is refused "
+        "as busy (default 8)",
     )
     pmcp.set_defaults(func=_cmd_mcp)
 

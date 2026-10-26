@@ -1,13 +1,22 @@
-"""The stdio transport: newline-delimited JSON-RPC on stdin / stdout, logs on stderr only."""
+"""The stdio transport: newline-delimited JSON-RPC on stdin / stdout, logs on stderr only.
+
+Without a :class:`~camber.mcp.WorkerPool` (library use) messages are answered in order, one at a
+time, in this process. With one (``camber mcp``, #292) tool calls run in killable worker processes
+and everything else is answered at once by the reading thread; see :func:`serve`.
+"""
 
 from __future__ import annotations
 
+import io
 import logging
 import os
+import queue
+import select
 import sys
-from typing import IO
+import threading
+from typing import IO, Any
 
-from ._server import INTERNAL_ERROR, INVALID_REQUEST, McpServer, _error, encode_reply
+from ._server import INTERNAL_ERROR, INVALID_REQUEST, McpServer, ToolCall, _error, encode_reply
 
 log = logging.getLogger("camber.mcp")
 
@@ -57,13 +66,25 @@ def serve(
     outstream: IO[bytes],
     *,
     max_message_bytes: int = MAX_MESSAGE_BYTES,
+    workers: Any = None,
 ) -> int:
     """Answer every message line from ``instream`` on ``outstream`` until end of input.
 
-    Messages are handled in order, one at a time; each response is one line, flushed at once.
-    Returns 0 at end of input or when the client closes ``outstream`` (a broken pipe), 130 on
-    Ctrl-C. Nothing but MCP messages is ever written to ``outstream``.
+    Without ``workers``, messages are handled in order, one at a time, in this process. With a
+    :class:`~camber.mcp.WorkerPool`, each tool call runs in a worker process while the other
+    messages (``ping``, ``server/discover``, ``initialize``, the lists, ``prompts/get``) are
+    answered at once; replies to concurrent calls may come out of order, each with its own id.
+    ``notifications/cancelled`` stops a queued or running call (it gets no reply), a call beyond
+    the pool's queue is refused with the retryable tool error ``busy``, and at end of input or
+    when the client closes ``outstream`` every call still running is stopped and the pool is
+    closed before this returns.
+
+    Each response is one line, flushed at once. Returns 0 at end of input or when the client
+    closes ``outstream`` (a broken pipe), 130 on Ctrl-C. Nothing but MCP messages is ever written
+    to ``outstream``.
     """
+    if workers is not None:
+        return _serve_concurrent(server, instream, outstream, max_message_bytes, workers)
     try:
         while True:
             line = instream.readline(max_message_bytes + 1)
@@ -87,7 +108,7 @@ def serve(
             except Exception:  # handle_line answers its own errors; this is a last resort
                 log.exception("internal error answering a message")
                 response = _error(None, INTERNAL_ERROR, "Internal error")
-            if response is not None:
+            if isinstance(response, dict):  # never a ToolCall: nothing is deferred here
                 _reply(outstream, response)
     except KeyboardInterrupt:
         log.info("interrupted; exiting")
@@ -97,8 +118,148 @@ def serve(
         return 0
 
 
-def serve_stdio(server: McpServer, *, max_message_bytes: int = MAX_MESSAGE_BYTES) -> int:
-    """Serve ``server`` on this process's stdin / stdout (the MCP stdio transport).
+class _Output:
+    """``outstream`` shared by threads: one complete line at a time, and whether the client has
+    gone (a broken pipe, or the read end closed)."""
+
+    def __init__(self, outstream: IO[bytes]):
+        self.stream = outstream
+        self.lock = threading.Lock()
+        self.gone = threading.Event()
+        self._poll = None
+        try:
+            fd = outstream.fileno()
+            self._poll = select.poll()
+            self._poll.register(fd, select.POLLOUT)
+        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+            self._poll = None
+
+    def reply(self, response: dict) -> None:
+        if self.gone.is_set():
+            return
+        with self.lock:
+            try:
+                _reply(self.stream, response)
+            except BrokenPipeError:
+                self.gone.set()
+
+    def hung_up(self) -> bool:
+        """Whether the client closed its end of ``outstream`` (checked without writing)."""
+        if self._poll is None:
+            return False
+        try:
+            events = self._poll.poll(0)
+        except OSError:
+            return False
+        return any(ev & (select.POLLHUP | select.POLLERR) for _, ev in events)
+
+
+_EOF = object()
+
+
+def _read_lines(instream: IO[bytes], max_message_bytes: int, lines: queue.Queue) -> None:
+    """The reading thread: every line (or the refusal of an oversized one) into ``lines``, then
+    ``_EOF``."""
+    try:
+        while True:
+            line = instream.readline(max_message_bytes + 1)
+            if not line:
+                return
+            if len(line) > max_message_bytes:
+                more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes)
+                log.warning("refused a message longer than %d bytes", max_message_bytes)
+                lines.put(
+                    _error(
+                        None,
+                        INVALID_REQUEST,
+                        f"Invalid Request: message longer than {max_message_bytes} bytes",
+                    )
+                )
+                if not more:
+                    return
+                continue
+            lines.put(line)
+    except Exception:  # noqa: BLE001 - a read error is the end of the input
+        log.exception("could not read the input")
+    finally:
+        lines.put(_EOF)
+
+
+def _serve_concurrent(
+    server: McpServer, instream: IO[bytes], outstream: IO[bytes], max_bytes: int, workers: Any
+) -> int:
+    out = _Output(outstream)
+    lines: queue.Queue = queue.Queue(maxsize=64)
+    inflight: dict = {}  # request id -> [Job]
+    inflight_lock = threading.Lock()
+
+    def done(job) -> None:
+        with inflight_lock:
+            jobs = inflight.get(job.call.id, [])
+            if job in jobs:
+                jobs.remove(job)
+            if not jobs:
+                inflight.pop(job.call.id, None)
+        out.reply(server.finish(job.call, job.outcome, job.started))
+
+    def cancel(request_id) -> None:
+        with inflight_lock:
+            jobs = inflight.pop(request_id, [])
+        for job in jobs:
+            if workers.cancel(job):
+                log.info("tool %s (%s): cancelled by the client", job.call.name, job.call.caller)
+
+    previous = server.on_cancel
+    server.on_cancel = cancel
+    reader = threading.Thread(
+        target=_read_lines, args=(instream, max_bytes, lines), name="mcp-stdin", daemon=True
+    )
+    workers.start()
+    reader.start()
+    try:
+        while True:
+            if out.gone.is_set() or out.hung_up():
+                log.info("the client closed the output stream; exiting")
+                return 0
+            try:
+                item = lines.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if item is _EOF:
+                log.info("end of input; exiting")
+                return 0
+            if isinstance(item, dict):  # the refusal of an oversized line
+                out.reply(item)
+                continue
+            try:
+                response = server.handle_line(item, defer=True)
+            except Exception:  # handle_line answers its own errors; this is a last resort
+                log.exception("internal error answering a message")
+                response = _error(None, INTERNAL_ERROR, "Internal error")
+            if isinstance(response, ToolCall):
+                with inflight_lock:
+                    job = workers.submit(response, done)
+                    if job is not None:
+                        inflight.setdefault(response.id, []).append(job)
+                if job is None:
+                    out.reply(server.finish(response, workers.busy_error()))
+            elif response is not None:
+                out.reply(response)
+    except KeyboardInterrupt:
+        log.info("interrupted; exiting")
+        return 130
+    finally:
+        server.on_cancel = previous
+        stopped = workers.close()
+        if stopped:
+            log.info("stopped %d call(s) still in progress", stopped)
+
+
+def serve_stdio(
+    server: McpServer, *, max_message_bytes: int = MAX_MESSAGE_BYTES, workers: Any = None
+) -> int:
+    """Serve ``server`` on this process's stdin / stdout (the MCP stdio transport); ``workers``
+    as for :func:`serve`.
 
     The protocol stream keeps a private duplicate of file descriptor 1; for the duration, fd 1 and
     ``sys.stdout`` point at stderr, so a stray ``print`` or a library writing to stdout lands in the
@@ -110,8 +271,12 @@ def serve_stdio(server: McpServer, *, max_message_bytes: int = MAX_MESSAGE_BYTES
     os.dup2(2, 1)
     sys.stdout = sys.stderr
     out = os.fdopen(os.dup(proto_fd), "wb")
+    # with workers, stdin is read by a thread that may still be blocked in a read when the
+    # client closes stdout and this returns: it reads a private duplicate, never sys.stdin, whose
+    # lock the interpreter needs at exit (left open: closing it would wait for that read)
+    instream = sys.stdin.buffer if workers is None else os.fdopen(os.dup(0), "rb")
     try:
-        return serve(server, sys.stdin.buffer, out, max_message_bytes=max_message_bytes)
+        return serve(server, instream, out, max_message_bytes=max_message_bytes, workers=workers)
     finally:
         try:
             out.close()

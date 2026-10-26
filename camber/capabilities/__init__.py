@@ -35,7 +35,9 @@ The timeout runs the handler in a worker thread (a daemon thread with a copy of 
 context). Python cannot kill a thread: on a timeout the call returns ``timeout`` at once, while
 the handler runs on in the background until it returns, and its result is discarded. Handlers
 are read-only and no-persist, so a late finish changes nothing; a handler that loops for ever
-holds one thread until the process exits.
+holds one thread until the process exits. ``camber mcp`` runs each call in a worker process that
+calls this method and is killed on a timeout, a cancel or a disconnect
+(:class:`camber.mcp.WorkerPool`, #292).
 
 **Adding a capability is a one-file job.** Add a module ``camber/capabilities/_cap_<name>.py``
 that defines ``CAPABILITIES = (Capability(...),)`` (and optionally ``PROMPTS = (Prompt(...),)``);

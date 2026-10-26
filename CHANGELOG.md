@@ -17,6 +17,21 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- **`camber mcp` stops work that timed out, was cancelled or whose client has gone, and answers
+  other requests while a call runs (#292).** The server handled one request at a time, so a
+  `ping` or `server/discover` waited up to a minute behind a long `rule_run`; it ignored
+  `notifications/cancelled`; and a call that hit its time cap answered `timeout` while it went on
+  running, so each retry added another (three retries on a large facility kept about 4.5 cores
+  and 10 GB busy for over five minutes; six timeouts under a short cap reached 32 GB). Closing
+  stdin waited for the call in flight to finish, and a server with abandoned scans could crash
+  (SIGSEGV) on exit. Now each tool call runs in a worker process that is killed, releasing its
+  CPU and memory, on a timeout, a cancel, or when the client closes stdin or stdout; at most
+  `--max-concurrent` calls (default 2) run at once and `--max-queued` (default 8) wait, and a call
+  beyond that gets the retryable tool error `busy` at once. Every other message is answered
+  immediately, so replies may come out of order (each with its own id); a cancelled call gets no
+  reply; the server exits within about a second of stdin closing. Results are unchanged. Using
+  `McpServer`, `serve` or `serve_stdio` from Python works as before, in-process, unless you pass
+  `workers=WorkerPool(...)`.
 - **A capability call reads only the facilities it is about (#293).** While the store's point
   catalog was stale (after an ingest), every `camber mcp` call that needed it -- `facilities`,
   `points`, `coverage`, `sensor_trust`, `rule_run` and the rest -- rescanned every facility in
