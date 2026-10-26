@@ -96,22 +96,40 @@ arguments.
 `camber mcp` speaks two revisions of the protocol, so newer and older clients both connect:
 
 - **2026-07-28.** Stateless: each request carries its protocol version and client capabilities in
-  `_meta`. The server implements `server/discover`, marks every result `resultType: "complete"`
+  `params._meta`. Two keys are required, `io.modelcontextprotocol/protocolVersion` (the string
+  `"2026-07-28"`) and `io.modelcontextprotocol/clientCapabilities` (an object, `{}` if the client
+  has none); `io.modelcontextprotocol/clientInfo` is optional and, when sent, an object. The server implements `server/discover`, marks every result `resultType: "complete"`
   with its identity in `_meta`, and puts `ttlMs` and `cacheScope` on `server/discover`,
   `tools/list` and `prompts/list`. An unknown version gets `UnsupportedProtocolVersion` (-32022)
   with the list of supported ones.
 - **2025-11-25.** The `initialize` handshake, then `notifications/initialized` and `ping`.
   2025-06-18 is accepted as well; a client asking for an older version is offered 2025-11-25.
+  `initialize` needs `protocolVersion` and a `capabilities` object (`clientInfo`, when sent, is an
+  object), and is accepted once per process: a second one is refused (-32600) and the session
+  keeps the version it negotiated.
 
 A request with the 2026-07-28 `_meta` is always served statelessly; `initialize` starts a
 2025-11-25 session for the rest of the process. A request with neither is refused (-32602).
-Messages are one JSON object per line; batches are refused, and so is a line over 1 MiB.
+Messages are one JSON object per line in UTF-8; batches are refused, and so is a line over 1 MiB,
+an object that repeats a key, and a string holding a lone UTF-16 surrogate escape such as
+`"\ud800"` (valid JSON syntax, but not a character).
 
 **Errors.** Following the specification, a problem the model can fix by changing its call is a
 tool result with `isError: true` and a `code: message` text (`invalid_params`, `not_found`,
 `not_allowed`, `refused_licence`, `too_large`, `timeout`); the code is also in
-`_meta["camber/error"]`. A malformed request, an unknown tool or prompt, or a prompt argument
-missing is a JSON-RPC error (-32602); an internal failure is -32603 and names no local path.
+`_meta["camber/error"]`. Everything else is a JSON-RPC error:
+
+| Code | When |
+|---|---|
+| -32700 | the line is not JSON or not UTF-8 |
+| -32600 | not a JSON-RPC 2.0 request object: a batch, a line over 1 MiB, a duplicate key, a lone surrogate, an integer too long to read, `jsonrpc` not `"2.0"`, a missing `method`, an `id` that is not a string or integer, a second `initialize` |
+| -32601 | an unknown method, or one the request's protocol revision does not have |
+| -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown or not a string, an unknown cursor |
+| -32022 | `UnsupportedProtocolVersion`, with the supported versions in `data` |
+| -32603 | an internal failure, including a reply that could not be serialised; names no local path |
+
+When the request's id cannot be read, the error carries `"id": null`. No message, however
+malformed, ends the server: every failure is logged on stderr and answered.
 
 **Results.** A tool result has two text blocks, the summary (with any notices first, as lines
 starting with `NOTICE:`) and the result as JSON, and the same result as `structuredContent`. The

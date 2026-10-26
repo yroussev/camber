@@ -7,7 +7,7 @@ import os
 import sys
 from typing import IO
 
-from ._server import INVALID_REQUEST, McpServer, _error, encode_message
+from ._server import INTERNAL_ERROR, INVALID_REQUEST, McpServer, _error, encode_reply
 
 log = logging.getLogger("camber.mcp")
 
@@ -24,6 +24,31 @@ def _skip_rest_of_line(instream: IO[bytes], chunk: int) -> bool:
             return False
         if part.endswith(b"\n"):
             return True
+
+
+def _write(outstream: IO[bytes], data: bytes) -> bool:
+    """Write and flush one line; ``False`` (logged) when that failed. A closed pipe is the client
+    leaving: ``BrokenPipeError`` propagates and ends the loop."""
+    try:
+        outstream.write(data)
+        outstream.flush()
+    except BrokenPipeError:
+        raise
+    except Exception:
+        log.exception("could not write a reply")
+        return False
+    return True
+
+
+def _reply(outstream: IO[bytes], response: dict) -> None:
+    """Write one reply; when the write fails, try once to answer the same id with an Internal
+    error instead, then go on either way: a failed write never ends the session."""
+    if _write(outstream, encode_reply(response)):
+        return
+    id_ = response.get("id")
+    if _write(outstream, encode_reply(_error(id_, INTERNAL_ERROR, "Internal error"))):
+        return
+    log.error("the reply to id %r is lost; continuing", id_)
 
 
 def serve(
@@ -53,15 +78,17 @@ def serve(
                     f"Invalid Request: message longer than {max_message_bytes} bytes",
                 )
                 log.warning("refused a message longer than %d bytes", max_message_bytes)
-                outstream.write(encode_message(refusal))
-                outstream.flush()
+                _reply(outstream, refusal)
                 if not more:
                     return 0
                 continue
-            response = server.handle_line(line)
+            try:
+                response = server.handle_line(line)
+            except Exception:  # handle_line answers its own errors; this is a last resort
+                log.exception("internal error answering a message")
+                response = _error(None, INTERNAL_ERROR, "Internal error")
             if response is not None:
-                outstream.write(encode_message(response))
-                outstream.flush()
+                _reply(outstream, response)
     except KeyboardInterrupt:
         log.info("interrupted; exiting")
         return 130

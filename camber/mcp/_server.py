@@ -89,11 +89,73 @@ def _error(id_: Any, code: int, message: str, data: Any = None) -> dict:
     err: dict = {"code": code, "message": message}
     if data is not None:
         err["data"] = data
-    out: dict = {"jsonrpc": "2.0"}
-    if id_ is not None:  # MCP: the id is left out when it could not be read
-        out["id"] = id_
-    out["error"] = err
+    # JSON-RPC 2.0: "id" is always present, null when the request's id could not be read (the
+    # official MCP SDK drops an error response without one, and the caller waits forever)
+    return {"jsonrpc": "2.0", "id": id_, "error": err}
+
+
+class _DuplicateKey(Exception):
+    """An object in the message names the same key twice."""
+
+
+class _IntTooLarge(Exception):
+    """An integer in the message has more digits than Python converts."""
+
+
+def _pairs_no_duplicates(pairs: list) -> dict:
+    # last-wins would let a proxy that keeps the first key see another method, id or version
+    out = dict(pairs)
+    if len(out) != len(pairs):
+        seen: set = set()
+        for k, _ in pairs:
+            if k in seen:
+                raise _DuplicateKey(k)
+            seen.add(k)
     return out
+
+
+def _parse_int(digits: str) -> int:
+    try:
+        return int(digits)
+    except ValueError:  # over sys.get_int_max_str_digits(): valid JSON, just not convertible
+        raise _IntTooLarge from None
+
+
+def decode_message(line: str) -> Any:
+    """``json.loads`` for one message line, refusing duplicate keys at any depth.
+
+    Raises ``_DuplicateKey``, ``_IntTooLarge``, or ``ValueError`` / ``RecursionError`` for text
+    that is not JSON.
+    """
+    return json.loads(line, object_pairs_hook=_pairs_no_duplicates, parse_int=_parse_int)
+
+
+def _is_lone_surrogate_free(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _has_lone_surrogate(value: Any) -> bool:
+    """Whether any string (key or value) in ``value`` holds a lone UTF-16 surrogate.
+
+    ``"\\ud800"`` is valid JSON syntax, but not a Unicode character: such text cannot be written
+    back as UTF-8, so it is refused on the way in. Iterative, so a deep value cannot overflow.
+    """
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            if not _is_lone_surrogate_free(item):
+                return True
+        elif isinstance(item, dict):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return False
 
 
 def _valid_id(value: Any) -> bool:
@@ -109,6 +171,12 @@ def _capability_error(exc: BaseException) -> tuple[str, str, Any] | None:
     if isinstance(code, str) and isinstance(message, str):
         return code, message, getattr(exc, "data", None)
     return None
+
+
+def _printable(key: str) -> str:
+    """A key for an error message: JSON-quoted, ASCII-only and short."""
+    text = json.dumps(key)
+    return text if len(text) <= 66 else text[:62] + '..."'
 
 
 def _client_label(info: Any) -> str:
@@ -132,14 +200,34 @@ def json_safe(value: Any) -> Any:
 
 
 def encode_message(message: dict) -> bytes:
-    """One newline-terminated UTF-8 JSON line (no embedded newline: strings are escaped)."""
+    """One newline-terminated UTF-8 JSON line (no embedded newline: strings are escaped).
+
+    A lone surrogate (which UTF-8 cannot carry) is written as its ``\\uXXXX`` JSON escape: outside
+    strings ``json.dumps`` emits ASCII only, so the replacement always lands inside a string.
+    """
     try:
         text = json.dumps(message, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     except ValueError:  # NaN / inf somewhere in a result
         text = json.dumps(
             json_safe(message), ensure_ascii=False, separators=(",", ":"), allow_nan=False
         )
-    return text.encode("utf-8") + b"\n"
+    return text.encode("utf-8", "backslashreplace") + b"\n"
+
+
+def encode_reply(message: dict) -> bytes:
+    """:func:`encode_message` that never raises: a reply that cannot be serialised is logged to
+    stderr and replaced by an Internal error for the same request id (``null`` as a last resort)."""
+    try:
+        return encode_message(message)
+    except Exception:
+        log.exception("could not serialise the reply; answered as an internal error")
+    id_ = message.get("id") if isinstance(message, dict) else None
+    for candidate in (id_, None):
+        try:
+            return encode_message(_error(candidate, INTERNAL_ERROR, "Internal error"))
+        except Exception:  # an id that cannot be written (it was validated, so not expected)
+            continue
+    return b'{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"Internal error"}}\n'
 
 
 class McpServer:
@@ -195,7 +283,15 @@ class McpServer:
         if not line:
             return None
         try:
-            msg = json.loads(line)
+            msg = decode_message(line)
+        except _DuplicateKey as e:
+            return _error(
+                None, INVALID_REQUEST, f"Invalid Request: duplicate key {_printable(e.args[0])}"
+            )
+        except _IntTooLarge:
+            return _error(
+                None, INVALID_REQUEST, "Invalid Request: an integer (id or value) is too large"
+            )
         except (ValueError, RecursionError):
             return _error(None, PARSE_ERROR, "Parse error: Invalid JSON")
         return self.handle(msg)
@@ -209,6 +305,15 @@ class McpServer:
             return _error(None, INVALID_REQUEST, "Invalid Request: not a JSON-RPC object")
         has_id = "id" in msg
         id_ = msg.get("id") if has_id and _valid_id(msg.get("id")) else None
+        if _has_lone_surrogate(msg):
+            if isinstance(id_, str) and not _is_lone_surrogate_free(id_):
+                id_ = None
+            if not has_id and isinstance(msg.get("method"), str):
+                log.warning("dropped a notification holding a lone UTF-16 surrogate")
+                return None
+            return _error(
+                id_, INVALID_REQUEST, "Invalid Request: a string holds a lone UTF-16 surrogate"
+            )
         if msg.get("jsonrpc") != "2.0":
             return _error(id_, INVALID_REQUEST, 'Invalid Request: "jsonrpc" must be "2.0"')
         method = msg.get("method")
@@ -265,6 +370,10 @@ class McpServer:
                 if not isinstance(caps, dict):
                     raise _RpcError(
                         INVALID_PARAMS, f"Invalid params: _meta is missing {_CLIENT_CAPS}"
+                    )
+                if not isinstance(meta.get(_CLIENT_INFO, {}), dict):
+                    raise _RpcError(
+                        INVALID_PARAMS, f"Invalid params: {_CLIENT_INFO} must be an object"
                     )
                 return self._modern(method, params, meta)
             if version in LEGACY_VERSIONS:
@@ -339,9 +448,17 @@ class McpServer:
     # ------------------------------------------------------------------ lifecycle (legacy)
 
     def _initialize(self, params: dict) -> dict:
+        if self.legacy_version is not None:
+            # one stdio process is one session: the version is not renegotiated mid-session
+            raise _RpcError(INVALID_REQUEST, "Invalid Request: the session is already initialized")
         requested = params.get("protocolVersion")
         if not isinstance(requested, str):
             raise _RpcError(INVALID_PARAMS, 'Invalid params: "protocolVersion" must be a string')
+        # the same rules as the stateless path's clientCapabilities / clientInfo
+        if not isinstance(params.get("capabilities"), dict):
+            raise _RpcError(INVALID_PARAMS, 'Invalid params: "capabilities" must be an object')
+        if not isinstance(params.get("clientInfo", {}), dict):
+            raise _RpcError(INVALID_PARAMS, 'Invalid params: "clientInfo" must be an object')
         # 2025-11-25 lifecycle: echo a supported version, else offer the latest this server speaks
         version = requested if requested in LEGACY_VERSIONS else LEGACY_VERSIONS[0]
         self.legacy_version = version

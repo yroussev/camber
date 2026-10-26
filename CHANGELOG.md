@@ -14,6 +14,29 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Fixed
+
+- `camber mcp` no longer exits when a request holds a lone UTF-16 surrogate escape (such as
+  `"\ud800"`) in its id, method, tool name, prompt argument or anywhere else: the request is
+  refused with an Invalid Request error (-32600) and the server keeps serving. More generally, a
+  reply that cannot be serialised or written is now logged on stderr and answered with an Internal
+  error (-32603) instead of ending the session (#289).
+- JSON-RPC error replies to a request whose id cannot be read (a parse error, a batch, a line over
+  1 MiB, a bad id) now carry `"id": null`. The official MCP SDK dropped these replies before, so
+  the client waited until its own timeout (#300).
+- `camber mcp` refuses a request object that repeats a key at any depth (-32600) instead of
+  taking the last value, so a proxy that reads the first key cannot see a different method, id or
+  protocol version from the one served (#300).
+- A request with an integer too long to read (more than 4300 digits) is now an Invalid Request
+  (-32600), not a misleading "Invalid JSON" parse error (#300).
+- A second `initialize` is refused (-32600) and the session keeps its negotiated version;
+  `initialize` now needs a `capabilities` object, and `clientInfo` must be an object when sent, in
+  both protocol revisions, matching the stateless path's rules (#300).
+- docs/MCP.md lists the JSON-RPC error codes as the server returns them and names the required
+  2026-07-28 `_meta` keys (#300).
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.

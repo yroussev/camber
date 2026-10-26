@@ -148,7 +148,7 @@ def test_an_oversized_line_is_refused_and_the_stream_goes_on():
     out = io.BytesIO()
     assert serve(_server(), io.BytesIO(big + ok), out, max_message_bytes=400) == 0
     first, second = _lines(out.getvalue())
-    assert first["error"]["code"] == -32600 and "id" not in first
+    assert first["error"]["code"] == -32600 and first["id"] is None
     assert "400 bytes" in first["error"]["message"]
     assert second["id"] == 2 and "tools" in second["result"]
 
@@ -218,7 +218,11 @@ def test_each_call_runs_under_the_launch_context_with_the_client_as_caller():
             "jsonrpc": "2.0",
             "id": 2,
             "method": "initialize",
-            "params": {"protocolVersion": "2025-11-25", "clientInfo": {"name": "Old\nClient!"}},
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "Old\nClient!"},
+            },
         }
     )
     server.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "ids"}})
@@ -230,18 +234,17 @@ def test_each_call_runs_under_the_launch_context_with_the_client_as_caller():
 
 
 def test_initialize_offers_its_own_version_for_an_unknown_one():
-    server = _server()
     for asked, got in (("2024-11-05", "2025-11-25"), ("2025-06-18", "2025-06-18")):
-        resp = server.handle(
+        resp = _server().handle(
             {
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "initialize",
-                "params": {"protocolVersion": asked},
+                "params": {"protocolVersion": asked, "capabilities": {}},
             }
         )
         assert resp["result"]["protocolVersion"] == got
-    bad = server.handle({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}})
+    bad = _server().handle({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}})
     assert bad["error"]["code"] == -32602
 
 
