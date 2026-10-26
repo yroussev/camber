@@ -454,29 +454,30 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
     touched facility partition's modification signature (the facilities the arguments name, else
     every allowed one, plus a store-backed config's own facility). Stat calls only: nothing is
     read but the config."""
+    from .. import __version__
     from ..config import load_config
     from ..store.facilities import _FACILITIES
     from ..store.parquet_store import _FACILITY, _partition_signature
-    from ._policy import named_facilities
+    from ._policy import config_paths, named_facilities
 
-    config, config_store = None, None
-    if ctx.config:
+    configs, config_stores = [], []
+    for path in config_paths(ctx):
         try:
-            loaded = load_config(ctx.config)
+            loaded = load_config(path)
             text = json.dumps(loaded, sort_keys=True, separators=(",", ":"), default=str)
-            config = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            configs.append(hashlib.sha256(text.encode("utf-8")).hexdigest())
             source = loaded.get("source") or {}
             if source.get("kind") == "store" and source.get("facility_id"):
                 root = str(source.get("store") or "")
                 if not os.path.isabs(root):
-                    root = os.path.join(os.path.dirname(os.path.abspath(ctx.config)), root)
-                config_store = (root, str(source["facility_id"]))
+                    root = os.path.join(os.path.dirname(os.path.abspath(path)), root)
+                config_stores.append((root, str(source["facility_id"])))
         except Exception:  # noqa: BLE001 - a config that does not load: its bytes, or absent
             try:
-                with open(ctx.config, "rb") as fh:
-                    config = "raw:" + hashlib.sha256(fh.read()).hexdigest()
+                with open(path, "rb") as fh:
+                    configs.append("raw:" + hashlib.sha256(fh.read()).hexdigest())
             except OSError:
-                config = "missing"
+                configs.append("missing")
 
     def signature(root: str, fid: str) -> list:
         fdir = os.path.join(os.path.abspath(root), f"{_FACILITY}={fid}")
@@ -492,9 +493,9 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
         registry,
         *(signature(ctx.store, f) for f in sorted(set(named or ctx.allowed_facilities))),
     ]
-    if config_store is not None:
-        store.append(signature(*config_store))
-    return [config, float(ctx.min_trust), store]
+    store.extend(signature(*cs) for cs in config_stores)
+    # the package version: with no config a catalog facility runs its packaged template (#296)
+    return [__version__, configs, float(ctx.min_trust), store]
 
 
 def _scoped(facts: list, text: str, data, token: str) -> tuple:

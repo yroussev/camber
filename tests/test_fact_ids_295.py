@@ -72,6 +72,17 @@ def test_config_changes_the_ids(site):
     assert not set(before) & set(_ids(_ctx(site, config=a)))
 
 
+def test_several_configs_each_count(site):
+    """``--config`` is repeatable (#296): ``ctx.config`` is then a tuple, and each file counts."""
+    a = _write(site["root"] / "a.json", fx.config())
+    b = _write(site["root"] / "b.json", {**fx.config(), "site": "Other"})
+    pair = _ids(_ctx(site, config=(a, b)))
+    assert pair == _ids(_ctx(site, config=(a, b)))
+    assert not set(pair) & set(_ids(_ctx(site, config=a)))
+    _write(b, {**fx.config(), "site": "Renamed"})
+    assert not set(pair) & set(_ids(_ctx(site, config=(a, b))))
+
+
 def test_trust_floor_changes_the_ids(site):
     low = default_registry().call("rule_run", {"facility_id": FID}, _ctx(site, min_trust=0.0))
     high = default_registry().call("rule_run", {"facility_id": FID}, _ctx(site, min_trust=1.0))
