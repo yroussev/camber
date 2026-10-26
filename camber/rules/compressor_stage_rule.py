@@ -102,7 +102,7 @@ def _bounded_runs(changed: pd.Series, level: pd.Series, keep) -> pd.Series:
     out = pd.Series(False, index=level.index)
     run_id = (level != level.shift()).cumsum()
     nxt = changed.shift(-1, fill_value=False)
-    for _k, seg in level.groupby(run_id):
+    for _k, seg in level.groupby(run_id.to_numpy()):
         first, last = seg.index[0], seg.index[-1]
         if bool(changed.get(first, False)) and bool(nxt.get(last, False)) and keep(seg.iloc[0]):
             out.loc[seg.index] = True
