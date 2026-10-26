@@ -86,6 +86,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - Path redaction no longer garbles normal text: the `refused_licence` message reads
   "non-commercial / no-derivatives" again (not "non-commercial <path> no-derivatives"), and an
   internal error shows one `<path>`, not `<path><path>` (#302).
+- **`rcx_report` honours `top_n` (#299).** Every issue came back whatever `top_n` said (73
+  issues and 1.2 MB on one fleet). It now returns the `top_n` best-ranked issues (default: the
+  config's, else 8; up to 200), with only their facts and sections; `offset` gets the next ones.
+  The KPIs still count every issue.
+- **`truncated` is set whenever a list was cut (#299).** `coverage` cut `gaps` to 500 with a
+  notice but left `truncated` false. Every list a capability cuts now sets the flag and adds a
+  notice, by construction.
+- **The 2 MB cap bounds what is sent (#299).** It was measured on the result's data alone, while
+  a `camber mcp` reply carries that data twice plus the facts, so replies of 3-4 MB passed. The
+  registry now counts the whole result (data, summary, facts and notices) and `camber mcp` the
+  whole reply; a larger one is `too_large`.
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
@@ -108,6 +119,23 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
 ### Changed
+- **Capability results are model-sized by default (#299).** A plain `rule_run`, `rcx_report`,
+  `sensor_trust` or `coverage` call on a 650-point fleet returned 0.3 to 1.2 MB, far more than a
+  model's context. Every list now comes a page at a time -- `rule_run` 25 findings, `sensor_trust`
+  100 points, `coverage` 50 rows per list, `points` 250, `facilities` 100, `drift` 25,
+  `rule_params` 25 rules (10 with `detail`), `rcx_report` 8 issues and 20 appendix facts -- and
+  takes `limit` (up to 1,000) and `offset` for more; a notice says what was left out and the call
+  that gets it. Typical results are now 50 to 100 KB on the wire.
+- **`check_citations` returns a compact verdict (#299).** 50 KB of text in gave up to 764 KB out.
+  It now returns the counts per verdict and the sentences that fail; `detail: true` lists every
+  sentence and adds `verified_text` (no longer returned by default). `cited` lists each id once.
+- `rule_params` facts carry each parameter's name, default, unit and range, not its basis and
+  calibration prose, which stay in `data` (#299).
+- **A shorter MCP tool list (#299).** Tool descriptions are tighter, and `tools/list` leaves out
+  the default `$schema`, the `annotations.title` that repeats the tool's title and the
+  descriptions inside output schemas (46 KB to about 43 KB, with the new paging arguments). The
+  JSON text block of a tool result is compact. See docs/MCP.md for why the result is still sent
+  both as text and as `structuredContent`.
 - **Ingest refuses ids with control, bidi or invisible characters (#291).** `write_long` /
   `write_role_frame` (and so every ingest) raise a `ValueError` for an equipment id, equipment
   class or role that holds a newline, tab, ESC, NUL or other control character, a bidi override,

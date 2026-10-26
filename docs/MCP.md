@@ -26,8 +26,10 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because an input scores below it is announced in a NOTICE line, with the count,
   the rules and the inputs.
-- **Size and time caps.** A large result is truncated, with a notice, or refused as too large; a
-  call has a time budget.
+- **Model-sized results.** A tool returns one page of each list by default, so a typical result
+  stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
+  says what was left out and how to get it. A reply over 2 MB is refused as too large, and a
+  call has a time budget (see **Results** below).
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx]`, which point at the values in
   the result.
 
@@ -165,13 +167,40 @@ stored data is an ordinary, empty result with a notice. Everything else is a JSO
 When the request's id cannot be read, the error carries `"id": null`. No message, however
 malformed, ends the server: every failure is logged on stderr and answered.
 
-**Results.** A tool result has two text blocks, the summary (with any notices first, as lines
-starting with `NOTICE:`) and the result as JSON, and the same result as `structuredContent`. Only
-a notice starts a line with `NOTICE:`: the summary is one line, and names from the data in it are
-quoted and stripped of control, bidi and invisible characters (0.111, #291; see
-[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). The
-fact index is in `_meta["camber/facts"]`, the notices in `_meta["camber/banners"]` and the
-truncation flag in `_meta["camber/truncated"]`.
+**Results.** A tool result has two text blocks: the summary (with any notices first, as lines
+starting with `NOTICE:`) and the result as compact JSON; the same result is in
+`structuredContent`. Only a notice starts a line with `NOTICE:`: the summary is one line, and
+names from the data in it are quoted and stripped of control, bidi and invisible characters
+(0.111, #291; see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). The fact index is in
+`_meta["camber/facts"]`, the notices in `_meta["camber/banners"]` and the truncation flag in
+`_meta["camber/truncated"]`.
+
+**Sizes** (0.111, #299). Both revisions say a tool that returns `structuredContent` SHOULD also
+return it serialized as JSON in a text block, for clients that pass only `content` to the model,
+so the JSON goes out twice: once, compact, in `content` and once in `structuredContent`. Rather
+than leave one out, the server keeps results small:
+
+- **Pages.** Every list comes a page at a time: `rule_run` 25 findings, `sensor_trust` 100
+  points, `coverage` 50 rows per list, `points` 250, `facilities` 100, `rule_params` 25 rules (10
+  with `detail`), `check_citations` the failing sentences only (every sentence and
+  `verified_text` with `detail: true`), `rcx_report` its `top_n` ranked issues (default 8) with
+  their facts and the first 20 appendix entries of its fact index. Pass `limit` (up to 1,000)
+  and `offset` for more; `rcx_report` takes `top_n` and `offset` for issues and `limit` for the
+  appendix. Counts such as `count`, `n_points` and the RCx KPIs are of the whole list.
+- **`truncated` means something was left out.** Whenever a list in the result is not the whole
+  list, `_meta["camber/truncated"]` is `true` and a notice says which list, the rows shown, the
+  total and the call that gets the rest.
+- **The cap counts the whole reply.** A reply larger than 2 MB, counted as sent (the summary,
+  the JSON text block, `structuredContent` and `_meta` together), is the tool error
+  `too_large`, with `{"bytes": ..., "max_bytes": ...}`; ask for a smaller page.
+- **A shorter tool list.** `tools/list` leaves out what a client does not need to pick or call a
+  tool: the `$schema` of JSON Schema 2020-12 (the dialect both revisions assume), the
+  `annotations.title` that repeats the tool's `title`, and the `description` annotations inside
+  each `outputSchema` (it validates the same). The server still checks every result against the
+  full schema.
+
+On a 650-point fleet, typical calls now return 50 to 100 KB (they were 0.3 to 1.2 MB), and
+`tools/list` is about 43 KB.
 
 ## From Python
 

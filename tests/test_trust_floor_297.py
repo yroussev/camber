@@ -162,16 +162,17 @@ def test_capabilities_agree_with_the_cli_at_the_default_floor(did, built):
     fid, ctx = _ctx(store, did, cfgs[did])
     assert ctx.min_trust == 0.5
     reg = default_registry()
-    rr = reg.call("rule_run", {"facility_id": fid}, ctx)
+    # every row, not the default page (#299)
+    rr = reg.call("rule_run", {"facility_id": fid, "limit": 1000}, ctx)
     got = {
         (f["equip"], f["rule"], f["severity"]) for f in rr.data["findings"] if f["severity"] in _FW
     }
     assert got == cli_rules
     assert not any("declined because an input scored below" in b for b in rr.banners)
-    rcx = reg.call("rcx_report", {"facility_id": fid}, ctx)
+    rcx = reg.call("rcx_report", {"facility_id": fid, "top_n": 200}, ctx)
     assert sorted(i["key"] for i in rcx.data["issues"]) == cli_issues
     if cfg.get("drift"):
-        dr = reg.call("drift", {"facility_id": fid}, ctx)
+        dr = reg.call("drift", {"facility_id": fid, "limit": 1000}, ctx)
         got = {(f["equip"], f["rule"], f["severity"]) for f in dr.data["findings"]}
         assert {x for x in got if x[2] in _FW} == cli_drift
 

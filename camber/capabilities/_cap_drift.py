@@ -37,6 +37,7 @@ from ._common import (
     trust_banner,
     trust_declines,
 )
+from ._page import OFFSET, limit_arg, page
 
 
 def _families() -> list:
@@ -62,6 +63,9 @@ _PAIR = {
     "minItems": 2,
     "maxItems": 2,
 }
+
+#: rows per list and page by default (#299)
+_PAGE = 25
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -97,6 +101,8 @@ INPUT_SCHEMA = {
             },
         },
         "equips": EQUIPS,
+        "limit": limit_arg(_PAGE, "diagnoses, findings, unevaluated"),
+        "offset": OFFSET,
     },
 }
 
@@ -319,6 +325,7 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         else f"Drift on {fid} gave {counts['fault']} fault and {counts['warn']} warn findings; "
         f"{len(unevaluated)} equipment were not evaluated [F1@drift]."
     ]
+    rows = page(rows, arguments, default=_PAGE, what="findings", order="worst first")
     for i, r in enumerate(rows[:_FACTS], start=2):
         fact_id = f"F{i}@drift"
         r["fact"] = fact_id
@@ -339,9 +346,9 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         "source": source,
         "families": fams,
         "counts": counts,
-        "diagnoses": diagnoses,
+        "diagnoses": page(diagnoses, arguments, default=_PAGE, what="diagnoses"),
         "findings": rows,
-        "unevaluated": unevaluated,
+        "unevaluated": page(unevaluated, arguments, default=_PAGE, what="unevaluated"),
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
@@ -352,13 +359,12 @@ CAPABILITIES = (
         title="Performance drift",
         description=(
             "Detect slow performance drift (fouling coils, loading filters, a leaking valve, a "
-            "chiller losing efficiency) by scoring a current window against a baseline: either "
-            "a known-good baseline [start, end] you give (fitted for this call, never saved) or "
-            "the frozen baselines of the run config's drift section. Returns per-equipment "
-            "verdicts, the drift findings worst first, and the equipment that could not be "
-            "evaluated and why (a decline is not a clean bill of health). Families default to "
-            "one per stored equipment class. Nothing is saved. Cost: reads both windows and "
-            "fits each detector (seconds to minutes). Needs facility_id."
+            "chiller losing efficiency) by scoring a current window against a baseline: a known-"
+            "good [start, end] you give (fitted for this call) or the run config's frozen "
+            "baselines. Returns per-equipment verdicts, the drift findings worst first and the "
+            "equipment not evaluated, with why (a decline is not a clean bill of health). "
+            "Families default to one per stored class. Nothing is saved. Cost: seconds to "
+            "minutes. Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

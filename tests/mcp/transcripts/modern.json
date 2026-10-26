@@ -30,7 +30,7 @@
           "tools": {},
           "prompts": {}
         },
-        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Lines starting with NOTICE are licence, trust or truncation notices: always show them to the user.",
+        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Long lists come a page at a time (limit and offset arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
         "ttlMs": 300000,
         "cacheScope": "private",
         "resultType": "complete",
@@ -78,7 +78,6 @@
               "type": "object"
             },
             "annotations": {
-              "title": "Boom",
               "readOnlyHint": true,
               "destructiveHint": false,
               "idempotentHint": true,
@@ -109,7 +108,6 @@
               ]
             },
             "annotations": {
-              "title": "Facilities",
               "readOnlyHint": true,
               "destructiveHint": false,
               "idempotentHint": true,
@@ -130,7 +128,6 @@
               }
             },
             "annotations": {
-              "title": "Ids",
               "readOnlyHint": true,
               "destructiveHint": false,
               "idempotentHint": true,
@@ -148,7 +145,6 @@
               "type": "object"
             },
             "annotations": {
-              "title": "Noisy",
               "readOnlyHint": true,
               "destructiveHint": false,
               "idempotentHint": true,
@@ -179,7 +175,6 @@
               "type": "object"
             },
             "annotations": {
-              "title": "Rows",
               "readOnlyHint": true,
               "destructiveHint": false,
               "idempotentHint": true,
@@ -231,7 +226,7 @@
           },
           {
             "type": "text",
-            "text": "{\"facilities\": [\"annex\", \"empty\", \"hq\"]}"
+            "text": "{\"facilities\":[\"annex\",\"empty\",\"hq\"]}"
           }
         ],
         "isError": false,
@@ -296,7 +291,7 @@
           },
           {
             "type": "text",
-            "text": "{\"facility\": \"hq\", \"rows\": [{\"i\": 0, \"value\": 0.0}, {\"i\": 1, \"value\": 1.5}, {\"i\": 2, \"value\": 3.0}], \"nan\": null}"
+            "text": "{\"facility\":\"hq\",\"rows\":[{\"i\":0,\"value\":0.0},{\"i\":1,\"value\":1.5},{\"i\":2,\"value\":3.0}],\"nan\":null}"
           }
         ],
         "isError": false,
@@ -728,7 +723,7 @@
           },
           {
             "type": "text",
-            "text": "[\"a\", \"b\"]"
+            "text": "[\"a\",\"b\"]"
           }
         ],
         "isError": false,

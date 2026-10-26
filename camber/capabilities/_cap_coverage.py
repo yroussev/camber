@@ -12,8 +12,12 @@ import pandas as pd
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import DATE, EQUIPS, FACILITY, TEXT, window
+from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
+
+#: rows per list and page by default (#299)
+_PAGE = 50
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -45,6 +49,8 @@ INPUT_SCHEMA = {
             "description": "list only gaps at least this long (default: any gap longer than "
             "1.5 sampling intervals)",
         },
+        "limit": limit_arg(_PAGE, "equipment, points, gaps"),
+        "offset": OFFSET,
     },
 }
 
@@ -136,8 +142,6 @@ OUTPUT_SCHEMA = {
 
 #: equipment named in the summary and given their own fact
 _LISTED, _FACTS = 5, 100
-#: gaps listed (longest first)
-_MAX_GAPS = 500
 
 
 def _point(ts: pd.DatetimeIndex, w0, w1) -> tuple:
@@ -274,7 +278,11 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
         f"{fid} has a mean coverage of {mean * 100:.1f}% over {len(points)} points, with "
         f"{low} point(s) below 90% [F1@coverage]."
     ]
-    for i, e in enumerate(equipment[:_FACTS], start=2):
+    by_point = (arguments.get("group_by") or "point") == "point"
+    equipment_page = page(
+        equipment, arguments, default=_PAGE, what="equipment", order="worst first"
+    )
+    for i, e in enumerate(equipment_page[:_FACTS], start=2):
         facts.append(
             {
                 "id": f"F{i}@coverage",
@@ -297,9 +305,20 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
         "window": win,
         "coverage": mean,
         "n_points": len(points),
-        "equipment": equipment,
-        "points": points if (arguments.get("group_by") or "point") == "point" else [],
-        "gaps": gaps[:_MAX_GAPS],
+        "equipment": equipment_page,
+        "points": (
+            page(points, arguments, default=_PAGE, what="points", order="worst first")
+            if by_point
+            else []
+        ),
+        "gaps": page(
+            gaps,
+            arguments,
+            default=_PAGE,
+            what="gaps",
+            order="longest first",
+            more="or raise min_gap_hours",
+        ),
     }
     banners = []
     if ts_all.empty and keys:
@@ -307,11 +326,6 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
             "No valid stored sample of these points falls in the requested window, so every "
             "point shows 0% coverage; the facilities capability lists the first and last stored "
             "sample of each facility."
-        )
-    if len(gaps) > _MAX_GAPS:
-        banners.append(
-            f"'gaps' lists the longest {_MAX_GAPS} of {len(gaps)} gaps (raise min_gap_hours or "
-            "narrow the query)"
         )
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
@@ -321,12 +335,11 @@ CAPABILITIES = (
         name="coverage",
         title="Data coverage and gaps",
         description=(
-            "How complete a facility's stored trends are: per point the sample count, first and "
-            "last sample, sampling interval, coverage (0-1) over the window and its gaps; per "
-            "equipment the mean coverage and the worst point; and the longest gaps (start, end, "
-            "hours). Worst first. Call it before trusting an analysis or to plan what data to "
-            "fix. Filter by equips, roles and a start / end window; group_by='equip' drops the "
-            "per-point rows. Cost: one scan of the facility's timestamps. Needs facility_id."
+            "How complete a facility's stored trends are: per point the samples, first and last "
+            "sample, interval, coverage (0-1) and gaps; per equipment the mean and the worst "
+            "point; the longest gaps. Worst first. Use it before trusting an analysis. Filter by "
+            "equips, roles and start / end; group_by='equip' drops the point rows. Cost: one scan"
+            " of the timestamps. Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

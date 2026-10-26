@@ -297,13 +297,11 @@ CAPABILITIES = (
         name="dataset_search",
         title="Search the dataset catalog",
         description=(
-            "Search CAMBER's catalog of open building datasets (fault-labelled HVAC "
-            "simulations, real building trends, lab rigs, CAMBER's own synthetic sets) by words "
-            "and filters. Returns metadata only: id, title, kind, SPDX licence, access (open or "
-            "research_only), whether commercial use is allowed, fault labels, equipment, "
-            "download size and what each dataset is good for. Research-only entries are listed "
-            "with a notice: this server refuses their data. Use it to suggest data to practise "
-            "or validate a rule on. Cheap (reads the packaged catalog)."
+            "Search CAMBER's catalog of open building datasets (fault-labelled simulations, real "
+            "building trends, lab rigs, synthetic sets) by words and filters: id, title, kind, "
+            "SPDX licence, access, commercial use, fault labels, equipment, size and what each is"
+            " good for. Research-only entries are listed with a notice: this server refuses their"
+            " data. Cheap."
         ),
         input_schema=SEARCH_INPUT,
         output_schema=SEARCH_OUTPUT,
@@ -313,11 +311,10 @@ CAPABILITIES = (
         name="dataset_entry",
         title="Dataset catalog entry",
         description=(
-            "One catalog dataset's full metadata: summary, publisher, citation, DOIs, landing "
-            "page, licence and access (with the reason a dataset is held research-only), "
-            "subsets, download size, the rules it suits, known issues and the publisher data "
-            "issues CAMBER corrects at ingest. Metadata only; nothing is downloaded. Cheap. "
-            "Needs dataset_id (see dataset_search)."
+            "One catalog dataset's full metadata: summary, publisher, citation, DOIs, licence and"
+            " access (and why a dataset is research-only), subsets, download size, the rules it "
+            "suits and its known data issues. Nothing is downloaded. Cheap. Needs dataset_id (see"
+            " dataset_search)."
         ),
         input_schema=ENTRY_INPUT,
         output_schema=ENTRY_OUTPUT,

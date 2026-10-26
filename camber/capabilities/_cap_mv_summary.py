@@ -133,13 +133,11 @@ CAPABILITIES = (
         name="mv_summary",
         title="M&V summary",
         description=(
-            "Measurement and verification (M&V, IPMVP / ASHRAE Guideline 14) results of the "
-            "project configured for a facility: per meter the baseline model and its fit "
-            "statistics (R2, CV(RMSE), NMBE), the avoided energy and savings % with their "
-            "uncertainty, any rebaseline triggers and method proposals, and which results "
+            "Measurement and verification (IPMVP / ASHRAE Guideline 14) results of the facility's"
+            " configured M&V project: per meter the baseline model and its fit (R2, CV(RMSE), "
+            "NMBE), avoided energy and savings % with uncertainty, rebaseline triggers, and what "
             "declined and why. Use it to check a savings claim. Needs a run config with an mv "
-            "section for the facility; nothing is saved and no weather is fetched. Cost: fits "
-            "each meter's baseline (seconds). Needs facility_id."
+            "section; nothing is saved or fetched. Cost: seconds. Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

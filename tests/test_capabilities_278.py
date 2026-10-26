@@ -586,7 +586,9 @@ def test_check_citations_judges_each_sentence(results, site):
     )
     reg = default_registry()
     res = reg.call(
-        "check_citations", {"text": text, "facts": run.facts + cov.facts}, _ctx(site, allowed=())
+        "check_citations",
+        {"text": text, "facts": run.facts + cov.facts, "detail": True},
+        _ctx(site, allowed=()),
     )
     verdicts = [s["verdict"] for s in res.data["sentences"]]
     assert verdicts == [
@@ -601,9 +603,21 @@ def test_check_citations_judges_each_sentence(results, site):
         f"DemoAHU2 heats and cools at once [{r3}]. Coverage is 100.0% [{c1}]."
     )
     assert res.data["cited"] == [r3, c1] and res.banners
+    # 0.111 (#299): by default only the failing sentences, and no verified_text
+    compact = reg.call(
+        "check_citations", {"text": text, "facts": run.facts + cov.facts}, _ctx(site, allowed=())
+    ).data
+    assert [s["index"] for s in compact["sentences"]] == [2, 3, 4]
+    assert "verified_text" not in compact and compact["n_supported"] == 2
+    assert compact["verdicts"] == {
+        "supported": 2,
+        "unknown_citation": 1,
+        "uncited": 1,
+        "unsupported_number": 1,
+    }
     loose = reg.call(
         "check_citations",
-        {"text": text, "facts": run.facts + cov.facts, "per_sentence": False},
+        {"text": text, "facts": run.facts + cov.facts, "per_sentence": False, "detail": True},
         _ctx(site, allowed=()),
     )
     assert [s["verdict"] for s in loose.data["sentences"]][3] == "supported"

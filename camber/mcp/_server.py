@@ -79,8 +79,9 @@ _INSTRUCTIONS = (
     "time-series store, and only the facilities this server was launched with; a facility "
     "outside that list is refused, and so is research-only (non-commercial / no-derivatives) "
     "data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote "
-    "them when you repeat a number. Lines starting with NOTICE are licence, trust or truncation "
-    "notices: always show them to the user."
+    "them when you repeat a number. Long lists come a page at a time (limit and offset "
+    "arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut "
+    "list says how to get the rest): always show them to the user."
 )
 
 
@@ -258,6 +259,39 @@ def encode_reply(message: dict) -> bytes:
         except Exception:  # an id that cannot be written (it was validated, so not expected)
             continue
     return b'{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"Internal error"}}\n'
+
+
+def _published(schema: Any, *, notes: bool = True) -> Any:
+    """``schema`` as ``tools/list`` sends it (#299: a shorter tool list): without a ``$schema`` of
+    JSON Schema 2020-12, the dialect both revisions assume when there is none, and with
+    ``notes=False`` without its ``description`` annotations (an output schema validates the same
+    without them, and a model picks a tool from its description and input schema)."""
+    if isinstance(schema, dict) and schema.get("$schema") == _DIALECT:
+        schema = {k: v for k, v in schema.items() if k != "$schema"}
+    return schema if notes else _without_notes(schema)
+
+
+def _without_notes(schema: Any, depth: int = 0) -> Any:
+    if depth > 30:
+        return schema
+    if isinstance(schema, list):
+        return [_without_notes(v, depth + 1) for v in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {}
+    for k, v in schema.items():
+        if k == "description" and isinstance(v, str):
+            continue
+        if k in ("properties", "patternProperties", "$defs"):  # keys here are names, not keywords
+            out[k] = {n: _without_notes(s, depth + 1) for n, s in v.items()}
+        elif k in ("enum", "const", "required"):
+            out[k] = v
+        else:
+            out[k] = _without_notes(v, depth + 1)
+    return out
+
+
+_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
 class McpServer:
@@ -555,14 +589,14 @@ class McpServer:
             "name": cap.name,
             "title": cap.title,
             "description": cap.description,
-            "inputSchema": cap.input_schema,
+            "inputSchema": _published(cap.input_schema),
         }
         schema = cap.output_schema
         # 2025-11-25 requires an object-rooted outputSchema; 2026-07-28 allows any JSON Schema
         if schema and (modern or (isinstance(schema, dict) and schema.get("type") == "object")):
-            out["outputSchema"] = schema
+            out["outputSchema"] = _published(schema, notes=False)
+        # the tool's own title is the display name, so annotations do not repeat it (#299)
         out["annotations"] = {
-            "title": cap.title,
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
@@ -626,8 +660,25 @@ class McpServer:
             if code not in TOOL_ERROR_CODES:
                 raise _RpcError(INTERNAL_ERROR, f"Internal error: {message}") from None
             return self._tool_error(code, message, data)
+        result = self._tool_result(outcome, modern=call.modern)
+        # 0.111 (#299): the cap bounds the reply as sent -- the summary, the JSON text block,
+        # structuredContent and _meta together -- not only the result's data
+        cap = getattr(getattr(call.context, "caps", None), "max_bytes", None)
+        sent = self._complete(dict(result)) if call.modern else result
+        try:
+            size = len(encode_message({"jsonrpc": "2.0", "id": call.id, "result": sent}))
+        except (TypeError, ValueError):  # unserialisable: encode_reply answers Internal error
+            size = 0
+        if isinstance(cap, int) and size > cap:
+            log.info("tool %s (%s): too_large (%d bytes) after %.2fs", name, caller, size, took)
+            return self._tool_error(
+                "too_large",
+                f"the reply is {size:,} bytes, over this server's limit of {cap:,}; ask for a "
+                "smaller page (limit) or narrow the query",
+                {"bytes": size, "max_bytes": cap},
+            )
         log.info("tool %s (%s): ok in %.2fs", name, caller, took)
-        return self._tool_result(outcome, modern=call.modern)
+        return result
 
     def finish(self, call: ToolCall, outcome: Any, started: float | None = None) -> dict:
         """The response to a deferred ``call`` given its outcome: what ``Registry.call`` returned,
@@ -669,9 +720,14 @@ class McpServer:
             summary = f"{notices}\n\n{summary}" if summary else notices
         data = json_safe(res.data)
         content = [{"type": "text", "text": summary}]
-        # the spec asks a tool with structured content to repeat it as JSON text, for clients that
-        # pass only `content` to the model
-        content.append({"type": "text", "text": json.dumps(data, ensure_ascii=False)})
+        # both revisions ask a tool with structured content to repeat it as JSON text (SHOULD),
+        # for clients that pass only `content` to the model: once, compact (#299)
+        content.append(
+            {
+                "type": "text",
+                "text": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+            }
+        )
         out: dict = {"content": content, "isError": False}
         # 2025-11-25 structuredContent is an object; 2026-07-28 takes any JSON value
         if modern or isinstance(data, dict):

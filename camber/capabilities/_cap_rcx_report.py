@@ -25,7 +25,11 @@ from ._common import (
     window,
     with_rules,
 )
+from ._page import MAX_LIMIT, OFFSET, limit_arg, page
 from ._sanitize import name
+
+#: appendix A facts (declines and data gaps) returned by default (#299)
+_APPENDIX = 20
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -40,9 +44,11 @@ INPUT_SCHEMA = {
         "top_n": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 50,
-            "description": "issues to rank (default: the config's, else 8)",
+            "maximum": 200,
+            "description": "issues to return, best ranked first (default: the config's, else 8)",
         },
+        "offset": {**OFFSET, "description": "ranked issues to skip, for the next page"},
+        "limit": limit_arg(_APPENDIX, "the fact index's appendix A (declines, data gaps)"),
     },
 }
 
@@ -119,7 +125,7 @@ OUTPUT_SCHEMA = {
         "period": {"type": "array", "items": {"type": "string"}},
         "from_config": {"type": "boolean"},
         "kpis": {"type": "object"},
-        "issues": {"type": "array", "items": _ISSUE, "description": "ranked"},
+        "issues": {"type": "array", "items": _ISSUE, "description": "ranked; top_n of them"},
         "sections": {
             "type": "array",
             "items": {
@@ -132,8 +138,8 @@ OUTPUT_SCHEMA = {
         "fact_index": {
             "type": "array",
             "items": _FACT,
-            "description": "the report's fact index (ids such as K1@summary-<token>); "
-            "every entry is also in the result's facts",
+            "description": "the report's fact index for the KPIs, the appendices and the "
+            "issues returned (ids such as K1@summary-<token>); also in the result's facts",
         },
     },
 }
@@ -176,10 +182,40 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
     opts, banners = _options(config, base_dir, arguments.get("top_n"))
     rep = build_rcx_report(res, options=opts)
     d = rep.to_dict()
+    # 0.111 (#299): top_n is the page of ranked issues returned, with their facts and sections
+    every = {str(i["key"]) for i in d["issues"]}
+    offset = arguments.get("offset") or 0
+    shown = page(
+        d["issues"],
+        {"limit": max(int(opts.top_n), 1), "offset": offset},
+        default=8,
+        what="issues",
+        order="best ranked first",
+        how=f"call again with offset={offset + max(int(opts.top_n), 1)} or a larger top_n "
+        "(up to 200)",
+        more="kpis count every issue",
+    )
+    left_out = every - {str(i["key"]) for i in shown}
+    # appendix A (declines and data gaps) has an entry per rule and equipment: a page of it
+    every_fact = rep.facts.facts if rep.facts is not None else []
+    appendix = [f.id for f in every_fact if f.id.partition("@")[2] == "appA"]
+    kept = set(
+        page(
+            appendix,
+            {"limit": arguments.get("limit")},
+            default=_APPENDIX,
+            what="fact_index appendix A",
+            order="as in the report",
+            how=f"call again with a larger limit (up to {MAX_LIMIT})",
+        )
+    )
+    left_out |= {"appA"} if len(kept) < len(appendix) else set()
 
     index = []
     facts = []
-    for f in rep.facts.facts if rep.facts is not None else []:
+    for f in every_fact:
+        if f.id.partition("@")[2] in left_out and f.id not in kept:
+            continue
         index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": f.text})
         facts.append(
             {
@@ -209,7 +245,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
     }
     issues = []
     text = [cite(head)]
-    for i, iss in enumerate(d["issues"], start=2):
+    for i, iss in enumerate(shown, start=2):
         fact_id = f"F{i}@rcx_report"
         cost_v = jsonable(iss.get("cost"))
         cost_v = cost_v if isinstance(cost_v, (int, float)) else None
@@ -259,7 +295,11 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "from_config": from_caller,
         "kpis": jsonable(k),
         "issues": issues,
-        "sections": [{"id": str(s["id"]), "title": str(s["title"])} for s in d["sections"]],
+        "sections": [
+            {"id": str(s["id"]), "title": str(s["title"])}
+            for s in d["sections"]
+            if str(s["id"]).removeprefix("issue-") not in left_out
+        ],
         "fact_index": index,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
@@ -270,15 +310,13 @@ CAPABILITIES = (
         name="rcx_report",
         title="RCx report (structured)",
         description=(
-            "Build the retro-commissioning (RCx) report for one facility and return it as data: "
-            "the KPIs (issue counts, annual cost, data coverage), the ranked issues (cause, "
-            "equipment, severity, rules, annual cost or why uncosted, hours, confidence and its "
-            "reasons), the section list, and the report's fact index (ids such as "
-            "K1@summary-<token> and C1@<issue key>-<token>, also returned as facts) for "
-            "writing a cited executive summary. "
-            "No file and no charts are returned. Uses the caller's run config for the facility "
-            "when there is one. Cost: a full rule run plus the report's analysis -- the slowest "
-            "capability; prefer rule_run for a quick look. Needs facility_id."
+            "The retro-commissioning (RCx) report of one facility as data: the KPIs (issue "
+            "counts, annual cost, coverage), the top_n ranked issues (cause, equipment, severity,"
+            " rules, cost or why uncosted, hours, confidence and its reasons), the section list "
+            "and the report's fact index (K1@summary-<token>, C1@<issue key>-<token>; also in "
+            "facts) for a cited executive summary. No file or charts. Uses the caller's run "
+            "config when there is one. Cost: a full rule run plus the analysis, the slowest tool;"
+            " prefer rule_run for a quick look. Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

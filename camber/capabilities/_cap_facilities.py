@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ..store.parquet_store import StoreReadError
 from . import Capability, CapabilityResult
+from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
 
@@ -31,10 +32,13 @@ _ROW = {
     },
 }
 
+#: facilities per page by default (#299)
+_PAGE = 100
+
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "properties": {},
+    "properties": {"limit": limit_arg(_PAGE, "facilities"), "offset": OFFSET},
     "additionalProperties": False,
 }
 
@@ -44,8 +48,8 @@ OUTPUT_SCHEMA = {
     "required": ["facilities", "count", "withheld_research_only", "withheld_unverified"],
     "additionalProperties": False,
     "properties": {
-        "facilities": {"type": "array", "items": _ROW},
-        "count": {"type": "integer", "minimum": 0},
+        "facilities": {"type": "array", "items": _ROW, "description": "by id; a page"},
+        "count": {"type": "integer", "minimum": 0, "description": "facilities before paging"},
         "withheld_research_only": {"type": "integer", "minimum": 0},
         "withheld_unverified": {
             "type": "integer",
@@ -128,7 +132,8 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
         }
     ]
     text = [f"{len(rows)} facilities are visible [F1@facilities]."]
-    for i, r in enumerate(rows, start=2):
+    shown = page(rows, arguments, default=_PAGE, what="facilities", order="by id")
+    for i, r in enumerate(shown, start=2):
         if r.get("unavailable"):
             span = "stored data that cannot be read right now"
         else:
@@ -167,7 +172,7 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
             "served until it is repaired."
         )
     data = {
-        "facilities": rows,
+        "facilities": shown,
         "count": len(rows),
         "withheld_research_only": withheld,
         "withheld_unverified": unverified,
@@ -180,10 +185,9 @@ CAPABILITIES = (
         name="facilities",
         title="Facilities",
         description=(
-            "List the facilities (buildings) this caller may read: each one's id, name, "
-            "lifecycle state, time zone, the first and last stored sample, and how many points "
-            "and equipment are stored. Call it first to learn which facility_id values the "
-            "other capabilities accept. Takes no arguments."
+            "List the facilities (buildings) this caller may read: id, name, lifecycle state, "
+            "time zone, first and last stored sample, and the point and equipment counts. Call it"
+            " first: it gives the facility_id values the other tools accept."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,
