@@ -96,9 +96,9 @@ def test_coverage_with_a_window_after_the_data_is_an_empty_labelled_result(store
 
 
 def test_sensor_trust_with_a_window_after_the_data_says_so(store):
-    res = REG.call("sensor_trust", {"facility_id": FID, "start": "2030-01-01"}, _ctx(store))
-    assert res.data["n_points"] == 0
-    assert any("falls in the requested window" in b for b in res.banners)
+    # 0.111 (#296): no point can be judged, so it is not_found naming the stored span
+    e = _err(store, "sensor_trust", {"facility_id": FID, "start": "2030-01-01"})
+    assert e.code == "not_found" and "its data runs from" in e.message
 
 
 # --------------------------------------------------------------------------- damaged files

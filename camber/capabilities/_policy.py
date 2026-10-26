@@ -98,6 +98,17 @@ def redact_value(text, *extra) -> str:
     return "<path>" if _WHOLE.match(out) else out
 
 
+def config_paths(ctx) -> list:
+    """The run config paths of ``ctx``: ``ctx.config`` is one path or (0.111, #296) a sequence
+    of them, one per facility."""
+    config = getattr(ctx, "config", None)
+    if not config:
+        return []
+    if isinstance(config, (str, os.PathLike)):
+        return [os.fspath(config)]
+    return [os.fspath(c) for c in config if c]
+
+
 def known_roots(ctx=None) -> list:
     """The local directories no client-visible message may name: the call's store, its config
     and the config's directory, the stores and folders that config reads, the dataset data
@@ -106,9 +117,9 @@ def known_roots(ctx=None) -> list:
     import tempfile
 
     store = getattr(ctx, "store", None)
-    config = getattr(ctx, "config", None)
-    roots: list = [store, config]
-    if config:
+    roots: list = [store]
+    for config in config_paths(ctx):
+        roots.append(config)
         base = os.path.dirname(os.path.abspath(os.path.expanduser(str(config))))
         roots.append(base)
         try:
@@ -256,12 +267,16 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
     from . import CapabilityError
 
     if config is None:
-        if not ctx.config:
-            raise CapabilityError("invalid_params", "this caller has no run config")
-        if not os.path.isfile(ctx.config):
+        paths = config_paths(ctx)
+        if len(paths) != 1:
+            raise CapabilityError(
+                "invalid_params",
+                "this caller has no run config" if not paths else "this caller has several",
+            )
+        if not os.path.isfile(paths[0]):
             raise CapabilityError("not_found", "the run config this caller names does not exist")
-        config = load_config(ctx.config)
-        base_dir = base_dir or os.path.dirname(os.path.abspath(ctx.config))
+        config = load_config(paths[0])
+        base_dir = base_dir or os.path.dirname(os.path.abspath(paths[0]))
     config = dict(_check_config_shape(config))
     source = config.get("source") or {}
     if source.get("kind") == "store":

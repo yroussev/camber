@@ -19,6 +19,7 @@ from ._common import (
     SEVERITIES,
     SEVERITY,
     by_severity,
+    check_run_selection,
     cite,
     facility_config,
     finding_fact,
@@ -113,7 +114,8 @@ RULE_RUN_OUTPUT = {
         "facility_id": {"type": "string"},
         "from_config": {
             "type": "boolean",
-            "description": "True when the caller's run config for this facility was used",
+            "description": "True when a run config for this facility was used: the caller's, "
+            "or the config template of the catalog dataset it holds (a banner says which)",
         },
         "window": _WINDOW,
         "rules_run": {"type": "array", "items": {"type": "string"}},
@@ -137,16 +139,17 @@ def _run_for(ctx, arguments: dict):
     finding) reads the same in both."""
     fid = arguments["facility_id"]
     start, end = window(arguments)
-    config, base_dir, from_caller = facility_config(ctx, fid)
+    config, base_dir, from_caller, notice = facility_config(ctx, fid)
+    check_run_selection(ctx, fid, arguments, config)  # 0.111 (#296)
     config = with_rules(config, arguments.get("rules"), arguments.get("params"))
     config = narrow(config, equips=arguments.get("equips"), start=start, end=end)
-    return run(ctx, config, base_dir), from_caller, (start, end)
+    return run(ctx, config, base_dir), from_caller, notice, (start, end)
 
 
 def rule_run(ctx, arguments: dict) -> CapabilityResult:
     """Run the FDD rules on one allowed facility and return the findings, worst first."""
     fid = arguments["facility_id"]
-    res, from_caller, (start, end) = _run_for(ctx, arguments)
+    res, from_caller, config_notice, (start, end) = _run_for(ctx, arguments)
     rows = by_severity([finding_row(i, f) for i, f in zip(finding_ids(res.findings), res.findings)])
     counts = severity_counts(rows)
     floor = SEVERITIES.index(arguments.get("min_severity") or "info")
@@ -189,12 +192,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         facts.append(finding_fact(fact_id, r))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
-    banners = []
-    if not from_caller:
-        banners.append(
-            "No run config names this facility, so every equipment class it stores ran with "
-            "every built-in rule (or the rules asked for) at their default parameters."
-        )
+    banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)
@@ -417,7 +415,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     rule = want.split("@", 1)[0]
     if rule not in rule_names():
         raise CapabilityError("not_found", f"no finding {want!r}: {rule!r} is not a rule")
-    res, _from_caller, _w = _run_for(ctx, arguments)
+    res, _from_caller, _notice, _w = _run_for(ctx, arguments)
     found = dict(zip(finding_ids(res.findings), res.findings))
     f = found.get(want)
     if f is None:

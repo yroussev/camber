@@ -119,6 +119,129 @@ def window(arguments: dict) -> tuple:
     return start, end
 
 
+# --------------------------------------------------------------------------- selections
+
+#: stored names a not_found message lists (the error's data lists up to :data:`_AVAILABLE`)
+_SHOWN = 10
+_AVAILABLE = 50
+
+
+def _listing(values) -> str:
+    """Up to :data:`_SHOWN` of ``values`` as quoted spans, with how many more there are."""
+    values = sorted(values)
+    shown = ", ".join(name(v) for v in values[:_SHOWN])
+    more = len(values) - _SHOWN
+    return f"{shown} and {more} more" if more > 0 else (shown or "none")
+
+
+def _safe(values) -> list:
+    """``values`` as error data: sorted, at most :data:`_AVAILABLE`, each one line and cut."""
+    from ._sanitize import MAX_NAME, clip, one_line
+
+    return [clip(defang(one_line(v)), MAX_NAME, key=v) for v in sorted(values)[:_AVAILABLE]]
+
+
+def check_selection(store, facility_id: str, arguments: dict) -> None:
+    """``not_found`` for an ``equips`` / ``equip`` id, a ``roles`` / ``role`` or an
+    ``equip_class`` in ``arguments`` that ``facility_id`` does not store, naming what it does.
+
+    0.111 (#296): a selection that matched nothing used to read as a clean answer ("0 faults on
+    AHU-1"). Nothing is checked for a facility the store does not hold (a folder-backed config).
+    """
+    if facility_id not in store.facilities():
+        return
+    classes = store.equipment(facility_id=facility_id).get(facility_id) or {}
+    roles = None
+    for arg, what, plural in (
+        ("equips", "equipment id", "equipment ids"),
+        ("equip", "equipment id", "equipment ids"),
+        ("roles", "point role", "point roles"),
+        ("role", "point role", "point roles"),
+        ("equip_class", "equipment class", "equipment classes"),
+    ):
+        want = arguments.get(arg)
+        if want is None:
+            continue
+        want = [want] if isinstance(want, str) else list(want)
+        if arg.startswith("role"):
+            if roles is None:
+                roles = {str(k.role) for k in store.points(facility_id=facility_id)}
+            have = roles
+        else:
+            have = set(classes.values()) if arg == "equip_class" else set(classes)
+        unknown = [w for w in dict.fromkeys(want) if w not in have]
+        if unknown:
+            raise CapabilityError(
+                "not_found",
+                f"facility {facility_id!r} stores no {what} {_listing(unknown)}; its "
+                f"{plural} are {_listing(have)} (exact match; see the points capability)",
+                data={"argument": arg, "unknown": _safe(unknown), "available": _safe(have)},
+            )
+
+
+def check_window(store, facility_id: str, start, end) -> None:
+    """``not_found`` when the ``start`` / ``end`` window holds no stored sample of
+    ``facility_id``, giving its first and last stored sample (0.111, #296). Nothing is checked
+    for a facility the store does not hold, or one with no stored sample at all."""
+    if (not start and not end) or facility_id not in store.facilities():
+        return
+    lo, hi = store._ts_span(facility_id)
+    if lo is None:
+        return
+
+    def naive(t):
+        t = pd.Timestamp(t)
+        return t.tz_localize(None) if t.tzinfo is not None else t
+
+    lo, hi = naive(lo), naive(hi)
+    t0 = naive(start) if start else None
+    t1 = naive(end) if end else None
+    if (t1 is not None and t1 < lo) or (t0 is not None and t0 > hi):
+        raise CapabilityError(
+            "not_found",
+            f"facility {facility_id!r} has no stored sample from {start or 'its first sample'} "
+            f"to {end or 'its last sample'}: its data runs from {lo.isoformat()} to "
+            f"{hi.isoformat()}",
+            data={
+                "argument": "start" if t0 is not None and t0 > hi else "end",
+                "first": lo.isoformat(),
+                "last": hi.isoformat(),
+            },
+        )
+
+
+def check_run_selection(ctx, facility_id: str, arguments: dict, config: dict) -> None:
+    """:func:`check_selection` and :func:`check_window` for a run capability, and
+    ``not_found`` for an ``equips`` id the store holds but ``config`` runs no rule on (its class
+    is not among the config's equipment, or the config lists other ids of that class)."""
+    from ._policy import open_store
+
+    store = open_store(ctx)
+    check_selection(store, facility_id, arguments)
+    start, end = arguments.get("start"), arguments.get("end")
+    check_window(store, facility_id, start, end)
+    equips = arguments.get("equips")
+    source = config.get("source") or {}
+    if not equips or source.get("kind") != "store" or facility_id not in store.facilities():
+        return
+    classes = store.equipment(facility_id=facility_id).get(facility_id) or {}
+    covered = set()
+    for e in config.get("equipment") or []:
+        named = e.get("equip")
+        covered |= {q for q, c in classes.items() if c == e.get("class")} & (
+            set(named) if named else set(classes)
+        )
+    left = [q for q in dict.fromkeys(equips) if q not in covered]
+    if left:
+        kinds = sorted({str(e.get("class")) for e in config.get("equipment") or []})
+        raise CapabilityError(
+            "not_found",
+            f"the run config for {facility_id!r} runs no rule on equipment {_listing(left)} "
+            f"(it covers the equipment classes {_listing(kinds)})",
+            data={"argument": "equips", "unknown": _safe(left), "available": _safe(covered)},
+        )
+
+
 # --------------------------------------------------------------------------- run configs
 
 #: config sections a rule run keeps from the caller's run config (everything else -- drift, M&V,
@@ -145,27 +268,78 @@ RULE_SECTIONS = (
 
 def config_facility(config: dict) -> str:
     """The facility a config is about, read the way :func:`run_config_for` checks it."""
-    source = config.get("source") or {}
-    if source.get("kind") == "store":
-        return str(source.get("facility_id") or "")
-    return str(config.get("facility_id") or config.get("site") or "")
+    from ..config import _config_facility
+
+    return _config_facility(config)
 
 
-def caller_config(ctx, facility_id: str):
-    """``(config, base_dir)`` of the caller's run config when it is about ``facility_id``, else
-    ``(None, None)``. Never raises for a missing or unreadable config: the capability then
-    builds its own."""
+def caller_config(ctx, facility_id: str) -> tuple:
+    """``(config, base_dir, notice)``: the caller's run config about ``facility_id`` (``notice``
+    ``None``), else the packaged config template of the catalog dataset the facility was
+    ingested from (``notice`` the banner saying so, see :func:`dataset_template`), else
+    ``(None, None, None)``.
+
+    ``camber mcp`` checks every ``--config`` at startup (0.111, #296), so a config that cannot be
+    read here is one that changed since; it is skipped, never leaked."""
     from ..config import load_config
+    from ._policy import config_paths
 
-    if not ctx.config or not os.path.isfile(ctx.config):
+    for path in config_paths(ctx):
+        if not os.path.isfile(path):
+            continue
+        try:
+            config = load_config(path)
+        except Exception:  # noqa: BLE001 - a config broken after startup is skipped, not leaked
+            continue
+        if isinstance(config, dict) and config_facility(config) == facility_id:
+            return config, os.path.dirname(os.path.abspath(path)), None
+    config, dataset_id = dataset_template(ctx, facility_id)
+    if config is None:
+        return None, None, None
+    notice = (
+        f"No run config names this facility, so this run uses the config template packaged for "
+        f"catalog dataset {name(dataset_id)} (the one `camber datasets config` writes): its "
+        "equipment classes, rules and parameters, not ones tuned for your own use of the data."
+    )
+    return config, os.path.dirname(os.path.abspath(ctx.store)), notice
+
+
+def dataset_template(ctx, facility_id: str) -> tuple:
+    """``(config, dataset_id)``: the in-package config template of the catalog dataset
+    ``facility_id`` was ingested from, pointed at ``ctx.store``; ``(None, None)`` when there is
+    none (not a dataset facility, an unknown dataset, or a dataset without a template).
+
+    0.111 (#296): without it a catalog dataset ran every built-in rule at its defaults, and its
+    ranking misled (a fault-free unit could rank first). The template is read from the package:
+    no network, nothing written. The dataset is the one the facility's registry entry records,
+    else the one catalog entry its name matches."""
+    from .._servable import _is_dataset_name, catalog_entries_for, read_registry
+
+    if not ctx.store or not _is_dataset_name(facility_id):
         return None, None
     try:
-        config = load_config(ctx.config)
-    except Exception:  # noqa: BLE001 - a broken caller config is ignored, not leaked
+        from ..datasets import get
+        from ..datasets._ops import build_config
+
+        entries, problem = read_registry(ctx.store)
+        if problem is not None:
+            return None, None
+        block = (entries.get(facility_id) or {}).get("dataset")
+        did = block.get("dataset_id") if isinstance(block, dict) else None
+        if did:
+            entry = get(str(did))
+        else:
+            matches = catalog_entries_for(facility_id)
+            if len(matches) != 1:
+                return None, None
+            entry = matches[0]
+        if not (entry.suggested_analyses or {}).get("config_template"):
+            return None, None
+        config = build_config(entry, os.path.abspath(ctx.store), facility_id=facility_id)
+    except Exception:  # noqa: BLE001 - no usable template: the capability builds its own
         return None, None
-    if not isinstance(config, dict) or config_facility(config) != facility_id:
-        return None, None
-    return config, os.path.dirname(os.path.abspath(ctx.config))
+    config.pop("_comment", None)
+    return config, entry.id
 
 
 def store_config(ctx, facility_id: str) -> dict:
@@ -242,23 +416,42 @@ def with_rules(config: dict, rules, params) -> dict:
     return config
 
 
+#: the banner of a run with no run config: neither the caller's nor a dataset's template
+DEFAULT_NOTICE = (
+    "No run config names this facility, so every equipment class it stores ran with every "
+    "built-in rule (or the rules asked for) at their default parameters."
+)
+
+
 def facility_config(ctx, facility_id: str, *, keep=RULE_SECTIONS) -> tuple:
-    """``(config, base_dir, from_caller)``: the caller's run config for ``facility_id`` (only the
-    ``keep`` sections) when it has one, else :func:`store_config`."""
-    config, base_dir = caller_config(ctx, facility_id)
+    """``(config, base_dir, from_config, notice)``: the run config :func:`caller_config` finds
+    for ``facility_id`` (only the ``keep`` sections), else :func:`store_config`.
+    ``from_config`` is whether a run config (the caller's or a dataset template) is used;
+    ``notice`` is the banner the result carries (``None`` for the caller's own config)."""
+    config, base_dir, notice = caller_config(ctx, facility_id)
     if config is not None:
-        return {k: v for k, v in config.items() if k in keep}, base_dir, True
-    return store_config(ctx, facility_id), os.path.dirname(os.path.abspath(ctx.store)), False
+        return {k: v for k, v in config.items() if k in keep}, base_dir, True, notice
+    base_dir = os.path.dirname(os.path.abspath(ctx.store))
+    return store_config(ctx, facility_id), base_dir, False, DEFAULT_NOTICE
+
+
+#: an equipment id no store holds (see :func:`narrow`)
+_NO_EQUIP = "\x00"
 
 
 def narrow(config: dict, *, equips=None, start=None, end=None) -> dict:
     """``config`` limited to ``equips`` and the ``start`` / ``end`` window (store sources)."""
     config = dict(config)
     if equips:
-        config["equipment"] = [
-            {**dict(e), "equip": sorted(set(equips) & set(e.get("equip") or equips))}
-            for e in config.get("equipment") or []
-        ]
+        out = []
+        for e in config.get("equipment") or []:
+            named = e.get("equip")
+            named = [named] if isinstance(named, str) else named
+            # an entry none of ``equips`` is named in keeps its class (a drift family names it)
+            # but discovers nothing: an empty list would mean all of the class (#296)
+            keep = sorted(set(equips) & set(named or equips))
+            out.append({**dict(e), "equip": keep or [_NO_EQUIP]})
+        config["equipment"] = out
     if start or end:
         source = dict(config.get("source") or {})
         if source.get("kind") != "store":

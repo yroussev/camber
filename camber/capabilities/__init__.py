@@ -118,7 +118,7 @@ class CallContext:
 
     store: str  # ParquetStore root the call reads
     allowed_facilities: frozenset[str]
-    config: str | None = None  # optional run/report config path
+    config: str | tuple[str, ...] | None = None  # run/report config path(s), one per facility
     min_trust: float = 0.5
     caps: Caps = Caps()
     caller: str = "local"  # free-text label for audit/logs (e.g. "mcp:claude-code")

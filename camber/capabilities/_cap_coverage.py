@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import DATE, EQUIPS, FACILITY, TEXT, window
+from ._common import DATE, EQUIPS, FACILITY, TEXT, check_selection, window
 from ._policy import open_store
 from ._sanitize import name
 
@@ -178,6 +178,9 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
     store = open_store(ctx)
     if fid not in store.facilities():
         raise CapabilityError("not_found", f"facility {fid!r} has no stored data")
+    # 0.111 (#296): an unknown id is not_found; a window outside the data is an answer here
+    # (0% coverage, with a notice)
+    check_selection(store, fid, arguments)
     classes = store.equipment(facility_id=fid).get(fid) or {}
     want_eq, want_roles = arguments.get("equips"), arguments.get("roles")
     keys = sorted(

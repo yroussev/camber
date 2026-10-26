@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
+from ._common import check_selection
 from ._policy import open_store
 from ._sanitize import name
 
@@ -52,6 +53,7 @@ def points(ctx, arguments: dict) -> CapabilityResult:
     store = open_store(ctx)
     if fid not in store.facilities():
         raise CapabilityError("not_found", f"facility {fid!r} has no stored data")
+    check_selection(store, fid, arguments)  # 0.111 (#296): an unknown id is not_found
     classes = store.equipment(facility_id=fid).get(fid) or {}
     want_eq, want_role = arguments.get("equip"), arguments.get("role")
     want_cls = arguments.get("equip_class")

@@ -478,8 +478,9 @@ def test_points_capability_filters(store):
         {"equip": "AHU-2", "equip_class": "AHU", "role": "supply_air_temp"}
     ]
     assert 'matching equip "AHU-2", role "supply_air_temp"' in one.facts[0]["text"]
-    none = reg.call("points", {"facility_id": "hq", "equip_class": "VAV"}, ctx)
-    assert none.data["count"] == 0 and none.data["points"] == []
+    with pytest.raises(CapabilityError) as e:  # 0.111 (#296): not "0 points"
+        reg.call("points", {"facility_id": "hq", "equip_class": "VAV"}, ctx)
+    assert e.value.code == "not_found" and '"AHU"' in e.value.message
 
 
 def test_missing_store_is_not_found(tmp_path):

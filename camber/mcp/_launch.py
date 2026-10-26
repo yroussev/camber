@@ -68,29 +68,147 @@ def resolve_allowlist(store: str, allow: list | None, allow_all_active: bool) ->
     return frozenset(ids)
 
 
+#: the run config formats ``--config`` reads (``camber run`` reads any other name as JSON)
+CONFIG_SUFFIXES = (".json", ".yaml", ".yml")
+
+
+def _same_dir(a: str, b: str) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def check_config(path: str, store: str, allowed: frozenset) -> str:
+    """The facility the run config at ``path`` is for, once it passes the checks ``camber run``
+    makes before it reads a trend (:func:`camber.config._preflight_config`), else a
+    :class:`LaunchError` saying what is wrong (0.111, #296).
+
+    On top of those: the file is ``.json``, ``.yaml`` or ``.yml``; it names a facility, one of
+    ``allowed``; and a store source reads the ``--store`` directory (``store``), whatever path
+    spells it (a different store would serve data the operator did not name).
+    """
+    from ..config import _config_facility, _preflight_config, load_config
+
+    where = f"--config {path}"
+    if not str(path).lower().endswith(CONFIG_SUFFIXES):
+        raise LaunchError(f"{where}: a run config is a .json, .yaml or .yml file")
+    if os.path.isdir(path):
+        raise LaunchError(f"{where}: is a directory, not a run config file")
+    if not os.path.isfile(path):
+        raise LaunchError(f"{where}: no such file")
+    try:
+        config = load_config(path)
+    except Exception as exc:  # noqa: BLE001 - bad JSON / YAML, no PyYAML, a wrong shape ...
+        msg = str(exc)
+        msg = msg[len(str(path)) + 2 :] if msg.startswith(f"{path}: ") else msg
+        raise LaunchError(f"{where}: {msg}") from None
+    fid = _config_facility(config)
+    if not fid:
+        raise LaunchError(
+            f"{where}: names no facility (a store source's source.facility_id, else facility_id "
+            "or site)"
+        )
+    base = os.path.dirname(os.path.abspath(path))
+    source = config.get("source") or {}
+    if isinstance(source, dict) and source.get("kind") == "store":
+        cstore = str(source.get("store") or "")
+        cstore = os.path.join(base, os.path.expanduser(cstore)) if cstore else ""
+        if not cstore or not (_same_dir(cstore, store) or _same_dir(resolve_quiet(cstore), store)):
+            raise LaunchError(
+                f"{where}: its source.store {source.get('store')!r} is not the --store directory "
+                f"{store}; the tools read only --store, so point the config at it"
+            )
+    if fid not in allowed:
+        raise LaunchError(
+            f"{where}: is for facility {fid!r}, which is not allowed (name it with --allow; "
+            "with --allow-all-active it must be active)"
+        )
+    try:
+        _preflight_config(config, base_dir=base)
+    except (KeyError, ValueError, TypeError) as exc:
+        why = exc.args[0] if isinstance(exc, KeyError) and exc.args else exc
+        raise LaunchError(f"{where}: {why}") from None
+    return fid
+
+
+def resolve_quiet(path: str) -> str:
+    """:func:`resolve_store` of ``path``, or ``path`` itself when it is no store."""
+    try:
+        return resolve_store(path)
+    except (LaunchError, OSError, ValueError):
+        return path
+
+
+def check_configs(configs, store: str, allowed: frozenset):
+    """The absolute ``--config`` paths, each checked with :func:`check_config`: ``None`` for
+    none, one path for one, a tuple for several (one per facility; two for the same facility
+    are refused)."""
+    if configs is None:
+        return None
+    paths = [configs] if isinstance(configs, (str, os.PathLike)) else list(configs)
+    seen: dict = {}
+    for p in paths:
+        fid = check_config(os.fspath(p), store, allowed)
+        if fid in seen:
+            raise LaunchError(
+                f"--config {p} and --config {seen[fid]} are both for facility {fid!r}; give "
+                "one config per facility"
+            )
+        seen[fid] = p
+    out = tuple(os.path.abspath(os.fspath(p)) for p in paths)
+    if not out:
+        return None
+    return out[0] if len(out) == 1 else out
+
+
 def build_context(
     store: str,
     *,
     allow: list | None = None,
     allow_all_active: bool = False,
-    config: str | None = None,
+    config=None,
     min_trust: float = 0.5,
 ) -> Any:
-    """The ``camber.capabilities.CallContext`` every tool call of this launch runs under."""
+    """The ``camber.capabilities.CallContext`` every tool call of this launch runs under.
+
+    ``config`` is one run config path or a list of them, one per facility; each is checked at
+    startup (:func:`check_config`)."""
     from ..capabilities import CallContext
 
     if not 0.0 <= float(min_trust) <= 1.0:
         raise LaunchError(f"--min-trust must be from 0 to 1 (got {min_trust})")
     root = resolve_store(store)
-    if config is not None and not os.path.isfile(config):
-        raise LaunchError(f"--config {config}: no such file")
+    allowed = resolve_allowlist(root, allow, allow_all_active)
     return CallContext(
         store=root,
-        allowed_facilities=resolve_allowlist(root, allow, allow_all_active),
-        config=os.path.abspath(config) if config is not None else None,
+        allowed_facilities=allowed,
+        config=check_configs(config, root, allowed),
         min_trust=float(min_trust),
         caller="mcp",
     )
+
+
+def _log_templates(ctx) -> None:
+    """One stderr line per allowed catalog-dataset facility no ``--config`` names: the tools run
+    it with the dataset's packaged config template (#296)."""
+    try:
+        from ..capabilities._common import dataset_template
+        from ..capabilities._policy import config_paths
+        from ..config import _config_facility, load_config
+
+        named = {_config_facility(load_config(p)) for p in config_paths(ctx)}
+        for fid in sorted(ctx.allowed_facilities - named):
+            _cfg, dataset_id = dataset_template(ctx, fid)
+            if dataset_id:
+                log.info(
+                    "facility %s: no --config names it; the tools use the config template of "
+                    "catalog dataset %s",
+                    fid,
+                    dataset_id,
+                )
+    except Exception:  # noqa: BLE001 - a log line only
+        pass
 
 
 def _setup_logging() -> None:
@@ -108,7 +226,7 @@ def launch(
     *,
     allow: list | None = None,
     allow_all_active: bool = False,
-    config: str | None = None,
+    config=None,
     min_trust: float = 0.5,
     max_concurrent: int = 2,
     max_queued: int = 8,
@@ -137,9 +255,10 @@ def launch(
         )
         if int(max_concurrent) < 1 or int(max_queued) < 0:
             raise LaunchError("--max-concurrent must be 1 or more and --max-queued 0 or more")
-    except LaunchError as exc:
+    except LaunchError as exc:  # a usage mistake: exit 2, like the argument parser's (#296)
         print(f"error: {exc}", file=sys.stderr)
-        return 1
+        return 2
+    _log_templates(ctx)
     server = McpServer(capabilities.default_registry(), ctx)
     # the workers build the same registry: the module this process imported it from
     workers = WorkerPool(

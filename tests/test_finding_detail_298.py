@@ -147,10 +147,14 @@ def test_rcx_issues_name_a_cause_and_a_readable_title(sets, ds):
         assert i["title"] not in ("G36 afdd", "Hw plant deltat", "Hp capacity shortfall"), i
 
 
-def test_an_unset_parameter_shows_the_value_the_rule_used(sets):
+def test_an_unset_parameter_shows_the_value_the_rule_used(sets, monkeypatch):
     """No run config: outdoor_air_fraction judges on its generic 20 % minimum. The parameter
     reads 20 (the fallback), and the excess energy the cost estimator declines to price without
-    min_oa_pct is not carried as a figure."""
+    min_oa_pct is not carried as a figure. (The dataset's packaged template, which a facility
+    with no config otherwise runs with since #296, is switched off here.)"""
+    from camber.capabilities import _common
+
+    monkeypatch.setattr(_common, "dataset_template", lambda ctx, fid: (None, None))
     reg, ds = default_registry(), "synthetic-ahu-excess-oa"
     ctx, fid = _ctx(sets, ds, config=False), f"ds-{ds}"
     d = reg.call(
