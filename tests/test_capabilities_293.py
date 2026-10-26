@@ -19,6 +19,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -91,7 +92,11 @@ def _outcome(st, name, args):
         res = REG.call(name, args, ctx)
     except CapabilityError as e:
         return ("error", e.code)
-    return ("ok", json.dumps(res.data, sort_keys=True))
+    # a fact id's token depends on the store it was read from (#295): compare without it
+    return (
+        "ok",
+        re.sub(r"(@[A-Za-z0-9_]*)-[0-9a-f]{6}\b", r"\1", json.dumps(res.data, sort_keys=True)),
+    )
 
 
 @pytest.fixture(autouse=True)

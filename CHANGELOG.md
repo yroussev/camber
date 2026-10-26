@@ -108,6 +108,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
 ### Changed
+- Fact ids change: the token in `F1@rule_run-1a2b3c` now also depends on the run config (its
+  content, not its path), the trust floor and the stored data of the facilities the call reads,
+  not only on the call and the allowlist. Two servers that differ in `--config`, `--min-trust` or
+  store contents, or one server before and after an ingest, no longer give the same id to
+  different values, so their facts merge for `check_citations` without a clash and a draft
+  written from one server's facts no longer passes against the other's. The same call on the
+  same server and unchanged data keeps its ids, also across a restart (#295).
 - **Ingest refuses ids with control, bidi or invisible characters (#291).** `write_long` /
   `write_role_frame` (and so every ingest) raise a `ValueError` for an equipment id, equipment
   class or role that holds a newline, tab, ESC, NUL or other control character, a bidi override,
