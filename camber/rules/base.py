@@ -154,6 +154,27 @@ def _gate_roles(rule, frame: pd.DataFrame) -> tuple:
     return req + tuple(dict.fromkeys(extra)) if extra else req
 
 
+def _untrusted(rule, ref, frame: pd.DataFrame, mapping, resample, min_trust) -> list:
+    """The rule's gated inputs on ``frame`` below ``min_trust`` (see :func:`untrusted_roles`).
+
+    0.111 (#297): a plant point is judged on its equipment's running samples, so when a gated
+    input is a plant role (:data:`~camber.sensorhealth.PLANT_GATED_ROLES`) and the rule's own frame
+    lacks the run signals, they are resolved for the trust gate alone -- the rule never sees them.
+    Without them a condenser-water temperature trended only while the chiller runs reads as a
+    point missing two thirds of the time.
+    """
+    from ..sensorhealth import PLANT_GATE_INPUTS, PLANT_GATED_ROLES
+
+    roles = _gate_roles(rule, frame)
+    gate_frame = None
+    want = tuple(r for r in PLANT_GATE_INPUTS if r not in frame.columns)
+    if want and any(r in PLANT_GATED_ROLES for r in roles if r in frame.columns):
+        extra = resolve(ref, mapping, want, resample=resample)
+        if extra is not None and not extra.empty:
+            gate_frame = frame.join(extra[[c for c in extra.columns if c not in frame.columns]])
+    return untrusted_roles(frame, roles, min_trust=min_trust, gate_frame=gate_frame)
+
+
 def _cannot_run(rule, frame: pd.DataFrame) -> bool:
     """True when the resolved frame is empty or lacks a required role or an any-of group."""
     if frame.empty:
@@ -453,7 +474,7 @@ class Registry:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
+                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -524,7 +545,7 @@ class Registry:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
+                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -612,9 +633,7 @@ class Registry:
             if _cannot_run(rule, frame):
                 _record_skip(skipped, rule, ref, frame)
                 continue
-            if min_trust is not None and untrusted_roles(
-                frame, _gate_roles(rule, frame), min_trust=min_trust
-            ):
+            if min_trust is not None and _untrusted(rule, ref, frame, mapping, resample, min_trust):
                 continue
             frames[ref.equip] = frame
             if applies is None:

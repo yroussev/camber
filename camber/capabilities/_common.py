@@ -331,6 +331,45 @@ def severity_counts(rows: list) -> dict:
     return out
 
 
+def trust_declines(findings) -> tuple:
+    """``([(rule, equip, roles)], floor)``: the checks the trust floor declined, and the floor
+    they declined under (0.111, #297).
+
+    A check declines when one of its inputs (``roles``), or its drift reference's, scores below
+    the trust floor; it then reports an ``info`` finding, so a fault count says nothing about it.
+    """
+    out, floor = [], None
+    for f in findings or ():
+        m = getattr(f, "metrics", None) or {}
+        if m.get("declined") is not True:
+            continue
+        roles = [str(r) for r in m.get("untrusted_roles") or ()]
+        if roles or m.get("reason") == "reference_untrusted":
+            out.append((str(getattr(f, "rule", "")), str(getattr(f, "equip", "")), roles))
+            if isinstance(m.get("min_trust"), (int, float)):
+                floor = max(floor or 0.0, float(m["min_trust"]))
+    return sorted(out), floor
+
+
+def trust_banner(declines: list, floor) -> str | None:
+    """The NOTICE for :func:`trust_declines` (None when nothing was declined): how many checks,
+    which, and on what inputs -- a declined check is not a pass."""
+    if not declines:
+        return None
+    per_rule: dict = {}
+    for rule, _equip, _roles in declines:
+        per_rule[rule] = per_rule.get(rule, 0) + 1
+    which = ", ".join(f"{r} on {n} equipment" for r, n in sorted(per_rule.items()))
+    roles = sorted({r for _rule, _equip, rs in declines for r in rs})
+    inputs = f"; untrusted input(s): {', '.join(roles)}" if roles else ""
+    under = f" {floor:g}" if floor is not None else ""
+    return (
+        f"{len(declines)} check(s) declined because an input scored below the trust floor"
+        f"{under} ({which}{inputs}). The fault and warn counts do not cover them: a declined "
+        "check is not a pass. sensor_trust shows why each input scored low."
+    )
+
+
 COUNTS = {
     "type": "object",
     "required": list(SEVERITIES),

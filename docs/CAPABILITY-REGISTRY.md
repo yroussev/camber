@@ -86,8 +86,12 @@ class (the facility's weather equipment, if any, as the shared outdoor-air tempe
 every built-in rule at its defaults, with a banner saying so. `mv_summary`, and `drift` without
 a `baseline`, need the caller's run config: an M&V project and frozen drift baselines are
 declared there. Every run goes through `run_config_for`, so it is no-persist and gets the trust
-floor. A configured OAT reference that fetches weather over the network is left out of
-`rcx_report` (a CSV reference is kept), and no prose is generated.
+floor. `rcx_report` also runs the config's `drift` section, as `camber report --layout rcx`
+does (0.111, #297), so its ranked issues match the command line's. A configured OAT reference
+that fetches weather over the network is left out of `rcx_report` (a CSV reference is kept), and
+no prose is generated. A configured sensor reference (`report.rcx.references`, such as a duct
+logger) is compared in `rcx_report` only; an issue that rests on a sensor the reference finds
+wrong names it in its fact ("conditional on sensor_drift:supply_air_temp warn").
 
 **Finding ids.** A `rule_run` finding is `<rule>@<equip>` (`economizer_high_limit@AHU-1`), with
 `#2`, `#3` ... when a rule gives one equipment more than one finding. `finding_detail` re-runs that
@@ -151,7 +155,11 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    fault history, writes no report file or manifest entry, writes back no store cache and
    fetches no weather. See [Fault lifecycle](FAULT-LIFECYCLE.md#no-persist-runs).
 5. **Trust floor.** `ctx.min_trust` (0.5 by default) is the lowest `trust_gate.min_trust` a config
-   run gets through `run_config_for`; a config that asks for more keeps its own.
+   run gets through `run_config_for`; a config that asks for more keeps its own. A check whose
+   input scores below the floor declines with an `info` finding. `rule_run`, `drift` and
+   `rcx_report` then carry a banner with the number of declined checks, the rules and the
+   untrusted inputs, and their summary and first fact give the count (0.111, #297): a declined
+   check is not a pass.
 6. **Caps** (`ctx.caps`). A list in the result longer than `max_rows` (5,000) is cut, with
    `truncated=True` and a banner that says how many rows there were; a result whose JSON is
    larger than `max_bytes` (2 MB) is `too_large`; a call that runs longer than `max_seconds`

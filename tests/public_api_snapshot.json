@@ -2516,10 +2516,12 @@
     "drift_finding"
   ],
   "camber.sensorhealth": [
+    "CW_FLOW_RUN_FRAC",
     "ConsistencyResult",
     "FAN_GATED_ROLES",
     "PHYSICAL_BOUNDS",
     "PLANT_GATED_ROLES",
+    "PLANT_GATE_INPUTS",
     "PLANT_SETTLE",
     "STUCK_HOURS",
     "SensorTrust",

@@ -50,6 +50,8 @@ __all__ = [
     "FAN_GATED_ROLES",
     "PLANT_GATED_ROLES",
     "PLANT_SETTLE",
+    "PLANT_GATE_INPUTS",
+    "CW_FLOW_RUN_FRAC",
     "plant_gates",
     "frame_sensor_health",
     "frame_checks",
@@ -336,6 +338,9 @@ class SensorTrust:
     # 0.92 (#66): what the plant run gate was read from ("chiller status", ...) when this
     # point was judged on its equipment's running samples only; None when it was not.
     run_gate: str | None = None
+    # 0.111 (#297): the share of its equipment's running samples the point holds (None when it
+    # was not judged on a run gate); its coverage counts as the higher of this and ``coverage``.
+    run_coverage: float | None = None
     # ==== begin 098-sensor-health (#87) ====
     # Provisional (0.98, #87). What the per-mode outlier read split the samples by ("fan on/off
     # (fan status)", "inferred off-mode ..."), and the outlier share it found; None when the point
@@ -450,6 +455,38 @@ def _settled(mask: pd.Series, settle: pd.Timedelta = PLANT_SETTLE) -> pd.Series:
     return m & ((t - last_start) >= settle)
 
 
+#: The roles :func:`plant_gates` reads a run gate (and its context) from: the run statuses, the
+#: chiller power with the chilled-water roles that mark it as a chiller's, the supply-fan signals
+#: that mark it as a fan's, the condenser-water flow and the boiler's gas input (0.111, #297).
+PLANT_GATE_INPUTS: tuple = (
+    Role.COMPRESSOR_STATUS,
+    Role.POWER,
+    Role.CHW_SUPPLY_TEMP,
+    Role.CHW_RETURN_TEMP,
+    Role.CHW_FLOW,
+    Role.SUPPLY_FAN_STATUS,
+    Role.SUPPLY_FAN_SPEED,
+    Role.CW_FLOW,
+    Role.BOILER_STATUS,
+    Role.GAS_INPUT_RATE,
+)
+
+#: Share of its own 95th percentile the condenser-water flow must exceed to read as a chiller
+#: running (0.111, #297): one condenser pump of several reads well above it, a stopped loop near 0.
+CW_FLOW_RUN_FRAC = 0.10
+
+
+def _cw_flow_running(flow: pd.Series):
+    """Samples the condenser water flowed (a tower's run gate), or None without a usable flow."""
+    s = pd.to_numeric(flow, errors="coerce")
+    if not s.notna().any():
+        return None
+    p95 = float(s.quantile(0.95))
+    if not p95 > 0:
+        return None
+    return (s > CW_FLOW_RUN_FRAC * p95).fillna(False)
+
+
 def plant_gates(frame: pd.DataFrame) -> dict:
     """``{Role: (running mask, source)}`` for the plant-gated roles ``frame`` carries.
 
@@ -458,6 +495,11 @@ def plant_gates(frame: pd.DataFrame) -> dict:
     too when the chilled-water gate comes from a run status (a status says when the machine ran,
     so a power reading stuck at zero while it ran is a fault; a power-derived gate cannot judge
     the power it was derived from). Roles without a gate are absent.
+
+    0.111 (#297): a chilled-water frame with neither a chiller status nor a chiller power -- a
+    cooling tower -- is gated on its condenser-water flow (``cw_flow`` above
+    :data:`CW_FLOW_RUN_FRAC` of its own 95th percentile, source ``"condenser-water flow"``): the
+    condenser pumps run while a chiller does.
     """
     from .schedules import plant_run_mask
 
@@ -466,6 +508,8 @@ def plant_gates(frame: pd.DataFrame) -> dict:
     masks = {}
     for loop in sorted(loops):
         m, src = plant_run_mask(frame, loop)
+        if m is None and loop == "chw" and Role.CW_FLOW in have:
+            m, src = _cw_flow_running(frame[Role.CW_FLOW]), "condenser-water flow"
         if m is not None:
             masks[loop] = (_settled(m), src)
     out = {r: masks[PLANT_GATED_ROLES[r]] for r in have if PLANT_GATED_ROLES.get(r) in masks}
@@ -796,7 +840,10 @@ def sensor_trust(
     :func:`camber.schedules.plant_run_mask`) judges a plant point on its equipment's **running**
     samples: the range, outlier and flatline reads and the stuck runs are taken over running
     samples (a run breaks where the equipment stops), while coverage stays over the point's whole
-    span. It applies to the roles in :data:`PLANT_GATED_ROLES` and to ``power``; others ignore
+    span -- or over the running samples alone when that is higher (0.111, #297: a point trended
+    only while its equipment runs is flagged ``logged_while_running``, not ``low_coverage``;
+    ``run_coverage`` reports the running share). It applies to the roles in
+    :data:`PLANT_GATED_ROLES` and to ``power``; others ignore
     it. When the equipment ran for fewer than 24 samples the point is flagged ``not_running`` and
     scored on coverage alone -- there is nothing to judge it on. ``run_gate_source`` names the
     gate in the result's ``run_gate``.
@@ -850,9 +897,17 @@ def sensor_trust(
                 shape_aware=True,
                 scale_floor=_scale_floor(on, role),
             )
+    # 0.111 (#297): run-conditional coverage. A plant point trended only while its equipment
+    # runs (blank while off, as many plant controllers log condenser water and approaches) is
+    # complete when it is there for the running samples: its coverage is the higher of the
+    # whole-span figure and the share of running samples it holds. A gap while off is expected.
+    cov, run_cov = q.coverage, None
+    if plant_g is not None and plant_g.any():
+        run_cov = round(float(series[plant_g].notna().mean()), 4)
+        cov = max(cov, run_cov)
     if not_running:
         rng = float("nan")  # not judged: the equipment never ran long enough
-        trust = q.coverage
+        trust = cov
         flat_frac = 0.0
     else:
         rng = range_violation_frac(series if plant_g is None else series[plant_g], role)
@@ -865,7 +920,7 @@ def sensor_trust(
             # one series -- a value held across successive running stretches is one flat run,
             # the off time between them is not counted
             quality = qj.score / qj.coverage if qj.coverage > 0 else 0.0
-            trust = q.coverage * quality * (1.0 - rng_pen)
+            trust = cov * quality * (1.0 - rng_pen)
             flat_frac = qj.flatline_frac
     flat_raw = flat_frac
     if gate is not None and role in FAN_GATED_ROLES:
@@ -892,8 +947,10 @@ def sensor_trust(
         flags.append("late_start")
     if stray:
         flags.append(stray)  # 0.98 (#87): judged on the main span
-    if q.coverage < 0.9:
+    if cov < 0.9:
         flags.append("low_coverage")
+    elif q.coverage < 0.9:
+        flags.append("logged_while_running")  # 0.111 (#297): judged on its running samples
     if q.n_gaps > 0:
         flags.append("gaps")
     out_frac = qj.outlier_frac
@@ -962,6 +1019,7 @@ def sensor_trust(
         window_coverage=window_cov,
         n_state_changes=n_changes,
         run_gate=run_gate_source if plant_g is not None else None,
+        run_coverage=run_cov,
         mode_source=mode_source if mode_out is not None else None,
         mode_outlier_frac=None if mode_out is None else round(mode_out, 4),
         main_start=str(series.first_valid_index()) if stray else None,
@@ -1308,17 +1366,20 @@ def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=
 
 
 def untrusted_roles(
-    frame: pd.DataFrame, roles, *, min_trust: float = 0.5, expected_freq=None
+    frame: pd.DataFrame, roles, *, min_trust: float = 0.5, expected_freq=None, gate_frame=None
 ) -> list:
     """Which of ``roles`` present in ``frame`` fall below the trust bar.
 
     Roles absent from the frame are skipped (their absence is handled separately by the
     rule runner). Returns the offending roles in the order given, for gating a rule's
     required inputs. Plant points are judged on their equipment's running samples when the frame
-    carries a run signal (0.92, #66; see :func:`plant_gates`).
+    carries a run signal (0.92, #66; see :func:`plant_gates`). ``gate_frame`` (0.111, #297): read
+    the run signal from this frame instead -- the same equipment with its
+    :data:`PLANT_GATE_INPUTS` resolved, when a rule's own frame does not load them.
     """
     present = [r for r in roles if r in frame.columns]
-    pg = plant_gates(frame)  # 0.92 (#66): plant points judged on running samples
+    # 0.92 (#66): plant points judged on running samples
+    pg = plant_gates(frame if gate_frame is None else gate_frame)
     health = {
         r: sensor_trust(
             frame[r],

@@ -23,7 +23,9 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   check fails closed: a facility named for a research-only catalog dataset is refused whatever
   the store's facility registry says, and while that registry (`_facilities.json`) is missing,
   unreadable or malformed no facility is served at all, with a notice on every result.
-- **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply.
+- **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
+  that declines because an input scores below it is announced in a NOTICE line, with the count,
+  the rules and the inputs.
 - **Size and time caps.** A large result is truncated, with a notice, or refused as too large; a
   call has a time budget.
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx]`, which point at the values in

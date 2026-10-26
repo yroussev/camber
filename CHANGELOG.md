@@ -17,6 +17,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- **The trust floor no longer withholds healthy plant checks, and says when it declines one
+  (#297).** A condenser-water temperature or chiller approach trended only while the chiller
+  runs (blank while it is off) scored about 0.39 for "low coverage", so under the default trust
+  floor of 0.5 every `camber mcp` and `trust_gate` run declined the plant checks that read it.
+  On the two synthetic chilled-water plant sets this dropped 5 of the command line's true
+  detections, and the RCx report ranked 1 issue instead of 6. A plant point is now scored on the
+  share of running samples it holds (flag `logged_while_running`, `SensorTrust.run_coverage`),
+  and a cooling tower is judged on its running samples, gated on its condenser-water flow. A
+  rule's trust gate now finds the chiller's status or power even when the rule does not read
+  them. With the default floor, `rule_run`, `drift` and `rcx_report` now give the same results
+  as the command line on every labelled synthetic set. Whenever the floor declines checks,
+  these three capabilities add a NOTICE with the count, the rules and the untrusted inputs, and
+  their summary gives the count. The benchmark gates are unchanged.
 - **A capability call reads only the facilities it is about (#293).** While the store's point
   catalog was stale (after an ingest), every `camber mcp` call that needed it -- `facilities`,
   `points`, `coverage`, `sensor_trust`, `rule_run` and the rest -- rescanned every facility in
@@ -47,6 +60,10 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
 ### Changed
+- `rcx_report` runs the run config's `drift` section, as `camber report --layout rcx` does, so
+  drift issues are ranked through MCP too. The fact of an issue that rests on a sensor that a
+  configured reference (`report.rcx.references`) finds wrong now says it is conditional on that
+  check (#297).
 - Capability date arguments accept only valid months (01-12), days (01-31), hours (00-23) and
   minutes (00-59) in their schema pattern (#301).
 - A handler's `OSError` is reported as `unavailable` rather than `internal`, and a failed store

@@ -545,16 +545,15 @@ def _run_one_reference(
     from .rules.base import (
         _cannot_run,
         _class_declined,
-        _gate_roles,
         _merge_shared,
         _missing_optional,
         _note_missing_optional,
         _note_unrecognised,
         _roles_to_load,
         _slice_period,
+        _untrusted,
         _with_class,
     )
-    from .sensorhealth import untrusted_roles
 
     load = _roles_to_load(rule)
     name = ref_equip.equip
@@ -568,7 +567,7 @@ def _run_one_reference(
         problem = ("reference_missing_inputs", f"the reference {name} lacks this detector's inputs")
     else:
         bad = (
-            untrusted_roles(ref_frame, _gate_roles(rule, ref_frame), min_trust=min_trust)
+            _untrusted(rule, ref_equip, ref_frame, mapping, resample, min_trust)
             if min_trust is not None
             else []
         )
@@ -612,7 +611,7 @@ def _run_one_reference(
             out.append(_ref_decline(rule, ref.equip, problem[0], problem[1]))
             continue
         if min_trust is not None:
-            bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
+            bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
             if bad:
                 out.append(
                     Finding(
