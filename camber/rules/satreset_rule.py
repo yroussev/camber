@@ -80,6 +80,14 @@ class SupplyAirReset:
         Role.SAT_RESET_REQUESTS,
     )
 
+    #: 0.111 (#298): why finding_detail shows no flagged hours for this rule
+    no_spans_reason = (
+        "supply_air_reset judges the shape of supply air against outdoor air over all cooling "
+        "hours (its slope and how much of the time it runs below 58 °F), not individual hours: "
+        "cold supply air on a hot afternoon is normal, so no hour is a violation on its own; read "
+        "the SAT-vs-OAT scatter instead"
+    )
+
     def __init__(self, *, fan_gate: bool = True):
         self.fan_gate = fan_gate
 

@@ -101,16 +101,9 @@ class ReheatMinimization:
                 return high | (rise >= self.dual_max_dat_rise), "valve or discharge temperature"
         return high, "valve"
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the diagnostic on an equipment role-frame; return a Finding."""
-        has_min = Role.AIRFLOW_MIN_SP in frame.columns or Role.AIRFLOW_SP in frame.columns
-        if any(r not in frame.columns for r in (Role.HEAT_VALVE, Role.AIRFLOW)) or not has_min:
-            return Finding(
-                rule=self.name,
-                equip=equip,
-                severity="info",
-                summary="needs reheat valve + airflow + minimum airflow setpoint",
-            )
+    def _window(self, frame: pd.DataFrame) -> tuple:
+        """``(w, min-flow basis, samples dropped for no heating-loop reading)``: the occupied
+        samples with a valve, an airflow and a minimum, ``_vmin`` the minimum (#298)."""
         occ_pt = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
         occupied = effective_occupied_mask(
             frame.index,
@@ -131,6 +124,48 @@ class ReheatMinimization:
         if Role.ZONE_HEAT_LOOP in w.columns and w[Role.ZONE_HEAT_LOOP].notna().any():
             n_loop_missing = int(w[Role.ZONE_HEAT_LOOP].isna().sum())
             w = w[w[Role.ZONE_HEAT_LOOP].notna()]
+        return w, basis, n_loop_missing
+
+    def _violation(self, w: pd.DataFrame) -> pd.Series:
+        """Reheating with airflow above the minimum outside the high heating loop."""
+        reheating = w[Role.HEAT_VALVE] > self.valve_thr
+        above_min = w[Role.AIRFLOW] > w["_vmin"] * self.flow_margin
+        return reheating & above_min & ~self._high_loop(w)[0]
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (#298): the valve and airflow against the minimum, with the occupied samples
+        the finding counts as G36 violations (reheat above the minimum outside the high heating
+        loop) shaded."""
+        from ..charts.evidence import Evidence
+
+        has_min = Role.AIRFLOW_MIN_SP in frame.columns or Role.AIRFLOW_SP in frame.columns
+        if any(r not in frame.columns for r in (Role.HEAT_VALVE, Role.AIRFLOW)) or not has_min:
+            return None
+        w, _basis, _n = self._window(frame)
+        if w.empty:
+            return None
+        sp = Role.AIRFLOW_MIN_SP if Role.AIRFLOW_MIN_SP in frame.columns else Role.AIRFLOW_SP
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.HEAT_VALVE, Role.AIRFLOW, sp],
+            mask=self._violation(w),
+            label="reheat above minimum",
+            title=f"{equip}: reheat above the minimum airflow (G36 §5.6.5)",
+            normalize="unit",
+        )
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the diagnostic on an equipment role-frame; return a Finding."""
+        has_min = Role.AIRFLOW_MIN_SP in frame.columns or Role.AIRFLOW_SP in frame.columns
+        if any(r not in frame.columns for r in (Role.HEAT_VALVE, Role.AIRFLOW)) or not has_min:
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="needs reheat valve + airflow + minimum airflow setpoint",
+            )
+        occ_pt = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        w, basis, n_loop_missing = self._window(frame)
         n = len(w)
         occupancy = "trended" if occ_pt is not None and occ_pt.notna().any() else "schedule"
         if n == 0:

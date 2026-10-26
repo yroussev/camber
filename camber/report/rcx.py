@@ -946,7 +946,9 @@ def _issue_dict(i) -> dict:
         "rank": i.rank,
         # 0.98 (#88): the packaged action's title and the finding's cause (the issue heading)
         "title": rec.title if rec is not None else _humanize(getattr(i.root, "rule", "")),
-        "cause": lead_cause if lead is not None else (rec.cause if rec is not None else ""),
+        "cause": lead_cause
+        if lead is not None
+        else ((rec.cause if rec is not None else "") or _summary_cause(i.root)),
         # 0.100 (#101): the rule whose finding names the cause (a member's, when more specific)
         "cause_rule": getattr(lead if lead is not None else i.root, "rule", ""),
         "equip": i.equip,
@@ -1093,9 +1095,47 @@ def _fmt_usd(v) -> str:
     return "—" if v is None else f"${v:,.0f}"
 
 
+#: rule-name words spelled out in a humanized title (#298: "G36 afdd", "Hp capacity shortfall")
+_RULE_WORDS = {
+    "g36": "G36",
+    "afdd": "fault detection",
+    "hp": "heat-pump",
+    "hw": "hot-water",
+    "chw": "chilled-water",
+    "cw": "condenser-water",
+    "sat": "supply-air temperature",
+    "oa": "outdoor-air",
+    "dp": "differential-pressure",
+    "dx": "DX",
+    "deltat": "delta-T",
+    "iaq": "IAQ",
+    "dcv": "DCV",
+    "vav": "VAV",
+    "ahu": "AHU",
+}
+
+
 def _humanize(rule: str) -> str:
     r = str(rule or "").replace("sensor_drift:", "sensor drift: ").replace("_", " ").strip()
+    r = " ".join(_RULE_WORDS.get(w.lower(), w) for w in r.split(" "))
     return r[:1].upper() + r[1:]
+
+
+def _summary_cause(finding) -> str:
+    """A cause phrase from a finding's own summary, for a rule with no packaged recommendation
+    (#298: such an issue had an empty cause): the summary without its ``<equip>:`` lead, up to
+    the first `` -- `` aside, cut to a heading's length."""
+    text = " ".join(str(getattr(finding, "summary", "") or "").split())
+    equip = str(getattr(finding, "equip", "") or "")
+    for lead in (f"{equip}:", "fleet:"):
+        if lead != ":" and text.startswith(lead):
+            text = text[len(lead) :].strip()
+            break
+    parts = text.split(" -- ")
+    # a G36 AFDD summary leads with the section and the FCs evaluated; the worst FC follows
+    text = parts[1] if len(parts) > 1 and text.startswith("G36 §") else parts[0]
+    text = text.split(". ", 1)[0].strip(" ;.")
+    return _cut(text[:1].upper() + text[1:], 120) if text else ""
 
 
 def _cut(text: str, n: int) -> str:

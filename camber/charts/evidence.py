@@ -50,6 +50,10 @@ class Evidence:
     # 0.102 (#119): min-max scale each multitrend series to 0-1, for roles in unlike units (CO2 in
     # ppm against an OA flow in cfm) that would otherwise flatten one another
     normalize: bool | str = False  # 0.108 (#258): "unit" scales same-unit series together
+    # 0.111 (#298, provisional): for a rule that counts events (starts, reversals, stage changes),
+    # a bool Series True at each counted event, so a consumer reports the count apart from the
+    # hours ``mask`` covers. None = the rule does not count events.
+    events: object = None
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):

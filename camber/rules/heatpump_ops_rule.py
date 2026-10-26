@@ -170,6 +170,7 @@ def _occupied(frame: pd.DataFrame, caveats: list) -> pd.Series:
 
 
 class _HPBase:
+    _flag_label = "flagged"
     roles_required = (Role.SUPPLY_AIR_TEMP, Role.SPACE_TEMP)
     roles_optional = (
         Role.SUPPLY_FAN_STATUS,
@@ -238,6 +239,34 @@ class _HPBase:
             "judges a box's reheat"
         )
 
+    def _flagged(self, frame: pd.DataFrame, mode, cold, hot, valid) -> pd.Series | None:
+        """The samples the finding counts as flagged (#298); ``None`` when the rule flags none."""
+        return None
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (#298): the discharge air and the zone, with the occupied samples the
+        finding counts shaded (see each rule's ``_flagged``)."""
+        from ..charts.evidence import Evidence
+
+        if self._coil_unit(frame) or any(r not in frame.columns for r in self.roles_required):
+            return None
+        mode, _defrost, cold, hot, valid = self._prep(frame, [])
+        if int(valid.sum()) == 0:
+            return None
+        mask = self._flagged(frame, mode, cold, hot, valid)
+        if mask is None:
+            return None
+        roles = [Role.SUPPLY_AIR_TEMP, Role.SPACE_TEMP] + [
+            r for r in (Role.HEAT_SP, Role.COOL_SP) if r in frame.columns
+        ]
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=mask,
+            label=self._flag_label,
+            title=f"{equip}: {self.name}",  # type: ignore[attr-defined]
+        )
+
     def _declined(self, equip, why) -> Finding:
         return Finding(
             rule=self.name,  # type: ignore[attr-defined]
@@ -269,6 +298,18 @@ class HPModeVsNeed(_HPBase):
         self.warn_pct = warn_pct
         self.fault_pct = fault_pct
 
+    _flag_label = "mode against need"
+
+    @staticmethod
+    def _wrong(mode, cold, hot, valid) -> tuple:
+        """``(cooling a cold room, heating a warm room)`` sample masks."""
+        return valid & (mode == -1) & cold, valid & (mode == 1) & hot
+
+    def _flagged(self, frame, mode, cold, hot, valid):
+        """The occupied samples in the mode the room does not need."""
+        cool_cold, heat_hot = self._wrong(mode, cold, hot, valid)
+        return cool_cold | heat_hot
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Hours (and share of occupied running time) spent in the mode the room does not need."""
         coil = self._coil_unit(frame)
@@ -280,8 +321,7 @@ class HPModeVsNeed(_HPBase):
             return self._declined(equip, "no occupied samples with a mode and a zone temperature")
         h = _step_hours(frame.index)
         running = valid & (mode != 0)
-        cool_cold = valid & (mode == -1) & cold
-        heat_hot = valid & (mode == 1) & hot
+        cool_cold, heat_hot = self._wrong(mode, cold, hot, valid)
         wrong = cool_cold | heat_hot
         n_run = int(running.sum())
         wrong_h = float(wrong.sum()) * h
@@ -357,16 +397,8 @@ class HPCapacityShortfall(_HPBase):
             "opposite_pct": 100.0 * opposite / n_out if n_out else None,
         }
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Share of occupied time outside the band, and how often the unit was working then."""
-        coil = self._coil_unit(frame)
-        if coil:
-            return self._declined(equip, coil)
-        caveats: list = []
-        mode, _defrost, cold, hot, valid = self._prep(frame, caveats)
-        if int(valid.sum()) == 0:
-            return self._declined(equip, "no occupied samples with a mode and a zone temperature")
-        h = _step_hours(frame.index)
+    def _judge(self, mode, cold, hot, valid, h: float) -> tuple:
+        """``(sides, severity, verdict, side)``: each side's shares and the worse side's verdict."""
         sides = {"heating": self._side(mode, cold, valid, 1, h)}
         sides["cooling"] = self._side(mode, hot, valid, -1, h)
         rank = {"ok": 0, "warn": 1, "fault": 2}
@@ -385,6 +417,29 @@ class HPCapacityShortfall(_HPBase):
                 sev = "warn"
             if rank[sev] > rank[severity]:
                 severity, verdict, side_name = sev, v, name
+        return sides, severity, verdict, side_name
+
+    _flag_label = "outside the band"
+
+    def _flagged(self, frame, mode, cold, hot, valid):
+        """The occupied samples outside the band on the finding's side (the worse one)."""
+        h = _step_hours(frame.index)
+        side = self._judge(mode, cold, hot, valid, h)[3]
+        if side is None:
+            return None
+        return valid & (cold if side == "heating" else hot)
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Share of occupied time outside the band, and how often the unit was working then."""
+        coil = self._coil_unit(frame)
+        if coil:
+            return self._declined(equip, coil)
+        caveats: list = []
+        mode, _defrost, cold, hot, valid = self._prep(frame, caveats)
+        if int(valid.sum()) == 0:
+            return self._declined(equip, "no occupied samples with a mode and a zone temperature")
+        h = _step_hours(frame.index)
+        sides, severity, verdict, side_name = self._judge(mode, cold, hot, valid, h)
         metrics = {
             f"{n}_{k}": (None if v is None else round(v, 2))
             for n, s in sides.items()
@@ -395,7 +450,7 @@ class HPCapacityShortfall(_HPBase):
         if severity == "ok":
             summary = f"{equip}: the room stays in its band when the unit runs"
         else:
-            s = sides[side_name]  # type: ignore[index]
+            s = sides[side_name]
             band = "below its heating band" if side_name == "heating" else "above its cooling band"
             what = {
                 "capacity": f"while the unit was already {side_name} -- a capacity or airflow "

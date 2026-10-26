@@ -46,6 +46,43 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `run_config` failed with `isoformat() argument 1 must be a unicode character, not str` when a
   config's `faults` section left out `run_id`; the default run id is now the run's UTC time to the
   second, as documented.
+- **`finding_detail` explains the finding `rule_run` returned (#298).** It re-ran the one rule
+  on its own, so a finding that depends on another rule read differently: a heat pump in a room
+  whose two units fight was "a capacity shortfall (unit size, refrigerant)" in `finding_detail`
+  but "the fight, not capacity" in `rule_run`, even when both rules were asked for. It now makes
+  the same run as `rule_run` with the same arguments, so the rule, severity, summary and metrics
+  match. It costs as much as the `rule_run` call.
+- **More findings have flagged-hour spans, and the rest say why (#298).** About a third of the
+  fault and warn findings had no spans. `actuator_stuck`, `control_hunting`, `filter_fouling`,
+  `boiler_summer_lockout`, `hw_plant_deltat`, `hw_pump_dp_reset`, `source_loop_deltat`,
+  `heatpump_defrost`, `compressor_staging`, `chiller_staging`, `hp_mode_vs_need`,
+  `hp_capacity_shortfall`, `reheat_minimization_g36`, `overcooling_severity`,
+  `supply_air_reset_compliance` and the SAT / static reset-effectiveness rules now mark the
+  samples their finding counts (the reset-effectiveness rules per failure mode, as
+  `conditions`). A finding without spans has a new `violations_note`: a fleet finding has no one
+  unit's hours, and `supply_air_reset` judges the shape of supply air against outdoor air, not
+  single hours. These masks also give the matching RCx issues their hours.
+- **Spans are contiguous and the share says what it is of (#298).** A span ran on across the
+  hours a mask did not cover (one "span" from one afternoon to the next evening); spans now
+  break where the mask's samples are more than one and a half intervals apart. The share was
+  called "% of the window" though it was of the samples the rule judged; the text now says "of
+  the N samples it judged", and `violations` gives `judged_samples`.
+- **Event rules count events apart from hours (#298).** `boiler_short_cycle` reported its starts
+  times the sample interval as hours (106 h for 424 starts at 15 minutes, where the boiler fired
+  119 h). Its hours are now the firing on short-cycling days, and `finding_detail` gives the
+  starts as `events`; `heatpump_defrost`, `compressor_staging`, `chiller_staging` and
+  `control_hunting` do the same with their reversals, stage changes and starts.
+- **A parameter left unset shows the value the rule used (#298).** `finding_detail` listed
+  `min_oa_pct = None` while `outdoor_air_fraction` judged on its generic 20%; it now shows 20 as
+  the rule's built-in fallback (`fallback: true`).
+- **No unpriced excess-OA energy on the generic minimum (#298).** On the generic 20% minimum,
+  `outdoor_air_fraction` carried `oa_cost_excess_*_kbtu` (and Btu per cfm) figures that the cost
+  estimator and the RCx report decline to price without `min_oa_pct`. They are now null there;
+  with a configured `min_oa_pct` nothing changes.
+- **RCx issues name a cause and a readable title (#298).** An issue from a rule with no packaged
+  recommendation had an empty `cause` and a title such as "G36 afdd" or "Hw plant deltat". The
+  cause is now taken from the finding's summary (for G36 AFDD, the worst fault condition), and
+  the title spells out the rule's words ("G36 fault detection", "Hot-water plant delta-T").
 - Path redaction no longer garbles normal text: the `refused_licence` message reads
   "non-commercial / no-derivatives" again (not "non-commercial <path> no-derivatives"), and an
   internal error shows one `<path>`, not `<path><path>` (#302).

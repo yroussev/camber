@@ -14,6 +14,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..plant import analyze_hw_plant
+from ..schedules import occupied_mask
 from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
@@ -75,4 +76,28 @@ class HWPlantDeltaT:
                 f"{res.design_deltaT_min_f:.0f}F design)"
             ),
             caveats=[GAS_RUN_CAVEAT] if run_source else [],  # 0.98 (#86 item 4a)
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the loop temperatures with the occupied running samples whose
+        delta-T is under the design minimum (the samples behind ``low_deltaT_pct``) shaded."""
+        from ..charts.evidence import Evidence
+
+        frame, _src = with_boiler_status(frame)
+        need = (Role.BOILER_STATUS, Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP)
+        if any(r not in frame.columns for r in need):
+            return None
+        # as analyze_hw_plant reads it: occupied, firing for most of the sample, a physical dT
+        occ = pd.Series(occupied_mask(frame.index), index=frame.index).astype(bool)
+        duty = pd.to_numeric(frame[Role.BOILER_STATUS], errors="coerce").clip(0.0, 1.0)
+        dt = pd.to_numeric(frame[Role.HW_SUPPLY_TEMP], errors="coerce") - pd.to_numeric(
+            frame[Role.HW_RETURN_TEMP], errors="coerce"
+        )
+        low = occ & (duty > 0.5) & (dt > -2) & (dt < 120) & (dt < self.design_deltaT_min_f)
+        return Evidence(
+            renderer="multitrend",
+            roles=[r for r in (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP) if r in frame.columns],
+            mask=low.fillna(False),
+            label=f"delta-T under {self.design_deltaT_min_f:g}°F",
+            title=f"{equip}: HW loop delta-T",
         )

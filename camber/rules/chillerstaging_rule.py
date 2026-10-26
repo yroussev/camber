@@ -18,7 +18,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..boilercycle import _interval_min
-from ..chillerstaging import analyze_chiller_staging
+from ..chillerstaging import analyze_chiller_staging, chiller_power_running
 from ..model.roles import Role
 from ..schedules import CHILLER_POWER_RUN_FRAC
 from .base import Finding
@@ -140,4 +140,52 @@ class ChillerStaging:
                 f"(threshold {self.max_starts_per_day:.0f}), running "
                 f"{res.runtime_pct:.0f}% of the time{load_note}"
             ),
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the chiller's power with each counted start an event; shaded,
+        the runs that a start began when the start rate drives the verdict, and the running
+        samples under ``low_load_pct`` load when the part load does."""
+        from ..charts.evidence import Evidence
+
+        cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
+        legacy = frame.rename(columns=cols)
+        res = analyze_chiller_staging(
+            legacy,
+            equip,
+            min_load_pct=self.low_load_pct,
+            min_power_kw=self.min_power_kw,
+            run_frac=self.run_frac,
+        )
+        if res is None:
+            return None
+        # as analyze_chiller_staging reads it: the power samples, the run gate, the starts
+        w = legacy[[c for c in ("Power", "Status") if c in legacy.columns]].dropna(subset=["Power"])
+        running, _src, _thr = chiller_power_running(
+            w.Power,
+            w["Status"] if "Status" in w.columns else None,
+            min_power_kw=self.min_power_kw,
+            run_frac=self.run_frac,
+        )
+        starts = running & ~running.shift(1, fill_value=False)
+        mask = pd.Series(False, index=w.index)
+        if res.starts_per_day >= self.max_starts_per_day:
+            started = starts.cumsum().where(running) > 0  # runs a counted start began
+            mask |= started.fillna(False).astype(bool)
+        low = res.low_load_pct if res.low_load_pct == res.low_load_pct else 0.0
+        if low >= 25.0:
+            run = legacy.loc[running[running].index]
+            tons = run.CHW_Flow * (run.CHWR_Temp - run.CHWS_Temp) / 24.0
+            tons = tons[tons > 0]
+            peak = float(tons.max())
+            if peak > 0:
+                lf = 100.0 * tons / peak
+                mask |= (lf < self.low_load_pct).reindex(w.index, fill_value=False)
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.POWER],
+            mask=mask.reindex(frame.index, fill_value=False),
+            events=starts.reindex(frame.index, fill_value=False),
+            label="short runs / low part load",
+            title=f"{equip}: chiller staging",
         )

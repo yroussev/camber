@@ -131,11 +131,14 @@ _FACTS = 200
 _LISTED = 10
 
 
-def _run_for(ctx, arguments: dict, rules=None):
+def _run_for(ctx, arguments: dict):
+    """The rule run ``rule_run`` makes for ``arguments``; ``finding_detail`` makes the same one
+    (#298), so a finding whose verdict depends on another rule's (a fighting room's capacity
+    finding) reads the same in both."""
     fid = arguments["facility_id"]
     start, end = window(arguments)
     config, base_dir, from_caller = facility_config(ctx, fid)
-    config = with_rules(config, rules or arguments.get("rules"), arguments.get("params"))
+    config = with_rules(config, arguments.get("rules"), arguments.get("params"))
     config = narrow(config, equips=arguments.get("equips"), start=start, end=end)
     return run(ctx, config, base_dir), from_caller, (start, end)
 
@@ -237,6 +240,11 @@ _PARAM_USED = {
         "value": {},
         "default": {},
         "overridden": {"type": "boolean"},
+        "fallback": {
+            "type": "boolean",
+            "description": "true when the parameter was not set (its documented default is "
+            "null) and value is the rule's built-in fallback it ran with",
+        },
         "unit": {"type": "string"},
         "basis": {"type": "string"},
     },
@@ -269,6 +277,7 @@ DETAIL_OUTPUT = {
         "parameters",
         "chart",
         "violations",
+        "violations_note",
         "conditions",
     ],
     "additionalProperties": False,
@@ -280,8 +289,15 @@ DETAIL_OUTPUT = {
         "chart": _CHART,
         "violations": {
             "type": ["object", "null"],
-            "description": "the hours the rule flagged, as contiguous spans",
+            "description": "the hours the rule flagged, as contiguous spans (null: see "
+            "violations_note)",
             **{k: v for k, v in MASK.items() if k != "type"},
+        },
+        "violations_note": {
+            "type": ["string", "null"],
+            "description": "why violations is null (a fleet finding, a rule that judges a "
+            "trend rather than flagging hours, no evidence for this equipment); null when spans "
+            "are given",
         },
         "conditions": {
             "type": "array",
@@ -337,10 +353,31 @@ def _violations(ev, frame):
         from ..charts.diagnostic import template_violations
 
         mask = template_violations(ev.frame if ev.frame is not None else frame, ev.template)
-    return None if mask is None else mask_summary(mask)
+    return None if mask is None else mask_summary(mask, events=getattr(ev, "events", None))
 
 
-def _parameters(rule: str, entry_params: dict) -> list:
+def _no_spans_note(rule_obj, ev, failed: bool) -> str:
+    """Why a finding has no flagged-hour spans (#298)."""
+    if rule_obj is not None and hasattr(rule_obj, "analyze_fleet"):
+        return (
+            "a fleet finding judges many units together, so it has no one unit's flagged hours; "
+            "its metrics give the figures per unit (or per room or cohort) -- call finding_detail "
+            "on a member unit's own findings for their hours"
+        )
+    reason = getattr(rule_obj, "no_spans_reason", None)
+    if reason:
+        return str(reason)
+    if failed:
+        return "the rule's evidence could not be computed on this equipment's trend"
+    if ev is None:
+        return "none of the rule's inputs is in this equipment's trend, so no evidence is drawn"
+    return (
+        "this rule does not mark the individual hours behind its verdict; its metrics carry "
+        "the figures it judged"
+    )
+
+
+def _parameters(rule: str, entry_params: dict, rule_obj=None) -> list:
     from ..rules.param_docs import describe
 
     try:
@@ -351,12 +388,19 @@ def _parameters(rule: str, entry_params: dict) -> list:
     for p in params:
         name = p["name"]
         over = name in entry_params
+        value = jsonable(entry_params[name] if over else p.get("default"))
         row = {
             "name": name,
-            "value": jsonable(entry_params[name] if over else p.get("default")),
+            "value": value,
             "default": jsonable(p.get("default")),
             "overridden": over,
         }
+        # #298: a parameter left unset (documented default null) runs on the rule's built-in
+        # fallback; show the value the rule used, read from the rule as it ran
+        if value is None and rule_obj is not None:
+            used = jsonable(getattr(rule_obj, name, None))
+            if isinstance(used, (bool, int, float, str)):
+                row["value"], row["fallback"] = used, True
         if p.get("unit"):
             row["unit"] = str(p["unit"])
         if p.get("basis"):
@@ -373,7 +417,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     rule = want.split("@", 1)[0]
     if rule not in rule_names():
         raise CapabilityError("not_found", f"no finding {want!r}: {rule!r} is not a rule")
-    res, _from_caller, _w = _run_for(ctx, arguments, rules=[rule])
+    res, _from_caller, _w = _run_for(ctx, arguments)
     found = dict(zip(finding_ids(res.findings), res.findings))
     f = found.get(want)
     if f is None:
@@ -387,45 +431,52 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
         (e for e in res.config.get("rules") or [] if isinstance(e, dict) and e.get("name") == rule),
         {},
     )
-    ev, frame = None, None
+    ev, frame, rule_obj, failed = None, None, None, False
     try:
         rule_obj = res.registry.get(rule)
         frame = res.frame_for(f.equip)
         if frame is not None and not frame.empty:
             ev = finding_evidence(rule_obj, f.equip, frame)
     except Exception:  # noqa: BLE001 - a rule that cannot draw simply has no evidence
-        ev = None
+        ev, failed = None, True
     chart = _chart(ev)
     try:
         viol = _violations(ev, frame)
     except Exception:  # noqa: BLE001 - as above
-        viol = None
+        viol, failed = None, True
+    note = None if viol is not None else _no_spans_note(rule_obj, ev, failed)
     conditions = []
     masks = getattr(ev, "masks", None) if ev is not None else None
     if isinstance(masks, dict):
         for name in sorted(masks, key=str):
             if masks[name] is not None:
                 conditions.append({"name": str(name), **mask_summary(masks[name])})
-    params = _parameters(rule, dict(entry.get("params") or {}))
+    params = _parameters(rule, dict(entry.get("params") or {}), rule_obj)
 
     row["fact"] = "F1@finding_detail"
     facts = [finding_fact("F1@finding_detail", row)]
     text = [cite(facts[0])]
     if viol is not None:
+        events = ""
+        if viol.get("events") is not None:
+            events = f" covering {viol['events']} counted event(s)"
         facts.append(
             {
                 "id": "F2@finding_detail",
                 "kind": "evidence_hours",
                 "value": viol["hours"],
-                "text": f"The rule flagged {viol['hours']:g} hours ({viol['samples']} samples, "
-                f"{viol['share']:.1%} of the window) in {viol['n_spans']} span(s)",
+                "text": f"The rule flagged {viol['hours']:g} hours{events} ({viol['samples']} "
+                f"of the {viol['judged_samples']} samples it judged, {viol['share']:.1%}) in "
+                f"{viol['n_spans']} contiguous span(s)",
                 "share": viol["share"],
             }
         )
         text.append(cite(facts[-1]))
     if params:
         listed = ", ".join(
-            f"{p['name']} = {p['value']}" + (" (set for this run)" if p["overridden"] else "")
+            (f"{p['name']} = {p['value']}" if p["value"] is not None else f"{p['name']} not set")
+            + (" (set for this run)" if p["overridden"] else "")
+            + (" (not set: the rule's built-in fallback)" if p.get("fallback") else "")
             for p in params
         )
         n = len(facts) + 1
@@ -456,6 +507,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
         "parameters": params,
         "chart": chart,
         "violations": viol,
+        "violations_note": note,
         "conditions": conditions,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts)
@@ -486,11 +538,14 @@ CAPABILITIES = (
         title="Finding detail and evidence",
         description=(
             "Explain one finding from rule_run: its full metrics, the parameter values the rule "
-            "ran with (default or overridden), the hours it flagged as contiguous time spans "
-            "(and per named sub-condition, e.g. G36 fault conditions), and which evidence chart "
-            "applies (renderer, the roles plotted, what it shows). Returns no image. Pass the "
-            "finding_id and the same facility_id, params, equips and window as the rule_run "
-            "call. Cost: re-runs that one rule on the facility."
+            "ran with (default, overridden or the rule's built-in fallback), the hours it "
+            "flagged as contiguous time spans (and per named sub-condition, e.g. G36 fault "
+            "conditions; for an event rule the events counted, apart from the hours), or why "
+            "there are none (violations_note), and which evidence chart applies (renderer, the "
+            "roles plotted, what it shows). Returns no image. Pass the finding_id and the same "
+            "facility_id, rules, params, equips and window as the rule_run call: the finding is "
+            "read from the same run, so it matches rule_run's. Cost: the same rule run as "
+            "rule_run."
         ),
         input_schema=DETAIL_INPUT,
         output_schema=DETAIL_OUTPUT,

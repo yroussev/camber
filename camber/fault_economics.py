@@ -460,8 +460,11 @@ def _excess_oa_airflow(m, load, min_pct):
     ``EquipmentLoad.supply_airflow_cfm``, else ``design_oa_cfm / (min_pct / 100)``. ``used`` holds
     the source (and the cfm a load gives); ``missing`` is the decline note when none applies.
     """
-    if _num(m, "oa_cost_excess_cool_kbtu") is not None and (
-        _num(m, "oa_cost_excess_heat_kbtu") is not None
+    # the trended airflow's period sums; a finding on the generic 20 % minimum names the trended
+    # airflow but carries no sums (#298), and declines on the minimum before they are read
+    if m.get("oa_cost_airflow") == "trended supply airflow" or (
+        _num(m, "oa_cost_excess_cool_kbtu") is not None
+        and _num(m, "oa_cost_excess_heat_kbtu") is not None
     ):
         return (
             None,

@@ -173,7 +173,7 @@ def test_no_g36_advice_without_a_declared_g36_sequence(tmp_path, captured):
         s for s in rep.sections if "Reheat with airflow above the heating minimum" in s["title"]
     )
     text = " ".join(b.get("text", "") for b in page["blocks"] if b["kind"] == "p")
-    assert "Recommended action — Reheat minimization g36: engineer to specify" in text
+    assert "Recommended action — Reheat minimization G36: engineer to specify" in text
     assert "Suggested:" not in text
 
 

@@ -126,3 +126,23 @@ class FilterFouling:
             ),
             caveats=caveats,
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the filter ΔP with the judged samples above change-out (the
+        samples behind ``pct_over_threshold``) shaded."""
+        from ..charts.evidence import Evidence
+
+        if Role.FILTER_DIFF_PRESS not in frame.columns:
+            return None
+        dp = pd.to_numeric(frame[Role.FILTER_DIFF_PRESS], errors="coerce")
+        over = (dp > self.change_dp_inwc).fillna(False)
+        gate, _src = self._gate(frame)
+        if gate is not None:
+            over &= gate.reindex(frame.index).fillna(False).astype(bool)
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.FILTER_DIFF_PRESS],
+            mask=over,
+            label="above change-out",
+            title=f"{equip}: filter ΔP",
+        )

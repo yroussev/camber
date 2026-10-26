@@ -203,6 +203,24 @@ def _short_cycle_samples(df: pd.DataFrame, *, max_starts_per_day: float) -> pd.S
     return pd.Series(df.index.isin(w.index[flagged.to_numpy()]), index=df.index)
 
 
+def _short_cycle_firing(df: pd.DataFrame, *, max_starts_per_day: float) -> pd.Series:
+    """The firing samples on short-cycling days (0.111, #298): the hours the boiler ran on the
+    days :func:`_short_cycle_samples` flags, so a report counts hours of firing, not starts times
+    the sample interval. All False without ``BoilerStatus``."""
+    out = pd.Series(False, index=df.index)
+    if "BoilerStatus" not in df.columns:
+        return out
+    w = df["BoilerStatus"].dropna()
+    if not len(w):
+        return out
+    running, start = _running_starts(w)
+    day = pd.DatetimeIndex(w.index).normalize()
+    per_day = start.groupby(day).sum()
+    busy = per_day.index[per_day.to_numpy() >= max_starts_per_day]
+    flagged = running & pd.Series(day.isin(busy), index=w.index)
+    return pd.Series(df.index.isin(w.index[flagged.to_numpy()]), index=df.index)
+
+
 def analyze_boiler_cycling(
     df: pd.DataFrame,
     equip: str,

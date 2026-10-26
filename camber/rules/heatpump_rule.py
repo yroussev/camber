@@ -26,7 +26,12 @@ import pandas as pd
 from ..boilercycle import _interval_min
 from ..model.roles import Role
 from .base import Finding
-from .compressor_stage_rule import _binary_changes, _coarse_trend_check, _short_trend_caveat
+from .compressor_stage_rule import (
+    _binary_change_evidence,
+    _binary_changes,
+    _coarse_trend_check,
+    _short_trend_caveat,
+)
 
 
 class HeatPumpDefrost:
@@ -103,4 +108,24 @@ class HeatPumpDefrost:
             },
             summary=summary,
             caveats=caveats,
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the reversing-valve command, each change an event and the
+        short excursions out of heating (the reversals, defrosts among them) shaded."""
+        from ..charts.evidence import Evidence
+
+        if Role.REVERSING_VALVE_CMD not in frame.columns:
+            return None
+        mask, events = _binary_change_evidence(frame[Role.REVERSING_VALVE_CMD])
+        roles = [
+            r for r in (Role.REVERSING_VALVE_CMD, Role.COMPRESSOR_STATUS) if r in frame.columns
+        ]
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=mask,
+            events=events,
+            label="reversed out of heating",
+            title=f"{equip}: reversing-valve cycling",
         )
