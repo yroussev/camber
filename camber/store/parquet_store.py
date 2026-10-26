@@ -144,6 +144,14 @@ _FRAG_INDEX: OrderedDict = OrderedDict()
 _FRAG_LOCK = threading.Lock()
 _NO_PARTITION = object()  # ParquetStore._scoped_dataset: the facility has no partition directory
 
+# Per-facility catalog memo (0.111, #293): one facility's point keys and equipment classes from a
+# projected scan of that facility's partition only, for a points() / equipment() call on one
+# facility while the store-wide catalog is stale. A no-persist reader (an MCP call) never writes
+# the catalog back, so without it every such call rescanned every facility of the store. Keyed
+# and validated like the fragment index; holds only the keys (no frames), and is bounded.
+_FAC_CATALOG_MAX = 256
+_FAC_CATALOG: OrderedDict = OrderedDict()
+
 
 class StoreReadError(OSError):
     """Stored data could not be read (0.111, #301).
@@ -570,24 +578,57 @@ class ParquetStore:
     def _scan(self):
         """A projected scan (no ts/value payload) -> (point keys, equipment classes), one facility
         partition at a time, so an ingest that replaces one facility's files fails (and retries)
-        only that facility's part of the scan (#301)."""
+        only that facility's part of the scan (#301), and the scan holds one facility's columns at
+        a time (#293)."""
+        keys: list = []
+        equipment: dict = {}
+        for f in self.facilities():
+            k, eqs = self._facility_catalog(f)
+            keys += k
+            if eqs:
+                equipment[f] = eqs
+        return keys, equipment
+
+    def _scan_facility(self, facility_id: str):
+        """:meth:`_scan` of one facility's partition: ``(point keys, {equip: equip_class})``."""
         cols = [_FACILITY, _EQUIP, _CLASS, _ROLE]
-        parts = [self.read_long(facility_id=f, columns=cols) for f in self.facilities()]
-        parts = [p for p in parts if not p.empty]
-        if not parts:
+        long = self.read_long(facility_id=facility_id, columns=cols)
+        if long.empty:
             return [], {}
-        long = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
         uniq = long.drop_duplicates([_FACILITY, _EQUIP, _ROLE])
+        del long
         keys = [
             PointKey(facility_id=f, equip=e, role=r)
             for f, e, r in zip(uniq[_FACILITY], uniq[_EQUIP], uniq[_ROLE])
         ]
         equipment: dict = {}
-        for f, e, c in zip(uniq[_FACILITY], uniq[_EQUIP], uniq[_CLASS]):
-            eqs = equipment.setdefault(str(f), {})
-            if not eqs.get(e):  # first non-empty class recorded for this equip wins
-                eqs[e] = "" if c is None or c != c else str(c)
+        for e, c in zip(uniq[_EQUIP], uniq[_CLASS]):
+            if not equipment.get(e):  # first non-empty class recorded for this equip wins
+                equipment[e] = "" if c is None or c != c else str(c)
         return keys, equipment
+
+    def _facility_catalog(self, facility_id: str):
+        """One facility's ``(point keys, {equip: equip_class})`` from a scan of its partition
+        only, memoized in :data:`_FAC_CATALOG` until the partition changes (#293)."""
+        fid = str(facility_id)
+        if "/" in fid or os.sep in fid:  # not a partition name: no scoped scan, no memo
+            return self._scan_facility(facility_id)
+        fdir = os.path.join(os.path.abspath(self.root), f"{_FACILITY}={fid}")
+        key = (os.path.abspath(self.root), fid)
+        sig = _partition_signature(fdir)  # before the scan: a write during it voids the entry
+        with _FRAG_LOCK:
+            hit = _FAC_CATALOG.get(key)
+            if hit is not None and sig and hit[0] == sig:
+                _FAC_CATALOG.move_to_end(key)
+                return list(hit[1]), dict(hit[2])
+        keys, equipment = self._scan_facility(fid)
+        if sig:
+            with _FRAG_LOCK:
+                _FAC_CATALOG[key] = (sig, tuple(keys), dict(equipment))
+                _FAC_CATALOG.move_to_end(key)
+                while len(_FAC_CATALOG) > _FAC_CATALOG_MAX:
+                    _FAC_CATALOG.popitem(last=False)
+        return list(keys), dict(equipment)
 
     def _scan_keys(self) -> list:
         """Distinct (facility_id, equip, role) keys via a projected scan (no ts/value payload)."""
@@ -786,6 +827,39 @@ class ParquetStore:
             df = df.sort_values(_TS).reset_index(drop=True)
         return df
 
+    def _ts_span(self, facility_id: str):
+        """``(first, last)`` stored ``ts`` of one facility (``(None, None)`` when it holds none),
+        from its part files' row-group statistics, so no column is read (0.111, #293). Falls back
+        to a ``ts`` read (with its error handling) when a file has no usable statistics."""
+        lo = hi = None
+        try:
+            dataset = self._scoped_dataset(facility_id)
+            if dataset is _NO_PARTITION:
+                return None, None
+            if dataset is None:
+                raise LookupError  # not a partition name: the plain read below
+            for frag in dataset.get_fragments():
+                md = frag.metadata
+                col = md.schema.to_arrow_schema().get_field_index(_TS)
+                if col < 0:
+                    raise LookupError
+                for i in range(md.num_row_groups):
+                    rg = md.row_group(i)
+                    if not rg.num_rows:
+                        continue
+                    st = rg.column(col).statistics
+                    if st is None or not st.has_min_max:
+                        raise LookupError
+                    a, b = pd.Timestamp(st.min), pd.Timestamp(st.max)
+                    lo = a if lo is None or a < lo else lo
+                    hi = b if hi is None or b > hi else hi
+        except Exception:  # noqa: BLE001 - no statistics or a damaged footer: read the column
+            ts = self.read_long(facility_id=facility_id, columns=[_TS])
+            if ts.empty or ts[_TS].isna().all():
+                return None, None
+            return pd.Timestamp(ts[_TS].min()), pd.Timestamp(ts[_TS].max())
+        return lo, hi
+
     def read_role_frame(
         self,
         *,
@@ -855,12 +929,16 @@ class ParquetStore:
         no partition scan. Writes *invalidate* the catalog (cheap), so the first call after a
         write burst rebuilds it once with a projected scan (facility/equip/role columns only -- no
         ts/value payload) and caches the result; subsequent calls are instant until the next
-        write.
+        write. A ``facility_id`` call on a stale catalog scans only that facility's partition
+        (memoized in-process until it changes) and leaves the catalog to the next store-wide call,
+        so its cost does not grow with the rest of the store (0.111, #293).
         """
         cached = self._read_catalog()
         if cached is None:
             if not os.path.isdir(self.root):
                 return []
+            if isinstance(facility_id, str):  # a stale catalog: scan this facility only (#293)
+                return self._facility_catalog(facility_id)[0]
             cached, _ = self._rebuild()  # memoize until the next write invalidates it
         return [k for k in cached if facility_id is None or k.facility_id == facility_id]
 
@@ -878,6 +956,9 @@ class ParquetStore:
         if not isinstance(equipment, dict):
             if not os.path.isdir(self.root):
                 return {}
+            if isinstance(facility_id, str):  # a stale catalog: scan this facility only (#293)
+                eqs = self._facility_catalog(facility_id)[1]
+                return {facility_id: eqs} if eqs else {}
             _, equipment = self._rebuild()
         if facility_id is not None:
             eqs = equipment.get(facility_id)

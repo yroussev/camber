@@ -17,6 +17,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- **A capability call reads only the facilities it is about (#293).** While the store's point
+  catalog was stale (after an ingest), every `camber mcp` call that needed it -- `facilities`,
+  `points`, `coverage`, `sensor_trust`, `rule_run` and the rest -- rescanned every facility in
+  the store, because a no-persist call never writes the catalog back: a `points` call on one
+  small facility took seconds and gigabytes in a large store, and the server kept that memory.
+  A call on one facility now scans only that facility (and remembers the result until its data
+  changes), and `facilities` reads each listed facility's catalog entry and file statistics
+  instead of its rows. `ParquetStore.points(facility_id=...)` and
+  `equipment(facility_id=...)` behave the same way outside MCP. In a 33-facility test store,
+  `facilities` and `points` on one small facility went from about 5 s and 2.4 GB to under
+  0.1 s and about 130 MB, the same as in a store holding only that facility.
 - **A `faults` section without `run_id` no longer crashes the run (#303).** `camber run` and
   `run_config` failed with `isoformat() argument 1 must be a unicode character, not str` when a
   config's `faults` section left out `run_id`; the default run id is now the run's UTC time to the

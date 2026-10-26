@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pandas as pd
-
 from ..store.parquet_store import StoreReadError
 from . import Capability, CapabilityResult
 from ._policy import open_store
@@ -61,10 +59,11 @@ _LISTED = 10
 
 
 def _span(store, fid: str) -> tuple:
-    ts = store.read_long(facility_id=fid, columns=["ts"])
-    if ts.empty:
+    """The first and last stored sample of ``fid`` (ISO), from file statistics (#293)."""
+    start, end = store._ts_span(fid)
+    if start is None:
         return None, None
-    return pd.Timestamp(ts["ts"].min()).isoformat(), pd.Timestamp(ts["ts"].max()).isoformat()
+    return start.isoformat(), end.isoformat()
 
 
 def facilities(ctx, arguments: dict) -> CapabilityResult:
@@ -80,8 +79,6 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
     registry = read_registry(store.root)
     meta = registry[0]
     known = set(store.facilities()) | set(meta)
-    points = store.points()
-    equipment = store.equipment()
     rows, withheld, unverified = [], 0, 0
     for fid in sorted(f for f in ctx.allowed_facilities if f in known):
         m = meta.get(fid) or {}
@@ -92,10 +89,14 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
             else:
                 unverified += 1
             continue
-        broken = None
+        # this facility's catalog entry and file statistics only, never its rows (#293); one
+        # facility's damaged file must not hide the others (#301)
+        broken, n_points, n_equipment, start, end = None, 0, 0, None, None
         try:
+            n_points = len(store.points(facility_id=fid))
+            n_equipment = len(store.equipment(facility_id=fid).get(fid) or {})
             start, end = _span(store, fid)
-        except StoreReadError as e:  # one facility's damaged file must not hide the others (#301)
+        except StoreReadError as e:
             start, end, broken = None, None, {"retryable": bool(e.retryable)}
         rows.append(
             {
@@ -105,8 +106,8 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
                 "timezone": facility_timezone(m),
                 "start": start,
                 "end": end,
-                "n_points": sum(1 for k in points if k.facility_id == fid),
-                "n_equipment": len(equipment.get(fid) or {}),
+                "n_points": n_points,
+                "n_equipment": n_equipment,
                 **({"unavailable": broken} if broken else {}),
             }
         )

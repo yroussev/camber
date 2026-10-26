@@ -143,9 +143,12 @@ case is refused. See [PORTFOLIO.md](PORTFOLIO.md).
    `_catalog.json` written alongside the dataset, so it needs no partition scan. Writes
    *invalidate* the catalog (an O(1) file removal — they never rewrite it, so bulk ingestion
    stays cheap); the first `points()` after a write burst rebuilds it once with a projected
-   scan and caches the result. (Arrow's dataset discovery ignores leading-`_` paths, so the
-   file is invisible to reads. `rebuild_catalog()` materializes it for a store that predates
-   the cache.)
+   scan and caches the result. A `points(facility_id=…)` / `equipment(facility_id=…)` call on a
+   stale catalog scans only that facility's partition (memoized in-process until the partition
+   changes) and leaves the store-wide rebuild to the next unscoped call, so its cost does not
+   grow with the rest of the store (0.111). (Arrow's dataset discovery ignores leading-`_`
+   paths, so the file is invisible to reads. `rebuild_catalog()` materializes it for a store
+   that predates the cache.)
 
 ## One writer at a time (0.104)
 

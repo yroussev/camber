@@ -168,9 +168,12 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    retry will not help until it is repaired or the facility re-ingested). The message names no
    path and no facility outside the allowlist. One facility's damaged file does not affect
    another facility's calls, and the `facilities` listing still lists it, with
-   `"unavailable": {"retryable": ...}` and a null `start` / `end` -- while the store's point
-   catalog is current. A stale catalog (after a write) is rebuilt by scanning every facility, so
-   until it is rebuilt a damaged file anywhere makes calls that need the catalog `unavailable`.
+   `"unavailable": {"retryable": ...}` and a null `start` / `end`. A call reads only the
+   facilities it is about (0.111, #293): while the store's point catalog is stale (after a
+   write; a call never writes it back), a call on one facility scans that facility's partition
+   only, and `facilities` reads each listed facility's catalog entry and its files' statistics,
+   never its rows -- so neither the cost of a call nor a damaged file depends on the rest of the
+   store.
 9. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
    of an error a handler raises, nor a result's `text` or `banners` -- holds an absolute local
    path. The known roots (the store, the config, its directory and the stores or folders it

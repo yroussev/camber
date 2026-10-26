@@ -136,9 +136,15 @@ def test_an_unreadable_facility_directory_is_unavailable(store):
 
 
 def test_the_error_names_no_facility_outside_the_allowlist(store):
+    from camber.capabilities import _unavailable
+
     _damage(store, FID, "garbage")
-    store._invalidate_catalog()  # the next points() scans every facility, the damaged one too
-    e = _err(store, "points", {"facility_id": OTHER}, allowed=(OTHER,))
+    store._invalidate_catalog()  # a stale catalog: a call on OTHER scans OTHER only (#293)
+    res = REG.call("points", {"facility_id": OTHER}, _ctx(store, (OTHER,)))
+    assert res.data["count"] > 0
+    # a store error about a facility the caller may not see names neither it nor its id
+    err = StoreReadError("a stored file is damaged or unreadable", facility_id=FID)
+    e = _unavailable(err, _ctx(store, (OTHER,)))
     assert e.code == "unavailable"
     assert FID not in e.message and "facility_id" not in (e.data or {})
 
