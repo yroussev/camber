@@ -21,8 +21,8 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   whose JSON is larger than ``caps.max_bytes`` is ``too_large``, and a call that runs longer than
   ``caps.max_seconds`` is ``timeout``;
 - **fact ids unique per call**: every fact id's context gets a token (:func:`call_token`, a hash
-  of the name, the arguments and the allowlist), ``F1@points`` -> ``F1@points-1a2b3c``, in
-  ``facts``, ``text`` and ``data``;
+  of the name, the arguments, the allowlist, the run config, the trust floor and the store
+  generation, #295), ``F1@points`` -> ``F1@points-1a2b3c``, in ``facts``, ``text`` and ``data``;
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
   (strict: a sentence stating a figure no cited fact carries is removed, and so is an unknown
   ``[id]``, each with a banner that says which);
@@ -63,6 +63,7 @@ import contextvars
 import hashlib
 import importlib
 import json
+import os
 import pkgutil
 import threading
 from collections.abc import Callable
@@ -430,16 +431,70 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
 
 def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
     """Six hex digits of SHA-256 over the capability name, the canonical JSON of the validated
-    arguments and the sorted allowlist: the same call always gives the same token, and two
-    different calls (almost surely) different ones."""
+    arguments, the sorted allowlist and the server's state (:func:`_server_state`: the effective
+    config, the trust floor and the store generation): the same call on the same server and
+    unchanged data always gives the same token, across restarts, and two different calls, or one
+    call on two servers that would answer it differently, (almost surely) different ones (#295).
+
+    The one place a fact id's token is made, so it can become a server-keyed MAC (#294)."""
     payload = json.dumps(
-        [name, arguments, sorted(ctx.allowed_facilities)],
+        [name, arguments, sorted(ctx.allowed_facilities), _server_state(arguments, ctx)],
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
         default=str,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:6]
+
+
+def _server_state(arguments: dict, ctx: CallContext) -> list:
+    """What decides a call's values besides its arguments and the allowlist (#295): a digest of
+    the loaded run config (its canonical JSON, not its path; the file's bytes when it does not
+    load), the trust floor, and a cheap store generation: the facility registry's and every
+    touched facility partition's modification signature (the facilities the arguments name, else
+    every allowed one, plus a store-backed config's own facility). Stat calls only: nothing is
+    read but the config."""
+    from ..config import load_config
+    from ..store.facilities import _FACILITIES
+    from ..store.parquet_store import _FACILITY, _partition_signature
+    from ._policy import named_facilities
+
+    config, config_store = None, None
+    if ctx.config:
+        try:
+            loaded = load_config(ctx.config)
+            text = json.dumps(loaded, sort_keys=True, separators=(",", ":"), default=str)
+            config = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            source = loaded.get("source") or {}
+            if source.get("kind") == "store" and source.get("facility_id"):
+                root = str(source.get("store") or "")
+                if not os.path.isabs(root):
+                    root = os.path.join(os.path.dirname(os.path.abspath(ctx.config)), root)
+                config_store = (root, str(source["facility_id"]))
+        except Exception:  # noqa: BLE001 - a config that does not load: its bytes, or absent
+            try:
+                with open(ctx.config, "rb") as fh:
+                    config = "raw:" + hashlib.sha256(fh.read()).hexdigest()
+            except OSError:
+                config = "missing"
+
+    def signature(root: str, fid: str) -> list:
+        fdir = os.path.join(os.path.abspath(root), f"{_FACILITY}={fid}")
+        return [fid, list(_partition_signature(fdir))]
+
+    try:
+        st = os.stat(os.path.join(ctx.store, _FACILITIES))
+        registry = [st.st_mtime_ns, st.st_size]
+    except OSError:
+        registry = None
+    named = [f for f in named_facilities(arguments) if f in ctx.allowed_facilities]
+    store = [
+        registry,
+        *(signature(ctx.store, f) for f in sorted(set(named or ctx.allowed_facilities))),
+    ]
+    if config_store is not None:
+        store.append(signature(*config_store))
+    return [config, float(ctx.min_trust), store]
 
 
 def _scoped(facts: list, text: str, data, token: str) -> tuple:

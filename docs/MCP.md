@@ -28,8 +28,10 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   the rules and the inputs.
 - **Size and time caps.** A large result is truncated, with a notice, or refused as too large; a
   call has a time budget.
-- **Citations.** A tool's summary cites fact ids such as `[F1@ctx]`, which point at the values in
-  the result.
+- **Citations.** A tool's summary cites fact ids such as `[F1@ctx-1a2b3c]`, which point at the
+  values in the result. The token after the context depends on the call, the allowlist, the run
+  config, the trust floor and the stored data, so two servers (or one server before and after an
+  ingest) never give one id to different values (0.111, #295).
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
 

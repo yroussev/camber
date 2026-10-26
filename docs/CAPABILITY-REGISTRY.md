@@ -55,10 +55,16 @@ returns the report's own fact index, `K1@summary-<token>`, `C1@<issue key>-<toke
 **Fact ids are unique per call.** `Registry.call` appends a token to the context of every fact id
 a handler returns -- in `facts`, in the `[id]` citations of `text` and wherever `data` names a
 fact id (a row's `fact`, the RCx fact index). The token is six hex digits of SHA-256 over the
-capability name, the canonical JSON of the validated arguments and the sorted allowlist, so the
-same call always gives the same ids and two different calls give different ones: a model cannot
-cite `F1@rule_run` from one call while meaning another, and the facts of several calls can be
-merged for `check_citations` without a clash. A handler writes plain ids (`F1@rule_run`); the
+capability name, the canonical JSON of the validated arguments, the sorted allowlist and what
+else decides the values (0.111, #295): a digest of the loaded run config (its content, not its
+path), the trust floor and a store generation (the modification signature of the facility
+registry and of each facility the call reads: the ones its arguments name, else every allowed
+one). So the same call on the same server and unchanged data gives the same ids, also after a
+restart, while two different calls, or the same call on two servers that differ in `--config`,
+`--min-trust` or stored data, or after an ingest, give different ones: a model cannot cite
+`F1@rule_run` from one call while meaning another, and the facts of several calls, from one
+server or several, can be merged for `check_citations` without a clash. The token is a
+collision-resistant name, not a signature: it does not prove a fact came from a server. A handler writes plain ids (`F1@rule_run`); the
 registry scopes them. A facility is named only by `facility_id`, so the allowlist and the
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.
