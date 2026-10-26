@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..store.parquet_store import StoreReadError
 from . import Capability, CapabilityResult
 from ._policy import open_store
+from ._sanitize import name
 
 _ROW = {
     "type": "object",
@@ -56,6 +57,13 @@ OUTPUT_SCHEMA = {
 
 #: per-facility sentences in the summary; the rest are in ``data``
 _LISTED = 10
+
+
+def _state(state: str) -> str:
+    """A lifecycle state for the summary: as it is when it is one of the states, else quoted."""
+    from ..portfolio._states import STATES
+
+    return state if state in STATES else name(state)
 
 
 def _span(store, fid: str) -> tuple:
@@ -131,13 +139,14 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "facility",
                 "facility_id": r["facility_id"],
                 "value": r["n_points"],
-                "text": f"{r['facility_id']} ({r['name']}): {r['state']}, {r['n_points']} points "
-                f"on {r['n_equipment']} equipment, {span}",
+                "text": f"{r['facility_id']} ({name(r['name'])}): {_state(r['state'])}, "
+                f"{r['n_points']} points on {r['n_equipment']} equipment, {span}",
             }
         )
         if i - 1 <= _LISTED:
             text.append(
-                f"{r['facility_id']} is {r['state']} with {r['n_points']} points [F{i}@facilities]."
+                f"{r['facility_id']} is {_state(r['state'])} with {r['n_points']} points "
+                f"[F{i}@facilities]."
             )
     banners = []
     unreadable = [r["facility_id"] for r in rows if r.get("unavailable")]

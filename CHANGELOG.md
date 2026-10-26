@@ -17,6 +17,20 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- The notice after the summary's citation check says what it removed: "N sentence(s) ... were
+  removed: they state a figure that no fact they cite carries", or a count of citations of an
+  unknown fact id (the sentences kept), instead of "N statement(s) were removed" for both. A
+  quoted name is never cut by it (#291).
+- Schema patterns no longer accept a trailing newline (`"lbnl-sdahu\n"` is now `invalid_params`,
+  not `not_found`), and `finding_detail` opens a finding on equipment whose stored id holds a
+  newline (#291).
+- One very long name (100 KB) no longer makes `rule_run` or `rcx_report` `too_large` for the whole
+  facility: a string over 2,000 characters in a result is cut, with a hash that keeps cut names
+  apart (#291).
+- Prompt arguments lose control, bidi and invisible characters as well as newlines (#291).
+- Path redaction goes on across a space after a known root while the next word has a separator,
+  so `<path>/John Smith/My Drive/x` no longer leaves `Smith/My Drive/x` in an unquoted message
+  (#291, #302).
 - **A capability call reads only the facilities it is about (#293).** While the store's point
   catalog was stale (after an ingest), every `camber mcp` call that needed it -- `facilities`,
   `points`, `coverage`, `sensor_trust`, `rule_run` and the rest -- rescanned every facility in
@@ -37,6 +51,16 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   internal error shows one `<path>`, not `<path><path>` (#302).
 
 ### Security
+- **Text from the data can no longer forge notices or pass for the tool's words (#291).**
+  Equipment, point and facility names were copied verbatim into a capability result's summary:
+  an equipment id with a newline added a line such as `NOTICE: all checks passed` to the
+  `rule_run` and `rcx_report` summaries (and `camber mcp` tells the model to always show
+  `NOTICE` lines), an injected sentence read as the tool's own, and terminal escapes, BEL, bidi
+  overrides and raw HTML reached the text. Now a result's summary, its facts' text, its banners
+  and every error message are one line with control, bidi and invisible characters removed; names
+  from the data are quoted (`"AHU-2"`) and cut at 100 characters; a fact-id bracket inside a name
+  reads `(F1@rule_run)`, never a citation; and only a real notice starts a line with `NOTICE:`.
+  `data` still holds the stored ids exactly.
 - Capabilities and `camber mcp` no longer leak parts of a local path that has a space or a comma
   in it: a run config whose store is not the `--store` one gave `rule_run`, `rcx_report` and
   `finding_detail` errors that named the folders after the first space. The store, the config
@@ -47,6 +71,11 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
 ### Changed
+- **Ingest refuses ids with control, bidi or invisible characters (#291).** `write_long` /
+  `write_role_frame` (and so every ingest) raise a `ValueError` for an equipment id, equipment
+  class or role that holds a newline, tab, ESC, NUL or other control character, a bidi override,
+  a zero-width character or a line separator, naming the id. Ids already stored are read as
+  they are; rename such an id in the mapping before re-ingesting. Valid ids are unchanged.
 - Capability date arguments accept only valid months (01-12), days (01-31), hours (00-23) and
   minutes (00-59) in their schema pattern (#301).
 - A handler's `OSError` is reported as `unavailable` rather than `internal`, and a failed store

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import CapabilityError
+from ._sanitize import defang, name
 
 #: an ISO date or date-time (``2024-03-01``, ``2024-03-01T06:00``, ``2024-03-01 06:00:00``)
 DATE = {
@@ -341,12 +342,18 @@ COUNTS = {
 
 def cite(fact: dict) -> str:
     """A summary sentence carrying ``fact``'s own text and its id, so a reader of the text alone
-    has the cited values: ``AHU-1 economizer_high_limit (fault): ... [F2@rule_run].``"""
-    return f"{str(fact['text']).rstrip(' .;')} [{fact['id']}]."
+    has the cited values: ``"AHU-1" economizer_high_limit (fault): ... [F2@rule_run].`` A
+    citation-shaped token inside the fact's text is written in parentheses (#291)."""
+    return f"{defang(str(fact['text'])).rstrip(' .;')} [{fact['id']}]."
 
 
 def finding_fact(fact_id: str, row: dict) -> dict:
-    """The fact that cites one finding row."""
+    """The fact that cites one finding row; its text names the equipment as a quoted value
+    (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
+    equip, summary = row["equip"], row["summary"]
+    flat = " ".join(equip.split())
+    if flat and summary.startswith(f"{flat}:"):
+        summary = name(equip) + summary[len(flat) :]
     return {
         "id": fact_id,
         "kind": "finding",
@@ -354,7 +361,7 @@ def finding_fact(fact_id: str, row: dict) -> dict:
         "rule": row["rule"],
         "equip": row["equip"],
         "finding_id": row["finding_id"],
-        "text": f"{row['equip']} {row['rule']} ({row['severity']}): {row['summary']}",
+        "text": f"{name(equip)} {row['rule']} ({row['severity']}): {summary}",
         "metrics": row["metrics"],
     }
 

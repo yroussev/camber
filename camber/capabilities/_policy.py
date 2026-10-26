@@ -44,8 +44,10 @@ _ABS_PATH = re.compile(
     rf"""|(?<=")(?:{_START}).*?(?="{_CLOSE})"""
     rf"""|(?<![\w.~/\\>])(?:{_START})[^{_END}]*"""
 )
-#: a placeholder followed by another or by the rest of the path it stood for
-_ADJACENT = re.compile(rf"""<path>(?:<path>|[^{_END}])*""")
+#: a placeholder followed by another or by the rest of the path it stood for -- across a space
+#: when the next word goes on with a separator (``<path>/John Smith/My Drive`` is one path,
+#: 0.111 #291); a last word with no separator after it cannot be told from the sentence
+_ADJACENT = re.compile(rf"""<path>(?:<path>|[^{_END}]|\s+(?=[^\s{_END[2:]}/\\]+[/\\]))*""")
 #: a value that is one path (or starts with one), the rest of the line included
 _WHOLE = re.compile(rf"""\s*(?:<path>|{_START})[^\n]*\Z""")
 #: the rest of a quoted path after the placeholder of its root

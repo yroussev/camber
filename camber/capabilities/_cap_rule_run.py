@@ -214,7 +214,7 @@ DETAIL_INPUT = {
             "type": "string",
             "minLength": 3,
             "maxLength": 300,
-            "pattern": r"^[a-z0-9_]+@.+$",
+            "pattern": r"^[a-z0-9_]+@[\s\S]+$",
             "description": "a finding_id from rule_run (pass the same params / equips / window)",
         },
     },

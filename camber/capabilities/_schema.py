@@ -3,8 +3,9 @@
 Supported keywords: ``type`` (one name or a list), ``properties``, ``required``,
 ``additionalProperties`` (a boolean or a schema), ``enum``, ``const``, ``items`` (one schema for
 every element), ``minItems`` / ``maxItems``, ``minimum`` / ``maximum``, ``exclusiveMinimum`` /
-``exclusiveMaximum``, ``minLength`` / ``maxLength`` and ``pattern`` (``re.search``, as the spec
-says: anchor it to match the whole string). Annotations (``$schema``, ``$id``, ``$comment``,
+``exclusiveMaximum``, ``minLength`` / ``maxLength`` and ``pattern`` (searched, as the spec says:
+anchor it to match the whole string; ``$`` is the end of the string, as in ECMA-262, not before
+a final newline as in Python -- 0.111, #291). Annotations (``$schema``, ``$id``, ``$comment``,
 ``title``, ``description``, ``default``, ``examples``, ``format``) are accepted and ignored;
 ``default`` is **not** applied -- a handler reads a missing key with its own default.
 
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import math
 import re
+from functools import lru_cache
 
 _TYPES = ("object", "array", "string", "integer", "number", "boolean", "null")
 _ANNOTATIONS = frozenset(
@@ -131,7 +133,7 @@ def validate(instance, schema, path: str = "") -> list:
             errors.append(f"{where}: shorter than {schema['minLength']} character(s)")
         if "maxLength" in schema and len(instance) > schema["maxLength"]:
             errors.append(f"{where}: longer than {schema['maxLength']} character(s)")
-        if "pattern" in schema and not re.search(schema["pattern"], instance):
+        if "pattern" in schema and not _pattern(schema["pattern"]).search(instance):
             errors.append(f"{where}: does not match the pattern {schema['pattern']!r}")
     if _is_type(instance, "number"):
         for key, ok, word in (
@@ -172,3 +174,26 @@ def _json_type(value) -> str:
         if _is_type(value, name):
             return name
     return type(value).__name__
+
+
+@lru_cache(maxsize=256)
+def _pattern(pattern: str) -> re.Pattern:
+    """``pattern`` compiled with ECMA-262's ``$``: each unescaped ``$`` outside a character class
+    becomes ``\\Z``, so ``^a$`` refuses ``"a\\n"`` (Python's ``$`` also matches before a final
+    newline)."""
+    out, i, in_class = [], 0, False
+    while i < len(pattern):
+        ch = pattern[i]
+        if ch == "\\":
+            out.append(pattern[i : i + 2])
+            i += 2
+            continue
+        if in_class:
+            in_class = ch != "]"
+        elif ch == "[":
+            in_class = True
+        elif ch == "$":
+            ch = "\\Z"
+        out.append(ch)
+        i += 1
+    return re.compile("".join(out))

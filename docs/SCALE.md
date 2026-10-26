@@ -118,6 +118,16 @@ more-specific seed when display names repeat). An older `site=<name>` store conv
 `camber.store.migrate_site_to_facility(root)`. The read API addresses facilities by `facility_id`
 (the legacy `site=` argument and `/sites` endpoint remain as deprecated aliases).
 
+Equipment ids, equipment classes and roles are free text (spaces, slashes, Unicode and
+punctuation are fine), but since 0.111 (#291) `write_long` / `write_role_frame` refuse one that
+holds a control character (newline, tab, ESC, NUL, C1), a bidi override or isolate, a
+zero-width or other invisible format character, or a line separator, with a `ValueError` naming
+the id and the character. Such an id looks like another one on screen and can forge lines in an
+assistant's tool results; it is refused rather than rewritten, because rewriting could merge two
+ids or split one already stored. Ids already in a store are read as they are (the capabilities
+show them one-line and quoted, see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)); rename
+them in the mapping before re-ingesting.
+
 Since 0.86 each registry entry also carries a lifecycle `state`, dates, an editable `display_name`,
 an owner and tags (registry v2; older entries read as `active`). Removed ids are tombstoned in
 `_tombstones.json` and never reused, and a new id that differs from a known one only by letter

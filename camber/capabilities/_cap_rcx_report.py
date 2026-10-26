@@ -23,6 +23,7 @@ from ._common import (
     window,
     with_rules,
 )
+from ._sanitize import name
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -228,7 +229,8 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "issue",
                 "equip": row["equip"],
                 "value": row["rank"],
-                "text": f"Issue {row['rank']} on {row['equip']}: {row['cause'] or row['title']} "
+                "text": f"Issue {row['rank']} on {name(row['equip'])}: "
+                f"{row['cause'] or row['title']} "
                 f"({row['severity']}, confidence {row['confidence']}, {money})",
                 "issue_key": row["key"],
             }

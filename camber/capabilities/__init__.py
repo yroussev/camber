@@ -24,7 +24,14 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   of the name, the arguments and the allowlist), ``F1@points`` -> ``F1@points-1a2b3c``, in
   ``facts``, ``text`` and ``data``;
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
-  (strict: an unknown ``[id]`` or a figure no cited fact carries is removed, with a banner);
+  (strict: a sentence stating a figure no cited fact carries is removed, and so is an unknown
+  ``[id]``, each with a banner that says which);
+- **text from the data** (0.111, #291): ``text``, every fact's ``text``, every banner and every
+  error message are one line with no control, bidi or invisible character, only the handler's
+  own fact ids are citations in ``text`` (any other ``[F1@x]`` reads ``(F1@x)``), a value quoted
+  with :func:`camber.capabilities._sanitize.name` is one word to the citation check, and no
+  string in ``data`` or ``facts`` is longer than 2,000 characters (see
+  :mod:`camber.capabilities._sanitize`);
 - **store errors**: a read of stored data that fails (a damaged or unreadable part file, or one a
   concurrent ingest replaced) or any other ``OSError`` is ``unavailable``, with ``data``
   ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it);
@@ -44,8 +51,8 @@ handler takes ``(ctx, arguments)``: ``arguments`` is already valid against its i
 every facility it names is allowed and licence-clean. It names facilities only through
 ``facility_id`` / ``facility_ids`` arguments, keeps a listing to ``ctx.allowed_facilities`` (and
 leaves out research-only ones, see :func:`research_only`), calls :func:`run_config_for` for any
-config run, and puts every figure its ``text`` states into a fact it cites. See
-docs/CAPABILITY-REGISTRY.md.
+config run, puts every figure its ``text`` states into a fact it cites, and writes each name
+from the data with :func:`camber.capabilities._sanitize.name`. See docs/CAPABILITY-REGISTRY.md.
 """
 
 from __future__ import annotations
@@ -61,6 +68,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ._policy import known_roots, redact, redact_value, research_only, run_config_for
+from ._sanitize import cap_strings, finish, hide_spans, lead, one_line, show_spans, unmark
 
 __all__ = [
     "ERROR_CODES",
@@ -297,12 +305,13 @@ class Registry:
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
             data = _redact_data(e.data, secrets)
-            raise CapabilityError(e.code, redact(e.message, *secrets), data=data) from None
+            msg = redact(one_line(e.message), *secrets)  # one line: data cannot add a NOTICE
+            raise CapabilityError(e.code, msg, data=data) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
             store_err = _unavailable(e, ctx)
             if store_err is not None:
                 raise store_err from None
-            msg = redact(f"{type(e).__name__}: {e}", *secrets)
+            msg = redact(one_line(f"{type(e).__name__}: {e}"), *secrets)
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
@@ -327,7 +336,8 @@ class Registry:
             raise TypeError(f"handler returned {type(res).__name__}, not a CapabilityResult")
         data, banners = _truncate(res.data, ctx.caps.max_rows)
         token = call_token(cap.name, arguments, ctx)
-        facts, text_in, data = _scoped(list(res.facts or []), str(res.text or ""), data, token)
+        facts_in, text_in, data = _sanitized(res, data)
+        facts, text_in, data = _scoped(facts_in, text_in, data, token)
         errors = validate(data, cap.output_schema)
         if errors:
             raise ValueError("result does not match the output schema: " + "; ".join(errors[:3]))
@@ -342,14 +352,17 @@ class Registry:
                 f"{ctx.caps.max_bytes:,}; narrow the query",
                 data={"bytes": size, "max_bytes": ctx.caps.max_bytes},
             )
-        text, cite_banners = _grounded(text_in, facts)
+        hidden, spans = hide_spans(text_in)  # a quoted data value is one word to the filter
+        text, cite_banners = _grounded(hidden, facts)
+        text = lead(unmark(show_spans(text, spans)))
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
+        own = [unmark(finish(b)) for b in res.banners or []]
         return replace(
             res,
             data=data,
             text=text,
             facts=facts,
-            banners=[*([notice] if notice else []), *res.banners, *banners, *cite_banners],
+            banners=[*([notice] if notice else []), *own, *banners, *cite_banners],
             truncated=bool(res.truncated or banners),
         )
 
@@ -462,6 +475,20 @@ def _scoped(facts: list, text: str, data, token: str) -> tuple:
     return out, _CITE.sub(sub, text), walk(data) if mapping else data
 
 
+def _sanitized(res: CapabilityResult, data) -> tuple:
+    """``(facts, text, data)`` of ``res`` with the data in them made safe (0.111, #291): the text
+    one line with only the handler's own fact ids as citations (see
+    :func:`~camber.capabilities._sanitize.finish`), each fact's text one line with no citation,
+    and no string in ``data`` or ``facts`` longer than :data:`~._sanitize.MAX_VALUE`."""
+    facts = cap_strings(list(res.facts or []))
+    own = {f["id"] for f in facts if isinstance(f, dict) and isinstance(f.get("id"), str)}
+    facts = [
+        {**f, "text": unmark(finish(f["text"]))} if isinstance(f, dict) and "text" in f else f
+        for f in facts
+    ]
+    return facts, finish(str(res.text or ""), known_ids=own), cap_strings(data)
+
+
 def _redact_data(data, secrets: list, depth: int = 0):
     """``data`` (an error's ``data``) with every string in it path-redacted like the message."""
     if depth > 20:
@@ -485,12 +512,20 @@ def _grounded(text: str, facts: list) -> tuple[str, list]:
     from ..agent.verify import check
 
     g = check(str(text or ""), _Facts(list(facts or [])), strict=True, source="template")
-    if not g.flagged:
-        return g.text, []
-    return g.text, [
-        f"{len(g.flagged)} statement(s) of the summary were removed: they cite no fact that "
-        "supports them"
-    ]
+    dropped = sum(1 for f in g.flagged if f["reason"] in ("uncited-number", "uncited-sentence"))
+    unknown = sum(1 for f in g.flagged if f["reason"] == "unknown-citation")
+    banners = []
+    if dropped:
+        banners.append(
+            f"{dropped} sentence(s) of the summary were removed: they state a figure that no "
+            "fact they cite carries"
+        )
+    if unknown:
+        banners.append(
+            f"{unknown} citation(s) of a fact id this result does not have were removed from "
+            "the summary (the sentences around them were kept)"
+        )
+    return g.text, banners
 
 
 def default_registry() -> Registry:

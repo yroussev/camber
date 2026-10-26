@@ -372,7 +372,9 @@ def test_rule_run(results):
     assert d["counts"]["fault"] == 2 and d["counts"]["ok"] > 0
     assert any("default parameters" in b for b in res.banners)
     # the text carries the cited values, for a reader of the text alone
-    assert "DemoAHU2 simultaneous_heat_cool (fault): DemoAHU2: both coils open 26.7%" in res.text
+    assert (
+        '"DemoAHU2" simultaneous_heat_cool (fault): "DemoAHU2": both coils open 26.7%' in res.text
+    )
     assert f"[{_id(res, 'F3')}]." in res.text
 
 

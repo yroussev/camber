@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._policy import open_store
+from ._sanitize import name
 
 _TEXT = {"type": "string", "minLength": 1, "maxLength": 200}
 
@@ -66,7 +67,7 @@ def points(ctx, arguments: dict) -> CapabilityResult:
     )
     n_eq = len({r["equip"] for r in rows})
     filt = ", ".join(
-        f"{k} {v}"
+        f"{k} {name(v)}"
         for k, v in (("equip", want_eq), ("role", want_role), ("class", want_cls))
         if v is not None
     )

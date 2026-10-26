@@ -157,9 +157,28 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    larger than `max_bytes` (2 MB) is `too_large`; a call that runs longer than `max_seconds`
    (120 s) is `timeout`.
 7. **Citations.** `text` is checked against `facts` with `camber.agent.verify.check` (strict): a
-   sentence that cites an unknown id or states a figure no cited fact carries is removed, with a
-   banner.
-8. **Store errors.** A read of stored data that fails -- a truncated, empty or non-Parquet part
+   sentence that states a figure no cited fact carries is removed, and a citation of an id the
+   result has no fact for is removed (its sentence kept), each with a banner that says which
+   (0.111, #291).
+8. **Text from the data** (0.111, #291). Facility, equipment and point names, classes, units and
+   metadata come from the data, so they can never pass for the tool's own words. A result's
+   `text`, every fact's `text`, every banner and every error message are one line: newlines and
+   tabs become spaces, and control characters (C0 / C1: ESC sequences, BEL, NUL), bidi overrides
+   and isolates, zero-width and other invisible characters are removed. A line that starts with
+   `NOTICE:` in the MCP summary is therefore always a banner, and a text that would itself start
+   with `NOTICE` reads `Summary: NOTICE ...`. A handler names a data value with
+   `camber.capabilities._sanitize.name()`, which quotes it (`equipment "AHU-2"`), writes a
+   fact-id bracket inside it as `(F1@rule_run)` and cuts it at 100 characters (an ellipsis and
+   six hex digits of a hash keep two cut names apart); a quoted value is one word to the citation
+   check, so a sentence break or a number inside a name is never "removed". In `text`, only the
+   handler's own fact ids are citations: any other `[F1@x]` reads `(F1@x)`, and a fact's `text`
+   holds no citation at all. `data` keeps the stored values exactly (so an id can be passed
+   back), except that any string in `data` or `facts` longer than 2,000 characters is cut the
+   same way, so one huge name does not make a whole facility `too_large`. Schema `pattern`s use
+   ECMA-262's `$` (the end of the string; Python's `$` also matches before a final newline). New
+   equipment ids, classes and roles with such characters are refused at ingest (see
+   [SCALE.md](SCALE.md#facility-identity-why-an-id-not-a-name)).
+9. **Store errors.** A read of stored data that fails -- a truncated, empty or non-Parquet part
    file, an unreadable facility directory, or a part file a concurrent ingest replaced between
    listing and opening it (the store retries such a read once first) -- or any other `OSError`
    is `unavailable`, never `internal` (0.111, #301). Its `data` is `{"retryable": bool}`, plus
@@ -174,14 +193,17 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    only, and `facilities` reads each listed facility's catalog entry and its files' statistics,
    never its rows -- so neither the cost of a call nor a damaged file depends on the rest of the
    store.
-9. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
+10. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
    of an error a handler raises, nor a result's `text` or `banners` -- holds an absolute local
    path. The known roots (the store, the config, its directory and the stores or folders it
    reads, the dataset data directory, home, temp, the working directory and the Python prefix)
    are replaced by `<path>` first, in every spelling (quoted, `repr`, JSON, either Unicode
    form), with the rest of the path after them; then a pattern takes any other absolute path
    (a quoted one whole, spaces and commas included). Words either side of a slash
-   ("non-commercial / no-derivatives", `kBtu/ft2`) are not paths, and the JSON pointers of an
+   ("non-commercial / no-derivatives", `kBtu/ft2`) are not paths; after a redacted root, the
+   path goes on across a space while the next word has a separator in it
+   (`<path>/John Smith/My Drive/x` is one path; a last word with no separator cannot be told
+   from the sentence, so quote paths in messages). The JSON pointers of an
    `invalid_params` refusal by the input schema (`/facility_id: ...`) are left as they are.
 
 **The timeout cannot stop a handler.** The handler runs in a worker thread; Python cannot kill a
@@ -220,8 +242,9 @@ CAPABILITIES = (
 
 A handler names facilities only through `facility_id` / `facility_ids`, keeps a listing to
 `ctx.allowed_facilities` and leaves out research-only facilities (`research_only(meta)`), calls
-`run_config_for(ctx)` for any config run, and puts every figure its `text` states into a fact it
-cites. The schemas use a subset of JSON Schema 2020-12: `type`, `properties`, `required`,
+`run_config_for(ctx)` for any config run, puts every figure its `text` states into a fact it
+cites, and writes every name from the data in its `text`, facts and banners with
+`camber.capabilities._sanitize.name()`. The schemas use a subset of JSON Schema 2020-12: `type`, `properties`, `required`,
 `additionalProperties`, `enum`, `const`, `items`, `minItems` / `maxItems`, `minimum` /
 `maximum` (and the exclusive forms), `minLength` / `maxLength` and `pattern`. `default` is an
 annotation and is not applied. Registering a schema with any other keyword is a `ValueError`, so a

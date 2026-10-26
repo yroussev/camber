@@ -44,6 +44,7 @@ import re
 import shutil
 import tempfile
 import threading
+import unicodedata
 import uuid
 from collections import OrderedDict
 from contextlib import nullcontext as _nullcontext
@@ -296,6 +297,39 @@ def _role_slug(r) -> str:
     return r.value if isinstance(r, Role) else str(r)
 
 
+def _bad_label_char(label: str) -> str | None:
+    """The first character of ``label`` an id may not hold: a control character (C0, DEL, C1:
+    newline, tab, ESC, NUL ...), a format character (bidi override or isolate, zero-width, tag)
+    or a line / paragraph separator."""
+    for ch in label:
+        if unicodedata.category(ch) in ("Cc", "Cf", "Cs", "Zl", "Zp"):
+            return ch
+    return None
+
+
+def _require_labels(long) -> None:
+    """Refuse (``ValueError``) a long frame whose equipment id, equipment class or role holds a
+    character :func:`_bad_label_char` names (0.111, #291).
+
+    Such an id cannot be told apart from its neighbours on screen, breaks a one-line summary and
+    has been used to forge notices in an assistant's tool results, so it is refused at ingest
+    rather than silently rewritten (rewriting could merge two ids, or split one already stored).
+    Ids already in a store are read as they are; map or rename them before re-ingesting."""
+    if long is None or len(long) == 0:
+        return
+    for col, what in ((_EQUIP, "equipment id"), (_CLASS, "equipment class"), (_ROLE, "role")):
+        if col not in long:
+            continue
+        for label in pd.unique(long[col].astype(str)):
+            ch = _bad_label_char(label)
+            if ch is not None:
+                raise ValueError(
+                    f"{what} {label[:80]!r} holds the character U+{ord(ch):04X} "
+                    f"({unicodedata.name(ch, unicodedata.category(ch))}); an id may hold no "
+                    "control, bidi or invisible character -- rename it in the mapping"
+                )
+
+
 def _scratch_store(root: str) -> ParquetStore:
     """A store whose writes take no lock of their own: an ingest's staging area or a workspace
     rollup, written only under the lock its caller already holds on the store it belongs to."""
@@ -386,6 +420,7 @@ class ParquetStore:
         accumulate. Returns rows written. Holds the store lock (see :meth:`lock`).
         """
         require_facility_id(facility_id)
+        _require_labels(long)
         with self._write_lock():
             return self._write_long(long, facility_id=facility_id, name=name, **meta)
 

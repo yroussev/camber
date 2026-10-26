@@ -145,7 +145,10 @@ When the request's id cannot be read, the error carries `"id": null`. No message
 malformed, ends the server: every failure is logged on stderr and answered.
 
 **Results.** A tool result has two text blocks, the summary (with any notices first, as lines
-starting with `NOTICE:`) and the result as JSON, and the same result as `structuredContent`. The
+starting with `NOTICE:`) and the result as JSON, and the same result as `structuredContent`. Only
+a notice starts a line with `NOTICE:`: the summary is one line, and names from the data in it are
+quoted and stripped of control, bidi and invisible characters (0.111, #291; see
+[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). The
 fact index is in `_meta["camber/facts"]`, the notices in `_meta["camber/banners"]` and the
 truncation flag in `_meta["camber/truncated"]`.
 

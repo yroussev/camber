@@ -10,9 +10,9 @@ on new lines.
 from __future__ import annotations
 
 import json
-import re
 
 from . import CapabilityError, Prompt, PromptArg
+from ._sanitize import defang, one_line
 
 _CITE_RULES = (
     "Rules for the answer: state only what the tool results say. End every sentence with the "
@@ -32,9 +32,10 @@ _FINISH = (
 
 
 def _arg(args: dict, name: str, *, required: bool = True, default: str = "") -> str:
-    """One argument as a single short line (whitespace collapsed, at most 200 characters)."""
+    """One argument as a single short line: whitespace collapsed, control, bidi and invisible
+    characters out (#291), citation brackets in parentheses, at most 200 characters."""
     raw = (args or {}).get(name)
-    value = re.sub(r"\s+", " ", str(raw if raw is not None else "")).strip()[:200]
+    value = defang(one_line(raw if raw is not None else ""))[:200]
     if required and not value:
         raise CapabilityError("invalid_params", f"the prompt needs the argument {name!r}")
     return value or default

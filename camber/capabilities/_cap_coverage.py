@@ -13,6 +13,7 @@ import pandas as pd
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import DATE, EQUIPS, FACILITY, TEXT, window
 from ._policy import open_store
+from ._sanitize import name
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -280,14 +281,15 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "equip_coverage",
                 "equip": e["equip"],
                 "value": round(e["coverage"] * 100, 1),
-                "text": f"{e['equip']}: mean coverage {e['coverage'] * 100:.1f}% over "
-                f"{e['n_points']} points; worst {e['worst_role']} at "
+                "text": f"{name(e['equip'])}: mean coverage {e['coverage'] * 100:.1f}% over "
+                f"{e['n_points']} points; worst {name(e['worst_role'])} at "
                 f"{e['worst_coverage'] * 100:.1f}%",
             }
         )
         if i - 1 <= _LISTED and e["coverage"] < 0.9:
             text.append(
-                f"{e['equip']} averages {e['coverage'] * 100:.1f}% (worst {e['worst_role']}) "
+                f"{name(e['equip'])} averages {e['coverage'] * 100:.1f}% "
+                f"(worst {name(e['worst_role'])}) "
                 f"[F{i}@coverage]."
             )
     data = {

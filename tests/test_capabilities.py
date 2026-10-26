@@ -477,7 +477,7 @@ def test_points_capability_filters(store):
     assert one.data["points"] == [
         {"equip": "AHU-2", "equip_class": "AHU", "role": "supply_air_temp"}
     ]
-    assert "matching equip AHU-2, role supply_air_temp" in one.facts[0]["text"]
+    assert 'matching equip "AHU-2", role "supply_air_temp"' in one.facts[0]["text"]
     none = reg.call("points", {"facility_id": "hq", "equip_class": "VAV"}, ctx)
     assert none.data["count"] == 0 and none.data["points"] == []
 

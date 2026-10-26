@@ -13,6 +13,7 @@ from __future__ import annotations
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import DATE, EQUIPS, FACILITY, TEXT, jsonable, window
 from ._policy import open_store
+from ._sanitize import name
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -205,13 +206,13 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 "equip": r["equip"],
                 "role": r["role"],
                 "value": r["trust"],
-                "text": f"{r['equip']} {r['role']}: trust {r['trust']:.2f} ({r['verdict']}; "
-                f"{why}); coverage {r['coverage']:.0%}",
+                "text": f"{name(r['equip'])} {name(r['role'])}: trust {r['trust']:.2f} "
+                f"({r['verdict']}; {why}); coverage {r['coverage']:.0%}",
             }
         )
         if i - 1 <= _LISTED:
             text.append(
-                f"{r['equip']} {r['role']} scores {r['trust']:.2f} ({r['verdict']}) "
+                f"{name(r['equip'])} {name(r['role'])} scores {r['trust']:.2f} ({r['verdict']}) "
                 f"[F{i}@sensor_trust]."
             )
     banners = []
