@@ -14,6 +14,14 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Fixed
+- **A `faults` section without `run_id` no longer crashes the run (#303).** `camber run` and
+  `run_config` failed with `isoformat() argument 1 must be a unicode character, not str` when a
+  config's `faults` section left out `run_id`; the default run id is now the run's UTC time to the
+  second, as documented.
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.

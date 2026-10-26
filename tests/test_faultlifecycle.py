@@ -287,6 +287,20 @@ def test_config_runs_sharing_a_store_keep_other_sites_open(tmp_path):
     assert FaultLifecycle.load(store).get(y).status == "open"
 
 
+def test_config_faults_without_run_id_defaults_to_the_run_time(tmp_path):
+    """A ``faults`` section with no ``run_id`` takes the run's UTC time to the second (#303)."""
+    import _rcx_fixture as rfx
+
+    from camber.config import run_config
+
+    rfx.make_store(tmp_path)
+    cfg = rfx.config()
+    cfg["faults"] = {"store": "faults.json"}
+    res = run_config(cfg, base_dir=str(tmp_path))
+    run_id = res.faults["run_id"]
+    assert len(run_id) == 25 and run_id.endswith("+00:00") and "." not in run_id
+
+
 def test_fault_register_resolves_only_its_own_key():
     reg = FaultRegister()
     reg.update([_leak("AHU-1")], site="site-x", run_id=1)

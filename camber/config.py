@@ -2884,7 +2884,9 @@ def _fold_faults(
         )
     if persist:
         ctx.require_writable("folding the run's faults")
-    run_id = str(spec.get("run_id") or _dt.datetime.now(_dt.timezone.utc).isoformat("seconds"))
+    run_id = str(
+        spec.get("run_id") or _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    )
     lock: contextlib.AbstractContextManager = contextlib.nullcontext()
     if ctx.workspace and persist:
         from .portfolio._lock import portfolio_lock
