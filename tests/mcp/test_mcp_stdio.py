@@ -159,7 +159,7 @@ def test_a_missing_registry_is_one_clear_line(tmp_path):
 
 def test_a_bad_store_is_refused_before_serving(tmp_path):
     proc = _run(["--store", str(tmp_path / "nope"), "--allow", "hq"], b"")
-    assert proc.returncode == 1 and proc.stdout == b""
+    assert proc.returncode == 2 and proc.stdout == b""  # a launch mistake is a usage error
     assert b"does not exist" in proc.stderr
 
 
@@ -365,7 +365,7 @@ def fake_capabilities(monkeypatch):
 def test_build_context(tmp_path, fake_capabilities, caplog):
     store = _store(tmp_path, "hq", "annex")
     cfg = tmp_path / "site.json"
-    cfg.write_text("{}")
+    cfg.write_text(json.dumps({"source": {"kind": "store", "store": "store", "facility_id": "hq"}}))
     ctx = build_context(store, allow=["hq", "ghost"], config=str(cfg), min_trust=0.7)
     assert ctx.allowed_facilities == frozenset({"hq", "ghost"})
     assert ctx.store == os.path.abspath(store) and ctx.config == str(cfg) and ctx.min_trust == 0.7
@@ -419,7 +419,7 @@ def test_launch(tmp_path, fake_capabilities, monkeypatch, capsys):
         2,
         8,
     )
-    assert launch(store, allow_all_active=True, min_trust=2) == 1
+    assert launch(store, allow_all_active=True, min_trust=2) == 2
     assert "--min-trust" in capsys.readouterr().err
 
 

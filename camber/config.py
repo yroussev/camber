@@ -2523,6 +2523,76 @@ def _param_basis(name: str, params: dict, basis) -> dict | None:
     return {k: {"value": params.get(k, defaults.get(k)), "basis": str(v)} for k, v in basis.items()}
 
 
+def _config_facility(config: dict) -> str:
+    """The facility a config is about: a store source's ``facility_id``, else the config's
+    ``facility_id`` or ``site`` (``""`` when it names none)."""
+    source = config.get("source") or {}
+    if isinstance(source, dict) and source.get("kind") == "store":
+        return str(source.get("facility_id") or "")
+    return str(config.get("facility_id") or config.get("site") or "")
+
+
+def _rule_entries(config: dict):
+    """``(name, params, basis)`` for each entry of ``config["rules"]``, the way a run builds it.
+
+    A rule entry is either a bare name ``"economizer_high_limit"`` (defaults) or a dict
+    ``{"name": ..., "params": {...}}`` that overrides the rule's constructor for this run."""
+    site_elev = site_elevation_ft(config)  # 0.98 (#92)
+    inherited = _inherited_params(config)  # 0.103 (#132)
+    for entry in config.get("rules") or []:
+        basis = None
+        if isinstance(entry, dict):
+            name = entry["name"]
+            params = entry.get("params") or {}
+            basis = _param_basis(name, params, entry.get("basis"))
+        else:
+            name, params = entry, {}
+        # 0.103 (#132): the pump's lockout defaults to the boiler's when only that one is set
+        params, basis = _inherit(name, params, basis, inherited)
+        # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
+        params = _with_site_elevation(name, params, site_elev)
+        yield name, params, basis
+
+
+def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
+    """``config`` if a run of it would get past the checks :func:`run_config` makes before it
+    reads any trend, else the same ``ValueError`` / ``KeyError`` / ``TypeError`` the run raises.
+
+    0.111 (#296): ``camber mcp --config`` refuses a config at startup with this, so a config that
+    ``camber run`` refuses is never served. It checks the shape (:func:`load_config` does too),
+    the ``units`` and ``ventilation`` blocks, every rule name and its parameters, and for a
+    store source that the store holds the facility (and the ``shared_oat`` equipment).
+    """
+    from .energy_units import UnitSystem
+    from .store import ParquetStore
+
+    _check_config_shape(config)
+    UnitSystem.from_config(config)
+    reg = builtin_registry()
+    vent_rule = _ventilation_rule(config, base_dir)
+    if vent_rule is not None:
+        reg.register(vent_rule)
+    for name, params, _basis in _rule_entries(config):
+        if name not in reg.names():
+            raise _unknown_rule(name, reg.names())
+        if params:
+            make_rule(name, **params)
+    source = config.get("source") or {}
+    if not isinstance(source, dict):
+        raise ValueError("'source' must be an object")
+    if source.get("kind") == "store":
+        if not source.get("store") or not source.get("facility_id"):
+            raise ValueError("a store source needs 'store' and 'facility_id'")
+        store = ParquetStore(_path(base_dir, source["store"]))
+        fid = source["facility_id"]
+        if fid not in store.facilities():
+            raise ValueError(f"facility {fid!r} has no data in store {store.root!r}")
+        so = config.get("shared_oat") or {}
+        if so.get("equip") and so["equip"] not in (store.equipment(facility_id=fid).get(fid) or {}):
+            raise ValueError(f"shared_oat equip {so['equip']!r} is not stored in facility {fid!r}")
+    return config
+
+
 def run_config(config: dict, *, base_dir: str = ".", persist: bool = True) -> RunResult:
     """Execute a config dict: discover equipment, run the named rules, build a report.
 
@@ -2579,22 +2649,7 @@ def _run_config(config: dict, base_dir: str, *, persist: bool) -> RunResult:
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
         reg.register(vent_rule)
-    site_elev = site_elevation_ft(config)  # 0.98 (#92)
-    inherited = _inherited_params(config)  # 0.103 (#132)
-    for entry in config.get("rules", []):
-        # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
-        # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
-        basis = None
-        if isinstance(entry, dict):
-            name = entry["name"]
-            params = entry.get("params") or {}
-            basis = _param_basis(name, params, entry.get("basis"))
-        else:
-            name, params = entry, {}
-        # 0.103 (#132): the pump's lockout defaults to the boiler's when only that one is set
-        params, basis = _inherit(name, params, basis, inherited)
-        # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
-        params = _with_site_elevation(name, params, site_elev)
+    for name, params, basis in _rule_entries(config):
         if name not in reg.names():
             raise _unknown_rule(name, reg.names())  # KeyError, naming the valid ones
         if params:

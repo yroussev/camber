@@ -3260,7 +3260,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="allow the store's active facilities, as they are at startup",
     )
-    pmcp.add_argument("--config", help="run/report config the tools use (JSON or YAML)")
+    pmcp.add_argument(
+        "--config",
+        action="append",
+        metavar="PATH",
+        help="run/report config (JSON or YAML) for one facility; repeat it for more (one per "
+        "facility). Checked at startup: a config camber run refuses is refused here",
+    )
     pmcp.add_argument(
         "--min-trust",
         type=_unit_interval,

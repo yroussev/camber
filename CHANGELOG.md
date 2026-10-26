@@ -86,6 +86,24 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - Path redaction no longer garbles normal text: the `refused_licence` message reads
   "non-commercial / no-derivatives" again (not "non-commercial <path> no-derivatives"), and an
   internal error shows one `<path>`, not `<path><path>` (#302).
+- **A selection that matches nothing is `not_found`, not a clean "0 faults" (#296).** An unknown
+  equipment id (`AHU-1` where the units are `AHU__economizer` ...), point role or equipment class
+  gave a success such as "59 rules ran on 0 equipment, with 0 fault findings", "ranks 0 issues"
+  or "0 points". Every capability that takes `equips` / `equip`, `roles` / `role` or
+  `equip_class` now answers `not_found`, naming the unknown values and the facility's stored
+  ones. An `equips` id the run config runs no rule on is `not_found` too (and no longer widens
+  the run to every unit of a class the config lists by name). A window with no stored sample is
+  `not_found` naming the stored span for `rule_run`, `finding_detail`, `rcx_report`, `drift` and
+  `sensor_trust`; `coverage` still answers it with 0% and a notice.
+- **`camber mcp --config` is checked at startup (#296).** A config `camber run` refuses (one
+  trailing comma, a list, an empty file, YAML without PyYAML, an unknown rule or parameter, a
+  facility the store does not hold) was silently ignored: the tools ran at defaults and said "No
+  run config names this facility", and a labelled fault could disappear. A suffix other than
+  `.json`, `.yaml` or `.yml`, a config that names no facility or one that is not allowed are
+  refused too. The server now stops with one line naming the file and the problem (exit 2).
+- **A config's `source.store` no longer overrides `--store` (#296).** Run tools read the
+  config's store while the others read `--store`. A config whose store is not the `--store`
+  directory (any spelling of the same directory is fine) is now refused at startup.
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
@@ -118,6 +136,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - A handler's `OSError` is reported as `unavailable` rather than `internal`, and a failed store
   read raises `camber.store.parquet_store.StoreReadError` (an `OSError`) instead of pyarrow's
   `ArrowInvalid` or a bare `FileNotFoundError` (#301).
+- **`camber mcp --config` can be given once per facility (#296)**, so `--allow-all-active` can
+  serve tuned results for every facility; two configs for the same facility are refused.
+  `CallContext.config` takes a tuple of paths as well as one.
+- **A catalog-dataset facility with no `--config` runs with its dataset's packaged config template
+  (#296)**, the one `camber datasets config` writes (read from the package: nothing is fetched or
+  written), with a banner and a startup line naming the dataset. At defaults the rankings misled:
+  on one LBNL air-handler dataset the fault-free unit was issue #1. Pass a `--config` for the
+  facility to use your own. `rcx_report` now also carries the "default parameters" banner when
+  no config is used.
+- Every `camber mcp` launch mistake (a bad store, `--min-trust` out of range, an empty `--allow`,
+  a bad config) exits 2, like the argument parser's usage errors; it was 1 (#296).
 
 ## [0.110.0] — 2026-10-25
 

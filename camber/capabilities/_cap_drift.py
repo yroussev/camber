@@ -25,6 +25,8 @@ from ._common import (
     TEXT,
     by_severity,
     caller_config,
+    check_run_selection,
+    check_window,
     cite,
     finding_fact,
     finding_ids,
@@ -37,6 +39,7 @@ from ._common import (
     trust_banner,
     trust_declines,
 )
+from ._policy import open_store
 
 
 def _families() -> list:
@@ -185,9 +188,9 @@ def _families_for(config: dict, families) -> list:
 
 
 def _config(ctx, arguments: dict) -> tuple:
-    """``(config, base_dir, source)`` for the drift run."""
+    """``(config, base_dir, source, notice)`` for the drift run."""
     fid = arguments["facility_id"]
-    base, base_dir = caller_config(ctx, fid)
+    base, base_dir, notice = caller_config(ctx, fid)
     baseline, current = arguments.get("baseline"), arguments.get("current")
     if baseline is not None:
         if not baseline[0] or not baseline[1]:
@@ -233,7 +236,11 @@ def _config(ctx, arguments: dict) -> tuple:
         config["drift"] = drift
         source = "frozen_baselines"
     config["rules"] = []
-    return narrow(config, equips=arguments.get("equips")), base_dir, source
+    check_run_selection(ctx, fid, {"equips": arguments.get("equips")}, config)  # 0.111 (#296)
+    for win in (baseline, current):  # a period with no stored sample cannot be measured
+        if win:
+            check_window(open_store(ctx), fid, win[0], win[1] if len(win) > 1 else None)
+    return narrow(config, equips=arguments.get("equips")), base_dir, source, notice
 
 
 def _reference(fam) -> str | None:
@@ -249,7 +256,7 @@ def _reference(fam) -> str | None:
 def drift(ctx, arguments: dict) -> CapabilityResult:
     """Drift findings and per-equipment verdicts for one allowed facility."""
     fid = arguments["facility_id"]
-    config, base_dir, source = _config(ctx, arguments)
+    config, base_dir, source, config_notice = _config(ctx, arguments)
     res = run(ctx, config, base_dir)
     dr = res.drift
     fams_raw = list(dr.families) if dr is not None else []
@@ -325,7 +332,7 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         facts.append(finding_fact(fact_id, r))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
-    banners = []
+    banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)

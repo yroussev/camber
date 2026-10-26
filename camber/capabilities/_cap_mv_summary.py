@@ -16,6 +16,7 @@ from ._common import (
     FINDING_ROW,
     by_severity,
     caller_config,
+    check_selection,
     cite,
     finding_fact,
     finding_ids,
@@ -24,6 +25,7 @@ from ._common import (
     run,
     severity_counts,
 )
+from ._policy import open_store
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -69,7 +71,7 @@ _LISTED = 10
 def mv_summary(ctx, arguments: dict) -> CapabilityResult:
     """The M&V findings of the caller's configured project for one allowed facility."""
     fid = arguments["facility_id"]
-    config, base_dir = caller_config(ctx, fid)
+    config, base_dir, config_notice = caller_config(ctx, fid)
     if config is None:
         raise CapabilityError(
             "invalid_params",
@@ -81,6 +83,8 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         )
     config = {k: v for k, v in config.items() if k not in _DROP}
     config["rules"] = []
+    # 0.111 (#296): a meter id the facility does not store is not_found, not "0 meters"
+    check_selection(open_store(ctx), fid, {"equips": arguments.get("equips")})
     config = narrow(config, equips=arguments.get("equips"))
     res = run(ctx, config, base_dir)
     rows = by_severity([finding_row(i, f) for i, f in zip(finding_ids(res.findings), res.findings)])
@@ -119,7 +123,7 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         "declined": declined,
         "findings": rows,
     }
-    banners = []
+    banners = [config_notice] if config_notice else []
     if declined:
         banners.append(
             f"{declined} M&V result(s) declined to state a figure; read their declined_reason "

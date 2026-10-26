@@ -15,6 +15,7 @@ from ._common import (
     EQUIPS,
     FACILITY,
     RULE_SECTIONS,
+    check_run_selection,
     cite,
     facility_config,
     jsonable,
@@ -164,9 +165,10 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
 
     fid = arguments["facility_id"]
     start, end = window(arguments)
-    config, base_dir, from_caller = facility_config(
+    config, base_dir, from_caller, notice = facility_config(
         ctx, fid, keep=(*RULE_SECTIONS, "drift", "report")
     )
+    check_run_selection(ctx, fid, arguments, config)  # 0.111 (#296)
     config = with_rules(config, None, None)
     config = narrow(config, equips=arguments.get("equips"), start=start, end=end)
     config["report"] = {**dict(config.get("report") or {}), "layout": "rcx"}
@@ -174,6 +176,8 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         config["report"].pop(key, None)
     res = run(ctx, config, base_dir)
     opts, banners = _options(config, base_dir, arguments.get("top_n"))
+    if notice:
+        banners.insert(0, notice)
     rep = build_rcx_report(res, options=opts)
     d = rep.to_dict()
 

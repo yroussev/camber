@@ -80,18 +80,35 @@ first where that means something, so a row cap keeps the rows that matter.
 | `check_citations` | `text`, `facts`; optional `per_sentence` | a verdict per sentence of a drafted text (`supported`, `unknown_citation`, `uncited`, `unsupported_number`) against the facts of earlier results, and the text with the unsupported sentences removed | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
-caller's run config (`ctx.config`) when it names the facility -- its rules, parameters, mapping,
-topology and report options -- and otherwise a store-backed config with every stored equipment
-class (the facility's weather equipment, if any, as the shared outdoor-air temperature) and
-every built-in rule at its defaults, with a banner saying so. `mv_summary`, and `drift` without
-a `baseline`, need the caller's run config: an M&V project and frozen drift baselines are
-declared there. Every run goes through `run_config_for`, so it is no-persist and gets the trust
+caller's run config when it names the facility -- its rules, parameters, mapping, topology and
+report options. `ctx.config` is one config path or a tuple of them, one per facility (0.111,
+#296). Without one, a facility ingested from a catalog dataset (`ds-...`) runs with that
+dataset's packaged config template, the one `camber datasets config` writes, read from the
+package (no network, nothing written), with a banner naming the dataset; `from_config` is then
+true. Any other facility gets a store-backed config with every stored equipment class (the
+facility's weather equipment, if any, as the shared outdoor-air temperature) and every built-in
+rule at its defaults, with a banner saying so. `mv_summary`, and `drift` without a `baseline`,
+need a run config with an M&V project or a drift section (a dataset template counts). Every run goes through `run_config_for`, so it is no-persist and gets the trust
 floor. `rcx_report` also runs the config's `drift` section, as `camber report --layout rcx`
 does (0.111, #297), so its ranked issues match the command line's. A configured OAT reference
 that fetches weather over the network is left out of `rcx_report` (a CSV reference is kept), and
 no prose is generated. A configured sensor reference (`report.rcx.references`, such as a duct
 logger) is compared in `rcx_report` only; an issue that rests on a sensor the reference finds
 wrong names it in its fact ("conditional on sensor_drift:supply_air_temp warn").
+
+**A selection that matches nothing is `not_found`** (0.111, #296), never an empty answer that
+reads as a clean bill of health. An `equips` / `equip` id, a `roles` / `role` or an `equip_class`
+the facility does not store is `not_found` in every capability that takes one (`points`,
+`coverage`, `sensor_trust`, `rule_run`, `finding_detail`, `rcx_report`, `drift`, `mv_summary`).
+The message names the unknown values and up to 10 of the stored ones (quoted, one line), and the
+error's `data` has `argument`, `unknown` and up to 50 `available` values. An `equips` id the
+facility stores but the run config runs no rule on (its class is not in the config's
+`equipment`) is `not_found` too. A `start` / `end` window (or a drift `baseline` / `current`
+period) with no stored sample is `not_found` for the run capabilities and `sensor_trust`,
+naming the first and last stored sample (`data`: `argument`, `first`, `last`): nothing can be
+judged there. `coverage` alone answers such a window, with 0% coverage and a notice, because
+that is the answer. A selection that exists but has no data (an equipment with no such point,
+a window inside the data where some points are missing) is still an answer.
 
 **Finding ids.** A `rule_run` finding is `<rule>@<equip>` (`economizer_high_limit@AHU-1`), with
 `#2`, `#3` ... when a rule gives one equipment more than one finding. `finding_detail` makes the

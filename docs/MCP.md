@@ -37,7 +37,7 @@ Nothing else is offered: no resources, subscriptions, roots, sampling or logging
 
 ```
 camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-active)
-           [--config PATH] [--min-trust 0.5] [--max-concurrent 2] [--max-queued 8]
+           [--config PATH ...] [--min-trust 0.5] [--max-concurrent 2] [--max-queued 8]
 ```
 
 - `--store PATH` is the ParquetStore directory the tools read. A
@@ -56,13 +56,35 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   damaged.
 - One of `--allow` and `--allow-all-active` is required: the server does not start without an
   allowlist (exit 2).
-- `--config PATH` is a run or report config (JSON, or YAML with the `yaml` extra) for the tools
-  that run rules or reports.
+- `--config PATH` is a run or report config (`.json`, or `.yaml` / `.yml` with the `yaml` extra)
+  for one facility, used by the tools that run rules or reports. Repeat it for more facilities,
+  one config each (two configs for the same facility are refused), so `--allow-all-active` can
+  serve tuned results for every facility. Each config is checked at startup the way `camber run`
+  checks it: a file that cannot be parsed (a trailing comma, an empty file, YAML without the
+  extra), a config that is not an object, a wrong shape, an unknown rule or rule parameter, a
+  bad `units` or `ventilation` block, a facility the store does not hold, a config that names no
+  facility or one that is not allowed, or any other suffix stops the server (exit 2) with one
+  line on stderr naming the file and the problem.
+- A store-backed config's `source.store` must be the `--store` directory (a relative path is
+  resolved from the config's own directory; any spelling of the same directory, a symlink
+  included, is accepted). A config that points at another store is refused at startup: the
+  tools read only `--store`. `camber datasets config ID --store PATH --out FILE` writes a config
+  that points at the store you name.
+- Without a `--config` for it, a facility ingested from a catalog dataset (`ds-...`) runs with
+  that dataset's packaged config template (the one `camber datasets config` writes), so its
+  results and rankings are the ones the template was tuned for, not every rule at its defaults.
+  The template is read from the installed package: nothing is fetched or written. A line on
+  stderr at startup, and a banner on every result that used it, names the dataset. Pass a
+  `--config` for the facility to use your own. Any other facility without a config runs every
+  stored equipment class with every built-in rule at its defaults, with a banner saying so.
 - `--min-trust` is a number from 0 to 1 (default 0.5).
 - `--max-concurrent N` is how many tool calls run at once (default 2), each in its own worker
   process; `--max-queued N` is how many more may wait for a free worker (default 8). A call
   beyond that is refused at once with the tool error `busy` (retry shortly). Each worker holds
   the memory of the call it runs, so raise these with care on a large store.
+
+Any other launch mistake (a missing or unreadable store, `--min-trust` out of range, an empty
+`--allow`) also exits 2 with one line on stderr.
 
 The configuration is fixed for the life of the process. The client cannot change the store, the
 allowlist or the trust floor; to serve something else, start another server.

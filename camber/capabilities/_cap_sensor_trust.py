@@ -11,7 +11,16 @@ floor (``ctx.min_trust``, or a higher ``min_trust`` argument) is one a rule run 
 from __future__ import annotations
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import DATE, EQUIPS, FACILITY, TEXT, jsonable, window
+from ._common import (
+    DATE,
+    EQUIPS,
+    FACILITY,
+    TEXT,
+    check_selection,
+    check_window,
+    jsonable,
+    window,
+)
 from ._policy import open_store
 from ._sanitize import name
 
@@ -140,6 +149,8 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     store = open_store(ctx)
     if fid not in store.facilities():
         raise CapabilityError("not_found", f"facility {fid!r} has no stored data")
+    check_selection(store, fid, arguments)  # 0.111 (#296): an unknown id is not_found
+    check_window(store, fid, start, end)
     classes = store.equipment(facility_id=fid).get(fid) or {}
     want_eq, want_roles = arguments.get("equips"), arguments.get("roles")
     rows, read_any = [], False
