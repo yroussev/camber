@@ -243,6 +243,46 @@ def analyze_overcooling_severity(
     by depth alone (the pre-0.98 behaviour). ``share_pct`` does the same for the overcooling
     tiers and defaults to ``None`` (depth alone).
     """
+    return _score(
+        df,
+        equip,
+        tiers=tiers,
+        window_min=window_min,
+        interval=interval,
+        relative_to_deadband=relative_to_deadband,
+        gap_factor=gap_factor,
+        occupied_only=occupied_only,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        occupied_days=occupied_days,
+        recovery_hours=recovery_hours,
+        reheat_saturated_pct=reheat_saturated_pct,
+        shortfall_share_pct=shortfall_share_pct,
+        share_pct=share_pct,
+    )
+
+
+def _score(
+    df: pd.DataFrame,
+    equip: str,
+    *,
+    tiers=None,
+    window_min=60.0,
+    interval=None,
+    relative_to_deadband=True,
+    gap_factor=1.5,
+    occupied_only=True,
+    start_hour=7,
+    end_hour=18,
+    occupied_days=(0, 1, 2, 3, 4),
+    recovery_hours=2.0,
+    reheat_saturated_pct=90.0,
+    shortfall_share_pct=DEFAULT_SHORTFALL_SHARE_PCT,
+    share_pct=None,
+    masks: dict | None = None,
+):
+    """:func:`analyze_overcooling_severity`; ``masks``, when given, receives each tier's
+    sustained overcooled samples as a bool Series on the samples considered (#298)."""
     tiers = dict(tiers) if tiers else dict(DEFAULT_TIERS)
     if "SpaceTemp" not in df.columns or "ActCoolSP" not in df.columns:
         return None
@@ -326,6 +366,8 @@ def analyze_overcooling_severity(
         tier_sustained[tier] = bool(cnt)
         tier_pct[tier] = round(100.0 * cnt / n, 2) if n else 0.0
         tier_minutes[tier] = round(cnt * iv_min, 1)
+        if masks is not None:
+            masks[tier] = pd.Series(sustained, index=work.index)
         if cnt:
             severity = tier  # tiers iterate mild -> worst; worst sustained wins
         short = _sustained_mask((depth >= thr) & saturated, times, window, iv, gap_factor)

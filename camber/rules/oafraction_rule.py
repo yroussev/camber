@@ -237,13 +237,25 @@ class OutdoorAirFraction:
         if w is None or w.empty:
             return {}
         mins = _sample_minima(w.index, self.min_oa_pct, self.min_oa_pct_by_month)
-        return excess_oa_penalty(
+        out = excess_oa_penalty(
             _cost_conditions(frame, legacy),
             w["oaf"],
             mins,
             margin_pct=self.excess_margin_pct,
             observed_h=_observed_hours(legacy, ("OAT", "MixedAir", "ReturnAir")),
         )
+        if self.min_oa_source == "default":
+            # 0.111 (#298): the excess energy above the generic 20 % is not a figure the cost
+            # estimator prices (it declines without min_oa_pct), so the finding does not carry it
+            for k in (
+                "oa_cost_excess_cool_btu_per_cfm",
+                "oa_cost_excess_heat_btu_per_cfm",
+                "oa_cost_excess_cool_kbtu",
+                "oa_cost_excess_heat_kbtu",
+            ):
+                if k in out:
+                    out[k] = None
+        return out
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: OA fraction vs OAT against *this rule's* envelope.

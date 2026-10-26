@@ -369,9 +369,14 @@ def _step_hours(index: pd.DatetimeIndex) -> float:
     return max(float(step / pd.Timedelta(hours=1)), 1e-9)
 
 
-def mask_summary(mask, *, max_spans: int = 20) -> dict:
-    """A boolean evidence mask as hours: ``{"hours", "samples", "share", "spans": [{"start",
-    "end", "hours"}, ...]}`` -- the longest ``max_spans`` contiguous runs, in time order."""
+def mask_summary(mask, *, max_spans: int = 20, events=None) -> dict:
+    """A boolean evidence mask as hours: ``{"hours", "samples", "judged_samples", "share",
+    "n_spans", "spans": [{"start", "end", "hours"}, ...]}`` -- the longest ``max_spans`` contiguous
+    runs, in time order. ``share`` is of the ``judged_samples`` (the samples the mask covers,
+    often only those the rule judged, not the whole window). A run breaks where the mask's own
+    samples are more than one and a half intervals apart (#298): a mask over the occupied hours
+    alone does not join Monday evening to Tuesday morning. With ``events`` (a bool Series of
+    counted event instants, e.g. starts) the result also has ``events``, their count."""
     m = pd.Series(mask).fillna(False).astype(bool)
     if not isinstance(m.index, pd.DatetimeIndex):
         m.index = pd.DatetimeIndex(pd.to_datetime(m.index))
@@ -380,7 +385,8 @@ def mask_summary(mask, *, max_spans: int = 20) -> dict:
     n_on = int(m.sum())
     spans: list = []
     if n_on:
-        run_id = (m != m.shift()).cumsum()
+        gap = pd.Series(m.index, index=m.index).diff() > pd.Timedelta(hours=1.5 * step)
+        run_id = ((m != m.shift()) | gap).cumsum()
         for _k, seg in m[m].groupby(run_id[m]):
             spans.append(
                 {
@@ -390,23 +396,38 @@ def mask_summary(mask, *, max_spans: int = 20) -> dict:
                 }
             )
     longest = sorted(spans, key=lambda s: (-s["hours"], s["start"]))[:max_spans]
-    return {
+    out = {
         "hours": round(n_on * step, 2),
         "samples": n_on,
+        "judged_samples": len(m),
         "share": round(n_on / len(m), 4) if len(m) else 0.0,
         "n_spans": len(spans),
         "spans": sorted(longest, key=lambda s: s["start"]),
     }
+    if events is not None:
+        out["events"] = int(pd.Series(events).fillna(False).astype(bool).sum())
+    return out
 
 
 MASK: dict = {
     "type": "object",
-    "required": ["hours", "samples", "share", "n_spans", "spans"],
+    "required": ["hours", "samples", "judged_samples", "share", "n_spans", "spans"],
     "additionalProperties": False,
     "properties": {
         "hours": {"type": "number", "minimum": 0},
         "samples": {"type": "integer", "minimum": 0},
+        "judged_samples": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "the samples the mask covers (share is of these, not of the window)",
+        },
         "share": {"type": "number", "minimum": 0, "maximum": 1},
+        "events": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "for a rule that counts events (starts, reversals): how many it "
+            "counted; hours are the time those events cover, not events x the interval",
+        },
         "n_spans": {"type": "integer", "minimum": 0},
         "spans": {
             "type": "array",

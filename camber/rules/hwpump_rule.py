@@ -115,3 +115,38 @@ class HWPumpDPReset:
             ),
             caveats=caveats + _run_caveats(res),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the pump speed with the running samples behind the verdict
+        shaded -- near full speed when ``pct_running_near_full`` drives it, near the minimum
+        when ``pct_running_near_min`` does (both when both do)."""
+        from ..charts.evidence import Evidence
+
+        if Role.HW_PUMP_SPEED not in frame.columns:
+            return None
+        cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
+        legacy = frame.rename(columns=cols)
+        legacy = legacy.assign(PumpSpeed=normalize_percent(legacy["PumpSpeed"]))
+        res = analyze_pump(
+            legacy, equip, near_min_pct=self.near_min_pct, floor_tol_pct=self.floor_tol_pct
+        )
+        if res is None:
+            return None
+        spd = pd.to_numeric(legacy["PumpSpeed"], errors="coerce")
+        running = spd > 5.0  # analyze_pump's run_thr
+        if res.run_source == "status":
+            running &= (pd.to_numeric(legacy["PumpStatus"], errors="coerce") > 0.5).fillna(False)
+        full = res.pct_running_near_full >= 30.0
+        low = res.pct_running_near_min >= 50.0
+        mask = pd.Series(False, index=frame.index)
+        if full or not low:
+            mask |= running & (spd >= 90.0)  # analyze_pump's near_full_pct
+        if low:
+            mask |= running & (spd <= res.near_min_band_pct)
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.HW_PUMP_SPEED],
+            mask=mask.fillna(False),
+            label="near full speed" if full and not low else "pinned",
+            title=f"{equip}: HW pump speed",
+        )

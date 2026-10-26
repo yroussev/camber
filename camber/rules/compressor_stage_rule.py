@@ -91,6 +91,63 @@ def _running_stage_changes(series: pd.Series) -> tuple:
     return n, _per_day(n, _span_days(s)), _span_days(s), _n_partial(s)
 
 
+def _bounded_runs(changed: pd.Series, level: pd.Series, keep) -> pd.Series:
+    """The samples of the level runs entered and left by a ``changed`` sample (0.111, #298).
+
+    ``level`` is a whole-number series and ``changed`` is True on the first sample of each counted
+    change. A run is the stretch from one level change to the next; it is kept when a counted
+    change starts it, the next sample after it is a counted change too, and ``keep(level)`` holds
+    for its level -- an excursion the count sees going in and coming out.
+    """
+    out = pd.Series(False, index=level.index)
+    run_id = (level != level.shift()).cumsum()
+    nxt = changed.shift(-1, fill_value=False)
+    for _k, seg in level.groupby(run_id):
+        first, last = seg.index[0], seg.index[-1]
+        if bool(changed.get(first, False)) and bool(nxt.get(last, False)) and keep(seg.iloc[0]):
+            out.loc[seg.index] = True
+    return out
+
+
+def _stage_change_evidence(series: pd.Series) -> tuple:
+    """``(mask, events)`` for :class:`CompressorStaging` (0.111, #298): ``events`` True at each
+    stage change the rule counts (both sides running), ``mask`` the stage runs between two such
+    changes -- the time the stage was hunting."""
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if len(s) < 2:
+        empty = pd.Series(False, index=series.index)
+        return empty, empty
+    lvl = s.round()
+    prev = lvl.shift()
+    changed = (lvl != prev) & (lvl > 0) & (prev > 0)
+    mask = _bounded_runs(changed, lvl, lambda v: v > 0)
+    return (
+        mask.reindex(series.index, fill_value=False),
+        changed.reindex(series.index, fill_value=False),
+    )
+
+
+def _binary_change_evidence(series: pd.Series, off_state: bool = False) -> tuple:
+    """``(mask, events)`` for a 0/1 command's changes (0.111, #298): ``events`` True at each
+    sample whose state differs from the previous whole sample, or that sits part-way between the
+    states (a change inside a resampled bin); ``mask`` the runs in the ``off_state`` (``False``:
+    below 0.5) entered and left by a change, plus the part-way samples -- a reversing valve's
+    excursions out of heating."""
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if len(s) < 2:
+        empty = pd.Series(False, index=series.index)
+        return empty, empty
+    v = s.to_numpy(dtype=float)
+    partial = pd.Series(~((v <= _LEVEL_EPS) | (v >= 1.0 - _LEVEL_EPS)), index=s.index)
+    state = (s >= 0.5).astype(int)
+    changed = ((state != state.shift()) & state.shift().notna()) | partial
+    mask = _bounded_runs(changed, state, lambda x: bool(x) == off_state) | partial
+    return (
+        mask.reindex(series.index, fill_value=False),
+        changed.reindex(series.index, fill_value=False),
+    )
+
+
 def _binary_changes(series: pd.Series) -> tuple:
     """(#changes, changes/day, span_days, #partial samples) of a 0/1 command (0.106, #185).
 
@@ -234,4 +291,21 @@ class CompressorStaging:
             },
             summary=summary,
             caveats=caveats,
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the stage trend, each counted stage change an event and the
+        stage runs between two of them shaded."""
+        from ..charts.evidence import Evidence
+
+        if Role.COMPRESSOR_STAGE not in frame.columns:
+            return None
+        mask, events = _stage_change_evidence(frame[Role.COMPRESSOR_STAGE])
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.COMPRESSOR_STAGE],
+            mask=mask,
+            events=events,
+            label="between stage changes",
+            title=f"{equip}: compressor staging",
         )

@@ -128,3 +128,23 @@ class SourceLoopDeltaT:
                 "overpumping (pump speed / DP reset, heat-pump isolation valves)"
             )
         return Finding(self.name, equip, severity, metrics, summary, caveats=caveats)
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the loop temperatures with the pumping samples whose
+        |delta-T| is under ``flat_deltat_f`` (the samples behind ``flat_pct``) shaded."""
+        from ..charts.evidence import Evidence
+
+        need = (Role.SOURCE_LOOP_SUPPLY_TEMP, Role.SOURCE_LOOP_RETURN_TEMP)
+        if any(r not in frame.columns for r in need):
+            return None
+        sup = pd.to_numeric(frame[Role.SOURCE_LOOP_SUPPLY_TEMP], errors="coerce")
+        ret = pd.to_numeric(frame[Role.SOURCE_LOOP_RETURN_TEMP], errors="coerce")
+        run = self._running(frame, []).fillna(False)
+        flat = run & sup.notna() & ret.notna() & ((ret - sup).abs() < self.flat_deltat_f)
+        return Evidence(
+            renderer="multitrend",
+            roles=list(need),
+            mask=flat,
+            label=f"|delta-T| under {self.flat_deltat_f:g}°F",
+            title=f"{equip}: source-loop delta-T",
+        )

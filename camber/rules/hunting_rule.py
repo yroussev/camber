@@ -99,6 +99,56 @@ def reversals_per_hour(signal, deadband: float, *, gap_factor: float = 3.0, gate
     return (reversals / hours if hours > 0 else 0.0), reversals
 
 
+def _reversal_mask(signal, deadband: float, *, gap_factor: float = 3.0, gate=None) -> pd.Series:
+    """The samples at which :func:`reversals_per_hour` counts a reversal (0.111, #298).
+
+    True at the first sample of each significant increment that reverses the previous one's
+    direction within one contiguous run, so the count of True samples is the reversal count.
+    """
+    s = pd.Series(signal).dropna()
+    out = pd.Series(False, index=s.index)
+    if len(s) < 3:
+        return out
+    s, ok, _hours, _ = _contiguous(s, gap_factor, gate)
+    out = pd.Series(False, index=s.index)
+    if len(s) < 3:
+        return out
+    d = np.diff(s.to_numpy(dtype=float))
+    run = np.cumsum(~ok)
+    sig = ok & (np.abs(d) > deadband)
+    steps = np.flatnonzero(sig)  # step i runs from sample i to sample i + 1
+    if steps.size < 2:
+        return out
+    signs, runs = np.sign(d[steps]), run[steps]
+    flips = steps[1:][(signs[1:] != signs[:-1]) & (runs[1:] == runs[:-1])]
+    out.iloc[flips] = True
+    return out
+
+
+def _hunting_stretches(
+    signal, flips: pd.Series, per_hr: float, *, gap_factor: float = 3.0, gate=None
+):
+    """The samples of the stretches in which ``signal`` hunts at ``per_hr`` or faster (0.111,
+    #298): from one reversal (``flips``, :func:`_reversal_mask`) to the next within one contiguous
+    run, when the two are no more than ``1 / per_hr`` hours apart."""
+    s = pd.Series(signal).dropna()
+    out = pd.Series(False, index=s.index)
+    if len(s) < 3 or per_hr <= 0:
+        return out
+    s, ok, _hours, _ = _contiguous(s, gap_factor, gate)
+    out = pd.Series(False, index=s.index)
+    if len(s) < 3:
+        return out
+    run = np.concatenate(([0], np.cumsum(~ok)))  # a run id per sample
+    at = np.flatnonzero(flips.reindex(s.index, fill_value=False).to_numpy(dtype=bool))
+    t = s.index.asi8 / 1e9
+    limit = 3600.0 / per_hr
+    for a, b in zip(at[:-1], at[1:]):
+        if run[a] == run[b] and t[b] - t[a] <= limit:
+            out.iloc[a : b + 1] = True
+    return out
+
+
 def max_resolvable_per_hour(signal, *, gap_factor: float = 3.0) -> float | None:
     """The highest reversal rate a trend's sampling can show: one per sample, ``3600 / dt``/hr.
 
@@ -337,11 +387,22 @@ class ControlHunting:
         """Pattern J: the worst-hunting signal's trend (the oscillation is the evidence)."""
         from ..charts.evidence import Evidence
 
-        role = self._worst(frame, self._gate(frame)[0])[0] if self._signals(frame) else None
+        gate = self._gate(frame)[0]
+        role = self._worst(frame, gate)[0] if self._signals(frame) else None
         if role is None:
             return None
+        # 0.111 (#298): each reversal the rate counts is an event; the hours are the stretches
+        # in which the worst signal reverses at the warn rate or faster
+        sig = normalize_percent(frame[role])
+        flips = _reversal_mask(sig, self.deadband, gap_factor=self.gap_factor, gate=gate)
+        hunting = _hunting_stretches(
+            sig, flips, self.warn_per_hr, gap_factor=self.gap_factor, gate=gate
+        )
         return Evidence(
             renderer="multitrend",
             roles=[role],
+            mask=hunting.reindex(frame.index, fill_value=False),
+            events=flips.reindex(frame.index, fill_value=False),
+            label=f"hunting at {self.warn_per_hr:g}/hr or faster",
             title=f"{equip}: {getattr(role, 'value', role)} hunting",
         )

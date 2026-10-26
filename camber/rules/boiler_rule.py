@@ -16,6 +16,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..plant import SUMMER_LOCKOUT_OAT_F, analyze_hw_plant, lockout_severity
+from ..schedules import occupied_mask
 from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
@@ -105,4 +106,27 @@ class BoilerSummerLockout:
                 f"hours; {summer_note}; {reset_note}{slope_note}"
             ),
             caveats=caveats,
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the boiler's firing with the occupied samples it fired at an
+        OAT above the lockout (the samples behind ``summer_run_pct``) shaded."""
+        from ..charts.evidence import Evidence
+
+        frame, _src = with_boiler_status(frame)
+        if Role.BOILER_STATUS not in frame.columns or Role.OAT not in frame.columns:
+            return None
+        occ = pd.Series(occupied_mask(frame.index), index=frame.index).astype(bool)
+        duty = pd.to_numeric(frame[Role.BOILER_STATUS], errors="coerce").clip(0.0, 1.0)
+        oat = pd.to_numeric(frame[Role.OAT], errors="coerce")
+        hot = occ & (duty > 0) & (oat > self.summer_lockout_oat_f)
+        return Evidence(
+            renderer="multitrend",
+            roles=[
+                r for r in (Role.BOILER_STATUS, Role.OAT, Role.HW_SUPPLY_TEMP) if r in frame.columns
+            ],
+            mask=hot.fillna(False),
+            label=f"firing above {self.summer_lockout_oat_f:g}°F OAT",
+            title=f"{equip}: boiler firing in warm weather",
+            normalize="unit",
         )

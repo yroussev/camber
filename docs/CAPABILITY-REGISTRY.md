@@ -70,7 +70,7 @@ first where that means something, so a row cap keeps the rows that matter.
 | `coverage` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `group_by` (`point` / `equip`), `min_gap_hours` | per point the samples, first and last sample, interval, coverage and gaps; per equipment the mean and the worst point; the longest gaps | one timestamp scan |
 | `sensor_trust` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `view` (`rules` / `report`), `min_trust` | per point the trust score, verdict, flags and whether it is below the caller's trust floor (`ctx.min_trust`, or a higher `min_trust`), least trusted first | reads every trend |
 | `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics), worst first; counts per severity; the rules skipped for missing inputs | long-running |
-| `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default or overridden), its flagged hours as time spans (and per named sub-condition), and which evidence chart applies; no image | one rule |
+| `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default, overridden or the rule's built-in fallback), its flagged hours as contiguous time spans (and per named sub-condition; an event rule's events counted apart from the hours) or why there are none (`violations_note`), and which evidence chart applies; no image | the same run as `rule_run` |
 | `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n` | the RCx report as data: KPIs, ranked issues (cause, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
 | `mv_summary` | `facility_id`; optional `equips` | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty, triggers, method proposals, and which declined | seconds |
 | `drift` | `facility_id`; optional `baseline` `[start, end]`, `current`, `families`, `equips` | drift findings and per-equipment verdicts against a known-good baseline window (fitted for the call, never saved) or the run config's frozen baselines (read, never written), and the equipment not evaluated | long-running |
@@ -90,9 +90,12 @@ floor. A configured OAT reference that fetches weather over the network is left 
 `rcx_report` (a CSV reference is kept), and no prose is generated.
 
 **Finding ids.** A `rule_run` finding is `<rule>@<equip>` (`economizer_high_limit@AHU-1`), with
-`#2`, `#3` ... when a rule gives one equipment more than one finding. `finding_detail` re-runs that
-one rule with the arguments given, so pass the same `params`, `equips` and window as the
-`rule_run` call. A drift finding id carries its family (`ahu:coil_valve_drift@AHU-1`).
+`#2`, `#3` ... when a rule gives one equipment more than one finding. `finding_detail` makes the
+same run as `rule_run` with the arguments given (every rule of it, so a verdict one rule takes
+from another reads the same), so pass the same `rules`, `params`, `equips` and window as the
+`rule_run` call. A span in `violations` is a run of flagged samples with no gap longer than one
+and a half intervals; `share` is of the `judged_samples` the rule's mask covers, not of the
+whole window. A drift finding id carries its family (`ahu:coil_valve_drift@AHU-1`).
 
 **Catalog metadata is public.** `dataset_search` and `dataset_entry` list research-only entries
 too, each with its licence, `access` and a notice (and a banner) that this server refuses any

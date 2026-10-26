@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..g36_reset import sat_reset_compliance
+from ..g36_reset import oat_sat_setpoint, sat_reset_compliance
 from ..model.roles import Role
 from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
 from .applicability import RULE_EQUIP_CLASSES
@@ -142,6 +142,40 @@ class SupplyAirResetCompliance:
         if missing:
             meta["_missing_optional"] = missing
         return mask, meta
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (#298): supply air and OAT, with the judged samples behind the verdict
+        shaded -- supply air more than ``tol_f`` colder than the target (``pct_below_target``),
+        or, on a not-tracking warn, warm-weather supply air more than ``tol_f`` above it
+        (``pct_above_target``)."""
+        from ..charts.evidence import Evidence
+
+        f = self.analyze(equip, frame)
+        if (f.metrics or {}).get("declined"):
+            return None
+        sat, oat = Role.SUPPLY_AIR_TEMP, Role.OAT
+        w = frame[[sat, oat]].dropna()
+        gate = self._gate(frame)[0]
+        if gate is not None:  # as sat_reset_compliance applies it
+            w = w[pd.Series(gate).reindex(w.index).fillna(False).astype(bool)]
+        w = w[(w[sat] > 40) & (w[sat] < 90)]
+        gap = pd.Series(oat_sat_setpoint(w[oat].values, **self._reset_kwargs), index=w.index)
+        gap = gap - w[sat]  # positive: colder than the target
+        m = f.metrics
+        opportunity = m["pct_below_target"] >= self.warn_pct and m["mean_gap_f"] >= self.warn_gap_f
+        if f.severity == "warn" and not opportunity:  # the not-tracking warn
+            mask = (w[oat] >= float(self._reset_kwargs["oat_min"])) & (-gap > self.tol_f)
+            label = "SAT above the target (warm weather)"
+        else:
+            mask = gap > self.tol_f
+            label = "SAT below the target"
+        return Evidence(
+            renderer="multitrend",
+            roles=[sat, oat],
+            mask=mask,
+            label=label,
+            title=f"{equip}: SAT vs the {self.target_label} OAT reset target",
+        )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Score supply air against the G36 OAT-reset target; return a Finding."""

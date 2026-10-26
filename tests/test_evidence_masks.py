@@ -291,15 +291,17 @@ def test_dcv_static_shades_high_demand_samples():
     assert (frame.loc[flagged, Role.CO2] >= 800.0).all() and ev.normalize
 
 
-def test_boiler_short_cycle_shades_starts_on_busy_days():
+def test_boiler_short_cycle_shades_firing_on_busy_days():
     idx = pd.date_range("2025-01-06", periods=4 * 24 * 3, freq="15min")
     cycling = (np.arange(len(idx)) % 3 == 0).astype(float)
     status = np.where(idx.day == 8, 1.0, cycling)  # the third day fires steadily: one start
     frame = pd.DataFrame({Role.BOILER_STATUS: status}, index=idx)
     rule = BoilerShortCycle()
     f = rule.analyze("BLR-1", frame)
-    _ev, flagged = _check(rule, "BLR-1", frame)
+    ev, flagged = _check(rule, "BLR-1", frame)
     running = pd.Series(status > 0.5, index=idx)
     starts = running & ~running.shift(1, fill_value=False)
-    assert flagged.equals(starts & (idx.day != 8))
-    assert flagged.sum() < f.metrics["n_starts"]
+    # 0.111 (#298): the shaded hours are the firing on busy days, the starts the counted events
+    assert flagged.equals(running & (idx.day != 8))
+    assert ev.events.equals(starts & (idx.day != 8))
+    assert ev.events.sum() < f.metrics["n_starts"]

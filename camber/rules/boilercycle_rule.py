@@ -94,20 +94,30 @@ class BoilerShortCycle:
             + _coverage_caveat(res, "boiler"),  # 0.108 (#237)
         )
 
-    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
-        """The firing starts on days with at least ``max_starts_per_day`` of them (0.102, #119),
-        read from the same run status the rule counts (the gas-input fallback included)."""
-        from ..boilercycle import _short_cycle_samples
-
+    def _legacy(self, frame: pd.DataFrame) -> pd.DataFrame:
         status_frame, _src = with_boiler_status(frame)
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in status_frame.columns}
-        m = _short_cycle_samples(
-            status_frame.rename(columns=cols), max_starts_per_day=self.max_starts_per_day
-        )
+        return status_frame.rename(columns=cols)
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The firing samples on days with at least ``max_starts_per_day`` starts (0.111, #298;
+        0.102 marked the starts themselves, now :meth:`start_mask`), read from the same run
+        status the rule counts (the gas-input fallback included)."""
+        from ..boilercycle import _short_cycle_firing
+
+        m = _short_cycle_firing(self._legacy(frame), max_starts_per_day=self.max_starts_per_day)
+        return m.reindex(frame.index, fill_value=False)
+
+    def start_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The firing starts on days with at least ``max_starts_per_day`` of them (0.102, #119)."""
+        from ..boilercycle import _short_cycle_samples
+
+        m = _short_cycle_samples(self._legacy(frame), max_starts_per_day=self.max_starts_per_day)
         return m.reindex(frame.index, fill_value=False)
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: the boiler's firing trend, the starts on short-cycling days shaded (#119).
+        """Pattern J: the boiler's firing trend, the firing on short-cycling days shaded (#119,
+        #298), with the starts on those days as the counted events.
 
         The trend is the run status, or -- when firing is read from the gas input -- the gas
         input itself, the data the rule examined."""
@@ -121,6 +131,7 @@ class BoilerShortCycle:
             renderer="multitrend",
             roles=[role],
             mask=self.violation_mask(frame),
-            label=f"start, on a day with >= {self.max_starts_per_day:g} starts",
+            events=self.start_mask(frame),
+            label=f"firing, on a day with >= {self.max_starts_per_day:g} starts",
             title=f"{equip}: boiler short-cycling",
         )

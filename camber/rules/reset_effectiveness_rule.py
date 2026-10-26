@@ -33,9 +33,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from ..g36_reset import SAT_TR, STATIC_TR, TRParams, reset_effectiveness
+from ..g36_reset import SAT_TR, STATIC_TR, TRParams, reset_effectiveness, tr_simulate
 from ..model.roles import Role
 from .base import Finding
 
@@ -114,6 +115,65 @@ class ResetEffectiveness:
             metrics={"declined": True, "reason": reason},
             summary=f"{equip}: declined -- {reason}",
             caveats=[caveat],
+        )
+
+    def _mode_masks(self, frame: pd.DataFrame) -> dict:
+        """Per failure mode, the cycles behind it (#298), on the rows
+        :func:`~camber.g36_reset.reset_effectiveness` judges: ``not_responding`` the demand cycles
+        parked at the trim end, ``not_trimming`` the idle cycles parked at the demand end,
+        ``diverges`` the cycles that moved against the T&R command, ``stuck`` the cycles on which
+        the T&R trajectory moved. Only the modes the finding reports are kept."""
+        p, kw = self._params, self._kwargs
+        band = p.sp_max - p.sp_min
+        w = frame[[self._sp_role, self._req_role]].dropna()
+        sp = w[self._sp_role]
+        w = w[(sp >= p.sp_min - band) & (sp <= p.sp_max + band)]
+        if len(w) < kw["min_cycles"]:
+            return {}
+        actual = w[self._sp_role].to_numpy(dtype=float)
+        req = np.clip(np.round(w[self._req_role].to_numpy(dtype=float)), 0, None).astype(int)
+        expected = tr_simulate(req, p)
+        trim_end = p.sp_max if p.sp_trim > 0 else p.sp_min
+        demand_end = p.sp_min if p.sp_trim > 0 else p.sp_max
+        eff = req - p.ignored
+        tol = kw["pinned_frac"] * band
+        hi = (eff > 0) & (np.abs(expected - trim_end) > tol)
+        idle = (eff <= 0) & (np.abs(expected - demand_end) > tol)
+        exp_move = np.concatenate(([0.0], np.diff(expected)))
+        act_move = np.concatenate(([0.0], np.diff(actual)))
+        moved = np.abs(exp_move) > 1e-9
+        masks = {
+            "stuck": moved,
+            "not_responding": hi & (np.abs(actual - trim_end) <= tol),
+            "not_trimming": idle & (np.abs(actual - demand_end) <= tol),
+            "diverges": moved & (act_move * exp_move < 0),
+        }
+        return {k: pd.Series(v, index=w.index) for k, v in masks.items()}
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (#298): the reset setpoint and its request count, with the cycles behind the
+        finding's failure modes shaded (one named sub-mask per mode)."""
+        from ..charts.evidence import Evidence
+
+        if any(r not in frame.columns for r in self.roles_required):
+            return None
+        f = self.analyze(equip, frame)
+        modes = list((f.metrics or {}).get("failure_modes") or [])
+        all_masks = self._mode_masks(frame)
+        if not all_masks:
+            return None
+        masks = {m: all_masks[m] for m in modes if m in all_masks}
+        mask = None
+        for m in masks.values():
+            mask = m if mask is None else (mask | m)
+        return Evidence(
+            renderer="multitrend",
+            roles=[self._sp_role, self._req_role],
+            mask=mask,
+            masks=masks or None,
+            label="reset not following its requests",
+            title=f"{equip}: {self._label} reset vs its requests",
+            normalize=True,
         )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:

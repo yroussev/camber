@@ -352,6 +352,7 @@ class ActuatorStuck:
         dates = pd.Series(frame.index.normalize(), index=frame.index)
         day_counts = valid.groupby(dates).sum()
         flagged = []
+        mask = pd.Series(False, index=frame.index)  # 0.111 (#298): the flagged runs' samples
         for run in runs.itertuples():
             sel = valid & (frame.index >= run.start) & (frame.index <= run.end)
             sel &= sig.eq(run.value)
@@ -359,6 +360,7 @@ class ActuatorStuck:
             verdict = self._judge(role, run, sel, frame, day_n, twin)
             if verdict["tier"] == "consistent":
                 continue
+            mask |= sel
             flagged.append(
                 {
                     "start": str(run.start),
@@ -398,6 +400,7 @@ class ActuatorStuck:
                 "runs": flagged[:_MAX_LISTED_RUNS],
             },
             "worst": worst,
+            "mask": mask,
         }
 
     def _phrase(self, role: Role, worst: dict) -> str:
@@ -439,19 +442,31 @@ class ActuatorStuck:
         )
         return f"{head}, the whole occupied day, while {driver} moved {d:g}{unit}"
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the diagnostic on a terminal / fan-coil role-frame; return a Finding."""
-        active, basis = self._active(frame)
-        per_role: dict = {}
-        caveats: list = []
+    def _judged(self, frame: pd.DataFrame, active: pd.Series) -> list:
+        """``[(role, judgement)]`` for each configured actuator present, in config order."""
+        seen: set = set()
         judged = []
         for want in self.roles:
             role = self._resolve_role(frame, want)
-            if role is None or role.value in per_role:
+            if role is None or role.value in seen:
                 continue
-            res = self._judge_role(role, frame, active)
-            per_role[role.value] = res["metrics"]
-            judged.append((role, res))
+            seen.add(role.value)
+            judged.append((role, self._judge_role(role, frame, active)))
+        return judged
+
+    @staticmethod
+    def _worst_role(judged: list) -> tuple:
+        order = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
+        return max(
+            judged, key=lambda rr: (order[rr[1]["severity"]], rr[1]["metrics"]["stuck_share"])
+        )
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the diagnostic on a terminal / fan-coil role-frame; return a Finding."""
+        active, basis = self._active(frame)
+        caveats: list = []
+        judged = self._judged(frame, active)
+        per_role = {role.value: res["metrics"] for role, res in judged}
         if not judged:
             return Finding(
                 rule=self.name,
@@ -467,10 +482,7 @@ class ActuatorStuck:
                 metrics={"roles": per_role, "active_basis": basis},
                 summary=f"{equip}: no active (occupied, fan-on) samples to judge",
             )
-        order = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
-        role, res = max(
-            judged, key=lambda rr: (order[rr[1]["severity"]], rr[1]["metrics"]["stuck_share"])
-        )
+        role, res = self._worst_role(judged)
         sev = res["severity"]
         if Role.SPACE_TEMP not in frame.columns:
             caveats.append(
@@ -512,4 +524,24 @@ class ActuatorStuck:
             },
             summary=summary,
             caveats=caveats,
+        )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (0.111, #298): the judged actuator with the zone's demand, its flagged flat
+        runs (the samples behind ``stuck_share``) shaded."""
+        from ..charts.evidence import Evidence
+
+        active, _basis = self._active(frame)
+        judged = self._judged(frame, active)
+        if not judged:
+            return None
+        role, res = self._worst_role(judged)
+        context = (Role.SPACE_TEMP, Role.COOL_SP, Role.HEAT_SP, Role.AIRFLOW, Role.AIRFLOW_SP)
+        return Evidence(
+            renderer="multitrend",
+            roles=[role, *(r for r in context if r in frame.columns)],
+            mask=res["mask"],
+            label="held flat against demand",
+            title=f"{equip}: {role.value} stuck",
+            normalize="unit",
         )

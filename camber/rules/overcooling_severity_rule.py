@@ -29,7 +29,7 @@ from ..model.roles import Role
 from ..overcooling_severity import (
     DEFAULT_SHORTFALL_SHARE_PCT,
     DEFAULT_TIERS,
-    analyze_overcooling_severity,
+    _score,
 )
 from .base import Finding
 
@@ -86,13 +86,14 @@ class OvercoolingSeverity:
         self.shortfall_share_pct = _share_gate(shortfall_share_pct, "shortfall_share_pct")
         self.share_pct = _share_gate(share_pct, "share_pct")
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the severity diagnostic on an equipment role-frame; return a Finding."""
+    def _score(self, frame: pd.DataFrame, masks: dict | None = None):
+        """:func:`~camber.overcooling_severity.analyze_overcooling_severity` with this rule's
+        parameters; ``masks`` receives each tier's sustained samples (#298)."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
-        legacy = frame.rename(columns=cols)
-        res = analyze_overcooling_severity(
-            legacy,
-            equip,
+        return _score(
+            frame.rename(columns=cols),
+            "",
+            masks=masks,
             tiers=self.tiers,
             window_min=self.window_min,
             relative_to_deadband=self.relative_to_deadband,
@@ -104,6 +105,30 @@ class OvercoolingSeverity:
             shortfall_share_pct=self.shortfall_share_pct,
             share_pct=self.share_pct,
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J (#298): the space against its setpoints, with the samples in a sustained
+        excursion at the finding's tier (warn: >= the warn depth, fault: >= the fault depth)
+        shaded -- the samples behind its ``warn_pct`` / ``fault_pct``."""
+        from ..charts.evidence import Evidence
+
+        masks: dict = {}
+        res = self._score(frame, masks)
+        if res is None:
+            return None
+        tier = res.severity if res.severity in ("warn", "fault") else "warn"
+        roles = [r for r in (Role.SPACE_TEMP, Role.COOL_SP, Role.HEAT_SP) if r in frame.columns]
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=masks.get(tier),
+            label=f"overcooled ({tier} tier)",
+            title=f"{equip}: overcooling severity",
+        )
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the severity diagnostic on an equipment role-frame; return a Finding."""
+        res = self._score(frame)
         if res is None:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
