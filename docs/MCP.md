@@ -19,7 +19,10 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
 - **The facility allowlist.** A tool reads only the facilities named when the server was started
   (see below). Any other facility is refused, even if it is in the same store.
 - **Research-only data is refused.** Data under a non-commercial or no-derivatives licence
-  (the catalog's research-only tier) is never served to an AI client, with no override.
+  (the catalog's research-only tier) is never served to an AI client, with no override. The
+  check fails closed: a facility named for a research-only catalog dataset is refused whatever
+  the store's facility registry says, and while that registry (`_facilities.json`) is missing,
+  unreadable or malformed no facility is served at all, with a notice on every result.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply.
 - **Size and time caps.** A large result is truncated, with a notice, or refused as too large; a
   call has a time budget.
@@ -42,7 +45,13 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
 - `--allow-all-active` allows every facility that is **active** in the store when the server
   starts (an unregistered facility counts as active; suspended, provisioning, offboarding and
   archived ones are left out). A facility activated later needs a restart. A store with no active
-  facility is refused.
+  facility is refused. A facility named for a catalog dataset (`ds-...`) that has no registry
+  entry is not counted as active. If the facility registry is missing, unreadable or malformed,
+  no facility counts as active: the server starts with nothing to serve and says so on stderr and
+  in every result. Repair the registry (restore it, or re-ingest) and restart.
+- A warning on stderr names each `--allow` facility that will be refused: research-only data, a
+  catalog-dataset facility with no registry entry, or every facility while the registry is
+  damaged.
 - One of `--allow` and `--allow-all-active` is required: the server does not start without an
   allowlist (exit 2).
 - `--config PATH` is a run or report config (JSON, or YAML with the `yaml` extra) for the tools

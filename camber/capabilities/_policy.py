@@ -9,6 +9,13 @@
   ``redistribution == "prohibited"``, or an NC / ND licence id), or -- for a block written before
   the catalog changed the dataset's terms -- the catalog's current entry for its ``dataset_id``.
   A named research-only facility is ``refused_licence``; there is no override.
+- **Fail closed** (0.111, #290). :func:`check_facility` decides with
+  :func:`camber._servable.refusal`: a facility named for a research-only catalog dataset
+  (``ds-<dataset>...``) is refused whatever its registry entry says, and so is every facility
+  while the store's facility registry is missing, unreadable or malformed, and a ``ds-`` facility
+  the registry has no entry for. Those are ``refused_licence`` too (with
+  ``data["reason"] == "licence_unverified"``), and :func:`registry_notice` puts the registry's
+  problem on every result.
 - **Trust floor.** :func:`run_config_for` raises a config's ``trust_gate.min_trust`` to
   ``ctx.min_trust``.
 - **No local paths.** :func:`redact` takes absolute paths out of any message that leaves the
@@ -139,24 +146,20 @@ def open_store(ctx):
 
 def research_only(meta: dict) -> bool:
     """Whether a facility's registry entry marks research-only (NC / ND) data."""
-    from ..datasets._catalog import is_research_only_licence
+    from .._servable import research_only_block
 
-    block = (meta or {}).get("dataset")
-    if not isinstance(block, dict):
-        return False
-    if block.get("access") == "research_only" or block.get("redistribution") == "prohibited":
-        return True
-    if block.get("licence") and is_research_only_licence(str(block["licence"])):
-        return True
-    did = block.get("dataset_id")
-    if did:
-        try:
-            from ..datasets import get
+    return research_only_block(meta)
 
-            return bool(get(str(did)).research_only)
-        except Exception:  # noqa: BLE001 - an unknown / retired id: the recorded block decides
-            return False
-    return False
+
+def registry_notice(ctx) -> str | None:
+    """The banner every result carries while the store's facility registry cannot be trusted
+    (``None`` when it can, or when there is no store)."""
+    from .._servable import read_registry, registry_banner
+
+    if not ctx.store or not os.path.isdir(ctx.store):
+        return None
+    problem = read_registry(ctx.store)[1]
+    return registry_banner(problem) if problem is not None else None
 
 
 def named_facilities(arguments: dict) -> list:
@@ -171,8 +174,14 @@ def named_facilities(arguments: dict) -> list:
     return out
 
 
-def check_facility(ctx, facility_id: str, meta: dict | None = None) -> None:
-    """``not_allowed`` outside the allowlist; ``refused_licence`` for research-only data."""
+def check_facility(ctx, facility_id: str, *, store_root=None, registry=None) -> None:
+    """``not_allowed`` outside the allowlist; ``refused_licence`` for research-only data or a
+    facility whose licence cannot be established (see :func:`camber._servable.refusal`).
+
+    ``store_root`` is the store the facility is read from (default ``ctx.store``; ``False``: none,
+    a folder-backed config); ``registry`` is that store's :func:`~camber._servable.read_registry`.
+    """
+    from .._servable import refusal
     from . import CapabilityError
 
     if facility_id not in ctx.allowed_facilities:
@@ -180,28 +189,40 @@ def check_facility(ctx, facility_id: str, meta: dict | None = None) -> None:
             "not_allowed",
             f"facility {facility_id!r} is not among the facilities this caller may read",
         )
-    if meta is None:
-        meta = open_store(ctx).facilities_meta().get(facility_id) or {}
-    if research_only(meta):
+    if store_root is None:
+        open_store(ctx)  # not_found when there is no store
+        store_root = ctx.store
+    why = refusal(facility_id, store_root or None, registry)
+    if why is None:
+        return
+    kind, message = why
+    if kind == "research_only":
         raise CapabilityError(
             "refused_licence",
-            f"facility {facility_id!r} holds research-only (non-commercial / no-derivatives) "
-            "data, which is never served here",
+            f"{message}, which is never served here",
             data={"facility_id": facility_id},
         )
+    raise CapabilityError(
+        "refused_licence",
+        f"{message}; it is not served until that is repaired",
+        data={"facility_id": facility_id, "reason": "licence_unverified"},
+    )
 
 
 def check_arguments(ctx, arguments: dict) -> None:
     """Apply :func:`check_facility` to every facility ``arguments`` names."""
+    from .._servable import read_registry
+
     named = named_facilities(arguments)
     if not named:
         return
     for fid in named:  # the allowlist first: an unallowed id never reaches the store
         if fid not in ctx.allowed_facilities:
-            check_facility(ctx, fid, {})
-    meta = open_store(ctx).facilities_meta()
+            check_facility(ctx, fid, store_root=False)
+    open_store(ctx)
+    registry = read_registry(ctx.store)
     for fid in named:
-        check_facility(ctx, fid, meta.get(fid) or {})
+        check_facility(ctx, fid, store_root=ctx.store, registry=registry)
 
 
 def outside_allowlist(data, allowed) -> str | None:
@@ -225,9 +246,9 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
 
     The helper a run or report capability calls; returns the
     :class:`~camber.config.RunResult`. A store-backed config's ``source.facility_id`` is checked
-    against the allowlist and the licence. A folder-backed config has no store facility: its
-    ``facility_id`` (or ``site``) must still be in the allowlist, and it carries no dataset
-    licence to check.
+    against the allowlist and the licence, in the store it names. A folder-backed config has no
+    store facility: its ``facility_id`` (or ``site``) must still be in the allowlist, and it is
+    refused when it is named for a research-only catalog dataset.
     """
     from ..config import _check_config_shape, load_config, run_config
     from . import CapabilityError
@@ -246,12 +267,10 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
         store_root = source.get("store") or ""
         if not os.path.isabs(store_root):
             store_root = os.path.join(base_dir or ".", store_root)
-        from ..store import ParquetStore
-
-        check_facility(ctx, fid, ParquetStore(store_root).facilities_meta().get(fid) or {})
+        check_facility(ctx, fid, store_root=store_root)
     else:
         fid = str(config.get("facility_id") or config.get("site") or "")
-        check_facility(ctx, fid, {})
+        check_facility(ctx, fid, store_root=False)
     gate = dict(config.get("trust_gate") or {})
     floor = float(ctx.min_trust)
     if gate.get("min_trust") is None or float(gate["min_trust"]) < floor:

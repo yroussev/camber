@@ -10,7 +10,9 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
 - **input validation** against ``input_schema`` (``invalid_params``);
 - **facility allowlist**: a ``facility_id`` / ``facility_ids`` argument outside
   ``ctx.allowed_facilities`` is ``not_allowed``, and a listing shows only allowed facilities;
-- **research-only (NC/ND) data** is ``refused_licence`` -- no override, in every adapter;
+- **research-only (NC/ND) data** is ``refused_licence`` -- no override, in every adapter -- and
+  so is a facility whose licence cannot be established (a missing or damaged facility registry,
+  #290), with a banner on every result while the registry is damaged;
 - **no-persist**: the handler runs inside :func:`camber._nopersist.no_persist`, so a config run
   writes no fault history, report file, manifest entry or cache (#276);
 - **trust floor**: ``ctx.min_trust`` (0.5 by default) reaches trust-aware code through
@@ -297,7 +299,7 @@ class Registry:
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
-        from ._policy import check_arguments, outside_allowlist
+        from ._policy import check_arguments, outside_allowlist, registry_notice
         from ._schema import validate
 
         cap = self.get(name)
@@ -334,12 +336,13 @@ class Registry:
                 data={"bytes": size, "max_bytes": ctx.caps.max_bytes},
             )
         text, cite_banners = _grounded(text_in, facts)
+        notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
         return replace(
             res,
             data=data,
             text=text,
             facts=facts,
-            banners=[*res.banners, *banners, *cite_banners],
+            banners=[*([notice] if notice else []), *res.banners, *banners, *cite_banners],
             truncated=bool(res.truncated or banners),
         )
 

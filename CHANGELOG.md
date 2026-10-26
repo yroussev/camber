@@ -33,6 +33,7 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   temp, the working directory and the Python prefix are now redacted first, by exact prefix and
   in quoted, `repr` and JSON forms; any other quoted path is redacted whole. A result's `text`
   and banners are redacted too (#302).
+- **The research-only refusal and the `--allow-all-active` lifecycle filter fail closed (#290).** If the store's facility registry (`_facilities.json`) was deleted, corrupt, empty, or lacked a facility's entry, `camber mcp` listed and served research-only (NC/ND) facilities, and with `--allow-all-active` every facility counted as active, with no warning. Now a facility named for a research-only catalog dataset is refused by its name, whatever the registry says (a missing entry or one recording an open licence no longer unlocks it). While the registry is missing, unreadable or malformed, no facility is served: `--allow-all-active` allows none and `--allow` facilities are refused (`refused_licence`, `reason: licence_unverified`), with a warning on stderr and a notice on every tool result. A catalog-dataset facility with no registry entry is refused and not counted as active. `camber mcp` also warns at startup about each `--allow` facility it will refuse, such as research-only data. The `facilities` tool reports these as `withheld_unverified`. A store of your own data with no registry is served as before.
 
 ## [0.110.0] — 2026-10-25
 
