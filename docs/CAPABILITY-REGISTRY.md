@@ -148,7 +148,14 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    sentence that cites an unknown id or states a figure no cited fact carries is removed, with a
    banner.
 8. **No leaks.** Any other exception becomes `internal`, and no error message -- nor the `data`
-   of an error a handler raises -- holds an absolute local path.
+   of an error a handler raises, nor a result's `text` or `banners` -- holds an absolute local
+   path. The known roots (the store, the config, its directory and the stores or folders it
+   reads, the dataset data directory, home, temp, the working directory and the Python prefix)
+   are replaced by `<path>` first, in every spelling (quoted, `repr`, JSON, either Unicode
+   form), with the rest of the path after them; then a pattern takes any other absolute path
+   (a quoted one whole, spaces and commas included). Words either side of a slash
+   ("non-commercial / no-derivatives", `kBtu/ft2`) are not paths, and the JSON pointers of an
+   `invalid_params` refusal by the input schema (`/facility_id: ...`) are left as they are.
 
 **The timeout cannot stop a handler.** The handler runs in a worker thread; Python cannot kill a
 thread, so on a timeout the call returns `timeout` at once while the handler finishes in the

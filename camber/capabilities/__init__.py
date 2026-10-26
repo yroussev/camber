@@ -49,14 +49,13 @@ import contextvars
 import hashlib
 import importlib
 import json
-import os
 import pkgutil
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from ._policy import redact, research_only, run_config_for
+from ._policy import known_roots, redact, redact_value, research_only, run_config_for
 
 __all__ = [
     "ERROR_CODES",
@@ -278,14 +277,16 @@ class Registry:
 
         Never raises anything but :class:`CapabilityError`; see the module docstring.
         """
-        # the call's own paths, absolute, are redacted even where the generic pattern would miss
-        secrets = [
-            os.path.abspath(p)
-            for p in (getattr(ctx, "store", None), getattr(ctx, "config", None))
-            if p
-        ]
+        # the known roots (the call's store and config, home, temp ...) go by exact prefix
+        # before the generic pattern, which a path with a space or a comma would get past
+        secrets = known_roots(ctx)
         try:
-            return self._call(name, arguments, ctx)
+            res = self._call(name, arguments, ctx)
+            return replace(
+                res,
+                text=redact(res.text, *secrets),
+                banners=[redact(b, *secrets) for b in res.banners],
+            )
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
@@ -430,10 +431,12 @@ def _redact_data(data, secrets: list, depth: int = 0):
     if depth > 20:
         return None
     if isinstance(data, str):
-        return redact(data, *secrets)
+        return redact_value(data, *secrets)
     if isinstance(data, dict):
         return {
-            redact(k, *secrets) if isinstance(k, str) else k: _redact_data(v, secrets, depth + 1)
+            redact_value(k, *secrets) if isinstance(k, str) else k: _redact_data(
+                v, secrets, depth + 1
+            )
             for k, v in data.items()
         }
     if isinstance(data, (list, tuple)):

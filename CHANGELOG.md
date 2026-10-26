@@ -14,6 +14,24 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Security
+
+- Capabilities and `camber mcp` no longer leak parts of a local path that has a space or a comma
+  in it: a run config whose store is not the `--store` one gave `rule_run`, `rcx_report` and
+  `finding_detail` errors that named the folders after the first space. The store, the config
+  and its directory, the stores and folders the config reads, the dataset data directory, home,
+  temp, the working directory and the Python prefix are now redacted first, by exact prefix and
+  in quoted, `repr` and JSON forms; any other quoted path is redacted whole. A result's `text`
+  and banners are redacted too (#302).
+
+### Fixed
+
+- Path redaction no longer garbles normal text: the `refused_licence` message reads
+  "non-commercial / no-derivatives" again (not "non-commercial <path> no-derivatives"), and an
+  internal error shows one `<path>`, not `<path><path>` (#302).
+
 ## [0.110.0] — 2026-10-25
 
 **0.110: an MCP server over a read-only capability registry (#275–#278).** `camber mcp` lets an AI client such as Claude Desktop query a store over stdio, speaking MCP 2026-07-28 and 2025-11-25. It sees 13 read-only tools and 8 prompts from the new `camber.capabilities` registry, which enforces one policy for every caller: a facility allowlist set at launch, research-only (NC/ND) data always refused, a trust floor, caps and time limits, cited fact ids checked against the facts, and no local paths in any message. Runs behind it are no-persist, a mode now also available as `run_config(persist=False)` and `camber run|report --no-persist`. The registry, the server and the capabilities are provisional.
