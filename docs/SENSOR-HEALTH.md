@@ -45,6 +45,10 @@ the gate:
 | `"chw"` | the chiller's run status / command (`compressor_status`) > 0.5; else its `power` above a tenth of its own 95th percentile (only on a frame with a chilled-water role and no supply-fan signal) |
 | `"hw"` | the boiler's status (`boiler_status`) > 0.5; else its gas input (`gas_input_rate`) above 5 % of its own 95th percentile |
 
+A chilled-water frame with neither a chiller status nor a chiller power, such as a cooling tower,
+is gated on its condenser-water flow (`cw_flow` above a tenth of its own 95th percentile, gate
+`"condenser-water flow"`, 0.111): the condenser pumps run while a chiller does.
+
 The first 30 minutes after each start are left out (a loop pulling down from standby is not a
 sensor fault), and a value held across successive running stretches still counts as one stuck run
 (the off time between them is not added). A chiller's `power` is gated too when the gate comes from
@@ -52,7 +56,18 @@ its status. A point whose equipment ran for fewer than 24 samples is flagged `no
 scored on coverage alone. The running samples are read regime-aware: a "status" that is really an
 enable (a boiler on through a mild month with the loop cold) splits them in two, which is flagged
 `bimodal` rather than read as outliers. The all-points-frozen check ignores intervals the plant was
-off throughout. The runner's trust gate (`untrusted_roles`) and the RCx report apply the plant gate;
+off throughout.
+
+**Run-conditional coverage (0.111).** Many plant controllers trend condenser-water temperatures and
+chiller approaches only while the chiller runs, and leave them blank while it is off. On a gated
+point the coverage that scores it is the higher of the whole-span coverage and the share of
+running samples it holds (`SensorTrust.run_coverage`). A point that is there whenever its
+equipment runs is flagged `logged_while_running`, not `low_coverage`. A point that is missing
+while the equipment runs is still `low_coverage`.
+
+The runner's trust gate (`untrusted_roles`) and the RCx report apply the plant gate. When a rule's
+own inputs leave out the run signals, the gate resolves them for the trust check alone
+(`untrusted_roles(gate_frame=)`; the rule never sees them).
 `frame_sensor_health` keeps `plant_gate=None` as its default. `SensorTrust.run_gate` names the gate
 a point was judged on.
 

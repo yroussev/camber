@@ -30,6 +30,8 @@ from ._common import (
     rule_names,
     run,
     severity_counts,
+    trust_banner,
+    trust_declines,
     window,
     with_rules,
 )
@@ -159,6 +161,8 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         key=lambda s: (s["rule"], s["equip"]),
     )
     n_rules = len(res.rules_run)
+    declines, floor = trust_declines(res.findings)  # 0.111 (#297)
+    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
     facts = [
         {
             "id": "F1@rule_run",
@@ -168,12 +172,13 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "counts": counts,
             "text": f"{n_rules} rules ran on {res.equipment} equipment of {fid}: "
             f"{counts['fault']} fault, {counts['warn']} warn, {counts['info']} info and "
-            f"{counts['ok']} ok findings, {len(skipped)} rule(s) skipped for missing inputs",
+            f"{counts['ok']} ok findings, {len(skipped)} rule(s) skipped for missing inputs"
+            f"{declined}",
         }
     ]
     text = [
         f"{n_rules} rules ran on {res.equipment} equipment of {fid}, with {counts['fault']} "
-        f"fault and {counts['warn']} warn findings [F1@rule_run]."
+        f"fault and {counts['warn']} warn findings{declined} [F1@rule_run]."
     ]
     for i, r in enumerate(listed[:_FACTS], start=2):
         fact_id = f"F{i}@rule_run"
@@ -187,6 +192,9 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "No run config names this facility, so every equipment class it stores ran with "
             "every built-in rule (or the rules asked for) at their default parameters."
         )
+    notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
+    if notice:
+        banners.append(notice)
     data = {
         "facility_id": fid,
         "from_config": from_caller,

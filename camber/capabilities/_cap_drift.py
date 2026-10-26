@@ -34,6 +34,8 @@ from ._common import (
     run,
     severity_counts,
     store_config,
+    trust_banner,
+    trust_declines,
 )
 
 
@@ -250,6 +252,7 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
     config, base_dir, source = _config(ctx, arguments)
     res = run(ctx, config, base_dir)
     dr = res.drift
+    fams_raw = list(dr.families) if dr is not None else []
     fams, diagnoses, unevaluated, rows = [], [], [], []
     for fam in dr.families if dr is not None else []:
         fams.append(
@@ -304,8 +307,16 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
             f"declined, {len(unevaluated)} equipment not evaluated",
         }
     ]
+    declines, floor = trust_declines(f for fam in fams_raw for f in fam.findings)  # 0.111 (#297)
+    untrusted = f" ({len(declines)} on untrusted input(s))" if declines else ""
+    if declines:
+        facts[0]["text"] += f" ({len(declines)} declined on untrusted input(s))"
     text = [
         f"Drift on {fid} gave {counts['fault']} fault and {counts['warn']} warn findings; "
+        f"{declined} check(s) declined{untrusted}; {len(unevaluated)} equipment were not "
+        "evaluated [F1@drift]."
+        if declines
+        else f"Drift on {fid} gave {counts['fault']} fault and {counts['warn']} warn findings; "
         f"{len(unevaluated)} equipment were not evaluated [F1@drift]."
     ]
     for i, r in enumerate(rows[:_FACTS], start=2):
@@ -315,6 +326,9 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
     banners = []
+    notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
+    if notice:
+        banners.append(notice)
     if source == "baseline_period":
         banners.append(
             "Drift is measured against the baseline window given, fitted for this call only: it "

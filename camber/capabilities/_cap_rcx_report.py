@@ -20,6 +20,8 @@ from ._common import (
     jsonable,
     narrow,
     run,
+    trust_banner,
+    trust_declines,
     window,
     with_rules,
 )
@@ -162,7 +164,9 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
 
     fid = arguments["facility_id"]
     start, end = window(arguments)
-    config, base_dir, from_caller = facility_config(ctx, fid, keep=(*RULE_SECTIONS, "report"))
+    config, base_dir, from_caller = facility_config(
+        ctx, fid, keep=(*RULE_SECTIONS, "drift", "report")
+    )
     config = with_rules(config, None, None)
     config = narrow(config, equips=arguments.get("equips"), start=start, end=end)
     config["report"] = {**dict(config.get("report") or {}), "layout": "rcx"}
@@ -187,6 +191,11 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
             }
         )
     k = d["kpis"]
+    declines, floor = trust_declines(res.findings)  # 0.111 (#297)
+    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
+    notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
+    if notice:
+        banners.append(notice)
     n = int(k.get("n_issues") or 0)
     cost = jsonable(k.get("annual_cost_usd"))
     cost_txt = f"${cost:,.0f}/yr across {k.get('n_costed')} costed issue(s)" if cost else "no cost"
@@ -195,7 +204,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "kind": "rcx_report",
         "facility_id": fid,
         "value": n,
-        "text": f"The RCx report for {fid} ranks {n} issue(s) with {cost_txt}",
+        "text": f"The RCx report for {fid} ranks {n} issue(s) with {cost_txt}{declined}",
         "kpis": jsonable(k),
     }
     issues = []
@@ -223,6 +232,10 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         }
         issues.append(row)
         money = f"${cost_v:,.0f}/yr" if cost_v else "uncosted"
+        # 0.111 (#297): an issue that rests on a sensor a reference found wrong says so
+        cond = sorted({c.split(" (")[0] for c in row["conditional_on"]})
+        if cond:
+            money += f"; conditional on {', '.join(cond)}"
         facts.append(
             {
                 "id": fact_id,

@@ -234,7 +234,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `GAS_FIRING_FRAC` and `PLANT_GATE_NONE`; in `camber.sensorhealth`, `PLANT_GATED_ROLES`,
     `PLANT_SETTLE`, `plant_gates`, `frame_sensor_health(plant_gate=)`,
     `sensor_trust(run_gate=, run_gate_source=)`, the trailing `SensorTrust.run_gate` and the
-    `not_running` flag; `link_findings(shared_scope=)` / `sensor_causes(shared_scope=)`; the
+    `not_running` flag; and (0.111, #297) `CW_FLOW_RUN_FRAC`, `PLANT_GATE_INPUTS`,
+    `untrusted_roles(gate_frame=)`, `SensorTrust.run_coverage` and the `logged_while_running`
+    flag; `link_findings(shared_scope=)` / `sensor_causes(shared_scope=)`; the
     chilled-water plant rules' `run_source="power"` fallback (`POWER_GATE_CAVEAT`); the RCx
     report's OAT peer check without a reference;
   - roles `gas_input_rate`, `cond_entering_water_temp` and `cw_bypass_valve`, and their Brick
