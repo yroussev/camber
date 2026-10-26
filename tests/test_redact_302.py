@@ -173,19 +173,26 @@ def test_every_known_root_is_redacted_in_messages_data_text_and_banners(
         raise CapabilityError("not_found", f"nothing at '{leaf}'", data={"tried": [leaf]})
 
     def internal(ctx, a):
+        raise RuntimeError(f"cannot open {leaf!r}")
+
+    def unavailable(ctx, a):  # an OSError is `unavailable` (#301), which names no path at all
         raise FileNotFoundError(2, "No such file or directory", leaf)
 
     def ok(ctx, a):
         return CapabilityResult({}, f"read '{leaf}' and {root}/x", [], banners=[f"at {leaf!r}"])
 
     reg = Registry()
-    for name, h in (("err", err), ("internal", internal), ("ok", ok)):
+    for name, h in (("err", err), ("internal", internal), ("unavailable", unavailable), ("ok", ok)):
         reg.register(_cap(name, h))
     for name in ("err", "internal"):
         with pytest.raises(CapabilityError) as e:
             reg.call(name, {}, _ctx(st_root, config))
         seen = e.value.message + json.dumps(e.value.data, ensure_ascii=False)
         assert "<path>" in seen and "<path><path>" not in seen and not _leaks(seen), seen
+    with pytest.raises(CapabilityError) as e:
+        reg.call("unavailable", {}, _ctx(st_root, config))
+    seen = e.value.message + json.dumps(e.value.data, ensure_ascii=False)
+    assert e.value.code == "unavailable" and not _leaks(seen), seen
     res = reg.call("ok", {}, _ctx(st_root, config))
     assert res.text == "read '<path>' and <path>" and res.banners == ["at '<path>'"]
 
