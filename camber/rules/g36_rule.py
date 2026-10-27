@@ -527,18 +527,27 @@ class G36AFDD:
         step_h = float(_median_step(res.masks.index) / pd.Timedelta(hours=1))
         reported, _moved = self._attributed(res, declined_fcs, step_h)
         any_fc = np.zeros(len(res.masks), dtype=bool)
+        any_app = np.zeros(len(res.masks), dtype=bool)
         # 0.92 (#67): each evaluated FC's own reported hours, so a consumer (the plant-capacity
         # link reads FC13) can use one condition instead of the any-FC union
         per_fc: dict = {}
+        # 0.111 (#310): each FC's share is of its applicable samples (its operating states,
+        # fan on, outside ModeDelay), as the finding's per-FC pct
+        per_app: dict = {}
+
+        def on_frame(m):
+            return pd.Series(m, index=res.masks.index).reindex(frame.index, fill_value=False)
+
         for fc, m in reported.items():
             if fc in declined_fcs or fc in res.omitted:
                 continue
             any_fc |= m
+            app = np.asarray(res.masks[f"FC{fc}_app"], dtype=bool)
+            any_app |= app
             if not res.missing_inputs.get(fc):
-                per_fc[f"FC{fc}"] = pd.Series(m, index=res.masks.index).reindex(
-                    frame.index, fill_value=False
-                )
-        mask = pd.Series(any_fc, index=res.masks.index).reindex(frame.index, fill_value=False)
+                per_fc[f"FC{fc}"] = on_frame(m)
+                per_app[f"FC{fc}"] = (on_frame(app), "applicable samples")
+        mask = on_frame(any_fc)
         roles = [
             r
             for r in (
@@ -557,4 +566,7 @@ class G36AFDD:
             label="G36 fault reported",
             title=f"{equip}: G36 §5.16.14 fault conditions",
             masks=per_fc,
+            judged=on_frame(any_app),
+            judged_basis="samples in a fault condition's operating states",
+            masks_judged=per_app,
         )

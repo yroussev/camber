@@ -230,18 +230,24 @@ class CHWPlantReset:
         index: ``"low deltaT"`` -- loop deltaT below ``design_deltaT_min_f``, only when the rule
         judges it (a return temperature, not constant flow) -- and ``"CHWST held low"`` -- CHWST
         at or below 46 F, only when the rule finds no reset (flat or reversed)."""
+        return self._masks(frame)[0]
+
+    def _masks(self, frame: pd.DataFrame) -> tuple:
+        """``(masks, out)``: :meth:`violation_masks`, and the analysis' own masks -- with
+        (0.111, #310) ``"running"`` and ``"deltaT_judged"``, the samples the shares are of."""
         none = pd.Series(False, index=frame.index)
         out: dict = {}
         f = self._analyze(frame, masks_out=out)
         m = f.metrics
         pct = m.get("low_deltaT_pct")  # NaN when no return temperature was usable
         dt_judged = pct is not None and pct == pct and m.get("flow_mode") != "constant"
-        return {
+        masks = {
             "low deltaT": out.get("low_deltaT", none) if dt_judged else none,
             "CHWST held low": (
                 out.get("chwst_low", none) if m.get("chwst_reset_present") is False else none
             ),
         }
+        return masks, out
 
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
         """The union of :meth:`violation_masks`."""
@@ -257,12 +263,17 @@ class CHWPlantReset:
         ]
         if Role.CHW_SUPPLY_TEMP not in roles:
             return None
-        masks = self.violation_masks(frame)
+        masks, out = self._masks(frame)
+        none = pd.Series(False, index=frame.index)
         return Evidence(
             renderer="multitrend",
             roles=roles,
             mask=masks["low deltaT"] | masks["CHWST held low"],
             masks=masks,
+            # 0.111 (#310): the running samples; low_deltaT_pct is of those with a usable deltaT
+            judged=out.get("running", none),
+            judged_basis="running samples",
+            masks_judged={"low deltaT": (out.get("deltaT_judged", none), "running samples")},
             label=f"low deltaT (< {self.design_deltaT_min_f:g}F) or CHWST held low, no reset",
             title=f"{equip}: CHW plant reset / deltaT",
         )
@@ -520,6 +531,16 @@ class CHWSupplyTracking:
             legacy, running=run, above_f=self.above_f, settle_intervals=self.settle_intervals
         )
 
+    def _judged(self, frame: pd.DataFrame) -> pd.Series:
+        """The running samples ``above_pct`` is of (0.111, #310)."""
+        from ..chwplant import _chw_tracking_judged
+
+        legacy = self._legacy(frame)
+        if "CHWS_Temp" not in legacy.columns or "CHWS_SP" not in legacy.columns:
+            return pd.Series(False, index=frame.index)
+        run, _src = _run_mask(frame)
+        return _chw_tracking_judged(legacy, running=run, settle_intervals=self.settle_intervals)
+
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: CHWST vs its setpoint, the running hours short of setpoint shaded."""
         from ..charts.evidence import Evidence
@@ -531,6 +552,8 @@ class CHWSupplyTracking:
             renderer="multitrend",
             roles=roles,
             mask=self.violation_mask(frame),
+            judged=self._judged(frame),
+            judged_basis="running samples",
             label=f"CHWST > setpoint + {self.above_f:g}F",
             title=f"{equip}: CHW supply vs setpoint",
         )

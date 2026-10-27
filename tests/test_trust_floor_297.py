@@ -108,7 +108,7 @@ def test_trust_declines_and_banner():
     )
     empty = Finding(rule="d", equip="B", severity="info", metrics={"declined": True}, summary="")
     declines, floor = trust_declines([ok, bad, empty])
-    assert declines == [("cooling_tower_approach", "T1", ["cw_supply_temp"])] and floor == 0.5
+    assert declines == [("cooling_tower_approach", "T1", ["cw_supply_temp"], {})] and floor == 0.5
     text = trust_banner(declines, floor)
     assert text.startswith("1 check(s) declined") and "cooling_tower_approach on 1" in text
     assert "cw_supply_temp" in text and "0.5" in text

@@ -289,12 +289,14 @@ class ReheatCapacityShortfall:
         sp, _ = self._setpoint(equip, frame)
         if sp is None:
             return None
-        short = self._masks(frame, sp)[1]
+        judged, short = self._masks(frame, sp)[:2]
         roles = [Role.SPACE_TEMP] + [r for r in (Role.HEAT_SP,) if r in frame.columns]
         return Evidence(
             renderer="multitrend",
             roles=roles,
             mask=short,
+            judged=judged,  # 0.111 (#310): shortfall_pct is of the evaluated occupied samples
+            judged_basis="occupied samples",
             label="below setpoint, reheat saturated",
             title=f"{equip}: zone vs heating setpoint",
         )

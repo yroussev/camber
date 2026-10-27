@@ -87,6 +87,7 @@ from ._sanitize import (
     one_line,
     plain,
     show_spans,
+    shown,
     unmark,
 )
 
@@ -309,8 +310,10 @@ class Registry:
         would refuse); ``equip`` and ``equips`` (its last comma-separated id) from the stored
         equipment of ``context["facility_id"]`` when a call could read that facility, else to
         nothing. A name that is not one clean line of at most 200 characters is never offered
-        (the prompt could not take it whole). Any other argument completes to nothing; an
-        unknown prompt or argument is ``CapabilityError("invalid_params")``.
+        (the prompt could not take it whole), nor one the sanitiser would change (HTML or markdown
+        markup, a URL, a fact-id bracket) or one that starts with ``NOTICE`` (#307). Any other
+        argument completes to nothing; an unknown prompt or argument is
+        ``CapabilityError("invalid_params")``.
         """
         p = self._prompts.get(prompt) if isinstance(prompt, str) else None
         if p is None:
@@ -332,7 +335,11 @@ class Registry:
             pool = _equipment(ctx, fid) if fid and _readable(ctx, fid) else []
         else:
             pool = []
-        pool = [s for s in pool if s == one_line(s) and 0 < len(s) <= 200 and "," not in s]
+        # #307: a name the sanitiser would change (markup, a link, a fact-id bracket) or one that
+        # reads as a NOTICE is not offered: shown sanitised, it would name nothing
+        pool = [
+            s for s in pool if s == shown(s) and s == lead(s) and 0 < len(s) <= 200 and "," not in s
+        ]
         low = value.lower()
         hits = sorted(
             (s for s in pool if low in s.lower()),
@@ -366,16 +373,19 @@ class Registry:
                 _fence_check(ctx, fence)  # an error a concurrent replace caused is unavailable
                 raise
             _fence_check(ctx, fence)
+            # the quoted spans keep their marks until here, so a name from the data gets the
+            # known roots only (#307), then the marks go
             return replace(
                 res,
-                text=redact(res.text, *secrets),
-                banners=[redact(b, *secrets) for b in res.banners],
+                text=unmark(redact(res.text, *secrets)),
+                banners=[unmark(redact(b, *secrets)) for b in res.banners],
             )
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
             data = _redact_data(e.data, secrets)
-            msg = redact(one_line(e.message), *secrets)  # one line: data cannot add a NOTICE
+            # one line: data cannot add a NOTICE; the spans' marks kept for redact (#307)
+            msg = unmark(redact(one_line(e.message, keep_marks=True), *secrets))
             raise CapabilityError(e.code, msg, data=data) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
             store_err = _unavailable(e, ctx)
@@ -418,9 +428,9 @@ class Registry:
         json.dumps(data, allow_nan=False)  # NaN / inf in data is the handler's bug: internal
         hidden, spans = hide_spans(text_in)  # a quoted data value is one word to the filter
         text, cite_banners = _grounded(hidden, facts)
-        text = lead(unmark(show_spans(text, spans)))
+        text = lead(show_spans(text, spans))  # the marks stay for call()'s redact (#307)
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
-        own = [unmark(finish(b)) for b in [*(res.banners or []), *banners]]
+        own = [finish(b) for b in [*(res.banners or []), *banners]]
         out = replace(
             res,
             data=data,
@@ -588,14 +598,15 @@ def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
 def _server_state(arguments: dict, ctx: CallContext) -> list:
     """What decides a call's values besides its arguments and the allowlist (#295): a digest of
     the loaded run config (its canonical JSON, not its path; the file's bytes when it does not
-    load), the trust floor, and a cheap store generation: the facility registry's and every
-    touched facility partition's modification signature (the facilities the arguments name, else
-    every allowed one, plus a store-backed config's own facility). Stat calls only: nothing is
-    read but the config."""
+    load), the trust floor, and a cheap store generation: the size and modification time of the
+    facility registry and the point catalog, and of every file of each touched facility
+    partition, part files included, so an in-place rewrite counts (#312; the facilities the
+    arguments name, else every allowed one, plus a store-backed config's own facility). Stat
+    calls only: nothing is read but the config, and no path enters the token."""
     from .. import __version__
     from ..config import load_config
     from ..store.facilities import _FACILITIES
-    from ..store.parquet_store import _FACILITY, _partition_signature
+    from ..store.parquet_store import _CATALOG, _CATALOG_GEN, _FACILITY, _partition_signature
     from ._policy import config_paths, named_facilities
 
     configs, config_stores = [], []
@@ -621,17 +632,20 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
         fdir = os.path.join(os.path.abspath(root), f"{_FACILITY}={fid}")
         return [fid, list(_partition_signature(fdir))]
 
-    try:
-        st = os.stat(os.path.join(ctx.store, _FACILITIES))
-        registry = [st.st_mtime_ns, st.st_size]
-    except OSError:
-        registry = None
+    def stat(root: str, name: str):
+        try:
+            st = os.stat(os.path.join(root, name))
+            return [st.st_mtime_ns, st.st_size]
+        except (OSError, TypeError):  # absent, or no store
+            return None
+
     named = [f for f in named_facilities(arguments) if f in ctx.allowed_facilities]
     store = [
-        registry,
+        [stat(ctx.store, n) for n in (_FACILITIES, _CATALOG, _CATALOG_GEN)],
         *(signature(ctx.store, f) for f in sorted(set(named or ctx.allowed_facilities))),
     ]
-    store.extend(signature(*cs) for cs in config_stores)
+    for root, fid in config_stores:
+        store.append([*signature(root, fid), [stat(root, n) for n in (_CATALOG, _CATALOG_GEN)]])
     # the package version: with no config a catalog facility runs its packaged template (#296)
     return [__version__, configs, float(ctx.min_trust), store]
 
@@ -688,14 +702,15 @@ def _sanitized(res: CapabilityResult, data) -> tuple:
 
 
 def _redact_data(data, secrets: list, depth: int = 0):
-    """``data`` (an error's ``data``) with every string in it path-redacted like the message."""
+    """``data`` (an error's ``data``) with every string in it path-redacted like the message; a
+    value from the data comes marked as a span (see ``_common._safe``) and keeps its slashes."""
     if depth > 20:
         return None
     if isinstance(data, str):
-        return redact_value(data, *secrets)
+        return unmark(redact_value(data, *secrets))
     if isinstance(data, dict):
         return {
-            redact_value(k, *secrets) if isinstance(k, str) else k: _redact_data(
+            unmark(redact_value(k, *secrets)) if isinstance(k, str) else k: _redact_data(
                 v, secrets, depth + 1
             )
             for k, v in data.items()

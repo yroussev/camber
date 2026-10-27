@@ -187,6 +187,8 @@ def analyze_overcooling(
 
         none = pd.Series(np.zeros(len(df), dtype=bool), index=df.index)
         masks_out["satisfied"] = _on_df(satisfied)
+        # 0.111 (#310): the n_considered samples every share is of
+        masks_out["considered"] = _on_df(pd.Series(True, index=work.index))
         masks_out["overcool"] = _on_df(overcool) if minflow_evaluable else none.copy()
         masks_out["with_reheat"] = _on_df(with_reheat) if minflow_evaluable else none.copy()
 

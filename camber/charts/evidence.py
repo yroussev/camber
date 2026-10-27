@@ -54,6 +54,15 @@ class Evidence:
     # a bool Series True at each counted event, so a consumer reports the count apart from the
     # hours ``mask`` covers. None = the rule does not count events.
     events: object = None
+    # 0.111 (#310): the samples the rule judged -- the denominator of the share its verdict
+    # states (fan-on, occupied, running ...), a bool Series; ``judged_basis`` names them
+    # ("fan-on samples"). None = the samples ``mask`` covers (a mask built on the judged samples
+    # alone). ``masks_judged`` does the same for a named sub-mask whose own denominator differs
+    # (one G36 condition's applicable hours), as a bool Series or a ``(Series, basis)`` pair; a
+    # name it lacks uses ``judged``.
+    judged: object = None
+    judged_basis: str = ""
+    masks_judged: object = None
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):

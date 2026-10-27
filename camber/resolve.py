@@ -275,8 +275,9 @@ _STORE_LOCK = threading.Lock()
 
 
 def _facility_signature(store_root: str, facility_id: str) -> tuple:
-    """mtimes of the facility partition dir, its year dirs and their month dirs (changes on any
-    write/drop, in either partition layout)."""
+    """The facility partition's modification signature (see
+    :func:`camber.store.parquet_store._partition_signature`): changes on any write or drop, in
+    either partition layout, and when a part file is rewritten in place."""
     from .store.parquet_store import _partition_signature
 
     return _partition_signature(os.path.join(store_root, f"facility_id={facility_id}"))

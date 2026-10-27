@@ -616,15 +616,24 @@ class DemandControlledVentilation:
         high demand (DCV asked, OA never moved), for **uncorrelated** OA those with OA at its
         floor; and, wherever those checks run, CO₂ above ``co2_setpoint`` with OA at its minimum,
         OA below ``oa_floor_cfm``, and occupied high-CO₂ samples with nothing ventilating."""
+        return self._masks(frame)[0]
+
+    def _masks(self, frame: pd.DataFrame) -> tuple:
+        """``(flagged, judged)``: :meth:`violation_mask`, and (0.111, #310) every sample a
+        sub-check read -- the occupied samples with a demand and an OA reading."""
         if not frame.index.is_unique:
             frame = frame[~frame.index.duplicated(keep="last")]
         out = pd.Series(False, index=frame.index)
+        judged = out.copy()
         if _oa_role(frame, self.full_outdoor_air) is None or Role.CO2 not in frame.columns:
-            return out
+            return out, judged
         collected: list = []
         self._judge("", frame, frame[Role.CO2], masks_out=collected)
         keys = {"static": "high", "uncorrelated": "high_at_floor"}
         for status, masks in collected:
+            for m in (masks or {}).values():
+                if m is not None:
+                    judged |= frame.index.isin(m.index)
             names = [keys[status]] if status in keys else []
             names += ["breach", "below_floor", "unventilated"]
             for name in names:
@@ -633,7 +642,7 @@ class DemandControlledVentilation:
                     continue
                 m = m[~m.index.duplicated(keep="last")].reindex(frame.index)
                 out = out | m.where(m.notna(), False).astype(bool)
-        return out
+        return out, judged
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: CO₂ and the OA signal judged, the samples behind the verdict shaded (#119)."""
@@ -643,10 +652,13 @@ class DemandControlledVentilation:
         if oa is None or Role.CO2 not in frame.columns:
             return None
         dedup = frame[~frame.index.duplicated(keep="last")] if not frame.index.is_unique else None
+        flagged, judged = self._masks(frame)
         return Evidence(
             renderer="multitrend",
             roles=[Role.CO2, oa],
-            mask=self.violation_mask(frame),
+            mask=flagged,
+            judged=judged,
+            judged_basis="occupied samples with a demand and an OA reading",
             label="demand not answered / under-ventilated",
             title=f"{equip}: DCV verification",
             frame=dedup,

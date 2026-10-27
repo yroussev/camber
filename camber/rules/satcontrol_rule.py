@@ -153,12 +153,16 @@ class SupplyAirControl:
         """Pattern J: SAT vs its setpoint, off-setpoint spans shaded."""
         from ..charts.evidence import Evidence
 
-        run = self._running_mask(frame)
-        off = (self._deviation(frame).abs() > self.tol_F) & run
+        dev = self._deviation(frame)
+        run = self._running_mask(frame) & dev.notna()  # 0.111 (#310): analyze's n_running
+        off = (dev.abs() > self.tol_F) & run
+        occ = self._occupancy(frame)[0]
         return Evidence(
             renderer="multitrend",
             roles=[Role.SUPPLY_AIR_TEMP, Role.SUPPLY_AIR_TEMP_SP],
             mask=off.fillna(False),
+            judged=run,
+            judged_basis="occupied running samples" if occ is not None else "running samples",
             label="off setpoint",
             title=f"{equip}: SAT vs setpoint",
         )

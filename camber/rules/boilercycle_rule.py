@@ -132,6 +132,9 @@ class BoilerShortCycle:
             roles=[role],
             mask=self.violation_mask(frame),
             events=self.start_mask(frame),
+            # 0.111 (#310): the rule reads every status sample (runtime_pct is their mean duty)
+            judged=pd.to_numeric(status_frame[Role.BOILER_STATUS], errors="coerce").notna(),
+            judged_basis="boiler-status samples",
             label=f"firing, on a day with >= {self.max_starts_per_day:g} starts",
             title=f"{equip}: boiler short-cycling",
         )

@@ -17,7 +17,11 @@ as "clean" (the honesty convention in `camber/rules/base.py`).
 
 `sensor_trust(series, role)` combines coverage, gaps, flatline, robust outliers and the role's
 `PHYSICAL_BOUNDS` into a 0-1 trust and a verdict (`trusted` >= 0.8, `suspect` >= 0.5, else
-`untrusted`). `untrusted_roles(frame, roles, min_trust=...)` is what the runner's trust gate calls.
+`untrusted`). The runner's trust gate scores each input on its equipment's whole run frame (every
+role at the run's resample, over the run's window, with the shared points merged) with
+`frame_sensor_health(frame, plant_gate="auto")`, the read the `sensor_trust` capability reports, so
+a check is declined exactly when that capability puts an input below the floor (0.111, #311).
+`untrusted_roles(frame, roles, min_trust=...)` scores the roles of a frame you hold.
 
 **Gated mode.** `sensor_trust(series, role, gate=fan_on)` (or `frame_sensor_health(frame,
 gate="fan")`) reads the flatline -- the `stuck` flag and its share of the score -- on the gated
@@ -65,9 +69,9 @@ running samples it holds (`SensorTrust.run_coverage`). A point that is there whe
 equipment runs is flagged `logged_while_running`, not `low_coverage`. A point that is missing
 while the equipment runs is still `low_coverage`.
 
-The runner's trust gate (`untrusted_roles`) and the RCx report apply the plant gate. When a rule's
-own inputs leave out the run signals, the gate resolves them for the trust check alone
-(`untrusted_roles(gate_frame=)`; the rule never sees them).
+The runner's trust gate and the RCx report apply the plant gate. The gate's whole-frame read
+carries the run signals even when a rule's own inputs leave them out (the rule never sees them);
+`untrusted_roles(gate_frame=)` does the same for a frame you hold.
 `frame_sensor_health` keeps `plant_gate=None` as its default. `SensorTrust.run_gate` names the gate
 a point was judged on.
 
@@ -174,8 +178,9 @@ Since 0.92 (#16) two cross-sensor checks below feed trust as well:
 
 These flags make the unit's findings on that point **conditional** in triage
 (`camber.rules.triage.sensor_causes`), on that unit only -- even on OAT, since the check judged this
-unit's own points. The rule runner's trust gate resolves only a rule's own roles, so the flow balance
-applies there only when the rule loads both flows; the RCx report scores the whole frame. The
+unit's own points. The rule runner's trust gate scores the whole frame, as the RCx report does
+(0.111, #311; before, it read only a rule's own roles, so the flow balance applied there only when
+the rule loaded both flows). The
 RCx report's own mixing-consistency table runs the same order check, and a unit where both fire
 gets one triage cause on MAT, OAT and RAT (the table's), not a second one per flagged point. The
 cap at "suspect" never takes a point below the runner's 0.5 trust bar, so `mixing_order` changes no

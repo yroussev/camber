@@ -152,12 +152,24 @@ class LeakingValve:
         roles = [r for r in temps if r in frame.columns]
         if not roles:
             return None
-        masks = self.violation_masks(frame)
+        out: dict = {}
+        self._run("", frame, masks_out=out)
+        none = pd.Series(False, index=frame.index)
+        masks = {"heating leak": out.get("hw", none), "cooling leak": out.get("chw", none)}
+        basis = "both-valves-shut samples"
         return Evidence(
             renderer="multitrend",
             roles=roles,
             mask=masks["heating leak"] | masks["cooling leak"],
             masks=masks,
+            # 0.111 (#310): the shares are of the both-valves-shut samples (n_both_closed), each
+            # coil's of the ones its basis reads
+            judged=out.get("judged", none),
+            judged_basis=basis,
+            masks_judged={
+                "heating leak": (out.get("hw_judged", none), basis),
+                "cooling leak": (out.get("chw_judged", none), basis),
+            },
             label="valves shut, air shifts (leak)",
             title=f"{equip}: leaking valve",
         )
@@ -200,14 +212,14 @@ class LeakingValve:
             summary=(
                 f"{equip}: with both valves shut, air shifts (median "
                 f"{res.median_delta_f:+.1f}F beyond {res.fan_heat_f:g}F fan heat); HW-leak "
-                f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of closed hours "
-                f"(worst: {which}){self._basis_txt(res)}"
+                f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of both-valves-shut "
+                f"samples (worst: {which}){self._basis_txt(res)}"
                 if severity != "ok"
                 else f"{equip}: no valve leak -- with both valves shut, air holds near the "
                 f"{res.fan_heat_f:g}F fan-heat allowance (median "
                 f"{signed(res.median_delta_f, 1)}F beyond it); HW-leak "
-                f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of closed hours"
-                f"{self._basis_txt(res)}"
+                f"{res.hw_leak_pct:.0f}% / CHW-leak {res.chw_leak_pct:.0f}% of both-valves-shut "
+                f"samples{self._basis_txt(res)}"
             ),
         )
 

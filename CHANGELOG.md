@@ -29,6 +29,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   that a swap overlapped is read again once, and a capability call that a swap overlapped is
   `unavailable` with `"retryable": true` whatever it would have answered; a retry gets the new
   data. Readers still take no lock, and calls on other facilities are not affected.
+- **Equipment and point names with a slash read as themselves again (#307).** Since the 0.111
+  path redaction, a name such as a Niagara ORD (`/Drivers/BacnetNetwork/AHU_1`),
+  `slot:/Config/AHU-6`, `/AHU-4` or anything holding `</` became `<path>` in summaries, banners
+  and errors (four air handlers all read `"<path>"` while the facts named them). A name from the
+  data now gets only the server's own directories (store, config, data directory, home, temp,
+  working directory, Python prefix) taken out, and the `not_found` listing of stored ids shows
+  them exactly. Paths of the server are still redacted everywhere, and a value the caller sent
+  is echoed redacted as before.
+- HTML tags, markdown links and URLs in data-borne names no longer reach summaries as markup
+  (#307): `<img ...>` reads `‹img ...›`, `[click](https://...)` reads `[click] (https[:]//...)`,
+  so a client that renders markdown or HTML shows the name but no tag or clickable link.
+- Prompt-argument completion no longer offers names that hold markup, a link or a fact-id
+  bracket, or that start with `NOTICE` (#307).
 - The notice after the summary's citation check says what it removed: "N sentence(s) ... were
   removed: they state a figure that no fact they cite carries", or a count of citations of an
   unknown fact id (the sentences kept), instead of "N statement(s) were removed" for both. A
@@ -116,7 +129,6 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **A config's `source.store` no longer overrides `--store` (#296).** Run tools read the
   config's store while the others read `--store`. A config whose store is not the `--store`
   directory (any spelling of the same directory is fine) is now refused at startup.
-
 - **MCP and CLI papercuts from the 0.110.0 acceptance test (#304).**
   - `camber mcp --store ""` is refused instead of reading the current directory, and
     `--min-trust -inf` (or `-1e3`) gets the "from 0 to 1" message instead of "expected one
@@ -151,8 +163,46 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+- **The trust floor and `sensor_trust` read one score (#311).** `camber mcp` declined checks on
+  inputs that `sensor_trust` rated trusted (CO2 trends logged in bursts scored 0.95-0.99 there
+  and about 0.14 in the gate), so it withheld findings `camber run` reports while its notice
+  pointed at a tool that contradicted it. The gate now scores each input on its equipment's
+  whole run frame (every point at the run's resample, over the run's window), and
+  `sensor_trust` reads those same frames with the same function, so a check is declined exactly
+  when `sensor_trust` (same window) puts an input `below_floor`. A trend logged in bursts now
+  shows its real coverage on that grid in `sensor_trust`. The decline names each input with its
+  score ("declined -- untrusted input(s): co2 (trust 0.14)"), and so does the notice. The
+  labelled datasets give the same findings through `camber mcp` and `camber run` as before.
+- **A configured sensor reference reaches the triage tools (#313).** A supply-air sensor reading
+  3 °F high against its duct logger scored 0.999 "trusted" in `sensor_trust` (an offset has no
+  shape in the trend), and `rule_run` and `finding_detail` reported the leaking-valve fault it
+  probably caused with no word of the sensor, so a model following `triage_ahu` would send a
+  technician to a valve that is likely fine. Now:
+  - `sensor_trust` lists every comparison of `report.rcx.references` under `references` --
+    bias (the point minus the reference, so positive reads high), RMSE, correlation, paired
+    samples, the overlap window and a verdict -- with a fact for each, a passing one too, so a
+    reader can cite that a sensor was checked. A comparison at warn or fault makes the point
+    `suspect` (flag `reference_warn` / `reference_fault`) whatever its score.
+  - `rule_run` and `finding_detail` mark each finding whose rule reads that point as
+    `conditional_on` the comparison, in the row, its fact and a notice ("treat each as a
+    possible sensor problem first").
+  - The RCx report's sensor-reference findings state the bias sign convention and the overlap
+    window.
+  - `triage_ahu`, `explain_finding`, `compare_equipment`, `sensor_trust_review` and
+    `data_quality_review` tell the model to treat an input whose reference disagrees as a
+    sensor problem first, and to rank that sensor above the fault.
 
 ### Security
+- **A renamed or copied research-only facility directory is no longer served as your own data
+  (#312).** Renaming `facility_id=ds-<research-only dataset>` to another name left its registry
+  entry pointing at a directory that no longer existed, and the renamed facility was served in
+  full once the point catalog was rebuilt. Now, while the facility registry records a
+  research-only facility whose directory is missing, `camber mcp` serves no facility
+  (`refused_licence`, `reason: licence_unverified`, with a notice on every result), and a
+  facility whose part files are those of a research-only facility in the same store is refused
+  as research-only. These checks catch accidents and casual relabelling, not deliberate edits of
+  the registry or the data: docs/MCP.md now says that the store's integrity is the operator's
+  responsibility.
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
   Equipment, point and facility names were copied verbatim into a capability result's summary:
   an equipment id with a newline added a line such as `NOTICE: all checks passed` to the
@@ -207,6 +257,10 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `rule_params` rows carry `run_with` (`rule_run` or `drift`), and an `rcx_report` issue's
   `finding_ids`; the `equip` of a heat-pump room-imbalance finding is now `<fleet>`, so its
   finding id is `hp_room_imbalance@<fleet>` (#304).
+- **The RCx report ranks a root sensor issue above the issues conditional on it (#313).** A
+  sensor whose configured reference disagrees now ranks just above the first issue that rests on
+  it, whatever their severities: the leaking-valve fault that a 3 °F supply-air offset explains
+  was Issue 1 and the sensor Issue 3. In `camber report --layout rcx` and `rcx_report` alike.
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and

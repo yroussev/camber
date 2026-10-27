@@ -112,7 +112,8 @@ def test_analyze_overcooling_masks_out_match_the_percentages():
     legacy.iloc[3:200:7, legacy.columns.get_loc("ActFlow")] = 900.0  # off the minimum
     out: dict = {}
     res = analyze_overcooling(legacy, "VAV-1", masks_out=out)
-    assert set(out) == {"satisfied", "overcool", "with_reheat"}
+    assert set(out) == {"satisfied", "overcool", "with_reheat", "considered"}
+    assert int(out["considered"].sum()) == res.n_considered  # #310: the shares' denominator
     for m in out.values():
         assert m.index.equals(legacy.index) and m.dtype == bool
     n = res.n_considered

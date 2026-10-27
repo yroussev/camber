@@ -24,10 +24,20 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   (the catalog's research-only tier) is never served to an AI client, with no override. The
   check fails closed: a facility named for a research-only catalog dataset is refused whatever
   the store's facility registry says, and while that registry (`_facilities.json`) is missing,
-  unreadable or malformed no facility is served at all, with a notice on every result.
+  unreadable or malformed no facility is served at all, with a notice on every result. A
+  facility directory that was renamed, moved or copied is caught too (0.111, #312): while the
+  registry records a research-only facility whose directory is missing, no facility is served,
+  and a facility whose part files are those of a research-only facility in the same store is
+  refused as research-only. These checks guard against accidents and casual relabelling, not
+  against someone who edits the registry or the stored data on purpose: the store's integrity
+  is the operator's responsibility. Keep the store writable only by the people who ingest into
+  it, and change it with CAMBER's own commands (`camber datasets remove`, `camber facility ...`)
+  rather than by hand.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because an input scores below it is announced in a NOTICE line, with the count,
-  the rules and the inputs.
+  the rules and the inputs with their scores; `sensor_trust` reports the same scores and marks
+  exactly those inputs `below_floor`. A finding resting on an input whose configured sensor
+  reference disagrees is not declined but marked `conditional_on` that sensor.
 - **Model-sized results.** A tool returns one page of each list by default, so a typical result
   stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
   says what was left out and how to get it. A reply over 2 MB is refused as too large, and a
@@ -35,15 +45,19 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx-1a2b3c]`, which point at the
   values in the result. The token after the context depends on the call, the allowlist, the run
   config, the trust floor and the stored data, so two servers (or one server before and after an
-  ingest) never give one id to different values (0.111, #295).
+  ingest) never give one id to different values (0.111, #295). The stored data counts by the
+  size and modification time of each file the call reads and of the point catalog, so a part
+  file rewritten in place gives new ids too (#312); a restart, or a config at another path,
+  does not.
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
 allowed facilities a call would read (never a research-only one), `equip` and `equips` (its last
 comma-separated id) from the stored equipment of the facility already chosen
 (`context.arguments.facility_id`), at most 100 values, those starting with what was typed first.
-A name that is not one clean line of at most 200 characters is never offered, and any other
-argument completes to nothing. A host shows these to the person filling in a prompt. The model
+A name that is not one clean line of at most 200 characters is never offered, nor one that the
+summaries' sanitiser would change (HTML or markdown markup, a URL, a fact-id bracket) or that
+starts with `NOTICE` (0.111, #307), and any other argument completes to nothing. A host shows these to the person filling in a prompt. The model
 itself cannot list or start a prompt in most hosts, only a person can.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
@@ -65,7 +79,8 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   facility is refused. A facility named for a catalog dataset (`ds-...`) that has no registry
   entry is not counted as active. If the facility registry is missing, unreadable or malformed,
   no facility counts as active: the server starts with nothing to serve and says so on stderr and
-  in every result. Repair the registry (restore it, or re-ingest) and restart.
+  in every result. The same holds while it records a research-only facility whose directory is
+  missing. Repair the registry (restore it, or re-ingest) and restart.
 - A warning on stderr names each `--allow` facility that will be refused: research-only data, a
   catalog-dataset facility with no registry entry, or every facility while the registry is
   damaged.

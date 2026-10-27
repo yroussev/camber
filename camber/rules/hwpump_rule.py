@@ -147,6 +147,8 @@ class HWPumpDPReset:
             renderer="multitrend",
             roles=[Role.HW_PUMP_SPEED],
             mask=mask.fillna(False),
+            judged=running.fillna(False),  # 0.111 (#310): n_running, the shares' denominator
+            judged_basis="running samples",
             label="near full speed" if full and not low else "pinned",
             title=f"{equip}: HW pump speed",
         )

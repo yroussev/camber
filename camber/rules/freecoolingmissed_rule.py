@@ -414,6 +414,8 @@ class FreeCoolingMissed:
             template=tmpl,
             frame=derived,
             mask=j["missed"][keep],
+            # 0.111 (#310): the mask covers the judged samples alone (missed_pct's denominator)
+            judged_basis=("fan-on " if gate else "") + "free-cooling samples",
             label="missed free cooling",
             title=f"{equip}: cooling vs OAT (free-cooling)",
         )

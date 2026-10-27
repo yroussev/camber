@@ -122,6 +122,9 @@ class OvercoolingSeverity:
             renderer="multitrend",
             roles=roles,
             mask=masks.get(tier),
+            # 0.111 (#310): the mask covers the considered samples alone, the tier share's
+            # denominator (n_considered)
+            judged_basis="occupied samples",
             label=f"overcooled ({tier} tier)",
             title=f"{equip}: overcooling severity",
         )

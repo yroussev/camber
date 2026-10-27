@@ -168,7 +168,7 @@ def test_an_unset_parameter_shows_the_value_the_rule_used(sets, monkeypatch):
     m = d.data["metrics"]
     assert m["min_oa_source"] == "default"
     assert m["oa_cost_excess_cool_kbtu"] is None and m["oa_cost_excess_cool_btu_per_cfm"] is None
-    assert "of the window" not in d.text and "samples it judged" in d.text
+    assert "of the window" not in d.text and "judged occupied fan-on samples" in d.text
 
 
 def test_spans_break_where_the_masks_samples_are_apart():
