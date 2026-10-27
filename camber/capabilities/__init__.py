@@ -561,14 +561,15 @@ def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
 def _server_state(arguments: dict, ctx: CallContext) -> list:
     """What decides a call's values besides its arguments and the allowlist (#295): a digest of
     the loaded run config (its canonical JSON, not its path; the file's bytes when it does not
-    load), the trust floor, and a cheap store generation: the facility registry's and every
-    touched facility partition's modification signature (the facilities the arguments name, else
-    every allowed one, plus a store-backed config's own facility). Stat calls only: nothing is
-    read but the config."""
+    load), the trust floor, and a cheap store generation: the size and modification time of the
+    facility registry and the point catalog, and of every file of each touched facility
+    partition, part files included, so an in-place rewrite counts (#312; the facilities the
+    arguments name, else every allowed one, plus a store-backed config's own facility). Stat
+    calls only: nothing is read but the config, and no path enters the token."""
     from .. import __version__
     from ..config import load_config
     from ..store.facilities import _FACILITIES
-    from ..store.parquet_store import _FACILITY, _partition_signature
+    from ..store.parquet_store import _CATALOG, _CATALOG_GEN, _FACILITY, _partition_signature
     from ._policy import config_paths, named_facilities
 
     configs, config_stores = [], []
@@ -594,17 +595,20 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
         fdir = os.path.join(os.path.abspath(root), f"{_FACILITY}={fid}")
         return [fid, list(_partition_signature(fdir))]
 
-    try:
-        st = os.stat(os.path.join(ctx.store, _FACILITIES))
-        registry = [st.st_mtime_ns, st.st_size]
-    except OSError:
-        registry = None
+    def stat(root: str, name: str):
+        try:
+            st = os.stat(os.path.join(root, name))
+            return [st.st_mtime_ns, st.st_size]
+        except (OSError, TypeError):  # absent, or no store
+            return None
+
     named = [f for f in named_facilities(arguments) if f in ctx.allowed_facilities]
     store = [
-        registry,
+        [stat(ctx.store, n) for n in (_FACILITIES, _CATALOG, _CATALOG_GEN)],
         *(signature(ctx.store, f) for f in sorted(set(named or ctx.allowed_facilities))),
     ]
-    store.extend(signature(*cs) for cs in config_stores)
+    for root, fid in config_stores:
+        store.append([*signature(root, fid), [stat(root, n) for n in (_CATALOG, _CATALOG_GEN)]])
     # the package version: with no config a catalog facility runs its packaged template (#296)
     return [__version__, configs, float(ctx.min_trust), store]
 

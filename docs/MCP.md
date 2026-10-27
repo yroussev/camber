@@ -24,7 +24,15 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   (the catalog's research-only tier) is never served to an AI client, with no override. The
   check fails closed: a facility named for a research-only catalog dataset is refused whatever
   the store's facility registry says, and while that registry (`_facilities.json`) is missing,
-  unreadable or malformed no facility is served at all, with a notice on every result.
+  unreadable or malformed no facility is served at all, with a notice on every result. A
+  facility directory that was renamed, moved or copied is caught too (0.111, #312): while the
+  registry records a research-only facility whose directory is missing, no facility is served,
+  and a facility whose part files are those of a research-only facility in the same store is
+  refused as research-only. These checks guard against accidents and casual relabelling, not
+  against someone who edits the registry or the stored data on purpose: the store's integrity
+  is the operator's responsibility. Keep the store writable only by the people who ingest into
+  it, and change it with CAMBER's own commands (`camber datasets remove`, `camber facility ...`)
+  rather than by hand.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because an input scores below it is announced in a NOTICE line, with the count,
   the rules and the inputs with their scores; `sensor_trust` reports the same scores and marks
@@ -37,7 +45,10 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx-1a2b3c]`, which point at the
   values in the result. The token after the context depends on the call, the allowlist, the run
   config, the trust floor and the stored data, so two servers (or one server before and after an
-  ingest) never give one id to different values (0.111, #295).
+  ingest) never give one id to different values (0.111, #295). The stored data counts by the
+  size and modification time of each file the call reads and of the point catalog, so a part
+  file rewritten in place gives new ids too (#312); a restart, or a config at another path,
+  does not.
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
@@ -68,7 +79,8 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   facility is refused. A facility named for a catalog dataset (`ds-...`) that has no registry
   entry is not counted as active. If the facility registry is missing, unreadable or malformed,
   no facility counts as active: the server starts with nothing to serve and says so on stderr and
-  in every result. Repair the registry (restore it, or re-ingest) and restart.
+  in every result. The same holds while it records a research-only facility whose directory is
+  missing. Repair the registry (restore it, or re-ingest) and restart.
 - A warning on stderr names each `--allow` facility that will be refused: research-only data, a
   catalog-dataset facility with no registry entry, or every facility while the registry is
   damaged.

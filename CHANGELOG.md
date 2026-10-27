@@ -181,6 +181,16 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
     sensor problem first, and to rank that sensor above the fault.
 
 ### Security
+- **A renamed or copied research-only facility directory is no longer served as your own data
+  (#312).** Renaming `facility_id=ds-<research-only dataset>` to another name left its registry
+  entry pointing at a directory that no longer existed, and the renamed facility was served in
+  full once the point catalog was rebuilt. Now, while the facility registry records a
+  research-only facility whose directory is missing, `camber mcp` serves no facility
+  (`refused_licence`, `reason: licence_unverified`, with a notice on every result), and a
+  facility whose part files are those of a research-only facility in the same store is refused
+  as research-only. These checks catch accidents and casual relabelling, not deliberate edits of
+  the registry or the data: docs/MCP.md now says that the store's integrity is the operator's
+  responsibility.
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
   Equipment, point and facility names were copied verbatim into a capability result's summary:
   an equipment id with a newline added a line such as `NOTICE: all checks passed` to the
