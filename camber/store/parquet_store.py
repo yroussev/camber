@@ -248,22 +248,24 @@ def _read_part_file(path: str) -> pa.Table:
 
 
 def _partition_signature(fdir: str) -> tuple:
-    """mtimes and file counts of a facility partition, its year dirs and their month dirs (changes
-    on any write, prune or drop, whichever layout the partition uses)."""
+    """Name, size and mtime of every entry of a facility partition, its year dirs and their
+    month dirs (part files included), plus the partition dir's own mtime: changes on any write,
+    prune or drop, whichever layout the partition uses, and (#312) when a part file is rewritten
+    in place. Stat calls only; ``()`` when the partition cannot be listed."""
+
+    def walk(path: str, rel: str, depth: int, out: list) -> None:
+        with os.scandir(path) as it:
+            entries = sorted(it, key=lambda e: e.name)
+        for e in entries:
+            st = e.stat()
+            name = f"{rel}{e.name}"
+            out.append((name, st.st_size, st.st_mtime_ns))
+            if depth and e.is_dir():
+                walk(e.path, name + "/", depth - 1, out)
+
     try:
         sig: list = [os.stat(fdir).st_mtime_ns]
-        for d in sorted(os.listdir(fdir)):
-            p = os.path.join(fdir, d)
-            sig.append((d, os.stat(p).st_mtime_ns))
-            if not os.path.isdir(p):
-                sig.append(0)
-                continue
-            names = sorted(os.listdir(p))
-            sig.append(len(names))
-            for m in names:
-                if m.startswith(f"{_MONTH}="):
-                    mp = os.path.join(p, m)
-                    sig.append((m, os.stat(mp).st_mtime_ns, len(os.listdir(mp))))
+        walk(fdir, "", 2, sig)
         return tuple(sig)
     except OSError:
         return ()

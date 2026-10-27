@@ -45,8 +45,8 @@ def _frame(v=55.0):
 def store(tmp_path):
     assert get("at-30bldg-sensors").research_only and not get("lbnl-fcu").research_only
     st = ParquetStore(str(tmp_path / "store"))
-    for fid in (NC, OPEN, OWN, OLD):
-        st.write_role_frame(_frame(), facility_id=fid, equip="AHU-1", equip_class="AHU")
+    for v, fid in enumerate((NC, OPEN, OWN, OLD)):  # other values: none a copy of another (#312)
+        st.write_role_frame(_frame(55.0 + v), facility_id=fid, equip="AHU-1", equip_class="AHU")
     st.register_facility(NC, name="NC", dataset=get("at-30bldg-sensors").provenance())
     st.register_facility(OPEN, name="Open", dataset=get("lbnl-fcu").provenance())
     st.register_facility(OWN, name="HQ")

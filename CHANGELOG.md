@@ -139,8 +139,26 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+  - Fact ids now change when a facility's stored data is rewritten in place (#312). The token
+    followed the folders' modification times only, so a part file edited under the same name, or
+    a point catalog that changed, kept the old ids while the values changed (`CW supply median
+    70.5 °F`, then `77.8 °F`, under one id), and `check_citations` refused the pair. The token
+    now covers the name, size and modification time of each file the call reads and of the point
+    catalog; it still stays the same across a restart and for the same config at another path.
+    A long-running server also no longer reads a part file rewritten in place through stale
+    cached file metadata (which reported the file as damaged until a restart).
 
 ### Security
+- **A renamed or copied research-only facility directory is no longer served as your own data
+  (#312).** Renaming `facility_id=ds-<research-only dataset>` to another name left its registry
+  entry pointing at a directory that no longer existed, and the renamed facility was served in
+  full once the point catalog was rebuilt. Now, while the facility registry records a
+  research-only facility whose directory is missing, `camber mcp` serves no facility
+  (`refused_licence`, `reason: licence_unverified`, with a notice on every result), and a
+  facility whose part files are those of a research-only facility in the same store is refused
+  as research-only. These checks catch accidents and casual relabelling, not deliberate edits of
+  the registry or the data: docs/MCP.md now says that the store's integrity is the operator's
+  responsibility.
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
   Equipment, point and facility names were copied verbatim into a capability result's summary:
   an equipment id with a newline added a line such as `NOTICE: all checks passed` to the

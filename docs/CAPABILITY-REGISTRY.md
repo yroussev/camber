@@ -57,9 +57,9 @@ a handler returns -- in `facts`, in the `[id]` citations of `text` and wherever 
 fact id (a row's `fact`, the RCx fact index). The token is six hex digits of SHA-256 over the
 capability name, the canonical JSON of the validated arguments, the sorted allowlist and what
 else decides the values (0.111, #295): a digest of the loaded run config (its content, not its
-path), the trust floor and a store generation (the modification signature of the facility
-registry and of each facility the call reads: the ones its arguments name, else every allowed
-one). So the same call on the same server and unchanged data gives the same ids, also after a
+path), the trust floor and a store generation (the size and modification time of the facility
+registry, the point catalog and every file of each facility the call reads, part files included,
+so an in-place rewrite counts, #312: the facilities its arguments name, else every allowed one). So the same call on the same server and unchanged data gives the same ids, also after a
 restart, while two different calls, or the same call on two servers that differ in `--config`,
 `--min-trust` or stored data, or after an ingest, give different ones: a model cannot cite
 `F1@rule_run` from one call while meaning another, and the facts of several calls, from one

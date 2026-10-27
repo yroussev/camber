@@ -106,8 +106,19 @@ def test_stored_data_changes_the_ids(site):
     after = _ids(ctx)
     assert not set(before) & set(after)
     assert _ids(ctx) == after  # and stable again while the data stays as it is
-    # a facility the call does not touch keeps its ids
-    assert _ids(ctx, arguments={"facility_id": "annex"}) == annex
+    # a store write changes the point catalog every call may read (#312) ...
+    annex_after = _ids(ctx, arguments={"facility_id": "annex"})
+    assert annex_after != annex
+    # ... but a file of a facility the call does not touch is not its data
+    part = next(
+        os.path.join(d, f)
+        for d, _dirs, files in os.walk(os.path.join(site["store"].root, f"facility_id={FID}"))
+        for f in files
+        if f.endswith(".parquet")
+    )
+    os.utime(part, ns=(1, 1))
+    assert _ids(ctx, arguments={"facility_id": "annex"}) == annex_after
+    assert _ids(ctx) != after
     # a listing touches every allowed facility
     listing = _ids(ctx, "facilities", {})
     site["store"].write_role_frame(
