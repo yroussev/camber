@@ -27,7 +27,9 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   unreadable or malformed no facility is served at all, with a notice on every result.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because an input scores below it is announced in a NOTICE line, with the count,
-  the rules and the inputs.
+  the rules and the inputs with their scores; `sensor_trust` reports the same scores and marks
+  exactly those inputs `below_floor`. A finding resting on an input whose configured sensor
+  reference disagrees is not declined but marked `conditional_on` that sensor.
 - **Model-sized results.** A tool returns one page of each list by default, so a typical result
   stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
   says what was left out and how to get it. A reply over 2 MB is refused as too large, and a

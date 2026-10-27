@@ -21,6 +21,7 @@ from ._common import (
     by_severity,
     check_run_selection,
     cite,
+    conditional_banner,
     facility_config,
     finding_fact,
     finding_ids,
@@ -28,6 +29,8 @@ from ._common import (
     jsonable,
     mask_summary,
     narrow,
+    reference_conditions,
+    reference_findings,
     rule_names,
     run,
     severity_counts,
@@ -157,11 +160,26 @@ def _run_for(ctx, arguments: dict):
     return run(ctx, config, base_dir), from_caller, notice, (start, end)
 
 
+def _rows(ctx, fid: str, res) -> list:
+    """The run's findings as rows, each marked ``conditional_on`` the configured sensor
+    references of its inputs that disagree (0.111, #313)."""
+    ids = finding_ids(res.findings)
+    refs, _notes = reference_findings(ctx, fid, res)
+    conds = reference_conditions(res.findings, refs, getattr(res, "registry", None))
+    rows = []
+    for i, f, cond in zip(ids, res.findings, conds):
+        row = finding_row(i, f)
+        if cond:
+            row["conditional_on"] = cond
+        rows.append(row)
+    return rows
+
+
 def rule_run(ctx, arguments: dict) -> CapabilityResult:
     """Run the FDD rules on one allowed facility and return the findings, worst first."""
     fid = arguments["facility_id"]
     res, from_caller, config_notice, (start, end) = _run_for(ctx, arguments)
-    rows = by_severity([finding_row(i, f) for i, f in zip(finding_ids(res.findings), res.findings)])
+    rows = by_severity(_rows(ctx, fid, res))
     counts = severity_counts(rows)
     floor = SEVERITIES.index(arguments.get("min_severity") or "info")
     listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= floor]
@@ -215,6 +233,9 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             text.append(cite(facts[-1]))
     banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
+    if notice:
+        banners.append(notice)
+    notice = conditional_banner(sum(1 for r in rows if r.get("conditional_on")))  # #313
     if notice:
         banners.append(notice)
     data = {
@@ -445,7 +466,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
             f"no finding {want!r} in this run (call rule_run with the same arguments to list "
             "the finding ids)",
         )
-    row = finding_row(want, f)
+    row = next(r for r in _rows(ctx, fid, res) if r["finding_id"] == want)
     entry = next(
         (e for e in res.config.get("rules") or [] if isinstance(e, dict) and e.get("name") == rule),
         {},
@@ -529,7 +550,10 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
         "violations_note": note,
         "conditions": conditions,
     }
-    return CapabilityResult(data=data, text=" ".join(text), facts=facts)
+    banner = conditional_banner(1 if row.get("conditional_on") else 0)  # 0.111 (#313)
+    return CapabilityResult(
+        data=data, text=" ".join(text), facts=facts, banners=[banner] if banner else []
+    )
 
 
 CAPABILITIES = (

@@ -792,7 +792,9 @@ def link_findings(
       site never declared).
     * **Rank**: severity tier, then non-conditional before conditional, costed before uncosted, $
       descending; uncosted issues of one tier then rank by confidence, H before M before L
-      (0.102, #112); ties break on the key, so the order is deterministic.
+      (0.102, #112); ties break on the key, so the order is deterministic. A sensor issue that
+      other issues are conditional on then moves just above the first of them (0.111, #313), so
+      the root cause ranks above its symptoms.
     * **Confidence**: ``confidence_for(issue) -> Confidence`` (default: :func:`finding_confidence`
       of the root with the trust scores of its inputs and the conditional causes).
     * **Plant capacity** (0.91): an issue carrying a SAT-high finding (:func:`is_sat_high`) gets
@@ -1012,9 +1014,27 @@ def link_findings(
             i.key,
         )
     )
+    issues = _sensor_first(issues)
     for n, iss in enumerate(issues, 1):
         iss.rank = n
     return issues
+
+
+def _sensor_first(issues: list) -> list:
+    """``issues`` with each sensor issue that others are conditional on (its ``dependents``)
+    moved just above the first of them (0.111, #313): the root cause reads before its symptoms,
+    whatever their severity -- a fault resting on a biased sensor is that sensor first."""
+    out = list(issues)
+    for iss in [i for i in issues if i.dependents]:
+        dep = {id(f) for f in iss.dependents}
+        pos = next(k for k, o in enumerate(out) if o is iss)
+        first = next(
+            (k for k, o in enumerate(out) if o is not iss and any(id(m) in dep for m in o.members)),
+            None,
+        )
+        if first is not None and first < pos:
+            out.insert(first, out.pop(pos))
+    return out
 
 
 def _confidence_rank(issue) -> int:

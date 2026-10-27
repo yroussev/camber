@@ -1319,9 +1319,15 @@ def _point_references(ctx, o, run) -> tuple:
                 continue
             kw = {k: spec[k] for k in _REFERENCE_THRESHOLDS if k in spec}
             series = pd.to_numeric(series, errors="coerce")
-            f = drift_finding(series, ref.reindex(series.index), equip, role, **kw)
+            ref = pd.to_numeric(ref, errors="coerce").reindex(series.index)
+            f = drift_finding(series, ref, equip, role, **kw)
             f.metrics["reference"] = label
             f.metrics["scope_equips"] = [equip]  # this unit's own point, whatever the role
+            # 0.111 (#313): the paired samples' span, and what the sign of the bias means
+            both = series.notna() & ref.notna()
+            f.metrics["overlap_start"] = str(series.index[both][0]) if both.any() else None
+            f.metrics["overlap_end"] = str(series.index[both][-1]) if both.any() else None
+            f.caveats.append(_BIAS_SIGN.format(point=f"{equip} {slug}", ref=label))
             findings.append(f)
             m = f.metrics
             rows.append(
@@ -1338,6 +1344,28 @@ def _point_references(ctx, o, run) -> tuple:
                 ]
             )
     return findings, rows, notes
+
+
+#: the sign convention of a sensor reference's bias (0.111, #313)
+_BIAS_SIGN = (
+    "bias is the median of {point} minus {ref} over their paired samples: positive means the "
+    "point reads high against the reference, negative that it reads low"
+)
+
+
+def _reference_findings(run, references: dict | None, base_dir: str) -> tuple:
+    """``(findings, notes)``: the per-equipment sensor references ``references`` (a config's
+    ``report.rcx.references``) compared on ``run``'s frames exactly as the RCx report compares
+    them (0.111, #313) -- for the capabilities, which carry the comparison into ``sensor_trust``,
+    ``rule_run`` and ``finding_detail``. ``run`` needs ``frame_for``, ``refs``, ``config`` and
+    ``base_dir`` (a :class:`~camber.config.RunResult` has them). The site OAT entry is the
+    report's own. ``ValueError`` for a malformed block."""
+    if not references:
+        return [], []
+    o = RcxOptions()
+    o.references, _site_oat = _parse_references(references, base_dir)
+    findings, _rows, notes = _point_references(_Ctx(run, o), o, run)
+    return findings, notes
 
 
 def _load_reference_oat(spec: dict, index, weather=None) -> pd.Series | None:

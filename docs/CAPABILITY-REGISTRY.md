@@ -91,8 +91,8 @@ capability cannot cut a list and leave the flag false.
 | `facilities` | optional `limit`, `offset` | the allowed facilities: id, name, lifecycle state, time zone, first and last stored sample, point and equipment counts | cheap |
 | `points` | `facility_id`; optional `equip`, `role`, `equip_class` | the facility's stored points (equipment, class, role), sorted, and their count | cheap |
 | `coverage` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `group_by` (`point` / `equip`), `min_gap_hours` | per point the samples, first and last sample, interval, coverage (of the whole window, at the point's own interval) and gaps; per equipment the mean and the worst point; the longest gaps | one timestamp scan |
-| `sensor_trust` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `view` (`rules` / `report`), `min_trust` | per point the trust score, verdict, flags, coverage (of the point's own span, or its equipment's running hours: it can differ from `coverage`'s for one point) and whether it is below the caller's trust floor (`ctx.min_trust`, or a higher `min_trust`), least trusted first | reads every trend |
-| `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics), worst first; counts per severity; the rules skipped for missing inputs | long-running |
+| `sensor_trust` | `facility_id`; optional `equips`, `roles`, `start`, `end`, `view` (`rules` / `report`), `min_trust` | per point the trust score, verdict, flags, coverage (of the point's own span on the rule run's time grid, or its equipment's running hours: it can differ from `coverage`'s for one point) and whether it is below the caller's trust floor (`ctx.min_trust`, or a higher `min_trust`), least trusted first; the run config's sensor-reference comparisons (`references`: bias, its sign, RMSE, correlation, samples, overlap, verdict; a passing one too) | reads every trend |
+| `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics, and `conditional_on` when an input's configured sensor reference disagrees), worst first; counts per severity; the rules skipped for missing inputs | long-running |
 | `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default, overridden or the rule's built-in fallback), its flagged hours as contiguous time spans (and per named sub-condition; an event rule's events counted apart from the hours) or why there are none (`violations_note`), and which evidence chart applies; no image | the same run as `rule_run` |
 | `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n`, `offset`, `limit` | the RCx report as data: KPIs, the `top_n` ranked issues (cause, the rules and the `finding_ids` to pass to `finding_detail`, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
 | `mv_summary` | `facility_id`; optional `equips` | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty (in the meter's own units unless the config has a `units` block, and "for information only" when the baseline fails G14 acceptance; both said in the text), triggers, method proposals, and which declined | seconds |
@@ -116,8 +116,27 @@ floor. `rcx_report` also runs the config's `drift` section, as `camber report --
 does (0.111, #297), so its ranked issues match the command line's. A configured OAT reference
 that fetches weather over the network is left out of `rcx_report` (a CSV reference is kept), and
 no prose is generated. A configured sensor reference (`report.rcx.references`, such as a duct
-logger) is compared in `rcx_report` only; an issue that rests on a sensor the reference finds
-wrong names it in its fact ("conditional on sensor_drift:supply_air_temp warn").
+logger) is compared the way `rcx_report` compares it in `sensor_trust`, `rule_run` and
+`finding_detail` too (0.111, #313). `sensor_trust` lists every comparison under `references`
+(a passing one too, so a reader can cite that a sensor was checked): `bias` is the median of
+the point minus the reference over their paired samples, so a positive bias means the point
+reads high. A comparison at warn or fault makes its point `suspect` (flag `reference_warn` /
+`reference_fault`) whatever its trust score, since an offset has no shape in the trend; the
+score and `below_floor` are unchanged, so the check is not declined. Instead every finding
+whose rule reads that point on that equipment carries `conditional_on` (the comparison) in
+`rule_run` and `finding_detail`, its fact says "conditional on sensor_drift:supply_air_temp
+warn ...", and a notice says to treat it as a sensor problem first. In `rcx_report` such an
+issue names it in its fact the same way, and the sensor issue ranks just above the first issue
+that is conditional on it, whatever their severities.
+
+**The trust floor and `sensor_trust` read one score** (0.111, #311). A rule's input is scored
+on its equipment's whole run frame -- every role at the run config's resample, over the run's
+window, with the shared points merged -- by the same function that scores `sensor_trust`'s
+`rules` view, which reads the frames `rule_run` reads. So a check is declined exactly when
+`sensor_trust` (same window) puts one of its inputs `below_floor`, and the decline names each
+input with that score ("declined -- untrusted input(s): co2 (trust 0.14)"). A trend logged in
+bursts covers only its bursts on that grid, so it can be below the floor although every stored
+sample is sound.
 
 **A selection that matches nothing is `not_found`** (0.111, #296), never an empty answer that
 reads as a clean bill of health. An `equips` / `equip` id, a `roles` / `role` or an `equip_class`

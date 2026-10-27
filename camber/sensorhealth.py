@@ -1353,6 +1353,22 @@ def frame_sensor_health(
     return frame_checks(frame, health, gate=gate)
 
 
+def _input_health(frame: pd.DataFrame) -> dict:
+    """``{Role: SensorTrust}`` of an equipment's run frame: the one read the trust floor gates on
+    (0.111, #311).
+
+    The rule runner's gate and the ``sensor_trust`` capability both call this on the same frame
+    -- every role of the equipment at the run's resample, with the shared points merged -- so an
+    input is declined exactly when ``sensor_trust`` scores it below the floor. Plant points are
+    judged on their equipment's running samples; the frame-level checks see every point of the
+    unit.
+    """
+    num = frame.select_dtypes(include="number") if frame is not None else pd.DataFrame()
+    if num.empty:
+        return {}
+    return frame_sensor_health(num, plant_gate="auto")
+
+
 def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=None) -> set:
     """Roles whose data is trustworthy enough to diagnose on (trust >= ``min_trust``).
 

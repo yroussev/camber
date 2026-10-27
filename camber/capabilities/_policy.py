@@ -263,7 +263,7 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
     store facility: its ``facility_id`` (or ``site``) must still be in the allowlist, and it is
     refused when it is named for a research-only catalog dataset.
     """
-    from ..config import _check_config_shape, load_config, run_config
+    from ..config import load_config, run_config
     from . import CapabilityError
 
     if config is None:
@@ -277,6 +277,14 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
             raise CapabilityError("not_found", "the run config this caller names does not exist")
         config = load_config(paths[0])
         base_dir = base_dir or os.path.dirname(os.path.abspath(paths[0]))
+    return run_config(_checked(ctx, config, base_dir), base_dir=base_dir or ".", persist=False)
+
+
+def _checked(ctx, config: dict, base_dir: str | None) -> dict:
+    """``config`` checked the way :func:`run_config_for` runs it: its facility allowed and not
+    research-only, and its trust floor raised to ``ctx.min_trust``."""
+    from ..config import _check_config_shape
+
     config = dict(_check_config_shape(config))
     source = config.get("source") or {}
     if source.get("kind") == "store":
@@ -293,4 +301,27 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
     if gate.get("min_trust") is None or float(gate["min_trust"]) < floor:
         gate["min_trust"] = floor
     config["trust_gate"] = gate
-    return run_config(config, base_dir=base_dir or ".", persist=False)
+    return config
+
+
+def run_frames_for(ctx, config: dict, *, base_dir: str):
+    """The equipment frames a :func:`run_config_for` run of ``config`` reads -- every role at the
+    run's resample, the shared points merged -- with nothing run (0.111, #311), as a run-like
+    namespace: ``frame_for(equip)`` (``None`` for equipment the run does not discover),
+    ``refs``, ``resample``, ``config`` and ``base_dir``. The same checks apply."""
+    from types import SimpleNamespace
+
+    from ..config import _frame_resolver, _prepare
+
+    base_dir = base_dir or "."
+    config = _checked(ctx, config, base_dir)
+    prep = _prepare(config, base_dir)
+    return SimpleNamespace(
+        frame_for=_frame_resolver(prep),
+        refs=list(prep.refs),
+        resample=prep.resample,
+        config=config,
+        base_dir=base_dir,
+        findings=[],
+        registry=None,
+    )

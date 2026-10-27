@@ -139,6 +139,34 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+- **The trust floor and `sensor_trust` read one score (#311).** `camber mcp` declined checks on
+  inputs that `sensor_trust` rated trusted (CO2 trends logged in bursts scored 0.95-0.99 there
+  and about 0.14 in the gate), so it withheld findings `camber run` reports while its notice
+  pointed at a tool that contradicted it. The gate now scores each input on its equipment's
+  whole run frame (every point at the run's resample, over the run's window), and
+  `sensor_trust` reads those same frames with the same function, so a check is declined exactly
+  when `sensor_trust` (same window) puts an input `below_floor`. A trend logged in bursts now
+  shows its real coverage on that grid in `sensor_trust`. The decline names each input with its
+  score ("declined -- untrusted input(s): co2 (trust 0.14)"), and so does the notice. The
+  labelled datasets give the same findings through `camber mcp` and `camber run` as before.
+- **A configured sensor reference reaches the triage tools (#313).** A supply-air sensor reading
+  3 °F high against its duct logger scored 0.999 "trusted" in `sensor_trust` (an offset has no
+  shape in the trend), and `rule_run` and `finding_detail` reported the leaking-valve fault it
+  probably caused with no word of the sensor, so a model following `triage_ahu` would send a
+  technician to a valve that is likely fine. Now:
+  - `sensor_trust` lists every comparison of `report.rcx.references` under `references` --
+    bias (the point minus the reference, so positive reads high), RMSE, correlation, paired
+    samples, the overlap window and a verdict -- with a fact for each, a passing one too, so a
+    reader can cite that a sensor was checked. A comparison at warn or fault makes the point
+    `suspect` (flag `reference_warn` / `reference_fault`) whatever its score.
+  - `rule_run` and `finding_detail` mark each finding whose rule reads that point as
+    `conditional_on` the comparison, in the row, its fact and a notice ("treat each as a
+    possible sensor problem first").
+  - The RCx report's sensor-reference findings state the bias sign convention and the overlap
+    window.
+  - `triage_ahu`, `explain_finding`, `compare_equipment`, `sensor_trust_review` and
+    `data_quality_review` tell the model to treat an input whose reference disagrees as a
+    sensor problem first, and to rank that sensor above the fault.
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
@@ -195,6 +223,10 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `rule_params` rows carry `run_with` (`rule_run` or `drift`), and an `rcx_report` issue's
   `finding_ids`; the `equip` of a heat-pump room-imbalance finding is now `<fleet>`, so its
   finding id is `hp_room_imbalance@<fleet>` (#304).
+- **The RCx report ranks a root sensor issue above the issues conditional on it (#313).** A
+  sensor whose configured reference disagrees now ranks just above the first issue that rests on
+  it, whatever their severities: the leaking-valve fault that a 3 °F supply-air offset explains
+  was Issue 1 and the sensor Issue 3. In `camber report --layout rcx` and `rcx_report` alike.
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and
