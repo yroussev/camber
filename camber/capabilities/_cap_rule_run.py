@@ -32,6 +32,7 @@ from ._common import (
     finding_fact,
     finding_ids,
     finding_row,
+    is_fleet_id,
     jsonable,
     mask_summary,
     narrow,
@@ -517,7 +518,9 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
 
     fid, want = arguments["facility_id"], arguments["finding_id"]
     rule = want.split("@", 1)[0]
-    if want == f"{rule}@{FLEET_SHOWN}":  # 0.111 (#318): the fleet id as it was once shown
+    # 0.111 (#318): the fleet id as it was once shown; only a fleet rule's (#320: a unit stored
+    # with that id is a unit, whatever its name)
+    if want == f"{rule}@{FLEET_SHOWN}" and is_fleet_id(rule, FLEET):
         want = f"{rule}@{FLEET}"
     if rule not in rule_names():
         raise CapabilityError("not_found", f"no finding {want!r}: {rule!r} is not a rule")

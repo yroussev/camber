@@ -16,11 +16,13 @@ from ._common import (
     DATE,
     EQUIPS,
     FACILITY,
+    FLEET,
     RULE_SECTIONS,
     check_run_selection,
     cite,
     facility_config,
     finding_ids,
+    is_fleet_id,
     jsonable,
     narrow,
     reference_findings,
@@ -240,11 +242,13 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
     index = []
     facts = []
     names = _names_pattern(res, every_fact)
+    # 0.111 (#320): "<fleet>" in the report's text is the fleet unless a unit is stored with it
+    fleet_own = FLEET not in {str(getattr(r, "equip", "")) for r in getattr(res, "refs", ()) or ()}
     for f in every_fact:
         if f.id.partition("@")[2] in left_out and f.id not in kept:
             continue
         # 0.111 (#318): the report's fact text names equipment as summaries and finding facts do
-        f_text = names.sub(lambda m: name(m.group(0)), f.text) if names else f.text
+        f_text = names.sub(lambda m: name(m.group(0), own=fleet_own), f.text) if names else f.text
         index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": plain(f_text)})
         facts.append(
             {
@@ -318,13 +322,14 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         cond = sorted({c.split(" (")[0] for c in row["conditional_on"]})
         if cond:
             money += f"; conditional on {', '.join(cond)}"
+        own = any(is_fleet_id(r, row["equip"]) for r in row["rules"])  # 0.111 (#320)
         facts.append(
             {
                 "id": fact_id,
                 "kind": "issue",
                 "equip": row["equip"],
                 "value": row["rank"],
-                "text": f"Issue {row['rank']} on {name(row['equip'])}: "
+                "text": f"Issue {row['rank']} on {name(row['equip'], own=own)}: "
                 f"{row['heading']} "
                 f"({row['severity']}, confidence {row['confidence']}, {money})",
                 "issue_key": row["key"],

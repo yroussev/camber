@@ -279,6 +279,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   the OA damper) of `dcv_verification`, the OAT of `outdoor_air_fraction`, the wet-bulb source of
   `condenser_water_reset` and `cooling_tower_approach`, and the fan signal of
   `night_weekend_setback`. At the default floor no finding of any catalog dataset changes.
+- **Equipment named like the fleet is not taken for it (#320).** A unit stored with the id
+  `<fleet>` was shown like the fleet pseudo-equipment of a fleet rule's finding, and
+  `finding_detail` read `...@‹fleet›` as the fleet, so the finding id of a unit stored as
+  `‹fleet›` returned another unit's finding (or `not_found`). Only a fleet rule's `<fleet>` is
+  now shown as such (a unit with that id is shown defanged like any name), and the `‹fleet›`
+  spelling is taken for the fleet only in a fleet rule's finding id.
 
 ### Security
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are

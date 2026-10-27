@@ -11,6 +11,8 @@
    ``rcx_report`` too.
 4. The outdoor-air signal ``dcv_verification`` is judged on gates the check like a required
    input, although it is an optional role.
+5. Only a fleet rule's ``<fleet>`` is the fleet: a unit stored as ``<fleet>`` is shown defanged,
+   and ``finding_detail`` takes ``...@‹fleet›`` for the fleet only for a fleet rule.
 """
 
 import json
@@ -18,6 +20,7 @@ import os
 import sys
 import types
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -38,6 +41,7 @@ from camber.capabilities._sanitize import MAX_VALUE  # noqa: E402
 from camber.config import _preflight_config, run_config  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.rules import base  # noqa: E402
+from camber.store import ParquetStore  # noqa: E402
 from camber.report.rcx import RcxOptions  # noqa: E402
 from camber.rules.param_docs import _value_problem  # noqa: E402
 
@@ -268,3 +272,46 @@ def test_the_other_rules_gate_the_input_they_cannot_judge_without(monkeypatch):
         assert _gate(monkeypatch, rule, derived) == [(Role.OUTDOOR_RH, 0.1)]
         # a wet-bulb point is read first: the OAT and RH are not used then
         assert _gate(monkeypatch, rule, {**cws, Role.WETBULB_TEMP: 0.9, Role.OAT: 0.1}) == []
+
+
+# ------------------------------------------------------------- 5. a unit named <fleet>
+
+GUILLEMETS = "\u2039fleet\u203a"
+
+
+@pytest.fixture()
+def fleet_named(tmp_path):
+    st = ParquetStore(str(tmp_path / "store"))
+    idx = pd.date_range("2025-01-06", periods=24 * 14, freq="h")
+    occ = ((idx.hour >= 7) & (idx.hour < 18) & (idx.dayofweek < 5)).astype(float)
+    rng = np.random.default_rng(1)
+    for equip, fan in (("<fleet>", np.ones(len(idx))), (GUILLEMETS, occ)):
+        frame = pd.DataFrame(
+            {
+                Role.OAT: 70 + rng.normal(0, 2, len(idx)),
+                Role.SUPPLY_AIR_TEMP: 55 + rng.normal(0, 0.5, len(idx)),
+                Role.SUPPLY_FAN_STATUS: fan,
+            },
+            index=idx,
+        )
+        st.write_role_frame(frame, facility_id="fl", equip=equip, equip_class="AHU")
+    st.register_facility("fl", name="fleet names")
+    return CallContext(store=st.root, allowed_facilities=frozenset({"fl"}))
+
+
+def test_a_unit_named_fleet_is_not_the_fleet(fleet_named):
+    ctx = fleet_named
+    args = {"facility_id": "fl", "rules": ["night_weekend_setback"]}
+    rr = REG.call("rule_run", {**args, "min_severity": "ok"}, ctx)
+    by_id = {f["finding_id"]: f for f in rr.data["findings"]}
+    assert set(by_id) == {"night_weekend_setback@<fleet>", f"night_weekend_setback@{GUILLEMETS}"}
+    texts = " ".join(f["text"] for f in rr.facts)
+    assert '"<fleet>"' not in texts and '"<fleet>"' not in rr.text
+    for want in by_id:
+        fd = REG.call("finding_detail", {**args, "finding_id": want}, ctx)
+        assert fd.data["finding"]["finding_id"] == want
+        assert fd.data["finding"]["severity"] == by_id[want]["severity"]
+    assert (
+        by_id["night_weekend_setback@<fleet>"]["severity"]
+        != by_id[f"night_weekend_setback@{GUILLEMETS}"]["severity"]
+    )

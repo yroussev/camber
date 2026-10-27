@@ -644,18 +644,34 @@ def cite(fact: dict) -> str:
     return f"{defang(str(fact['text'])).rstrip(' .;')} [{fact['id']}]."
 
 
+@lru_cache(maxsize=1)
+def fleet_rules() -> frozenset:
+    """The names of the built-in fleet rules, whose one finding is on :data:`FLEET`."""
+    from ..rules.builtin import builtin_registry, is_fleet
+
+    reg = builtin_registry()
+    return frozenset(n for n in reg.names() if is_fleet(reg.get(n)))
+
+
+def is_fleet_id(rule: str, equip: str) -> bool:
+    """True when ``equip`` is the fleet pseudo-equipment of a finding of ``rule``: a fleet
+    rule's :data:`FLEET`, not stored equipment that happens to have that id (0.111, #320)."""
+    return equip == FLEET and rule in fleet_rules()
+
+
 def finding_fact(fact_id: str, row: dict) -> dict:
     """The fact that cites one finding row; its text names the equipment as a quoted value
     (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
     equip, summary = row["equip"], row["summary"]
+    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
     flat = " ".join(equip.split())
     # #314: the rest of the summary is the rule's text about the data (it may name more units,
     # zones or points): a span, so a name with a slash in it is not taken for a path
     if flat and summary.startswith(f"{flat}:"):
-        summary = name(equip) + ":" + prose(summary[len(flat) + 1 :])
+        summary = name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
     else:
         summary = prose(summary)
-    text = f"{name(equip)} {row['rule']} ({row['severity']}): {summary}"
+    text = f"{name(equip, own=own)} {row['rule']} ({row['severity']}): {summary}"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
     return {

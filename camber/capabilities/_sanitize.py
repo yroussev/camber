@@ -121,9 +121,12 @@ def prose(text: str) -> str:
 OWN_NAMES = frozenset({"<fleet>"})
 
 
-def name(value, *, limit: int = MAX_NAME) -> str:
-    """A data value (a name, an id, a unit) as a quoted span for a result's text."""
-    s = str(value) if value in OWN_NAMES else shown(value)
+def name(value, *, limit: int = MAX_NAME, own: bool = False) -> str:
+    """A data value (a name, an id, a unit) as a quoted span for a result's text. ``own``: the
+    value is CAMBER's own pseudo-equipment (a fleet finding's ``<fleet>``), shown as it is when
+    it is one of :data:`OWN_NAMES`; equipment from the data with the same id is defanged like
+    any other name (0.111, #320)."""
+    s = str(value) if own and value in OWN_NAMES else shown(value)
     s = clip(s, limit, key=value).replace("\\", "\\\\").replace('"', '\\"')
     return f'{OPEN}"{s}"{CLOSE}'
 
