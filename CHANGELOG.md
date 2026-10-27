@@ -29,6 +29,15 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   that a swap overlapped is read again once, and a capability call that a swap overlapped is
   `unavailable` with `"retryable": true` whatever it would have answered; a retry gets the new
   data. Readers still take no lock, and calls on other facilities are not affected.
+- **Two edge cases of that write fence (#317).** An ingest killed in the middle of its swap
+  could leave the facility marked busy with its process id; once the system gave that id to an
+  unrelated process, every call on the facility (and every `facilities` listing) answered
+  `unavailable` until the next ingest, and retrying never helped. The mark now also records when
+  the writer started, so a reused process id is not taken for the writer, and the next command
+  that takes the store lock clears a mark whose writer is gone. And `camber datasets remove
+  --purge-store` (or `drop_facility(forget=True)`) now keeps the fence until the facility's
+  registry entry is removed too: a call in the last few milliseconds of a removal got a
+  non-retryable `not_found` or `invalid_params`, where it now gets the retryable `unavailable`.
 - **Equipment and point names with a slash read as themselves again (#307).** Since the 0.111
   path redaction, a name such as a Niagara ORD (`/Drivers/BacnetNetwork/AHU_1`),
   `slot:/Config/AHU-6`, `/AHU-4` or anything holding `</` became `<path>` in summaries, banners

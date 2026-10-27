@@ -7,8 +7,8 @@ the new one in, so for a moment the facility is absent, and a reader listing its
 either rename sees part of it. Each such step runs inside :func:`fence` for its facility, which
 works like a sequence lock::
 
-    <store>/_fence/<facility_id>    "busy <pid> <token>" while the writer changes the files,
-                                     then "idle <token>", with a fresh random token each time
+    <store>/_fence/<facility_id>    "busy <pid> <started> <token>" while the writer changes the
+                                     files, then "idle <token>", with a fresh random token each time
 
 A reader takes a :func:`snapshot` of the facilities it reads before it starts and checks it with
 :func:`changed` when it is done. A writer still busy (after a short wait) or a token that changed
@@ -18,15 +18,20 @@ of answering from a partial facility. The catalog generation is replaced inside 
 the writer reports idle, so a catalog a reader rebuilt mid-swap is never served afterwards.
 
 Random tokens, not a counter, so a lost file cannot make an old snapshot look current (no ABA).
-A busy marker of a process that is gone (a writer killed mid-swap) does not block readers; the
-next writer's recovery settles the partition. The directory starts with ``_``, so dataset
-discovery, ``ParquetStore.facilities()`` and the swap recovery never read it as data.
+A busy marker of a process that is gone (a writer killed mid-swap) does not block readers, nor
+does one whose pid now belongs to another process: ``<started>`` is when the writer started, and
+a live pid that started at another time is not that writer (#317). The next writer to take the
+store lock resets such a marker (:func:`recover`), and its recovery settles the partition. The
+directory starts with ``_``, so dataset discovery, ``ParquetStore.facilities()`` and the swap
+recovery never read it as data.
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+import struct
+import sys
 import tempfile
 import threading
 import time
@@ -51,6 +56,33 @@ def _safe(fid) -> bool:
         and os.sep not in fid
         and not fid.startswith(".")
     )
+
+
+def _started(pid: int):
+    """When process ``pid`` started, as an opaque string, or ``None`` when that cannot be read
+    here (no such process, or a platform without a cheap way to ask). With the pid it names one
+    process: a pid the system reused for another process has another start time (#317)."""
+    try:
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/stat", "rb") as fh:
+                stat = fh.read()
+            return stat.rsplit(b")", 1)[1].split()[19].decode("ascii")  # field 22, starttime
+        if sys.platform == "darwin":
+            import ctypes
+
+            mib = (ctypes.c_int * 4)(1, 14, 1, pid)  # CTL_KERN, KERN_PROC, KERN_PROC_PID
+            buf = ctypes.create_string_buffer(1024)
+            size = ctypes.c_size_t(len(buf))
+            libc = ctypes.CDLL(None, use_errno=True)
+            if libc.sysctl(mib, 4, buf, ctypes.byref(size), None, ctypes.c_size_t(0)):
+                return None
+            if size.value < 16:  # no such process
+                return None
+            sec, usec = struct.unpack_from("qi", buf.raw, 0)  # kp_proc.p_starttime, a timeval
+            return f"{sec}.{usec:06d}"
+    except (OSError, IndexError, ValueError, AttributeError):
+        return None
+    return None
 
 
 def _file(root: str, fid: str) -> str:
@@ -103,7 +135,8 @@ def fence(root: str, fid: str):
         held[1] += 1
     try:
         if depth == 0:
-            _write(root, fid, f"busy {os.getpid()} {os.urandom(8).hex()}\n")
+            pid = os.getpid()
+            _write(root, fid, f"busy {pid} {_started(pid) or '-'} {os.urandom(8).hex()}\n")
         yield
     finally:
         with _DEPTH_LOCK:
@@ -138,14 +171,55 @@ def _read(root: str, fid: str):
             text = fh.read()
     except (OSError, UnicodeDecodeError):
         return None, False
-    words = text.split()
-    busy = False
-    if len(words) == 3 and words[0] == "busy" and words[1].isdigit():
-        from ._leftovers import _process_alive
+    return text, _busy(root, fid, text.split())
 
-        pid = int(words[1])
-        busy = _held_elsewhere(root, fid) if pid == os.getpid() else _process_alive(pid)
-    return text, busy
+
+def _busy(root: str, fid: str, words) -> bool:
+    """Whether the writer a fence's ``words`` name is still at work: its process is alive and,
+    when the marker records it, started when that writer did (else the pid was reused, #317)."""
+    if len(words) not in (3, 4) or words[0] != "busy" or not words[1].isdigit():
+        return False
+    from ._leftovers import _process_alive
+
+    pid = int(words[1])
+    if pid == os.getpid():
+        return _held_elsewhere(root, fid)  # an earlier process with this pid is gone
+    if not _process_alive(pid):
+        return False
+    if len(words) == 4 and words[2] != "-":
+        now = _started(pid)
+        return now is None or now == words[2]  # unsure counts as the writer
+    return True
+
+
+def recover(root: str) -> list:
+    """Reset each busy marker in the store at ``root`` whose writer is gone (killed mid-change,
+    or its pid since reused) to a fresh idle token; returns those facility ids (#317).
+
+    The caller holds the store lock, so no other writer is at work; the partition itself is
+    settled by the ingest's recovery. The catalog is invalidated first, as a writer does."""
+    root = os.path.abspath(root)
+    try:
+        names = sorted(os.listdir(os.path.join(root, FENCE_DIR)))
+    except OSError:
+        return []
+    stale = []
+    for fid in names:
+        if not _safe(fid):
+            continue  # a writer's temporary file
+        with _DEPTH_LOCK:
+            if (root, fid) in _DEPTH:
+                continue  # a fence this process holds
+        text, busy = _read(root, fid)
+        if text is not None and text.startswith("busy") and not busy:
+            stale.append(fid)
+    if stale:
+        from .parquet_store import _invalidate_catalog_at  # lazy: it imports this module
+
+        _invalidate_catalog_at(root)
+        for fid in stale:
+            _write(root, fid, f"idle {os.urandom(8).hex()}\n")
+    return stale
 
 
 def snapshot(root: str, fids, *, wait: float = _WAIT) -> dict:

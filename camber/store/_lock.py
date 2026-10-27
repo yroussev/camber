@@ -24,6 +24,7 @@ ingest swaps a facility's partition in with directory renames.
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 # camber.store/__init__ does not import this module, so importing the portfolio package here (which
@@ -42,10 +43,25 @@ def store_lock(root, *, timeout: float | None = None):
     """Context manager holding the single-writer lock of the store at ``root`` (see the module).
 
     ``timeout`` seconds to wait for another process (``0`` = fail at once; ``None`` = the default,
-    see the module). Creates ``root`` if needed."""
+    see the module). Creates ``root`` if needed. Once held, the busy write fence of a writer that
+    is gone is reset (:func:`camber.store._fence.recover`, #317)."""
     if timeout is None:
         timeout = default_lock_timeout(STORE_LOCK_TIMEOUT)
     root = os.path.abspath(os.fspath(root))
+    return _recovering(_lock_of(root, timeout), root)
+
+
+@contextlib.contextmanager
+def _recovering(lock, root: str):
+    with lock:
+        from . import _fence
+
+        with contextlib.suppress(OSError):  # a fence it cannot reset still never blocks a reader
+            _fence.recover(root)
+        yield
+
+
+def _lock_of(root: str, timeout: float):
     ws = _workspace_of_store(root)
     if ws is not None:
         return portfolio_lock(ws, timeout=timeout)

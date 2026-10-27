@@ -1487,6 +1487,16 @@ class ParquetStore:
         """:meth:`drop_facility` without the workspace rule: for callers that have checked the
         lifecycle and audit the deletion themselves (``camber datasets remove|ingest``), holding
         the store lock."""
+        from . import _fence
+
+        # one fence until the registry entry is gone too, so a reader that overlaps a removal is
+        # told to retry, never that the facility it names has no data (#317)
+        fdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
+        touches = os.path.isdir(fdir) or (forget and os.path.isdir(self.root))
+        with _fence.fence(self.root, facility_id) if touches else _nullcontext():
+            return self._drop_facility_fenced(facility_id, forget, reason=reason)
+
+    def _drop_facility_fenced(self, facility_id: str, forget: bool, *, reason: str) -> int:
         fdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
         rows = 0
         if os.path.isdir(fdir):

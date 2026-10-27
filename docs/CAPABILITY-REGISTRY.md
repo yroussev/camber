@@ -268,7 +268,10 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    prune, a removal -- whatever the handler answered (0.111, #306): each such writer marks the
    facility busy in `<store>/_fence/<facility_id>` and gives it a fresh token when done, and a
    call checks the fences of the facilities it reads (those its arguments name, else every
-   allowed one) before and after it runs; it waits up to a second for a swap in progress. Its
+   allowed one) before and after it runs; it waits up to a second for a swap in progress. A
+   removal keeps the mark until the facility's registry entry is gone too, and a mark left by a
+   writer that was killed (its process gone, or its process id since reused by another process)
+   blocks no call; the next writer to take the store lock clears it (0.111, #317). Its
    `data` is `{"retryable": bool}`, plus `"facility_id"` when the read was of one facility the
    caller may see: `retryable` is `true` for a file that went missing or a concurrent replace
    (retry the call) and `false` for a damaged or unreadable one (a
