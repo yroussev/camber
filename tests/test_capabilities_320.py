@@ -13,6 +13,9 @@
    input, although it is an optional role.
 5. Only a fleet rule's ``<fleet>`` is the fleet: a unit stored as ``<fleet>`` is shown defanged,
    and ``finding_detail`` takes ``...@‹fleet›`` for the fleet only for a fleet rule.
+6. The conditional notice counts this page as "listed", names the other pages, and a fact
+   carries the conditional results left out; ``sensor_trust`` says "matching points" for a
+   selection.
 """
 
 import json
@@ -29,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import _rcx_fixture as fx  # noqa: E402
 
+from camber import datasets  # noqa: E402
 from camber.capabilities import (  # noqa: E402
     CallContext,
     Capability,
@@ -315,3 +319,65 @@ def test_a_unit_named_fleet_is_not_the_fleet(fleet_named):
         by_id["night_weekend_setback@<fleet>"]["severity"]
         != by_id[f"night_weekend_setback@{GUILLEMETS}"]["severity"]
     )
+
+
+# ------------------------------------------------------------- 6. counts and wording
+
+
+@pytest.fixture(scope="module")
+def bias(tmp_path_factory):
+    root = tmp_path_factory.mktemp("bias320")
+    store = str(root / "store")
+    datasets.ingest("synthetic-ahu-sensor-bias", store, data_dir=str(root / "cache"))
+    cfg = datasets.config_template(
+        "synthetic-ahu-sensor-bias", store, exercise="data-sensor-conditional"
+    )
+    path = root / "bias.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    fid = "ds-synthetic-ahu-sensor-bias"
+    return CallContext(store=store, allowed_facilities=frozenset([fid]), config=str(path)), fid
+
+
+def _notice(res):
+    return next(b for b in res.banners if "configured sensor reference disagrees" in b)
+
+
+def test_the_conditional_notice_counts_this_page(bias):
+    ctx, fid = bias
+    whole = REG.call("rule_run", {"facility_id": fid}, ctx)
+    cond = [f["finding_id"] for f in whole.data["findings"] if f.get("conditional_on")]
+    assert len(cond) >= 2 and whole.data["findings"][0]["finding_id"] in cond
+    first = REG.call("rule_run", {"facility_id": fid, "limit": 1}, ctx)
+    notice = _notice(first)
+    assert notice.startswith("1 listed finding(s) rest on an input")
+    assert f"{len(cond) - 1} finding(s) on other pages of this list" in notice
+    assert "rest on such an input too and are not listed (another offset" in notice
+    plain_at = next(i for i, f in enumerate(whole.data["findings"]) if not f.get("conditional_on"))
+    later = REG.call("rule_run", {"facility_id": fid, "limit": 1, "offset": plain_at}, ctx)
+    assert not any(f.get("conditional_on") for f in later.data["findings"])
+    assert _notice(later).startswith("No listed finding rests on an input")
+    assert f"{len(cond)} finding(s) on other pages" in _notice(later)
+
+
+def test_a_fact_names_the_conditional_results_not_listed(bias):
+    ctx, fid = bias
+    every = REG.call("rule_run", {"facility_id": fid, "min_severity": "ok"}, ctx)
+    ok = [f for f in every.data["findings"] if f.get("conditional_on") and f["severity"] == "ok"]
+    assert ok
+    res = REG.call("rule_run", {"facility_id": fid}, ctx)
+    fact = next(f for f in res.facts if f["kind"] == "conditional_not_listed")
+    assert fact["value"] == len(ok) and fact["finding_ids"] == [f["finding_id"] for f in ok]
+    assert f"{ok[0]['rule']} (ok)" in fact["text"] and f"[{fact['id']}]" in res.text
+    # the notice can now be cited: a sentence on it checks out against that fact
+    draft = f"{len(ok)} result(s) not listed here also rest on the suspect sensor [{fact['id']}]."
+    check = REG.call("check_citations", {"text": draft, "facts": res.facts}, ctx)
+    assert check.data["grounded"] is True
+    assert not [f for f in every.facts if f["kind"] == "conditional_not_listed"]
+
+
+def test_sensor_trust_says_matching_points_for_a_selection(bias):
+    ctx, fid = bias
+    every = REG.call("sensor_trust", {"facility_id": fid}, ctx)
+    one = REG.call("sensor_trust", {"facility_id": fid, "equips": ["AHU__sat_bias"]}, ctx)
+    assert " matching points on " in one.text and " matching points judged" in one.facts[0]["text"]
+    assert " matching points" not in every.text

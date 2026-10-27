@@ -128,7 +128,10 @@ reads high. A comparison at warn or fault makes its point `suspect` (flag `refer
 score and `below_floor` are unchanged, so the check is not declined. Instead every finding
 whose rule reads that point on that equipment carries `conditional_on` (the comparison) in
 `rule_run` and `finding_detail`, its fact says "conditional on sensor_drift:supply_air_temp
-warn ...", and a notice says to treat it as a sensor problem first. In `rcx_report` such an
+warn ...", and a notice says to treat it as a sensor problem first. The notice counts the
+findings on the page returned as "listed" and names the conditional ones on other pages or below
+`min_severity` apart; `rule_run`'s fact `C1@rule_run` names those (0.111, #320), so the notice's
+claim can be cited. In `rcx_report` such an
 issue names it in its fact the same way, and the sensor issue ranks just above the first issue
 that is conditional on it, whatever their severities. A reference that cannot be compared (its
 equipment has no data for the role, say) is named in a notice of `sensor_trust`, `rule_run` and

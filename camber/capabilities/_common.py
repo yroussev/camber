@@ -759,18 +759,28 @@ def reference_conditions(findings, ref_findings, registry) -> list:
     return out
 
 
-def conditional_banner(n: int, hidden: dict | None = None) -> str | None:
+def conditional_banner(n: int, hidden: dict | None = None, elsewhere: int = 0) -> str | None:
     """The NOTICE of ``n`` listed findings conditional on a disagreeing sensor reference (#313).
 
     ``hidden`` (0.111, #318) counts, by severity, the conditional results the ``min_severity``
-    floor left out of the list: they are named, never counted as listed findings."""
+    floor left out of the list, and ``elsewhere`` (#320) the conditional findings on other pages
+    of it: they are named, never counted as listed findings."""
     hidden = {k: int(v) for k, v in (hidden or {}).items() if v}
-    if not n and not hidden:
+    if not n and not hidden and not elsewhere:
         return None
-    what = ", ".join(f"{v} {k}" for k, v in hidden.items())
+    items, hows = [], []
+    if elsewhere:
+        items.append(f"{elsewhere} finding(s) on other pages of this list")
+        hows.append("another offset or a larger limit lists them")
+    if hidden:
+        items.append(
+            ", ".join(f"{v} {k}" for k, v in hidden.items()) + " result(s) below min_severity"
+        )
+        hows.append("a lower min_severity lists them")
     more = (
-        f"{what} result(s) below min_severity rest on such an input too and are not listed (a "
-        "lower min_severity lists them); a pass measured with that input is conditional as well."
+        " and ".join(items)
+        + f" rest on such an input too and are not listed ({'; '.join(hows)})"
+        + ("; a pass measured with that input is conditional as well." if hidden else ".")
     )
     if not n:
         return (
@@ -781,7 +791,7 @@ def conditional_banner(n: int, hidden: dict | None = None) -> str | None:
         f"{n} listed finding(s) rest on an input whose configured sensor reference disagrees "
         "with it (conditional_on names the comparison): treat each as a possible sensor problem "
         "first and check that sensor before acting on the equipment. sensor_trust shows the "
-        "comparison." + (f" {more}" if hidden else "")
+        "comparison." + (f" {more}" if items else "")
     )
 
 

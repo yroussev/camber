@@ -159,7 +159,12 @@ _ROW = {
         "flatline_frac": {"type": "number", "minimum": 0, "maximum": 1},
         "outlier_frac": {"type": "number", "minimum": 0, "maximum": 1},
         "range_violation_frac": {"type": ["number", "null"]},
-        "longest_flat_hours": {"type": ["number", "null"]},
+        "longest_flat_hours": {
+            "type": ["number", "null"],
+            "description": "the longest run of one value, in hours; null when the point is not "
+            "judged by duration (no duration limit for its role, a fan-dependent point read "
+            "without a fan gate as the rules view reads it, or a plant point that never ran)",
+        },
         "n_stuck_intervals": {"type": "integer", "minimum": 0},
         "checks": {"type": "array", "items": {"type": "string"}, "description": "frame checks"},
         "reference": {
@@ -412,20 +417,22 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     counts = {k: sum(1 for r in rows if r["verdict"] == k) for k in ("trusted", "suspect")}
     counts["untrusted"] = sum(1 for r in rows if r["verdict"] == "untrusted")
     counts["below_floor"] = sum(1 for r in rows if r["below_floor"])
+    # 0.111 (#320): a selection's count is not the facility's
+    points = "matching points" if want_eq or want_roles else "points"
     facts = [
         {
             "id": "F1@sensor_trust",
             "kind": "trust_summary",
             "facility_id": fid,
             "value": counts["below_floor"],
-            "text": f"{fid}: {len(rows)} points judged ({view} view): {counts['trusted']} "
+            "text": f"{fid}: {len(rows)} {points} judged ({view} view): {counts['trusted']} "
             f"trusted, {counts['suspect']} suspect, {counts['untrusted']} untrusted; "
             f"{counts['below_floor']} below the trust floor {floor:g}",
             "min_trust": floor,
         }
     ]
     text = [
-        f"Of {len(rows)} points on {fid}, {counts['below_floor']} are below the trust floor "
+        f"Of {len(rows)} {points} on {fid}, {counts['below_floor']} are below the trust floor "
         f"{floor:g} [F1@sensor_trust]."
     ]
     shown = page(rows, arguments, default=_PAGE, what="points", order="least trusted first")

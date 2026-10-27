@@ -285,6 +285,14 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `‹fleet›` returned another unit's finding (or `not_found`). Only a fleet rule's `<fleet>` is
   now shown as such (a unit with that id is shown defanged like any name), and the `‹fleet›`
   spelling is taken for the fleet only in a fleet rule's finding id.
+- **Counts and wording (#320).** `rule_run`'s notice about findings that rest on a disagreeing
+  sensor reference counted the findings on other pages as "listed" (with `limit: 1` it said 2
+  listed); it now counts the page and names the other pages apart. A new fact (`C1@rule_run`)
+  names the conditional results the page does not list, a hidden `ok` included, so the notice can
+  be cited. `sensor_trust` says "Of 11 matching points" for a selection of equipment or roles
+  rather than "Of 11 points on" the facility. docs/SENSOR-HEALTH.md said `longest_flat_hours` is
+  always reported; it now says when it is null (a role with no duration limit, a fan-dependent
+  point read without a fan gate, a plant point that never ran), and the output schema says so too.
 
 ### Security
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
