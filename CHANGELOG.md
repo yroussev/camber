@@ -337,6 +337,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   now says so on a later one instead of "offset N is past its 1 row(s)" (#314).
 - The `rcx_executive_summary` prompt tells the model to page the issues, so an issue
   conditional on a sensor fix beyond the first page is not missed (#314).
+- `camber mcp` keeps a worker that needs a lot of memory for every call instead of replacing it
+  after each one (#316). A worker was replaced after any call that took it past 1 GiB, so every
+  call on a facility whose load alone passes that, even a one-row `points`, loaded it again (0.02 s
+  became 2.5 s). Now it is replaced only after a call that takes it past 1 GiB and past twice
+  the memory it held after its first call: an unusually large call. The first call a worker
+  serves sets that level, so a worker may now keep what a large facility needs between calls.
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and
