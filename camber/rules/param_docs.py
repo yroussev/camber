@@ -3087,6 +3087,46 @@ def rule_params(rule: str) -> list[RuleParam]:
     return out
 
 
+def _number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _value_problem(rule: str, name: str, value, *, check_range: bool = True) -> str | None:
+    """What is wrong with ``value`` for the parameter ``name`` of the registered rule ``rule``,
+    else ``None`` (0.111, #308): a number that is not finite (NaN quietly turns every comparison
+    against it into "ok"), or (with ``check_range``) one outside the documented numeric range. A
+    dict-valued (tier map) or list-valued parameter is checked value by value. ``None``,
+    keywords, flags and unknown parameters are left to the rule's constructor."""
+    import math
+
+    values = list(value.values()) if isinstance(value, dict) else value
+    values = list(values) if isinstance(values, (list, tuple)) else [values]
+    for v in values:
+        if isinstance(v, float) and not math.isfinite(v):
+            return f"rule {rule!r} parameter {name!r}: {v!r} is not a finite number"
+    if not check_range:
+        return None
+    try:
+        docs = {rp.name: rp.doc for rp in rule_params(rule)}
+    except KeyError:
+        return None
+    doc = docs.get(name)
+    if doc is None:
+        return None
+    nums = [r for r in doc.range if _number(r)]
+    if len(nums) != 2:
+        return None
+    lo, hi = nums
+    for v in values:
+        if _number(v) and not lo <= v <= hi:
+            return (
+                f"rule {rule!r} parameter {name!r}: {v!r} is outside its range {lo!r} to "
+                f"{hi!r} ({doc.unit}; see `camber rules params {rule}`); a value outside it "
+                'is kept only when the rule entry\'s "basis" says where it came from'
+            )
+    return None
+
+
 def documented_rules() -> list[str]:
     """The sorted names of every registered rule (each has an entry, or no tunables)."""
     return sorted(_rule_factories())

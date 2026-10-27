@@ -169,6 +169,26 @@ def validate(instance, schema, path: str = "") -> list:
     return errors
 
 
+def as_integers(instance, schema):
+    """``instance`` (already valid against ``schema``) with every float where the schema allows
+    an integer but not a number as that ``int``: ``5.0`` passes an ``integer`` schema (2020-12)
+    but is no slice index or ``range`` bound (0.111, #308). Returns a new container where
+    anything changed; the input is not modified."""
+    if not isinstance(schema, dict):
+        return instance
+    t = schema.get("type")
+    names = t if isinstance(t, list) else [t]
+    if isinstance(instance, float) and "integer" in names and "number" not in names:
+        return int(instance)
+    if isinstance(instance, dict):
+        props = schema.get("properties", {})
+        extra = schema.get("additionalProperties", True)
+        return {k: as_integers(v, props.get(k, extra)) for k, v in instance.items()}
+    if isinstance(instance, (list, tuple)) and "items" in schema:
+        return [as_integers(v, schema["items"]) for v in instance]
+    return instance
+
+
 #: an enum this long is not listed in an error, only counted (0.111, #304: a 3 KB message)
 _LIST_ENUM = 12
 

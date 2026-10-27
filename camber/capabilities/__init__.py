@@ -137,6 +137,9 @@ class CallContext:
     min_trust: float = 0.5
     caps: Caps = Caps()
     caller: str = "local"  # free-text label for audit/logs (e.g. "mcp:claude-code")
+    # 0.111 (#308): ((path, loaded config), ...) as checked when the server started; the calls
+    # read a config named here from this snapshot, never from the file again
+    config_snapshot: tuple = field(default=(), compare=False, repr=False)
 
     def __post_init__(self):
         allowed = self.allowed_facilities
@@ -385,7 +388,7 @@ class Registry:
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
         from ._policy import check_arguments, outside_allowlist, registry_notice
-        from ._schema import validate
+        from ._schema import as_integers, validate
 
         cap = self.get(name)
         if not isinstance(ctx, CallContext):
@@ -398,6 +401,7 @@ class Registry:
             raise _SchemaError(
                 "invalid_params", "; ".join(errors[:5]), data={"errors": errors[:50]}
             )
+        arguments = as_integers(arguments, cap.input_schema)  # #308: 5.0 runs as 5
         check_arguments(ctx, arguments)
 
         res, cuts = self._run(cap, ctx, dict(arguments))
@@ -567,15 +571,14 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
     arguments name, else every allowed one, plus a store-backed config's own facility). Stat
     calls only: nothing is read but the config, and no path enters the token."""
     from .. import __version__
-    from ..config import load_config
     from ..store.facilities import _FACILITIES
     from ..store.parquet_store import _CATALOG, _CATALOG_GEN, _FACILITY, _partition_signature
-    from ._policy import config_paths, named_facilities
+    from ._policy import config_paths, named_facilities, read_config
 
     configs, config_stores = [], []
     for path in config_paths(ctx):
         try:
-            loaded = load_config(path)
+            loaded = read_config(ctx, path)
             text = json.dumps(loaded, sort_keys=True, separators=(",", ":"), default=str)
             configs.append(hashlib.sha256(text.encode("utf-8")).hexdigest())
             source = loaded.get("source") or {}

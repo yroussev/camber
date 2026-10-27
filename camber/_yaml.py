@@ -60,7 +60,20 @@ def _loader():
     }
 
     class _ConfigLoader(yaml.SafeLoader):
-        pass
+        def construct_mapping(self, node, deep=False):
+            # 0.111 (#308): a duplicate key is refused, as in a JSON config (merge keys aside)
+            if isinstance(node, yaml.MappingNode):
+                seen: set = set()
+                for key_node, _value in node.value:
+                    if not isinstance(key_node, yaml.ScalarNode) or key_node.tag.endswith(":merge"):
+                        continue
+                    key = (key_node.tag, key_node.value)
+                    if key in seen:
+                        raise yaml.constructor.ConstructorError(
+                            None, None, f"duplicate key {key_node.value!r}", key_node.start_mark
+                        )
+                    seen.add(key)
+            return super().construct_mapping(node, deep=deep)
 
     _ConfigLoader.yaml_implicit_resolvers = {
         first: [(tag, rx) for tag, rx in resolvers if tag not in drop]
@@ -97,6 +110,23 @@ def loads_yaml(text: str):
         raise ValueError(f"invalid YAML: {e}") from e
 
 
+class _DuplicateKey(ValueError):
+    """A JSON object names the same key twice."""
+
+
+def _no_duplicates(pairs: list) -> dict:
+    # 0.111 (#308): last-wins silently moved a config with two source.facility_id keys to the
+    # second facility; the MCP protocol layer refuses duplicate keys the same way
+    out = dict(pairs)
+    if len(out) != len(pairs):
+        seen: set = set()
+        for k, _ in pairs:
+            if k in seen:
+                raise _DuplicateKey(f"duplicate key {k!r} in a JSON object")
+            seen.add(k)
+    return out
+
+
 def read_config_file(path) -> dict:
     """Read a run config: ``.yaml`` / ``.yml`` as YAML (needs the extra), anything else as JSON."""
     with open(path, encoding="utf-8") as fh:
@@ -108,9 +138,11 @@ def read_config_file(path) -> dict:
             raise ValueError(f"{os.fspath(path)}: a config must be a mapping at the top level")
         return data
     try:
-        data = json.loads(text)
+        data = json.loads(text, object_pairs_hook=_no_duplicates)
     except json.JSONDecodeError as e:  # 0.107 (#214): name the file, keep the position
         raise ValueError(f"{os.fspath(path)}: invalid JSON: {e}") from None
+    except _DuplicateKey as e:
+        raise ValueError(f"{os.fspath(path)}: {e}") from None
     if not isinstance(data, dict):
         raise ValueError(
             f"{os.fspath(path)}: a config must be a JSON object at the top level, not "

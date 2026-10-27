@@ -136,6 +136,12 @@ The optional **`basis`** map is copied into each finding of that rule as
 then travels into `findings.json`, the reports and the fault register. A `basis` for a
 parameter you did not set records the default. A misspelt name is an error.
 
+A parameter value must be a finite number (a `NaN` or infinity is refused: a NaN threshold makes
+every comparison false, so the rule would report "ok" everywhere) and should lie in the range
+`camber rules params RULE` gives. A value outside that range is refused unless the rule entry's
+`basis` names its source, for a site whose own sequence or calibration really is unusual
+(0.111, #308). A key repeated in one object of a JSON or YAML config is refused too.
+
 JSON and YAML configs that say the same thing give identical results. `camber run`,
 `camber report`, `camber explain`, `camber drift`, `camber fleet` and `python -m camber.config`
 all read `.yaml` / `.yml`. To start from a catalog template in YAML:

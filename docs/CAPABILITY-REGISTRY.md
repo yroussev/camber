@@ -105,7 +105,8 @@ capability cannot cut a list and leave the flag false.
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
 report options. `ctx.config` is one config path or a tuple of them, one per facility (0.111,
-#296). Without one, a facility ingested from a catalog dataset (`ds-...`) runs with that
+#296). `ctx.config_snapshot`, when set (`camber mcp` sets it), holds `(path, config)` pairs as
+loaded and checked at startup, and the calls read those instead of the files (#308). Without one, a facility ingested from a catalog dataset (`ds-...`) runs with that
 dataset's packaged config template, the one `camber datasets config` writes, read from the
 package (no network, nothing written), with a banner naming the dataset; `from_config` is then
 true. Any other facility gets a store-backed config with every stored equipment class (the
@@ -193,7 +194,9 @@ the draft with the facts the calls returned. Argument values are reduced to one 
 `Registry.call(name, arguments, ctx)` enforces, in order:
 
 1. **Input validation.** `arguments` must match the input schema, else `invalid_params` (the
-   error's `data["errors"]` lists each problem with its JSON pointer).
+   error's `data["errors"]` lists each problem with its JSON pointer). A whole-number float
+   where the schema asks for an integer (`5.0`) passes, as JSON Schema 2020-12 says, and the
+   handler gets it as the `int` (0.111, #308).
 2. **Facility allowlist.** `ctx.allowed_facilities` is required; empty means no facility is
    visible. A capability names a facility only through a `facility_id` or `facility_ids`
    argument, and one outside the allowlist is `not_allowed`, whether it exists or not, so a

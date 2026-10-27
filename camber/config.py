@@ -2609,6 +2609,21 @@ def _rule_entries(config: dict):
         yield name, params, basis
 
 
+def _tuned_rule(name: str, params: dict, basis=None):
+    """:func:`make_rule` of ``name`` with ``params``, after refusing (``ValueError``) a value that
+    is not finite, or one outside the parameter's documented range when the rule entry's
+    ``basis`` does not say where it came from (0.111, #308: a NaN minimum turned every fault of
+    the rule into "ok", and a 500 % minimum faulted every unit, with no warning)."""
+    from .rules.param_docs import _value_problem
+
+    for key in sorted(params):
+        # a stated basis (a calibration, the building's own sequence) keeps an unusual value
+        problem = _value_problem(name, key, params[key], check_range=key not in (basis or {}))
+        if problem:
+            raise ValueError(problem)
+    return make_rule(name, **params)
+
+
 def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
     """``config`` if a run of it would get past the checks :func:`run_config` makes before it
     reads any trend, else the same ``ValueError`` / ``KeyError`` / ``TypeError`` the run raises.
@@ -2616,7 +2631,9 @@ def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
     0.111 (#296): ``camber mcp --config`` refuses a config at startup with this, so a config that
     ``camber run`` refuses is never served. It checks the shape (:func:`load_config` does too),
     the ``units`` and ``ventilation`` blocks, every rule name and its parameters, and for a
-    store source that the store holds the facility (and the ``shared_oat`` equipment).
+    store source that the store holds the facility (and the ``shared_oat`` equipment). Since
+    #308 a ventilation zones file that cannot be read is a ``ValueError`` naming it, and a
+    ``report.rcx`` section is checked the way ``camber report`` and ``rcx_report`` read it.
     """
     from .energy_units import UnitSystem
     from .store import ParquetStore
@@ -2624,14 +2641,20 @@ def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
     _check_config_shape(config)
     UnitSystem.from_config(config)
     reg = builtin_registry()
-    vent_rule = _ventilation_rule(config, base_dir)
+    try:
+        vent_rule = _ventilation_rule(config, base_dir)
+    except OSError as e:
+        what = (
+            e.filename if e.filename is not None else (config.get("ventilation") or {}).get("zones")
+        )
+        raise ValueError(f"ventilation.zones: cannot read {what!r}: {e.strerror or e}") from None
     if vent_rule is not None:
         reg.register(vent_rule)
-    for name, params, _basis in _rule_entries(config):
+    for name, params, basis in _rule_entries(config):
         if name not in reg.names():
             raise _unknown_rule(name, reg.names())
         if params:
-            make_rule(name, **params)
+            _tuned_rule(name, params, basis)
     source = config.get("source") or {}
     if not isinstance(source, dict):
         raise ValueError("'source' must be an object")
@@ -2645,6 +2668,11 @@ def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
         so = config.get("shared_oat") or {}
         if so.get("equip") and so["equip"] not in (store.equipment(facility_id=fid).get(fid) or {}):
             raise ValueError(f"shared_oat equip {so['equip']!r} is not stored in facility {fid!r}")
+    report = config.get("report")
+    if isinstance(report, dict) and report.get("rcx") is not None:
+        from .report.rcx import RcxOptions
+
+        RcxOptions.from_config(report, base_dir=base_dir)
     return config
 
 
@@ -2708,7 +2736,7 @@ def _run_config(config: dict, base_dir: str, *, persist: bool) -> RunResult:
         if name not in reg.names():
             raise _unknown_rule(name, reg.names())  # KeyError, naming the valid ones
         if params:
-            reg.register(make_rule(name, **params))  # override the default instance
+            reg.register(_tuned_rule(name, params, basis))  # override the default instance
         rule = reg.get(name)
         n_skip = len(skipped)
         n_before = len(findings)

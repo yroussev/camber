@@ -27,6 +27,10 @@
       "params": {
         "high_limit_f": 50.0,
         "min_damper": 0.1
+      },
+      "basis": {
+        "high_limit_f": "the building's own sequence: economizer enabled below 10 C = 50 F outdoor air (Table 3)",
+        "min_damper": "the building's own sequence: 10% minimum outdoor-air damper (Table 3)"
       }
     },
     "sat_rogue_zone_census",

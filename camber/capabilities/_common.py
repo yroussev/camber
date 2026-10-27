@@ -312,17 +312,15 @@ def caller_config(ctx, facility_id: str) -> tuple:
     ingested from (``notice`` the banner saying so, see :func:`dataset_template`), else
     ``(None, None, None)``.
 
-    ``camber mcp`` checks every ``--config`` at startup (0.111, #296), so a config that cannot be
-    read here is one that changed since; it is skipped, never leaked."""
-    from ..config import load_config
-    from ._policy import config_paths
+    ``camber mcp`` checks every ``--config`` at startup (0.111, #296) and its calls read the
+    configs as loaded then (#308), so an edit to the file while the server runs changes nothing.
+    For another caller a config that cannot be read is skipped, never leaked."""
+    from ._policy import config_paths, read_config
 
     for path in config_paths(ctx):
-        if not os.path.isfile(path):
-            continue
         try:
-            config = load_config(path)
-        except Exception:  # noqa: BLE001 - a config broken after startup is skipped, not leaked
+            config = read_config(ctx, path)  # #308: camber mcp's startup snapshot
+        except Exception:  # noqa: BLE001 - a config that does not load is skipped, not leaked
             continue
         if isinstance(config, dict) and config_facility(config) == facility_id:
             return config, os.path.dirname(os.path.abspath(path)), None
