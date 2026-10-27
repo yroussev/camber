@@ -618,7 +618,10 @@ def recover_staging(store: ParquetStore) -> list:
                 _swap.discard(path)
                 done.append({"path": path, "action": "stale_partition_removed"})
             else:
-                os.rename(path, final)
+                from ..store._fence import fence
+
+                with fence(store.root, fid):
+                    os.rename(path, final)
                 _swap._fsync_dir(store.root)
                 done.append({"path": final, "action": "partition_restored"})
             _forget_cached(store, fid)

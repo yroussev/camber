@@ -22,6 +22,10 @@ content, never a mix.
 rename: readers see it gone at once) and then remove it. A crash mid-removal leaves only a
 ``_trash-*`` directory, which recovery removes.
 
+A step that renames a store's ``facility_id=`` partition, or anything inside one, runs inside
+that facility's write fence (:mod:`._fence`), so a reader that overlaps it fails with a retryable
+error instead of reading a half-swapped facility (#306).
+
 Names starting with ``_`` are invisible to pyarrow's dataset discovery, to
 ``ParquetStore.facilities()`` and to the portfolio's state scan, so none of these leftovers is
 ever read as data.
@@ -33,6 +37,8 @@ import contextlib
 import os
 import shutil
 import uuid
+
+from . import _fence
 
 SWAP_PREFIX = "_swap-"
 TRASH_PREFIX = "_trash-"
@@ -105,10 +111,11 @@ def _finish(target: str) -> None:
     new, old, ready = _paths(target)
     parent = os.path.dirname(os.path.abspath(target))
     if os.path.isdir(new):
-        if os.path.lexists(target):
-            _rm(old)
-            os.rename(target, old)
-        os.rename(new, target)
+        with _fence.guard(target):  # readers of a store partition see the swap (#306)
+            if os.path.lexists(target):
+                _rm(old)
+                os.rename(target, old)
+            os.rename(new, target)
         _fsync_dir(parent)
     _rm(old)
     _rm(ready)
@@ -133,7 +140,8 @@ def recover(target: str):
         if os.path.lexists(target):  # pragma: no cover - .old is only made after .ready
             _rm(old)
         else:
-            os.rename(old, target)
+            with _fence.guard(target):
+                os.rename(old, target)
     return "rolled_back"
 
 
@@ -148,7 +156,8 @@ def discard(path: str) -> bool:
         return False
     parent, name = os.path.split(path)
     trash = os.path.join(parent, f"{TRASH_PREFIX}{name}-{uuid.uuid4().hex[:12]}")
-    os.rename(path, trash)
+    with _fence.guard(path):
+        os.rename(path, trash)
     _fsync_dir(parent)
     _rm(trash)
     return True

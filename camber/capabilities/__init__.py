@@ -38,7 +38,10 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   :mod:`camber.capabilities._sanitize`);
 - **store errors**: a read of stored data that fails (a damaged or unreadable part file, or one a
   concurrent ingest replaced) or any other ``OSError`` is ``unavailable``, with ``data``
-  ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it);
+  ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it); so
+  is a call that a writer replacing or removing files of a facility it reads overlapped (a forced
+  re-ingest, a prune: the facility's write fence, :mod:`camber.store._fence`, moved), retryable,
+  whatever the handler answered (#306);
 - **no leaks**: any other exception becomes ``CapabilityError("internal")`` whose message holds
   no absolute local path.
 
@@ -364,7 +367,15 @@ class Registry:
         # before the generic pattern, which a path with a space or a comma would get past
         secrets = known_roots(ctx)
         try:
-            res = self._call(name, arguments, ctx)
+            fence = _fence_snapshot(arguments, ctx)
+            try:
+                res = self._call(name, arguments, ctx)
+            except _SchemaError:
+                raise
+            except Exception:
+                _fence_check(ctx, fence)  # an error a concurrent replace caused is unavailable
+                raise
+            _fence_check(ctx, fence)
             # the quoted spans keep their marks until here, so a name from the data gets the
             # known roots only (#307), then the marks go
             return replace(
@@ -516,6 +527,32 @@ def _too_large(size: int, max_bytes: int) -> None:
             "a smaller page (limit) or narrow the query",
             data={"bytes": size, "max_bytes": max_bytes},
         )
+
+
+def _fence_snapshot(arguments, ctx) -> dict:
+    """The write fences of the facilities a call reads (those its arguments name, else every
+    allowed one), taken before it runs (#306): a writer replacing one of them now is a retryable
+    ``StoreReadError`` (after a short wait), so a call never starts on a half-swapped facility."""
+    from ..store import _fence
+    from ._policy import named_facilities
+
+    store = getattr(ctx, "store", None)
+    if not isinstance(store, str) or not store:
+        return {}
+    allowed: frozenset = getattr(ctx, "allowed_facilities", frozenset())
+    args = arguments if isinstance(arguments, dict) else {}
+    named = [f for f in named_facilities(args) if f in allowed]
+    return _fence.snapshot(store, set(named or allowed))
+
+
+def _fence_check(ctx, fence: dict) -> None:
+    """Raise a retryable ``StoreReadError`` when a writer replaced or removed files of a facility
+    in ``fence`` while the call ran: its answer may mix old, new and missing data (#306)."""
+    from ..store import _fence
+
+    moved = _fence.changed(ctx.store, fence) if fence else None
+    if moved is not None:
+        raise _fence.changed_error(moved)
 
 
 def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:

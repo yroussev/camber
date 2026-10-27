@@ -596,6 +596,8 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   wait, 30 seconds by default; the environment variable does not apply to it);
 - reads take no lock: `status`, the lab's catalog, trends and reports, and `camber run` on the
   store. Files and partitions are swapped in whole, so a reader sees the old data or the new;
+  a read that a swap overlaps is read again, then fails with a retryable error rather than
+  answer from a half-swapped facility (#306);
 - the lock is the kernel's (`flock`, or `msvcrt` on Windows), the same one the portfolio uses. It
   is released when its process exits, even after a crash or `kill -9`. A `_lock` file left behind
   is not a stale lock, only stale text, and the next writer takes it over;

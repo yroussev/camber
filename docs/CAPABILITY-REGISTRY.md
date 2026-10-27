@@ -261,9 +261,15 @@ the draft with the facts the calls returned. Argument values are reduced to one 
 9. **Store errors.** A read of stored data that fails -- a truncated, empty or non-Parquet part
    file, an unreadable facility directory, or a part file a concurrent ingest replaced between
    listing and opening it (the store retries such a read once first) -- or any other `OSError`
-   is `unavailable`, never `internal` (0.111, #301). Its `data` is `{"retryable": bool}`, plus
-   `"facility_id"` when the read was of one facility the caller may see: `retryable` is `true`
-   for a file that went missing (retry the call) and `false` for a damaged or unreadable one (a
+   is `unavailable`, never `internal` (0.111, #301). So is a call that a writer replacing or
+   removing files of a facility it reads overlapped -- a forced re-ingest's partition swap, a
+   prune, a removal -- whatever the handler answered (0.111, #306): each such writer marks the
+   facility busy in `<store>/_fence/<facility_id>` and gives it a fresh token when done, and a
+   call checks the fences of the facilities it reads (those its arguments name, else every
+   allowed one) before and after it runs; it waits up to a second for a swap in progress. Its
+   `data` is `{"retryable": bool}`, plus `"facility_id"` when the read was of one facility the
+   caller may see: `retryable` is `true` for a file that went missing or a concurrent replace
+   (retry the call) and `false` for a damaged or unreadable one (a
    retry will not help until it is repaired or the facility re-ingested). The message names no
    path and no facility outside the allowlist. One facility's damaged file does not affect
    another facility's calls, and the `facilities` listing still lists it, with

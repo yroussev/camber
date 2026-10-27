@@ -57,6 +57,7 @@ import pyarrow.dataset as ds
 
 from .._deprecation import deprecated
 from ..model.roles import Role
+from . import _fence
 from ._leftovers import STAGING_DIR
 from .facilities import FacilityRegistry, require_facility_id
 
@@ -816,14 +817,24 @@ class ParquetStore:
         kw = dict(facility_id=facility_id, equips=equips, roles=roles, start=start, end=end)
         scope = facility_id if isinstance(facility_id, str) else None
         try:
-            try:
-                return self._read_long(empty_cols, columns, **kw)
-            except FileNotFoundError:
-                # a part file listed by this read was replaced before it was opened (a concurrent
-                # ingest or prune): list again and retry once (#301)
-                with _FRAG_LOCK:
-                    _FRAG_INDEX.pop((os.path.abspath(self.root), str(facility_id)), None)
-                return self._read_long(empty_cols, columns, **kw)
+            # a writer that replaces or removes this facility's files while it is read (a forced
+            # re-ingest's swap, a prune) is seen by its fence: read again once, then fail
+            # retryably rather than answer from a partial facility (#306)
+            moved = None
+            for _attempt in range(2):
+                snap = _fence.snapshot(self.root, [scope]) if scope is not None else {}
+                try:
+                    df = self._read_long(empty_cols, columns, **kw)
+                except FileNotFoundError:
+                    # a part file listed by this read was replaced before it was opened (a
+                    # concurrent ingest or prune): list again and retry once (#301)
+                    with _FRAG_LOCK:
+                        _FRAG_INDEX.pop((os.path.abspath(self.root), str(facility_id)), None)
+                    df = self._read_long(empty_cols, columns, **kw)
+                moved = _fence.changed(self.root, snap) if snap else None
+                if moved is None:
+                    return df
+            raise _fence.changed_error(moved)
         except FileNotFoundError as e:
             raise StoreReadError(
                 "a stored file went missing while it was read (most likely a concurrent ingest)",
@@ -1133,12 +1144,17 @@ class ParquetStore:
         return sorted(out)
 
     def _prune(self, before_year: int, facility_id) -> int:
-        from . import _swap
+        from . import _fence, _swap
 
         removed = 0
+        doomed: dict = {}
         for fid, yr in self._prune_targets(before_year, facility_id):
-            _swap.discard(os.path.join(self.root, f"{_FACILITY}={fid}", f"{_YEAR}={yr}"))
-            removed += 1
+            doomed.setdefault(fid, []).append(yr)
+        for fid, years in doomed.items():
+            with _fence.fence(self.root, fid):  # one fence per facility: all its years go (#306)
+                for yr in years:
+                    _swap.discard(os.path.join(self.root, f"{_FACILITY}={fid}", f"{_YEAR}={yr}"))
+                    removed += 1
         if removed:
             self._invalidate_catalog()  # next points() rebuilds from the remaining data
         return removed
