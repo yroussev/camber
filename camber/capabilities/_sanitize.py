@@ -107,6 +107,15 @@ def echo(value, *, limit: int = MAX_NAME) -> str:
     return unmark(name(value, limit=limit))
 
 
+def prose(text: str) -> str:
+    """Text a rule wrote about the data (a finding's summary, which names units, zones and
+    points in its own words) as an unquoted span: like a :func:`name`, it gets only the server's
+    own directories taken out, never the path pattern, so a name with a slash in it is not read
+    as a path (#314). The text is shown as it is, with no quotes added."""
+    s = unmark(str(text))
+    return f"{OPEN}{s}{CLOSE}" if s.strip() else s
+
+
 def name(value, *, limit: int = MAX_NAME) -> str:
     """A data value (a name, an id, a unit) as a quoted span for a result's text."""
     s = shown(value)

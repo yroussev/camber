@@ -152,6 +152,14 @@ def _describe(name: str) -> dict:
     return out
 
 
+def _default_text(p: dict) -> str:
+    """``name = default unit`` for a fact's text; a parameter with no default reads ``not set``
+    (not "None %", #314)."""
+    if p["default"] is None:
+        return f"{p['name']} not set by default"
+    return f"{p['name']} = {p['default']!r}" + (f" {p['unit']}" if p.get("unit") else "")
+
+
 def rule_params(ctx, arguments: dict) -> CapabilityResult:
     """The named (or matching) rules with their tunable parameters and defaults."""
     named = arguments.get("rules")
@@ -192,10 +200,7 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
     ]
     text = [f"{matched} rule(s) match, with {n_params} tunable parameter(s) [F1@rule_params]."]
     for i, r in enumerate(rows[:200], start=2):
-        listed = ", ".join(
-            f"{p['name']} = {p['default']!r}" + (f" {p['unit']}" if p.get("unit") else "")
-            for p in r["params"]
-        )
+        listed = ", ".join(_default_text(p) for p in r["params"])
         facts.append(
             {
                 "id": f"F{i}@rule_params",

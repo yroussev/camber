@@ -191,6 +191,40 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - `triage_ahu`, `explain_finding`, `compare_equipment`, `sensor_trust_review` and
     `data_quality_review` tell the model to treat an input whose reference disagrees as a
     sensor problem first, and to rank that sensor above the fault.
+- **MCP papercuts from the second acceptance round (#314).**
+  - `too_large` reports the size of the reply it refused. Above about twice the cap it gave the
+    size of the result alone (one copy of the data), so a page of 790 rows read 2.0 MB while one
+    of 780 read 4.5 MB.
+  - A rule's summary keeps the names it gives in its own words: a zone such as
+    `/Drivers/Net/VAV_1` named after the unit no longer becomes `<path>`, and the server's own
+    directories are still taken out.
+  - `check_citations` splits sentences at line breaks, so a notice line no longer swallows the
+    headline after it, and keeps a list marker (`1.`, `2)`, `-`) with its sentence: a numbered,
+    fully cited draft passes, and the marker's number is not a figure to trace.
+  - Prompt arguments are refused when too long (an id over 200 characters, a `claim` over 1,000,
+    more than 20 `equips`) instead of being cut without a word.
+  - Completion offers only facilities the store holds, does not offer an `equips` id twice, and
+    `triage_ahu`'s `equip` offers no meters or weather.
+  - `rule_params` says `min_oa_pct not set by default` (not "None %"), and no rule text a model
+    reads cites a module path or a release or issue number.
+  - The M&V acceptance notes state each figure as the summary does (one R² no longer reads 0.20
+    and 0.19 in one sentence), and an undefined one reads "R2 undefined (must be at least
+    0.75)", not "undefined < 0.75".
+  - `camber run`'s `findings.json` holds the zone census's time-of-week profile as numbers (a
+    column per count by time-of-week hour), not a printed table.
+  - Protocol: an empty `method` is refused as empty; a message holding a lone surrogate is
+    answered like every other invalid message, a notification too; every message refused as a
+    whole is logged on stderr; a message with `"method": null` is no longer taken for a
+    response and gets its one reply.
+  - `camber mcp` no longer prints a traceback when the client closes stdout during a blocked
+    write, no longer exits 120 when stderr is on a full disk, and no longer hangs at startup
+    when the facility registry is a FIFO.
+  - With `--allow-all-active`, the startup log names the research-only facilities it will
+    refuse, counts them apart and no longer says they "use the config template"; a `--config`
+    for one is warned about.
+  - The default run of your own facility (no run config) no longer runs every rule on a class
+    CAMBER does not recognise (a `LOGGER`) when the facility has recognised ones, so such a unit
+    no longer gets a `warn` from a check that says it was not evaluated.
 
 ### Security
 - **A renamed or copied research-only facility directory is no longer served as your own data
@@ -261,6 +295,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   sensor whose configured reference disagrees now ranks just above the first issue that rests on
   it, whatever their severities: the leaking-valve fault that a 3 °F supply-air offset explains
   was Issue 1 and the sensor Issue 3. In `camber report --layout rcx` and `rcx_report` alike.
+- An `rcx_report` issue has a `heading`: the heading the report prints (the cause found, else
+  the recommended action). `title` is the recommended action and `cause` the cause or the
+  finding's figures, which is why neither was the heading for every issue (#314).
+- One `offset` pages every list of a result; a short list whose rows are all on the first page
+  now says so on a later one instead of "offset N is past its 1 row(s)" (#314).
+- The `rcx_executive_summary` prompt tells the model to page the issues, so an issue
+  conditional on a sensor fix beyond the first page is not missed (#314).
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and

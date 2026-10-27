@@ -80,7 +80,9 @@ or a larger limit (up to 1000)`. The default pages: `facilities` 100, `points` 2
 skipped rules, `drift` 25 per list, `rule_params` 25 rules (10 with `detail`), `check_citations`
 50 sentences; `rcx_report` returns `top_n` ranked issues (default the config's, else 8; `offset`
 for the next ones) with only their facts and sections, and the first 20 entries of the fact
-index's appendix A (declines and data gaps; `limit` for more).
+index's appendix A (declines and data gaps; `limit` for more). One `offset` pages every list of
+a result: a short list whose rows are all on the first page is empty on a later one, with a
+banner that says so (`'cited' is empty on this page: all its 1 row(s) are on the first page`).
 
 A capability cuts a list only with `camber.capabilities._page.page`, which records the notice in
 the call; `Registry.call` turns every recorded notice into a banner and sets `truncated`, so a

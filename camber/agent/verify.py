@@ -37,8 +37,12 @@ _CITE = re.compile(r"\[([A-Za-z]+\d+(?:@[A-Za-z0-9_\-]+)?)\]")
 #: numbers.
 _NUMBER = re.compile(r"(?<![A-Za-z0-9\-])\$?(\d[\d,]*(?:\.\d+)?)\s*%?")
 #: split into sentences on end-punctuation *followed by whitespace* -> never inside "5.16" or
-#: "Ch.5".
-_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+#: "Ch.5" -- and at every line break, so a line without a full stop (a heading, a notice) is a
+#: sentence of its own (#314)
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+|\s*\n\s*")
+#: a list marker ("1.", "2)", "(3)", "-", "*", "•") that starts a sentence: it is part of the
+#: sentence that follows it, and its number is not a figure to trace (#314)
+_MARKER = re.compile(r"(?:\(?\d{1,3}[.)]|[-*\u2022])(?=\s|\Z)")
 
 
 @dataclass
@@ -97,7 +101,27 @@ def _stringify(data) -> str:
 
 
 def _sentences(text: str) -> list:
-    return [s for s in (p.strip() for p in _SENT_SPLIT.split(text or "")) if s]
+    out, marker = [], ""
+    for s in (p.strip() for p in _SENT_SPLIT.split(text or "")):
+        if not s:
+            continue
+        if _MARKER.fullmatch(s):  # "1." alone: it belongs to the next sentence
+            marker = f"{marker}{s} "
+            continue
+        out.append(marker + s)
+        marker = ""
+    if marker:
+        out.append(marker.strip())
+    return out
+
+
+def _unlisted(sentence: str) -> str:
+    """``sentence`` without its leading list markers."""
+    while True:
+        m = _MARKER.match(sentence)
+        if m is None:
+            return sentence
+        sentence = sentence[m.end() :].lstrip()
 
 
 def check(
@@ -138,7 +162,7 @@ def check(
             nums = set()
             for c in own:
                 nums |= _fact_numbers(context.by_id(c))
-        untraceable = _numbers(sent) - nums
+        untraceable = _numbers(_unlisted(sent)) - nums
         if untraceable:
             flagged.append({"reason": "uncited-number", "text": sent})
             if strict:

@@ -941,11 +941,15 @@ def _issue_dict(i) -> dict:
 
     rec = recommend(i.root)
     lead, lead_cause = _cause_lead(i)
+    title = rec.title if rec is not None else _humanize(getattr(i.root, "rule", ""))
     return {
         "key": i.key,
         "rank": i.rank,
         # 0.98 (#88): the packaged action's title and the finding's cause (the issue heading)
-        "title": rec.title if rec is not None else _humanize(getattr(i.root, "rule", "")),
+        "title": title,
+        # the heading the report prints for the issue: the cause when one is named, else the
+        # action's title (#314: neither title nor cause is the heading for every issue)
+        "heading": _heading(rec, title, (lead, lead_cause)),
         "cause": lead_cause
         if lead is not None
         else ((rec.cause if rec is not None else "") or _summary_cause(i.root)),

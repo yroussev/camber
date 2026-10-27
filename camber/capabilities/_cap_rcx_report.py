@@ -60,6 +60,7 @@ _ISSUE = {
     "required": [
         "key",
         "rank",
+        "heading",
         "title",
         "cause",
         "equip",
@@ -79,8 +80,16 @@ _ISSUE = {
     "properties": {
         "key": {"type": "string", "description": "the issue key the report's fact ids use"},
         "rank": {"type": "integer", "minimum": 1},
-        "title": {"type": "string"},
-        "cause": {"type": "string"},
+        "heading": {
+            "type": "string",
+            "description": "the issue's heading as the report prints it: the cause found, "
+            "else the recommended action",
+        },
+        "title": {"type": "string", "description": "the recommended action"},
+        "cause": {
+            "type": "string",
+            "description": "the cause found, or the finding's figures when no cause is named",
+        },
         "equip": {"type": "string"},
         "severity": {"type": "string"},
         "rules": {"type": "array", "items": {"type": "string"}},
@@ -276,6 +285,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         row = {
             "key": str(iss["key"]),
             "rank": int(iss["rank"]),
+            "heading": plain(str(iss.get("heading") or iss.get("title") or "")),
             "title": str(iss.get("title") or ""),
             "cause": plain(str(iss.get("cause") or "")),
             "equip": str(iss.get("equip") or ""),
@@ -304,7 +314,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
                 "equip": row["equip"],
                 "value": row["rank"],
                 "text": f"Issue {row['rank']} on {name(row['equip'])}: "
-                f"{row['cause'] or row['title']} "
+                f"{row['heading']} "
                 f"({row['severity']}, confidence {row['confidence']}, {money})",
                 "issue_key": row["key"],
             }

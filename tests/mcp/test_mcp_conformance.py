@@ -96,9 +96,11 @@ def test_a_lone_surrogate_in_a_legacy_session():
     assert probe["id"] == "probe"
 
 
-def test_a_notification_with_a_lone_surrogate_is_dropped():
+def test_a_notification_with_a_lone_surrogate_is_answered_like_any_invalid_message():
+    # #314: it was dropped while every other invalid notification was answered
     note = '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"reason":"\\ud800"}}'
-    (probe,) = _serve(note, PROBE)
+    refusal, probe = _serve(note, PROBE)
+    assert refusal["id"] is None and refusal["error"]["code"] == -32600
     assert probe["id"] == "probe"
 
 

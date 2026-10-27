@@ -32,7 +32,7 @@ from ._common import (
 )
 from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
-from ._sanitize import name, plain
+from ._sanitize import name, plain, prose
 
 #: points per page by default (#299)
 _PAGE = 100
@@ -322,7 +322,7 @@ def _reference_fact(fact_id: str, r: dict) -> dict:
         "role": r["role"],
         "value": r["verdict"],
         "text": f"{name(r['equip'])} {name(r['role'])} against its configured reference "
-        f"{name(r['reference'])} {_REF_WORDS[r['verdict']]}: {r['summary']}{sign}; "
+        f"{name(r['reference'])} {_REF_WORDS[r['verdict']]}: {prose(r['summary'])}{sign}; "
         f"{r['n_samples']} paired samples{span}",
     }
 

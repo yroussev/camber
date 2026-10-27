@@ -21,7 +21,7 @@ camber bacnet-discover [--config bacnet.yml] [--device ADDR]... [--out inventory
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
-camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F] [--min-trust T] [--max-concurrent N] [--max-queued N]   # MCP server (stdio)
+camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F ...] [--min-trust T] [--max-concurrent N] [--max-queued N]   # MCP server (stdio)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
@@ -703,7 +703,7 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
 
 ```
 camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-active)
-           [--config PATH] [--min-trust 0.5]
+           [--config PATH ...] [--min-trust 0.5] [--max-concurrent 2] [--max-queued 8]
 ```
 
 A [Model Context Protocol](MCP.md) server on stdin / stdout, for AI clients such as Claude
@@ -713,10 +713,27 @@ client starts it; you do not run it by hand.
 - `--store` is the store the tools read (a portfolio workspace root works too).
 - `--allow` (repeatable) names the facilities the tools may read; `--allow-all-active` allows the
   store's active facilities at startup. One of the two is required; every other facility is
-  refused, and so is research-only data.
-- `--config` is a run or report config for the tools that need one; `--min-trust` (0 to 1,
-  default 0.5) is the trust floor.
-- Logs go to stderr; stdout carries protocol messages only. It exits when stdin closes.
+  refused, and so is research-only data (a warning on stderr names each allowed facility that
+  will be refused).
+- `--config` is a run or report config (`.json`, `.yaml` or `.yml`) for one facility; repeat it
+  for more, one per facility (two for the same facility are refused). Each is checked at startup
+  the way `camber run` checks it, and must point at the `--store` directory and name an allowed
+  facility; a config that fails stops the server (exit 2). The tools use the copy read at
+  startup, so editing the file while the server runs changes nothing until a restart. A
+  catalog-dataset facility without a `--config` runs with its dataset's packaged config template.
+- `--min-trust` (0 to 1, default 0.5) is the trust floor.
+- `--max-concurrent N` (1 to 64, default 2) is how many tool calls run at once, each in its own
+  worker process; `--max-queued N` (0 to 1024, default 8) is how many more may wait for a free
+  worker. A call beyond that is refused at once with the retryable tool error `busy`. Each
+  worker holds the memory of the call it runs, so raise these with care on a large store.
+- A call past its time cap (120 s) is stopped with the tool error `timeout`; a call whose worker
+  ended under it, or that a re-ingest of its facility overlapped, answers `unavailable` with
+  `"retryable": true`.
+- Any launch mistake (a missing store, a bad config, a value out of range, an empty `--allow`)
+  exits 2 with one line on stderr.
+- Logs go to stderr; stdout carries protocol messages only. The server exits when the client
+  closes stdin or its end of stdout, stopping every call still running. `SIGTERM` and `SIGHUP`
+  stop it like Ctrl-C (exit status 143, 129 and 130).
 
 See [MCP.md](MCP.md) for client setup and the protocol details.
 

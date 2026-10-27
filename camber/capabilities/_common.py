@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import CapabilityError
-from ._sanitize import defang, name, plain
+from ._sanitize import defang, name, plain, prose
 
 #: an ISO date or date-time (``2024-03-01``, ``2024-03-01T06:00``, ``2024-03-01 06:00:00``)
 DATE = {
@@ -374,8 +374,13 @@ def dataset_template(ctx, facility_id: str) -> tuple:
 
 
 def store_config(ctx, facility_id: str) -> dict:
-    """A store-backed run config for one facility: every stored equipment class, and the
-    facility's weather equipment (if any) as the shared outdoor-air temperature."""
+    """A store-backed run config for one facility: every stored equipment class that names a
+    known family (every class when none does), and the facility's weather equipment (if any) as
+    the shared outdoor-air temperature.
+
+    #314: a class no family recognises (a ``LOGGER``) ran every rule on its roles alone and
+    could grade checks it did not evaluate ``warn``; as a catalog dataset's template does, the
+    default runs no rule on it, and a run config that names its class still can."""
     from ..model.equipclass import equip_family
     from ._policy import open_store
 
@@ -390,7 +395,7 @@ def store_config(ctx, facility_id: str) -> dict:
             "store": os.path.abspath(ctx.store),
             "facility_id": facility_id,
         },
-        "equipment": [{"class": c} for c in sorted(set(classes.values()))],
+        "equipment": [{"class": c} for c in _default_classes(classes.values())],
         "rules": [],
     }
     oat_roles = {p.equip for p in store.points(facility_id=facility_id) if p.role == "oat"}
@@ -400,6 +405,15 @@ def store_config(ctx, facility_id: str) -> dict:
     if weather:
         config["shared_oat"] = {"equip": weather[0], "role": "oat"}
     return config
+
+
+def _default_classes(classes) -> list:
+    """The classes a store-backed default runs: those with a known family, else all of them."""
+    from ..model.equipclass import equip_family
+
+    every = sorted({str(c) for c in classes})
+    known = [c for c in every if equip_family(c) is not None]
+    return known or every
 
 
 @lru_cache(maxsize=1)
@@ -450,7 +464,8 @@ def with_rules(config: dict, rules, params) -> dict:
 #: the banner of a run with no run config: neither the caller's nor a dataset's template
 DEFAULT_NOTICE = (
     "No run config names this facility, so every equipment class it stores ran with every "
-    "built-in rule (or the rules asked for) at their default parameters."
+    "built-in rule (or the rules asked for) at their default parameters; a class CAMBER does "
+    "not recognise runs only when no class is recognised (a run config can name it)."
 )
 
 
@@ -632,8 +647,12 @@ def finding_fact(fact_id: str, row: dict) -> dict:
     (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
     equip, summary = row["equip"], row["summary"]
     flat = " ".join(equip.split())
+    # #314: the rest of the summary is the rule's text about the data (it may name more units,
+    # zones or points): a span, so a name with a slash in it is not taken for a path
     if flat and summary.startswith(f"{flat}:"):
-        summary = name(equip) + summary[len(flat) :]
+        summary = name(equip) + ":" + prose(summary[len(flat) + 1 :])
+    else:
+        summary = prose(summary)
     text = f"{name(equip)} {row['rule']} ({row['severity']}): {summary}"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])

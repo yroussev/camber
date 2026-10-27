@@ -52,9 +52,11 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
-allowed facilities a call would read (never a research-only one), `equip` and `equips` (its last
-comma-separated id) from the stored equipment of the facility already chosen
+allowed facilities the store holds and a call would read (never a research-only one), `equip` and
+`equips` (its last comma-separated id) from the stored equipment of the facility already chosen
 (`context.arguments.facility_id`), at most 100 values, those starting with what was typed first.
+`equips` does not offer an id it already lists, and `triage_ahu`'s `equip` offers no equipment
+of a recognised class other than an air handler (no meters, no weather).
 A name that is not one clean line of at most 200 characters is never offered, nor one that the
 summaries' sanitiser would change (HTML or markdown markup, a URL, a fact-id bracket) or that
 starts with `NOTICE` (0.111, #307), and any other argument completes to nothing. A host shows these to the person filling in a prompt. The model
@@ -83,7 +85,9 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   missing. Repair the registry (restore it, or re-ingest) and restart.
 - A warning on stderr names each `--allow` facility that will be refused: research-only data, a
   catalog-dataset facility with no registry entry, or every facility while the registry is
-  damaged.
+  damaged. Under `--allow-all-active` one warning names the active facilities that are refused
+  the same way, and the startup line counts them apart ("33 facilities allowed, 3 of them not
+  served"); a `--config` for such a facility is warned about too (its calls are refused).
 - One of `--allow` and `--allow-all-active` is required: the server does not start without an
   allowlist (exit 2).
 - `--config PATH` is a run or report config (`.json`, or `.yaml` / `.yml` with the `yaml` extra)
@@ -110,7 +114,9 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   The template is read from the installed package: nothing is fetched or written. A line on
   stderr at startup, and a banner on every result that used it, names the dataset. Pass a
   `--config` for the facility to use your own. Any other facility without a config runs every
-  stored equipment class with every built-in rule at its defaults, with a banner saying so.
+  stored equipment class with every built-in rule at its defaults, with a banner saying so; a
+  class CAMBER does not recognise (a `LOGGER`) is left out when the facility has a recognised
+  one, so no rule grades it on its roles alone (name its class in a `--config` to run it).
 - `--min-trust` is a number from 0 to 1 (default 0.5).
 - `--max-concurrent N` is how many tool calls run at once (1 to 64, default 2), each in its own
   worker process; `--max-queued N` is how many more may wait for a free worker (0 to 1024,
@@ -235,20 +241,23 @@ whether a retry will likely work (`"retryable": true`, e.g. a part file a concur
 `camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
 call never answers from a half-swapped facility) or not (a damaged or unreadable file), and names the facility.
 It is also the answer when the worker running the call ended under it (`"retryable": true`).
-A date the calendar does not have (`2025-02-30`) is `invalid_params`; a window outside the
-stored data is an ordinary, empty result with a notice. Everything else is a JSON-RPC error:
+A date the calendar does not have (`2025-02-30`) is `invalid_params`. A window outside the
+stored data is `not_found` for every tool that runs rules or reports and for `sensor_trust`;
+only `coverage` answers it, with an empty result and a notice. Everything else is a JSON-RPC error:
 
 | Code | When |
 |---|---|
 | -32700 | the line is not JSON or not UTF-8 |
 | -32600 | not a JSON-RPC 2.0 request object: a batch, a line over 1 MiB, a duplicate key, a lone surrogate, an integer too long to read, `jsonrpc` not `"2.0"`, a missing `method`, an `id` that is not a string or integer, a second `initialize`, a `tools/call` with the id of a call still in progress (#309) |
 | -32601 | an unknown method, or one the request's protocol revision does not have |
-| -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown or not a string, an unknown cursor, a completion `ref` that is not a known prompt (`ref/resource` included) or an unknown argument |
+| -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown, not a string or too long (an id over 200 characters, a `claim` over 1,000, more than 20 `equips`: refused, never cut), an unknown cursor, a completion `ref` that is not a known prompt (`ref/resource` included) or an unknown argument |
 | -32022 | `UnsupportedProtocolVersion`, with the supported versions in `data` |
 | -32603 | an internal failure, including a reply that could not be serialised; names no local path |
 
 When the request's id cannot be read, the error carries `"id": null`. No message, however
-malformed, ends the server: every failure is logged on stderr and answered.
+malformed, ends the server: every message refused as a whole (-32700, -32600) is answered, a
+notification too, and logged on stderr. A message with a `method` member, even `null`, is a
+request, never taken for a client's response.
 
 **Results.** A tool result has two text blocks: the summary (with any notices first, as lines
 starting with `NOTICE:`) and the result as compact JSON; the same result is in

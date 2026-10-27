@@ -76,6 +76,12 @@ def page(
     total = len(rows)
     if len(out) == total:
         return out
+    if not out and total <= limit:  # a short sibling of the list being paged (#314)
+        trimmed(
+            f"'{what}' is empty on this page: all its {total} row(s) are on the first page "
+            "(offset=0); one offset pages every list of this result"
+        )
+        return out
     if not out:
         trimmed(
             f"'{what}' is empty on this page: offset {offset} is past its {total} row(s) "

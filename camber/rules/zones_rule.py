@@ -202,8 +202,12 @@ class ZonesHeatCoolCensus:
                 f"{len(inferred)} zone(s) map an airflow_sp that moves like an active airflow "
                 "setpoint: their minimum airflow was inferred from it (map airflow_min_sp)"
             )
-        # keep the time-of-week profile available for charting downstream
-        profile = time_of_week_profile(states, occupied_only=True, occupied=occupied)
+        # keep the time-of-week profile available for charting downstream: as JSON data (a
+        # column per count, by time-of-week hour), not a DataFrame that findings.json printed
+        # as a table (#314); pandas.DataFrame(profile).set_index("time_of_week_hour") rebuilds it
+        tow = time_of_week_profile(states, occupied_only=True, occupied=occupied)
+        profile = {"time_of_week_hour": [int(h) for h in tow.index]}
+        profile.update({c: [round(float(v), 3) for v in tow[c]] for c in tow.columns})
         return Finding(
             rule=self.name,
             equip="<fleet>",
@@ -229,7 +233,7 @@ class ZonesHeatCoolCensus:
                 "driver_zones": drivers,
                 "pct_hours_mixed_without_drivers": round(pct_mixed_wo, 1),
                 "severity_capped": capped,
-                "timeofweek_profile": profile,  # DataFrame, for charts
+                "timeofweek_profile": profile,  # columns of numbers, for charts
             },
             summary=(
                 f"fleet: {pct_mixed:.0f}% of occupied hours have a zone heating while another "

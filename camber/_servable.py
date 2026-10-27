@@ -85,6 +85,18 @@ def research_only_block(meta: dict) -> bool:
     return False
 
 
+def _read_regular(path: str) -> str:
+    """The text of the regular file at ``path``; ``OSError`` for anything else (a FIFO, whose
+    open would wait for a writer, or a device), without blocking (#314)."""
+    import stat
+
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise OSError(f"{path} is not a regular file")
+        return fh.read().decode("utf-8")
+
+
 def read_registry(store_root: str) -> tuple:
     """``(entries, problem)`` for the facility registry of the store at ``store_root``.
 
@@ -100,9 +112,8 @@ def read_registry(store_root: str) -> tuple:
             return {}, "is missing although the store holds catalog-dataset facilities"
         return {}, None
     try:
-        with open(path, encoding="utf-8") as fh:
-            raw = json.load(fh)
-    except (OSError, ValueError):  # unreadable, empty, truncated, not UTF-8, not JSON
+        raw = json.loads(_read_regular(path))
+    except (OSError, ValueError):  # unreadable, empty, truncated, not UTF-8, not JSON, no file
         return {}, "cannot be read"
     if not isinstance(raw, dict) or not all(isinstance(e, dict) for e in raw.values()):
         return {}, "is not a valid facility registry"

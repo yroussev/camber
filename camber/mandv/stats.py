@@ -108,6 +108,16 @@ def _fmt(x, spec: str) -> str:
     return "undefined"
 
 
+def _unmet(label: str, x, spec: str, op: str, limit: str) -> str:
+    """One unmet acceptance criterion: ``R2 0.19 < 0.75``, or ``R2 undefined (must be at least
+    0.75)`` when there is no value to compare."""
+    shown = _fmt(x, spec)
+    if shown == "undefined":
+        need = "at least" if op == "<" else "at most"
+        return f"{label} undefined (must be {need} {limit})"
+    return f"{label} {shown} {op} {limit}"
+
+
 def fit_stats(
     y,
     yhat,
@@ -180,12 +190,15 @@ def fit_stats(
         and abs(nmbe) <= nmbe_max
     )
     notes = []
+    # each figure from the rounded value the result carries, so a summary that also states it
+    # gives the same digits (0.195 read "R2 0.20" there and "R2 0.19 < 0.75" here, #314); an
+    # undefined one says what it had to meet instead of comparing a word to a number
     if not (np.isfinite(cv_rmse) and cv_rmse <= cv_rmse_max):
-        notes.append(f"CV(RMSE) {_fmt(cv_rmse, '.1%')} > {cv_rmse_max:.0%}")
+        notes.append(_unmet("CV(RMSE)", round(cv_rmse, 4), ".1%", ">", f"{cv_rmse_max:.0%}"))
     if not (np.isfinite(r2) and r2 >= r2_min):
-        notes.append(f"R2 {_fmt(r2, '.2f')} < {r2_min}")
+        notes.append(_unmet("R2", round(r2, 4), ".2f", "<", f"{r2_min}"))
     if not (np.isfinite(nmbe) and abs(nmbe) <= nmbe_max):
-        notes.append(f"|NMBE| {_fmt(abs(nmbe), '.2%')} > {nmbe_max:.1%}")
+        notes.append(_unmet("|NMBE|", abs(round(nmbe, 5)), ".2%", ">", f"{nmbe_max:.1%}"))
     f_p = _f_sf(f_stat, p - 1, n - p) if (p > 1 and np.isfinite(f_stat)) else float("nan")
     adj = 1.0 - (1.0 - r2) * (n - 1) / (n - p) if np.isfinite(r2) else float("nan")
     return FitStats(

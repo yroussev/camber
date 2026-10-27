@@ -54,6 +54,31 @@ INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 UNSUPPORTED_PROTOCOL_VERSION = -32022
 
+#: the registry's own result-size check runs at this many times the reply cap, as a memory guard
+#: only: the reply (which carries the data twice) is measured on the wire
+_GUARD_FACTOR = 8
+
+
+def _too_large_text(size: int, cap: int, *, at_least: bool = False) -> tuple:
+    """A ``too_large`` reply's message and data: ``bytes`` is the reply's size (#314)."""
+    more = "more than " if at_least else ""
+    return (
+        f"the reply is {more}{size:,} bytes, over this server's limit of {cap:,}; ask for a "
+        "smaller page (limit) or narrow the query",
+        {"bytes": size, "max_bytes": cap},
+    )
+
+
+#: the codes of a message refused as a whole (logged on stderr as well as answered, #314)
+_INVALID = frozenset({PARSE_ERROR, INVALID_REQUEST})
+
+
+def _refused(response: dict) -> dict:
+    """``response`` (an error for a message refused as a whole), logged on stderr."""
+    log.warning("refused a message: %s", response["error"]["message"])
+    return response
+
+
 _PV = "io.modelcontextprotocol/protocolVersion"
 _CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
@@ -357,15 +382,21 @@ class McpServer:
         try:
             msg = decode_message(line)
         except _DuplicateKey as e:
-            return _error(
-                None, INVALID_REQUEST, f"Invalid Request: duplicate key {_printable(e.args[0])}"
+            return _refused(
+                _error(
+                    None,
+                    INVALID_REQUEST,
+                    f"Invalid Request: duplicate key {_printable(e.args[0])}",
+                )
             )
         except _IntTooLarge:
-            return _error(
-                None, INVALID_REQUEST, "Invalid Request: an integer (id or value) is too large"
+            return _refused(
+                _error(
+                    None, INVALID_REQUEST, "Invalid Request: an integer (id or value) is too large"
+                )
             )
         except (ValueError, RecursionError):
-            return _error(None, PARSE_ERROR, "Parse error: Invalid JSON")
+            return _refused(_error(None, PARSE_ERROR, "Parse error: Invalid JSON"))
         return self.handle(msg, defer=defer)
 
     def handle(self, msg: Any, *, defer: bool = False) -> dict | ToolCall | None:
@@ -373,9 +404,12 @@ class McpServer:
         ``defer``, a valid tool call is returned as a :class:`ToolCall` instead of being run."""
         self._defer = defer
         try:
-            return self._handle(msg)
+            out = self._handle(msg)
         finally:
             self._defer = False
+        if isinstance(out, dict) and out.get("error", {}).get("code") in _INVALID:
+            _refused(out)
+        return out
 
     def _handle(self, msg: Any) -> dict | ToolCall | None:
         if isinstance(msg, list):
@@ -388,21 +422,22 @@ class McpServer:
         if _has_lone_surrogate(msg):
             if isinstance(id_, str) and not _is_lone_surrogate_free(id_):
                 id_ = None
-            if not has_id and isinstance(msg.get("method"), str):
-                log.warning("dropped a notification holding a lone UTF-16 surrogate")
-                return None
+            # answered like every other invalid message, a notification too (#314)
             return _error(
                 id_, INVALID_REQUEST, "Invalid Request: a string holds a lone UTF-16 surrogate"
             )
         if msg.get("jsonrpc") != "2.0":
             return _error(id_, INVALID_REQUEST, 'Invalid Request: "jsonrpc" must be "2.0"')
         method = msg.get("method")
-        if method is None and ("result" in msg or "error" in msg):
-            # a response: this server never sends requests, so there is nothing to correlate
+        if "method" not in msg and ("result" in msg or "error" in msg):
+            # a response: this server never sends requests, so there is nothing to correlate (a
+            # message with a "method" member, even null, is not one: #314)
             log.debug("ignoring a response message from the client")
             return None
-        if not isinstance(method, str) or not method:
+        if not isinstance(method, str):
             return _error(id_, INVALID_REQUEST, 'Invalid Request: "method" must be a string')
+        if not method:
+            return _error(id_, INVALID_REQUEST, 'Invalid Request: "method" must not be empty')
         if not has_id:
             self._notification(method, msg.get("params"))
             return None
@@ -625,7 +660,16 @@ class McpServer:
 
     def _context_for(self, caller: str) -> Any:
         if dataclasses.is_dataclass(self.context) and not isinstance(self.context, type):
-            return dataclasses.replace(self.context, caller=caller)
+            ctx = dataclasses.replace(self.context, caller=caller)
+            caps: Any = getattr(ctx, "caps", None)
+            # the reply's size is checked on the wire (_call_outcome), where it is exact; the
+            # registry's own check of the smaller result only guards memory here, so that the
+            # `bytes` a too_large reports is the reply's, not the result's (#314)
+            limit = getattr(caps, "max_bytes", None)
+            if dataclasses.is_dataclass(caps) and not isinstance(caps, type) and type(limit) is int:
+                guard = dataclasses.replace(caps, max_bytes=limit * _GUARD_FACTOR)
+                ctx = dataclasses.replace(ctx, caps=guard)
+            return ctx
         return self.context
 
     def _call_tool(self, params: dict, caller: str, *, modern: bool) -> dict:
@@ -664,13 +708,18 @@ class McpServer:
                 raise _RpcError(INTERNAL_ERROR, "Internal error") from None
             code, message, data = cap_err
             log.info("tool %s (%s): %s after %.2fs", name, caller, code, took)
+            if code == "too_large":  # over the memory guard: the reply would be larger still
+                cap = getattr(getattr(self.context, "caps", None), "max_bytes", None)
+                size = (data or {}).get("bytes") if isinstance(data, dict) else None
+                if isinstance(cap, int) and isinstance(size, int):
+                    message, data = _too_large_text(size, cap, at_least=True)
             if code not in TOOL_ERROR_CODES:
                 raise _RpcError(INTERNAL_ERROR, f"Internal error: {message}") from None
             return self._tool_error(code, message, data)
         result = self._tool_result(outcome, modern=call.modern)
         # 0.111 (#299): the cap bounds the reply as sent -- the summary, the JSON text block,
         # structuredContent and _meta together -- not only the result's data
-        cap = getattr(getattr(call.context, "caps", None), "max_bytes", None)
+        cap = getattr(getattr(self.context, "caps", None), "max_bytes", None)
         sent = self._complete(dict(result)) if call.modern else result
         try:
             size = len(encode_message({"jsonrpc": "2.0", "id": call.id, "result": sent}))
@@ -678,12 +727,7 @@ class McpServer:
             size = 0
         if isinstance(cap, int) and size > cap:
             log.info("tool %s (%s): too_large (%d bytes) after %.2fs", name, caller, size, took)
-            return self._tool_error(
-                "too_large",
-                f"the reply is {size:,} bytes, over this server's limit of {cap:,}; ask for a "
-                "smaller page (limit) or narrow the query",
-                {"bytes": size, "max_bytes": cap},
-            )
+            return self._tool_error("too_large", *_too_large_text(size, cap))
         log.info("tool %s (%s): ok in %.2fs", name, caller, took)
         return result
 

@@ -308,7 +308,7 @@ PARAM_DOCS["supply_air_control"] = {
     ),
     "occupancy_gate": _P(
         "choice",
-        "CAMBER judgment (#84): on the fault-free lbnl-sdahu unit, 78 % of the fan-on hours more "
+        "CAMBER judgment: on the fault-free lbnl-sdahu unit, 78 % of the fan-on hours more "
         "than 2 F too warm were unoccupied fan cycling (damper shut, warm return air), which "
         "graded a healthy unit warn at 12.1 %; gated on its trended occupancy (SYS_CTL) it reads "
         "ok at 2.97 %. PNNL's discharge-air guide asks whether the unit meets its setpoint while "
@@ -341,13 +341,13 @@ PARAM_DOCS["outdoor_air_fraction"] = {
         "10 % minimum damper position can be a 1.6 % OA fraction.",
         (0.0, 100.0),
         "None = the generic 20 % assumption (min_oa_source 'default'): judged the same, but the "
-        "excess-OA cost estimator declines it (needs min_oa_pct; 0.107, #195). Excess OA is OAF "
+        "excess-OA cost estimator declines it (it needs min_oa_pct). Excess OA is OAF "
         "above min + 5 %; under-ventilation is a median OAF below min - 5 % (warn) or below half "
         "the minimum (fault).",
     ),
     "cooling_cutoff_f": _P(
         "°F",
-        "public source: PNNL Re-tuning Ch.5 with CAMBER judgment (camber/oafraction.py)",
+        "public source: PNNL Re-tuning Ch.5 with CAMBER judgment",
         "Set it to the economizer high limit of the sequence: above it outdoor air is a cooling "
         "penalty, not free cooling.",
         (55.0, 80.0),
@@ -421,7 +421,7 @@ PARAM_DOCS["economizer_high_limit"] = {
     ),
     "denom_min_f": _P(
         "°F",
-        "public source: PNNL Re-tuning Ch.5 (the same guard as camber/oafraction.py)",
+        "public source: PNNL Re-tuning Ch.5 (the same guard as the outdoor-air fraction estimate)",
         "Raise it when OA fractions scatter on hours with OAT close to RAT "
         "(n_masked_small_delta_t shows how many samples it drops).",
         (2.0, 15.0),
@@ -838,8 +838,8 @@ PARAM_DOCS["g36_afdd"] = {
         "below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % "
         "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 % "
         "(its summer position; its template sets the seasonal minimum, 45 % with "
-        "oa_damper_min_by_month 28 % in Jun-Aug, since 0.101). "
-        "The same minimum splits OS#2 (beyond it) and OS#1 (at it) since 0.99.",
+        "oa_damper_min_by_month 28 % in Jun-Aug). "
+        "The same minimum splits OS#2 (beyond it) and OS#1 (at it).",
     ),
     # ---- begin 0101-g36-seasonal (#105): a seasonal minimum damper position ----
     "oa_damper_min_by_month": _P(
@@ -1059,8 +1059,8 @@ PARAM_DOCS["overcooling_severity"] = {
     "shortfall_share_pct": _P(
         "% of considered (occupied, fan-on) samples, per key ('warn', 'fault')",
         "CAMBER judgment: the same 5 % / 20 % warn / fault shares reheat_capacity_shortfall uses; "
-        "a heating shortfall a few hours a year is a weather extreme, not a capacity fault (#85: "
-        "a stuck-open damper's 0.81 % shortfall graded fault on depth alone)",
+        "a heating shortfall a few hours a year is a weather extreme, not a capacity fault (on "
+        "a test unit, a stuck-open damper's 0.81 % shortfall graded fault on depth alone)",
         "Run the rule on a period you know the zone was comfortable and look at "
         "shortfall_warn_pct (the share of samples in a sustained shortfall at least the warn "
         "depth deep) across your zones: set 'warn' above the healthy zones' spread (their p95) "
@@ -1347,7 +1347,7 @@ _ZONE_COHORT = {
         "choice",
         "CAMBER judgment: the mean is the most stable summary",
         "Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units "
-        "cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves "
+        "cycle, variability (the standard deviation) to find a unit that never moves "
         "(pair it with tail='low').",
         ("mean", "peak", "load_factor", "variability"),
     ),
@@ -1854,8 +1854,8 @@ PARAM_DOCS["dcv_verification"] = {
         "low: OA below the 62.1 floor while occupied is an under-ventilation fault.",
         (1.0, 50.0),
         "Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor. The test "
-        "reads below_floor_total_pct, which includes hours with the supply fan off; since 0.98 "
-        "(#93) those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the "
+        "reads below_floor_total_pct, which includes hours with the supply fan off; "
+        "those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the "
         "shortfall with the fan running.",
     ),
     "excess_warn_pct": _P(
@@ -2533,8 +2533,8 @@ PARAM_DOCS["compressor_staging"] = {
         "ceiling above its busiest day; the controller's stage-up / stage-down delays bound what "
         "a stable sequence can do.",
         (8.0, 96.0),
-        "Warn at the ceiling, fault at twice it. Only changes while the compressor runs count "
-        "(0.106): a start or stop (to or from stage 0) is compressor_short_cycle's.",
+        "Warn at the ceiling, fault at twice it. Only changes while the compressor runs count: "
+        "a start or stop (to or from stage 0) is compressor_short_cycle's.",
     ),
     "max_interval_min": _P(  # 0.106 (#185)
         "minutes",

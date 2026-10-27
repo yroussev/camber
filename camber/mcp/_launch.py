@@ -211,16 +211,46 @@ def build_context(
     )
 
 
-def _log_templates(ctx) -> None:
+def refused_facilities(ctx) -> dict:
+    """``{facility_id: (kind, message)}`` for the allowed facilities every call refuses
+    (research-only data, or a licence that cannot be established), read once at startup."""
+    try:
+        from .._servable import read_registry, refusal
+
+        registry = read_registry(ctx.store)
+        out = {}
+        for fid in sorted(ctx.allowed_facilities):
+            why = refusal(fid, ctx.store, registry)
+            if why is not None:
+                out[fid] = why
+        return out
+    except Exception:  # noqa: BLE001 - log lines only; every call checks again
+        return {}
+
+
+def _log_templates(ctx, refused: dict | None = None) -> None:
     """One stderr line per allowed catalog-dataset facility no ``--config`` names: the tools run
-    it with the dataset's packaged config template (#296)."""
+    it with the dataset's packaged config template (#296). A facility in ``refused`` is never
+    served, so it gets no such line, and a ``--config`` for one is warned about (#314)."""
+    refused = refused or {}
     try:
         from ..capabilities._common import dataset_template
         from ..capabilities._policy import config_paths, read_config
         from ..config import _config_facility
 
-        named = {_config_facility(read_config(ctx, p)) for p in config_paths(ctx)}
-        for fid in sorted(ctx.allowed_facilities - named):
+        named = set()
+        for p in config_paths(ctx):
+            fid = _config_facility(read_config(ctx, p))
+            named.add(fid)
+            if fid in refused:
+                log.warning(
+                    "--config %s: is for facility %s, which is not served (%s); every call "
+                    "naming it is refused",
+                    p,
+                    fid,
+                    refused[fid][1],
+                )
+        for fid in sorted(ctx.allowed_facilities - named - set(refused)):
             _cfg, dataset_id = dataset_template(ctx, fid)
             if dataset_id:
                 log.info(
@@ -393,12 +423,22 @@ def launch(
     except LaunchError as exc:  # a usage mistake: exit 2, like the argument parser's (#296)
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    _log_templates(ctx)
+    refused = refused_facilities(ctx)
+    if allow_all_active and refused:  # --allow warns per id in resolve_allowlist
+        log.warning(
+            "--allow-all-active: %d active facilit%s not served, and every call naming %s is "
+            "refused: %s",
+            len(refused),
+            "y is" if len(refused) == 1 else "ies are",
+            "it" if len(refused) == 1 else "them",
+            "; ".join(why[1] for why in refused.values()),
+        )
+    _log_templates(ctx, refused)
     previous = _on_signals()
     mpl_dir = None
     try:
         mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
-        return _serve(capabilities, ctx, max_concurrent, max_queued)
+        return _serve(capabilities, ctx, max_concurrent, max_queued, len(refused))
     except Terminated as exc:  # before the session started
         return _terminated(exc)
     finally:
@@ -409,9 +449,23 @@ def launch(
                 shutil.rmtree(mpl_dir, ignore_errors=True)
         finally:
             _restore_signals(previous)
+            settle_stderr()
 
 
-def _serve(capabilities, ctx, max_concurrent: int, max_queued: int) -> int:
+def settle_stderr() -> None:
+    """Flush stderr; when that fails (a full disk, a closed pipe), send what is left of the log
+    to the null device, so that the interpreter's own flush at exit does not turn a clean exit
+    into status 120 (#314)."""
+    try:
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        try:
+            sys.stderr = open(os.devnull, "w")  # noqa: SIM115 - kept open until exit
+        except OSError:
+            pass
+
+
+def _serve(capabilities, ctx, max_concurrent: int, max_queued: int, n_refused: int = 0) -> int:
     server = McpServer(capabilities.default_registry(), ctx)
     # the workers build the same registry: the module this process imported it from
     workers = WorkerPool(
@@ -420,11 +474,12 @@ def _serve(capabilities, ctx, max_concurrent: int, max_queued: int) -> int:
         max_queued=max_queued,
     )
     log.info(
-        "store %s; %d facilit%s allowed; %d tools, %d prompts; protocol %s; "
+        "store %s; %d facilit%s allowed%s; %d tools, %d prompts; protocol %s; "
         "%d concurrent call(s), %d queued; reading stdin",
         ctx.store,
         len(ctx.allowed_facilities),
         "y" if len(ctx.allowed_facilities) == 1 else "ies",
+        f", {n_refused} of them not served (every call refused)" if n_refused else "",
         len(server._tools),
         len(server._prompts),
         ", ".join(SUPPORTED_VERSIONS),

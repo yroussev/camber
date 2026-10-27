@@ -309,11 +309,13 @@ class Registry:
         #304): at most :data:`MAX_COMPLETIONS` values starting with ``value``, then those
         containing it, case-insensitive.
 
-        ``facility_id`` completes from ``ctx.allowed_facilities`` (less the facilities a call
-        would refuse); ``equip`` and ``equips`` (its last comma-separated id) from the stored
-        equipment of ``context["facility_id"]`` when a call could read that facility, else to
-        nothing. A name that is not one clean line of at most 200 characters is never offered
-        (the prompt could not take it whole), nor one the sanitiser would change (HTML or markdown
+        ``facility_id`` completes from ``ctx.allowed_facilities`` the store holds (less the
+        facilities a call would refuse); ``equip`` and ``equips`` (its last comma-separated id)
+        from the stored equipment of ``context["facility_id"]`` when a call could read that
+        facility, else to nothing: not the ids ``equips`` already lists, and for ``triage_ahu``
+        no equipment of a recognised class other than an air handler (#314). A name that is not
+        one clean line of at most 200 characters is never offered (the prompt could not take it
+        whole), nor one the sanitiser would change (HTML or markdown
         markup, a URL, a fact-id bracket) or one that starts with ``NOTICE`` (#307). Any other
         argument completes to nothing; an unknown prompt or argument is
         ``CapabilityError("invalid_params")``.
@@ -331,11 +333,22 @@ class Registry:
             head, _, value = value.rpartition(",")
             head = ", ".join(e.strip() for e in head.split(",") if e.strip())
             head, value = (f"{head}, " if head else ""), value.strip()
-        if argument == "facility_id":
-            pool = [f for f in ctx.allowed_facilities if _readable(ctx, f)]
+        if argument == "facility_id":  # #314: only what the store holds (else not_found)
+            held = _stored_facilities(ctx)
+            pool = [f for f in ctx.allowed_facilities if f in held and _readable(ctx, f)]
         elif argument in ("equip", "equips"):
             fid = str((context or {}).get("facility_id") or "")
-            pool = _equipment(ctx, fid) if fid and _readable(ctx, fid) else []
+            classes = _equipment(ctx, fid) if fid and _readable(ctx, fid) else {}
+            # #314: an id already in the list is not offered again, and a prompt about one
+            # family (triage_ahu: air handlers) offers no equipment known to be of another
+            chosen = {e.strip() for e in head.split(",")}
+            family = _PROMPT_FAMILY.get(prompt)
+            pool = [
+                e
+                for e, cls in classes.items()
+                if e not in chosen
+                and (family is None or _family_matches(cls, (family,)) is not False)
+            ]
         else:
             pool = []
         # #307: a name the sanitiser would change (markup, a link, a fact-id bracket) or one that
@@ -498,8 +511,28 @@ def _readable(ctx: CallContext, facility_id: str) -> bool:
     return True
 
 
-def _equipment(ctx: CallContext, facility_id: str) -> list:
-    """The stored equipment ids of one facility, read without writing anything."""
+#: the equipment family a prompt's ``equip`` argument is about (completion offers no other)
+_PROMPT_FAMILY = {"triage_ahu": "air_handler"}
+
+
+def _family_matches(equip_class, wanted) -> bool | None:
+    from ..model.equipclass import family_matches as matches
+
+    return matches(equip_class, wanted)
+
+
+def _stored_facilities(ctx: CallContext) -> set:
+    """The facility ids the store holds (its partitions)."""
+    from ._policy import open_store
+
+    try:
+        return set(open_store(ctx).facilities())
+    except Exception:  # noqa: BLE001 - a store problem: nothing to offer
+        return set()
+
+
+def _equipment(ctx: CallContext, facility_id: str) -> dict:
+    """``{equip id: equip class}`` stored for one facility, read without writing anything."""
     from .._nopersist import no_persist
     from ._policy import open_store
 
@@ -507,8 +540,8 @@ def _equipment(ctx: CallContext, facility_id: str) -> list:
         with no_persist():
             eqs = open_store(ctx).equipment(facility_id=facility_id).get(facility_id) or {}
     except Exception:  # noqa: BLE001 - a store problem: nothing to offer
-        return []
-    return [str(e) for e in eqs]
+        return {}
+    return {str(e): c for e, c in eqs.items()}
 
 
 def _result_bytes(res: CapabilityResult) -> int:

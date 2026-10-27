@@ -31,11 +31,25 @@ _FINISH = (
 )
 
 
+#: the longest value of a prompt argument: an id (the tools take ids of at most 200 characters),
+#: else the longer free-text or list arguments
+_MAX_ARG = 200
+_MAX_LONG_ARG = {"claim": 1000, "equips": 4000}
+#: the most equipment compare_equipment takes
+_MAX_COMPARE = 20
+
+
 def _arg(args: dict, name: str, *, required: bool = True, default: str = "") -> str:
     """One argument as a single short line: whitespace collapsed, control, bidi and invisible
-    characters out (#291), citation brackets in parentheses, at most 200 characters."""
+    characters out (#291), citation brackets in parentheses. A value longer than the prompt
+    takes is ``invalid_params``, not cut (#314): a cut id names nothing."""
     raw = (args or {}).get(name)
-    value = defang(one_line(raw if raw is not None else ""))[:200]
+    value = defang(one_line(raw if raw is not None else ""))
+    most = _MAX_LONG_ARG.get(name, _MAX_ARG)
+    if len(value) > most:
+        raise CapabilityError(
+            "invalid_params", f"the argument {name!r} is longer than {most} characters"
+        )
     if required and not value:
         raise CapabilityError("invalid_params", f"the prompt needs the argument {name!r}")
     return value or default
@@ -86,6 +100,9 @@ def rcx_executive_summary(args: dict) -> list:
         f"Draft the executive summary of the retro-commissioning (RCx) report for facility {fid}.",
         _steps(
             f"Call rcx_report with {_j(facility_id=fid)}.",
+            "It returns the first issues by rank; when a notice says more are ranked, call it "
+            "again with the offset the notice names until you have them all, so that no issue "
+            "conditional on a sensor fix is missed.",
             "Write one or two paragraphs for a building owner: how many issues, the top issues "
             "with their equipment and cost (or why they are uncosted), what is conditional on a "
             "sensor fix, and how much of the data the verdicts rest on. Cite the report's own "
@@ -162,9 +179,17 @@ def data_quality_review(args: dict) -> list:
 
 def compare_equipment(args: dict) -> list:
     fid, equips = _arg(args, "facility_id"), _arg(args, "equips")
-    names = [e.strip() for e in equips.split(",") if e.strip()][:20]
+    names = list(dict.fromkeys(e.strip() for e in equips.split(",") if e.strip()))
     if len(names) < 2:
         raise CapabilityError("invalid_params", "equips needs two or more comma-separated ids")
+    if len(names) > _MAX_COMPARE:  # #314: refused, not cut to the first 20
+        raise CapabilityError(
+            "invalid_params", f"equips names {len(names)} ids; compare at most {_MAX_COMPARE}"
+        )
+    if any(len(e) > _MAX_ARG for e in names):
+        raise CapabilityError(
+            "invalid_params", f"an id in equips is longer than {_MAX_ARG} characters"
+        )
     return _message(
         f"Compare these equipment at facility {fid}: {', '.join(names)}.",
         _steps(

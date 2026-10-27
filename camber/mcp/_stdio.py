@@ -150,6 +150,11 @@ def _write(outstream: IO[bytes], data: bytes) -> bool:
         outstream.flush()
     except BrokenPipeError:
         raise
+    except ValueError:
+        if getattr(outstream, "closed", False):  # closed as the session ends: the client is gone
+            raise BrokenPipeError("the output stream is closed") from None
+        log.exception("could not write a reply")
+        return False
     except Exception:
         log.exception("could not write a reply")
         return False
