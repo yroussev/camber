@@ -225,8 +225,36 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - The default run of your own facility (no run config) no longer runs every rule on a class
     CAMBER does not recognise (a `LOGGER`) when the facility has recognised ones, so such a unit
     no longer gets a `warn` from a check that says it was not evaluated.
+- **Accuracy and rendering fixes from the third acceptance round (#318).**
+  - A check the trust floor declines now names every input it reads that is below the floor,
+    optional ones included ("declined -- untrusted input(s): co2 (trust 0.02), oa_airflow (trust
+    0.01), occupancy (trust 0.02)"), not only the required one. An optional input below the
+    floor on its own still does not decline the check; the docs now say which inputs decide.
+  - `rule_run`'s notice about findings that rest on a disagreeing sensor reference counts the
+    findings it lists, and says how many more results (such as an `ok` verdict) rest on that
+    input but are below `min_severity` and not listed. It used to say "3 finding(s)" next to a
+    list of two.
+  - `finding_detail` on a G36 AFDD finding states only the fault conditions the rule reported:
+    a condition below the `warn_pct` reporting threshold is no longer called "flagged", and its
+    hours are no longer added to the finding's flagged hours (566 h against the 540 h the rule
+    reported).
+  - The fleet pseudo-equipment reads `"<fleet>"` again in summaries and facts, the spelling
+    `finding_detail` and `equips` take; the `‹fleet›` spelling of earlier 0.111 builds is
+    accepted too.
+  - `rcx_report`'s facts name equipment the way summaries and `finding_detail` facts do:
+    quoted, with markup defanged and the server's own directories taken out.
+  - The refusal of a message line over 1 MiB answers the request's `id` only when the whole
+    line names one top-level `id`; a line that repeats it is answered with `id: null`.
+  - `finding_detail`'s parameter bases no longer carry internal issue references such as
+    "(#94)", as `rule_params` already did not.
 
 ### Security
+- **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
+  now taken out of a name in any letter case and with either path separator, so an equipment id
+  such as `/USERS/<name>/AHU-10` or `\Users\<name>\AHU-8` no longer shows the account name in
+  an error. Fact text is redacted the same way as the summary (a stored id holding a home path
+  appeared verbatim in facts), completion no longer offers such an id, and an echoed value
+  holding a closing tag such as `</b>` is no longer taken for a path.
 - **A renamed or copied research-only facility directory is no longer served as your own data
   (#312).** Renaming `facility_id=ds-<research-only dataset>` to another name left its registry
   entry pointing at a directory that no longer existed, and the renamed facility was served in

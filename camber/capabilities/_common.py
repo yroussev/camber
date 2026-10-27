@@ -161,6 +161,8 @@ def _safe(values, *, sent: bool = False) -> list:
 
 #: the ``equip`` of a fleet rule's finding (one finding over many equipment)
 FLEET = "<fleet>"
+#: :data:`FLEET` as the defanged text of 0.111 before #318 showed it; accepted as its alias
+FLEET_SHOWN = "\u2039fleet\u203a"
 
 
 def check_selection(store, facility_id: str, arguments: dict) -> None:
@@ -197,7 +199,7 @@ def check_selection(store, facility_id: str, arguments: dict) -> None:
             fleet = (
                 f"; {FLEET!r} is the equipment of a fleet finding (one finding over many units), "
                 "not stored equipment: use the units its metrics name"
-                if FLEET in unknown and not arg.startswith("role")
+                if (FLEET in unknown or FLEET_SHOWN in unknown) and not arg.startswith("role")
                 else ""
             )
             raise CapabilityError(
@@ -718,15 +720,29 @@ def reference_conditions(findings, ref_findings, registry) -> list:
     return out
 
 
-def conditional_banner(n: int) -> str | None:
-    """The NOTICE of ``n`` findings conditional on a disagreeing sensor reference (#313)."""
-    if not n:
+def conditional_banner(n: int, hidden: dict | None = None) -> str | None:
+    """The NOTICE of ``n`` listed findings conditional on a disagreeing sensor reference (#313).
+
+    ``hidden`` (0.111, #318) counts, by severity, the conditional results the ``min_severity``
+    floor left out of the list: they are named, never counted as listed findings."""
+    hidden = {k: int(v) for k, v in (hidden or {}).items() if v}
+    if not n and not hidden:
         return None
+    what = ", ".join(f"{v} {k}" for k, v in hidden.items())
+    more = (
+        f"{what} result(s) below min_severity rest on such an input too and are not listed (a "
+        "lower min_severity lists them); a pass measured with that input is conditional as well."
+    )
+    if not n:
+        return (
+            "No listed finding rests on an input whose configured sensor reference disagrees "
+            f"with it, but {more} sensor_trust shows the comparison."
+        )
     return (
-        f"{n} finding(s) rest on an input whose configured sensor reference disagrees with it "
-        "(conditional_on names the comparison): treat each as a possible sensor problem first "
-        "and check that sensor before acting on the equipment. sensor_trust shows the "
-        "comparison."
+        f"{n} listed finding(s) rest on an input whose configured sensor reference disagrees "
+        "with it (conditional_on names the comparison): treat each as a possible sensor problem "
+        "first and check that sensor before acting on the equipment. sensor_trust shows the "
+        "comparison." + (f" {more}" if hidden else "")
     )
 
 

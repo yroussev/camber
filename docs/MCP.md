@@ -34,9 +34,10 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   it, and change it with CAMBER's own commands (`camber datasets remove`, `camber facility ...`)
   rather than by hand.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
-  that declines because an input scores below it is announced in a NOTICE line, with the count,
-  the rules and the inputs with their scores; `sensor_trust` reports the same scores and marks
-  exactly those inputs `below_floor`. A finding resting on an input whose configured sensor
+  that declines because a required input scores below it is announced in a NOTICE line, with
+  the count, the rules and every input below it with its score; `sensor_trust` reports the same
+  scores and marks those inputs `below_floor`. An optional input below the floor does not
+  decline a check on its own. A finding resting on an input whose configured sensor
   reference disagrees is not declined but marked `conditional_on` that sensor.
 - **Model-sized results.** A tool returns one page of each list by default, so a typical result
   stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
@@ -228,8 +229,8 @@ A request with the 2026-07-28 `_meta` is always served statelessly; `initialize`
 Messages are one JSON object per line in UTF-8; batches are refused, and so is a line over 1 MiB,
 an object that repeats a key, and a string holding a lone UTF-16 surrogate escape such as
 `"\ud800"` (valid JSON syntax, but not a character). The refusal of a line over 1 MiB carries the
-request's `id` when the line's first bytes name it (top level, once, a complete string or
-integer), else `null`. An integer argument may be sent as a whole-number float (`5.0` is the
+request's `id` when the line's first bytes name it (top level, a complete string or integer)
+and the whole line names no other top-level `id`, else `null`. An integer argument may be sent as a whole-number float (`5.0` is the
 integer 5, as JSON Schema says); `5.5` is `invalid_params`.
 
 **Errors.** Following the specification, a problem the model can fix by changing its call is a

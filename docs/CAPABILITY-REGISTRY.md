@@ -136,8 +136,12 @@ that is conditional on it, whatever their severities.
 on its equipment's whole run frame -- every role at the run config's resample, over the run's
 window, with the shared points merged -- by the same function that scores `sensor_trust`'s
 `rules` view, which reads the frames `rule_run` reads. So a check is declined exactly when
-`sensor_trust` (same window) puts one of its inputs `below_floor`, and the decline names each
-input with that score ("declined -- untrusted input(s): co2 (trust 0.14)"). A trend logged in
+`sensor_trust` (same window) puts one of its gated inputs `below_floor` -- a required input, or
+a present input of a group the rule needs one of -- and the decline names each input the rule
+reads that is below the floor, optional ones included, with that score ("declined -- untrusted
+input(s): co2 (trust 0.14), oa_airflow (trust 0.08)"; 0.111, #318). An optional input below the
+floor does not decline a check on its own: the rule runs without trusting it, and
+`sensor_trust` shows its score. A trend logged in
 bursts covers only its bursts on that grid, so it can be below the floor although every stored
 sample is sound.
 

@@ -100,15 +100,89 @@ def head_id(head: bytes) -> Any:
     return value
 
 
-def _oversized(line: bytes, max_message_bytes: int) -> dict:
+#: a run of string characters other than a quote or a backslash
+_STR_RUN = re.compile(rb'[^"\\]*')
+#: the bytes that change the JSON structure outside a string
+_STRUCT = re.compile(rb'["{}\[\],]')
+
+
+class _TopKeys:
+    """Counts the top-level ``"id"`` keys of a JSON object line fed to it in pieces, holding no
+    more than a short key at a time (0.111, #318): an oversized line is read and dropped in
+    chunks, and its id is answered only when the whole line names it once."""
+
+    def __init__(self):
+        self.depth, self.in_str, self.esc, self.expect_key = 0, False, False, False
+        self.key: bytearray | None = None
+        self.ids = 0
+
+    def _key(self, part: bytes) -> None:
+        if self.key is not None:
+            self.key = self.key + part if len(self.key) + len(part) <= 64 else None
+
+    def feed(self, data: bytes) -> None:
+        i, n = 0, len(data)
+        while i < n:
+            if self.in_str:
+                if self.esc:
+                    self.esc = False
+                    self._key(data[i : i + 1])
+                    i += 1
+                    continue
+                j = _STR_RUN.match(data, i).end()  # type: ignore[union-attr]  # always matches
+                self._key(data[i:j])
+                i = j
+                if i >= n:
+                    break
+                if data[i] == 0x5C:  # a backslash: the next byte is escaped
+                    self.esc = True
+                    self._key(b"\\")
+                else:  # the closing quote
+                    self.in_str = False
+                    if self.key is not None:
+                        try:
+                            self.ids += json.loads(b'"' + bytes(self.key) + b'"') == "id"
+                        except ValueError:
+                            pass
+                    self.key = None
+                i += 1
+                continue
+            m = _STRUCT.search(data, i)
+            if m is None:
+                break
+            c, i = data[m.start()], m.end()
+            if c == 0x22:  # a quote opens a string: a key when the top level expects one
+                self.in_str = True
+                self.key = bytearray() if self.depth == 1 and self.expect_key else None
+                self.expect_key = False
+            elif c in b"{[":
+                self.depth += 1
+                self.expect_key = self.depth == 1 and c == 0x7B
+            elif c in b"}]":
+                self.depth -= 1
+            elif self.depth == 1:  # a comma at the top level: a key follows
+                self.expect_key = True
+
+
+def _oversized(line: bytes, max_message_bytes: int, *, repeated: bool = False) -> dict:
     """The refusal of a message longer than ``max_message_bytes``, answering its id when the line
-    names one in its first bytes (:func:`head_id`)."""
+    names one in its first bytes (:func:`head_id`) and, ``repeated`` false, nowhere else at its
+    top level (0.111, #318)."""
     log.warning("refused a message longer than %d bytes", max_message_bytes)
     return _error(
-        head_id(line),
+        None if repeated else head_id(line),
         INVALID_REQUEST,
         f"Invalid Request: message longer than {max_message_bytes} bytes",
     )
+
+
+def _drop_oversized(line: bytes, instream: IO[bytes], max_message_bytes: int) -> tuple:
+    """``(refusal, more)`` for an oversized ``line``: the rest of the line is read and dropped
+    (``more`` is ``False`` when the stream ended there), its top-level keys counted on the way."""
+    keys = _TopKeys()
+    keys.feed(line)
+    more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes, keys)
+    return _oversized(line, max_message_bytes, repeated=keys.ids > 1), more
 
 
 class Terminated(BaseException):
@@ -132,12 +206,15 @@ def _terminated(exc: Terminated) -> int:
     return 128 + exc.signum
 
 
-def _skip_rest_of_line(instream: IO[bytes], chunk: int) -> bool:
-    """Read and drop the remainder of an oversized line; ``False`` when the stream ended."""
+def _skip_rest_of_line(instream: IO[bytes], chunk: int, keys: _TopKeys | None = None) -> bool:
+    """Read and drop the remainder of an oversized line, feeding it to ``keys``; ``False`` when
+    the stream ended."""
     while True:
         part = instream.readline(chunk)
         if not part:
             return False
+        if keys is not None:
+            keys.feed(part)
         if part.endswith(b"\n"):
             return True
 
@@ -204,8 +281,8 @@ def serve(
                 log.info("end of input; exiting")
                 return 0
             if len(line) > max_message_bytes:
-                more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes)
-                _reply(outstream, _oversized(line, max_message_bytes))
+                refusal, more = _drop_oversized(line, instream, max_message_bytes)
+                _reply(outstream, refusal)
                 if not more:
                     return 0
                 continue
@@ -274,8 +351,8 @@ def _read_lines(instream: IO[bytes], max_message_bytes: int, lines: queue.Queue)
             if not line:
                 return
             if len(line) > max_message_bytes:
-                more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes)
-                lines.put(_oversized(line, max_message_bytes))
+                refusal, more = _drop_oversized(line, instream, max_message_bytes)
+                lines.put(refusal)
                 if not more:
                     return
                 continue

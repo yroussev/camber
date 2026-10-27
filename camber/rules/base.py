@@ -187,17 +187,23 @@ def _equip_health(ref, mapping, resample, shared, frame: pd.DataFrame) -> dict:
 
 
 def _untrusted(rule, ref, frame: pd.DataFrame, mapping, resample, min_trust, shared=None) -> list:
-    """``[(role, trust)]``: the rule's gated inputs on ``frame`` that score below ``min_trust``.
+    """``[(role, trust)]``: the rule's inputs on ``frame`` that score below ``min_trust`` when a
+    gated input (required, or a present any-of role) does; ``[]`` otherwise.
 
     0.111 (#311): each input is scored on its equipment's whole run frame by
     :func:`_equip_health`, the same read the ``sensor_trust`` capability reports, so a check is
-    declined exactly when ``sensor_trust`` puts an input below the floor -- whichever rule asks.
+    declined exactly when ``sensor_trust`` puts a gated input below the floor -- whichever rule
+    asks. An optional input below the floor does not decline a check on its own (0.111, #318).
     (0.111, #297: a plant point is judged on its equipment's running samples, which that frame
     carries even when the rule's own frame does not load the run signals.)
     """
-    roles = [r for r in _gate_roles(rule, frame) if r in frame.columns]
-    if not roles:
+    gated = [r for r in _gate_roles(rule, frame) if r in frame.columns]
+    if not gated:
         return []
+    # 0.111 (#318): a decline names every input the verdict reads that is below the floor, the
+    # optional ones too; only the gated inputs decide whether the check is declined
+    optional = [r for r in getattr(rule, "roles_optional", ()) if r in frame.columns]
+    roles = gated + [r for r in optional if r not in gated]
     health = _equip_health(ref, mapping, resample, shared, frame)
     missing = [r for r in roles if r not in health]
     if missing:  # a column the whole-frame read does not hold: scored on the rule's frame
@@ -207,6 +213,8 @@ def _untrusted(rule, ref, frame: pd.DataFrame, mapping, resample, min_trust, sha
         t = health.get(r)
         if t is not None and t.trust < min_trust:
             out.append((r, float(t.trust)))
+    if not any(r in gated for r, _t in out):
+        return []
     return out
 
 
