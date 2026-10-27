@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
 import time
 
 from camber.capabilities import Capability, CapabilityResult, Registry
@@ -44,6 +45,23 @@ def _freeze(ctx, args):
     return CapabilityResult(data={}, text="thawed", facts=[])
 
 
+def _spawn(ctx, args):
+    """Start a child process in a process group of its own (as the font scan of matplotlib does
+    on macOS), write its pid to ``path``, then wait: it must not outlive the worker (#309)."""
+    child = subprocess.Popen(["sleep", "60"], start_new_session=True)
+    with open(args["path"], "w") as f:
+        f.write(str(child.pid))
+    time.sleep(60)
+    return CapabilityResult(data={}, text="waited", facts=[])
+
+
+def _grow(ctx, args):
+    """Touch ``mb`` megabytes, then let them go: the worker's peak memory grows (#309)."""
+    block = b"x" * (int(args["mb"]) << 20)
+    del block
+    return CapabilityResult(data={"pid": os.getpid()}, text="grew", facts=[])
+
+
 def _pid(ctx, args):
     return CapabilityResult(data={"pid": os.getpid()}, text="the worker", facts=[])
 
@@ -62,6 +80,25 @@ def default_registry() -> Registry:
                 title=name.title(),
                 description=doc,
                 input_schema=_secs(),
+                output_schema=_OUT,
+                handler=handler,
+            )
+        )
+    for name, handler, schema in (
+        ("spawn", _spawn, {"path": {"type": "string"}}),
+        ("grow", _grow, {"mb": {"type": "integer", "minimum": 0}}),
+    ):
+        reg.register(
+            Capability(
+                name=name,
+                title=name.title(),
+                description=(handler.__doc__ or name).split("\n")[0],
+                input_schema={
+                    "type": "object",
+                    "properties": schema,
+                    "required": list(schema),
+                    "additionalProperties": False,
+                },
                 output_schema=_OUT,
                 handler=handler,
             )

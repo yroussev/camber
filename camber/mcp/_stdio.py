@@ -111,6 +111,27 @@ def _oversized(line: bytes, max_message_bytes: int) -> dict:
     )
 
 
+class Terminated(BaseException):
+    """Raised in the serving thread by a ``SIGTERM`` / ``SIGHUP`` handler (``camber mcp`` installs
+    one, #309): the session stops like a Ctrl-C, and the exit status is ``128 + signum``. Not an
+    ``Exception``, as ``KeyboardInterrupt`` is not, so no ``except Exception`` catches it."""
+
+    def __init__(self, signum: int):
+        super().__init__(signum)
+        self.signum = int(signum)
+
+
+def _terminated(exc: Terminated) -> int:
+    import signal
+
+    try:
+        name = signal.Signals(exc.signum).name
+    except ValueError:
+        name = f"signal {exc.signum}"
+    log.info("%s received; exiting", name)
+    return 128 + exc.signum
+
+
 def _skip_rest_of_line(instream: IO[bytes], chunk: int) -> bool:
     """Read and drop the remainder of an oversized line; ``False`` when the stream ended."""
     while True:
@@ -193,6 +214,8 @@ def serve(
     except KeyboardInterrupt:
         log.info("interrupted; exiting")
         return 130
+    except Terminated as exc:
+        return _terminated(exc)
     except BrokenPipeError:
         log.info("the client closed the output stream; exiting")
         return 0
@@ -287,9 +310,9 @@ def _serve_concurrent(
     reader = threading.Thread(
         target=_read_lines, args=(instream, max_bytes, lines), name="mcp-stdin", daemon=True
     )
-    workers.start()
-    reader.start()
     try:
+        workers.start()  # inside: a signal right after it still closes the pool
+        reader.start()
         while True:
             if out.gone.is_set() or out.hung_up():
                 log.info("the client closed the output stream; exiting")
@@ -311,16 +334,29 @@ def _serve_concurrent(
                 response = _error(None, INTERNAL_ERROR, "Internal error")
             if isinstance(response, ToolCall):
                 with inflight_lock:
-                    job = workers.submit(response, done)
+                    reused = response.id in inflight
+                    job = None if reused else workers.submit(response, done)
                     if job is not None:
                         inflight.setdefault(response.id, []).append(job)
-                if job is None:
+                if reused:  # #309: one reply and one cancel per id
+                    log.warning("refused a tools/call reusing the id of a call in progress")
+                    out.reply(
+                        _error(
+                            response.id,
+                            INVALID_REQUEST,
+                            "Invalid Request: a call with this id is still in progress; "
+                            "use a new id for each request",
+                        )
+                    )
+                elif job is None:
                     out.reply(server.finish(response, workers.busy_error()))
             elif response is not None:
                 out.reply(response)
     except KeyboardInterrupt:
         log.info("interrupted; exiting")
         return 130
+    except Terminated as exc:
+        return _terminated(exc)
     finally:
         server.on_cancel = previous
         stopped = workers.close()

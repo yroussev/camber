@@ -6,8 +6,10 @@ out, was cancelled or whose client has gone can only be stopped by ending the pr
 that builds the capability registry once and then runs :meth:`Registry.call` for one call at a
 time -- the same call, under the same context, with the same validation, policy, no-persist scope,
 redaction and citation checks as in-process; the worker only carries the outcome back. A worker is
-killed (``SIGKILL``) and replaced when its call is cancelled, runs past its time cap, leaves a
-handler thread behind, or the server shuts down; the next call finds a warm replacement.
+killed (``SIGKILL``, with its whole process group: matplotlib's font scan runs child processes)
+and replaced when its call is cancelled, runs past its time cap, leaves a handler thread behind,
+grew past ``recycle_bytes`` of memory, or the server shuts down; the next call finds a warm
+replacement. A worker found dead while idle is replaced before a call is given to it (0.111, #309).
 
 Calls beyond the running ones wait in a FIFO queue of at most ``max_queued``; a call beyond that
 is refused at once (``busy``). Each call is a :class:`Job` with a ``state`` (``queued``,
@@ -16,8 +18,8 @@ is refused at once (``busy``). Each call is a :class:`Job` with a ``state`` (``q
 The parent and a worker talk over the worker's stdin / stdout: length-prefixed pickles (the parent
 only ever unpickles what its own child wrote). Inside the worker, fd 1 points at stderr and fd 0 at
 ``/dev/null``, so a handler's stray output lands in the log. A worker exits on its own when the
-parent closes the pipe or dies, and always through ``os._exit`` (no interpreter teardown under a
-running Arrow scan).
+parent closes the pipe or dies (killing its own process group first), and always through
+``os._exit`` (no interpreter teardown under a running Arrow scan).
 """
 
 from __future__ import annotations
@@ -39,6 +41,12 @@ from typing import Any
 log = logging.getLogger("camber.mcp")
 
 _HEADER = struct.Struct("!Q")
+#: the largest ``max_concurrent`` / ``max_queued`` a pool accepts (#309): each slot is a thread
+#: and a worker process of about 110 MB, each queued call a message held in memory
+MAX_CONCURRENT = 64
+MAX_QUEUED = 1024
+#: a worker whose peak memory passed this many bytes during a call is replaced after it (#309)
+RECYCLE_BYTES = 1 << 30
 #: the worker's entry point: the parent's import path, then the registry factory
 _BOOT = (
     "import sys, json; sys.path[:] = json.loads(sys.argv[1]); "
@@ -130,11 +138,68 @@ def _abandoned_threads() -> bool:
     )
 
 
+def _peak_rss() -> int:
+    """This process's peak resident memory in bytes (0 when unknown)."""
+    try:
+        import resource
+
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except (ImportError, OSError, ValueError):
+        return 0
+    return int(peak) if sys.platform == "darwin" else int(peak) * 1024  # Linux: KiB
+
+
+def _process_tree(root: int) -> list:
+    """``root`` and every process descended from it, children first found by one ``ps`` (#309):
+    a process group is not enough, since macOS's ``system_profiler`` (which matplotlib's font
+    scan runs) starts its helper in a group of its own."""
+    try:
+        out = subprocess.run(
+            ["ps", "-axo", "pid=,ppid="], capture_output=True, text=True, timeout=5
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return [root]
+    children: dict = collections.defaultdict(list)
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            children[int(parts[1])].append(int(parts[0]))
+    tree, todo = [], [root]
+    while todo:
+        pid = todo.pop()
+        if pid not in tree:
+            tree.append(pid)
+            todo += children.get(pid, [])
+    return tree
+
+
+def _kill_tree(root: int, *, group: bool) -> None:
+    """SIGKILL ``root``'s descendants, then (``group``) its process group, which ``root`` leads;
+    every pid is collected before any is killed, so none is reparented out of reach."""
+    for pid in _process_tree(root)[1:]:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    if group:
+        try:
+            os.killpg(root, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def _exit_group(status: int) -> None:  # pragma: no cover - runs in the worker process
+    """End this worker and every process it started (it leads its own process group)."""
+    if os.name == "posix":
+        _kill_tree(os.getpid(), group=os.getpgrp() == os.getpid())
+    os._exit(status)
+
+
 def _watch_parent(parent: int) -> None:
     while True:
         time.sleep(0.5)
         if os.getppid() != parent:
-            os._exit(0)
+            _exit_group(0)
 
 
 def _worker_main(factory: str) -> None:  # pragma: no cover - runs in the worker process
@@ -156,16 +221,17 @@ def _worker_main(factory: str) -> None:  # pragma: no cover - runs in the worker
         reader = _Reader(requests)
         while True:
             job_id, name, arguments, ctx = reader.read()
+            _write_frame(replies, ("taken", job_id))  # the parent may retry a call not taken
             outcome = _outcome(registry, name, arguments, ctx)
             try:
-                _write_frame(replies, (job_id, outcome, _abandoned_threads()))
+                _write_frame(replies, (job_id, outcome, _abandoned_threads(), _peak_rss()))
             except _Gone:
                 raise
             except Exception:  # noqa: BLE001 - a result that does not pickle
                 log.exception("the result of %s could not be sent", name)
-                _write_frame(replies, (job_id, ("exc", "UnpicklingError"), True))
+                _write_frame(replies, (job_id, ("exc", "UnpicklingError"), True, 0))
     except _Gone:
-        os._exit(0)
+        _exit_group(0)
     except BaseException:  # noqa: BLE001 - never a teardown under running scans
         import traceback
 
@@ -215,11 +281,15 @@ class _Worker:
             stdout=subprocess.PIPE,
             close_fds=True,
             bufsize=0,
+            # its own process group, killed whole (#309): matplotlib's font scan starts
+            # fc-list / system_profiler, which would otherwise outlive a killed worker
+            start_new_session=os.name == "posix",
         )
         assert self.proc.stdin is not None and self.proc.stdout is not None
         self.requests, self.replies = self.proc.stdin, self.proc.stdout
         self.reader = _Reader(self.replies.fileno())
         self.killed = False
+        self.taken = False  # whether the worker acknowledged the call last sent
 
     def wait_ready(self, start_seconds: float) -> None:
         """Wait for the worker's registry to load; killed and raised when it does not."""
@@ -236,15 +306,27 @@ class _Worker:
     def pid(self) -> int:
         return self.proc.pid
 
-    def call(self, job_id: int, call: Any, deadline: float | None) -> tuple:
+    def alive(self) -> bool:
+        """Whether the process is still running (reaps it when it is not; the owner's thread)."""
+        return self.proc.poll() is None
+
+    def send(self, job_id: int, call: Any) -> None:
+        """Hand ``call`` to the worker; ``_Gone`` when it is no longer there to take it."""
+        self.taken = False
         _write_frame(self.requests.fileno(), (job_id, call.name, call.arguments, call.context))
+
+    def receive(self, job_id: int, deadline: float | None) -> tuple:
         while True:
             reply = self.reader.read(deadline)
-            if isinstance(reply, tuple) and reply and reply[0] == job_id:
+            if reply == ("taken", job_id):
+                self.taken = True
+            elif isinstance(reply, tuple) and reply and reply[0] == job_id:
                 return reply
 
     def signal_kill(self) -> None:
-        """Send SIGKILL (any thread; the owner reaps)."""
+        """SIGKILL the worker and every process it started (any thread; the owner reaps)."""
+        if self.proc.returncode is None and os.name == "posix" and not self.killed:
+            _kill_tree(self.proc.pid, group=True)
         try:
             self.proc.kill()
         except OSError:
@@ -298,7 +380,9 @@ class WorkerPool:
     its registry (``camber.capabilities:default_registry`` for ``camber mcp``). A call that runs
     ``grace_seconds`` past its context's ``caps.max_seconds`` without an answer is a ``timeout``
     (the registry's own cap normally answers first); either way its worker is killed. Up to
-    ``max_queued`` calls wait for a free worker; :meth:`submit` refuses more (``None``).
+    ``max_queued`` calls wait for a free worker; :meth:`submit` refuses more (``None``). The time
+    cap counts from when a call reaches a worker, not from when it was queued. A worker whose
+    peak memory passed ``recycle_bytes`` during a call is replaced after it (``None``: never).
 
     :func:`camber.mcp.serve` starts the pool and closes it at the end of the session.
     """
@@ -309,18 +393,20 @@ class WorkerPool:
         *,
         max_concurrent: int = 2,
         max_queued: int = 8,
-        grace_seconds: float = 5.0,
+        grace_seconds: float = 1.0,
         start_seconds: float = 60.0,
+        recycle_bytes: int | None = RECYCLE_BYTES,
     ):
-        if int(max_concurrent) < 1:
-            raise ValueError("max_concurrent must be at least 1")
-        if int(max_queued) < 0:
-            raise ValueError("max_queued must be 0 or more")
+        if not 1 <= int(max_concurrent) <= MAX_CONCURRENT:
+            raise ValueError(f"max_concurrent must be from 1 to {MAX_CONCURRENT}")
+        if not 0 <= int(max_queued) <= MAX_QUEUED:
+            raise ValueError(f"max_queued must be from 0 to {MAX_QUEUED}")
         self.registry_factory = registry_factory
         self.max_concurrent = int(max_concurrent)
         self.max_queued = int(max_queued)
         self.grace_seconds = float(grace_seconds)
         self.start_seconds = float(start_seconds)
+        self.recycle_bytes = None if recycle_bytes is None else int(recycle_bytes)
         self._cond = threading.Condition()
         self._queue: collections.deque = collections.deque()
         self._slots = [_Slot(i) for i in range(self.max_concurrent)]
@@ -462,13 +548,21 @@ class WorkerPool:
             while True:
                 with self._cond:
                     while not self._queue and not self._closing:
-                        self._cond.wait()
+                        if not self._cond.wait(1.0):
+                            break  # a look at the idle worker, below
                     if self._closing:
                         return
-                    job = self._queue.popleft()
-                    job.state, job._slot, slot.job = "running", slot, job
-                    job.started = time.monotonic()
-                    self._running += 1
+                    job = self._queue.popleft() if self._queue else None
+                    if job is not None:
+                        job.state, job._slot, slot.job = "running", slot, job
+                        job.started = time.monotonic()
+                        self._running += 1
+                if job is None:
+                    self._replace_if_dead(slot)
+                    continue
+                waited = job.started - job.submitted
+                if waited >= 1.0:
+                    log.info("tool %s waited %.1fs for a free worker", job.call.name, waited)
                 outcome = _CANCELLED
                 try:
                     outcome = self._run(slot, job)
@@ -491,6 +585,21 @@ class WorkerPool:
         finally:
             self._retire(slot)
 
+    def _replace_if_dead(self, slot: _Slot) -> bool:
+        """Replace the slot's worker when it ended on its own while idle (a crash, or the OS
+        killing it for memory, #309); whether it had."""
+        worker = slot.worker
+        if worker is None or worker.killed or worker.alive():
+            return False
+        log.warning(
+            "worker %d ended while idle (status %s); starting a replacement",
+            worker.pid,
+            worker.proc.returncode,
+        )
+        self._retire(slot)
+        self._warm(slot)
+        return True
+
     def _warm(self, slot: _Slot) -> None:
         if self._closing:
             return
@@ -509,44 +618,83 @@ class WorkerPool:
 
     def _run(self, slot: _Slot, job: Job) -> Any:
         call = job.call
-        worker = slot.worker
-        if worker is None:
-            try:
-                worker = self._spawn(slot)
-            except _Gone:
-                return _CANCELLED
-            except Exception:  # noqa: BLE001
-                log.exception("a worker process did not start")
-                return RemoteError("internal", "the worker process could not start")
-        if job.state != "running":
-            return _CANCELLED  # cancelled while its worker started
         with self._cond:
             self._next_id += 1
             job_id = self._next_id
-        try:
-            _, outcome, abandoned = worker.call(job_id, call, self._deadline(call))
-        except TimeoutError:
-            self._retire(slot)
-            cap = call.context.caps.max_seconds
-            log.info("tool %s: no answer %gs past its time cap; worker killed", call.name, cap)
-            # the words of the registry's own time cap
-            return RemoteError(
-                "timeout",
-                f"{call.name!r} ran longer than {cap:g} s and was abandoned",
-                {"max_seconds": cap},
-            )
-        except (_Gone, pickle.UnpicklingError, EOFError):
-            rc = worker.proc.poll()
-            self._retire(slot)
-            if job.state != "running" or self._closing:
-                return _CANCELLED
-            log.error("the worker running tool %s ended unexpectedly (status %s)", call.name, rc)
-            return RemoteError("internal", "the worker process ended unexpectedly")
-        except Exception:  # noqa: BLE001 - e.g. a context that does not pickle
-            log.exception("tool %s could not be handed to a worker", call.name)
-            self._retire(slot)
-            return RemoteError("internal", "the call could not be handed to a worker")
+        for attempt in (1, 2):  # a worker that died before it took the call: once more
+            if slot.worker is not None and not slot.worker.killed and not slot.worker.alive():
+                self._replace_if_dead(slot)
+            worker = slot.worker
+            if worker is None:
+                try:
+                    worker = self._spawn(slot)
+                except _Gone:
+                    return _CANCELLED
+                except Exception:  # noqa: BLE001
+                    log.exception("a worker process did not start")
+                    return RemoteError("internal", "the worker process could not start")
+            if job.state != "running":
+                return _CANCELLED  # cancelled while its worker started
+            try:
+                worker.send(job_id, call)
+                _, outcome, abandoned, peak = worker.receive(job_id, self._deadline(call))
+                break
+            except TimeoutError:
+                self._retire(slot)
+                cap = call.context.caps.max_seconds
+                log.info(
+                    "tool %s: no answer within its %gs time cap; worker killed", call.name, cap
+                )
+                return _timeout(call.name, cap)
+            except (_Gone, pickle.UnpicklingError, EOFError):
+                self._retire(slot)
+                if job.state != "running" or self._closing:
+                    return _CANCELLED
+                if worker.taken or attempt == 2:
+                    return self._worker_lost(call, worker)
+                log.warning(
+                    "worker %d ended (status %s) before it took tool %s; trying a fresh one",
+                    worker.pid,
+                    worker.proc.returncode,
+                    call.name,
+                )
+            except Exception:  # noqa: BLE001 - e.g. a context that does not pickle
+                log.exception("tool %s could not be handed to a worker", call.name)
+                self._retire(slot)
+                return RemoteError("internal", "the call could not be handed to a worker")
         if abandoned:
             log.info("tool %s left a handler thread running; worker replaced", call.name)
             self._retire(slot)
+            if outcome[0] == "err" and outcome[1] == "timeout":  # stopped now, not abandoned
+                return _timeout(call.name, call.context.caps.max_seconds)
+        elif self.recycle_bytes is not None and peak > self.recycle_bytes:
+            log.info(
+                "tool %s: its worker grew to %d MB; replaced to release the memory",
+                call.name,
+                peak >> 20,
+            )
+            self._retire(slot)
         return _decode(outcome)
+
+    @staticmethod
+    def _worker_lost(call: Any, worker: _Worker) -> RemoteError:
+        """The tool error for a call whose worker died under it: retryable (#309)."""
+        log.error(
+            "the worker running tool %s ended unexpectedly (status %s)",
+            call.name,
+            worker.proc.returncode,
+        )
+        return RemoteError(
+            "unavailable",
+            f"the worker process running {call.name!r} ended unexpectedly (the system may have "
+            "stopped it for lack of memory); retry the call, and if it fails again, narrow it "
+            "(a shorter window, fewer items or a smaller limit)",
+            {"retryable": True},
+        )
+
+
+def _timeout(name: str, cap: float) -> RemoteError:
+    """The ``timeout`` of a call whose worker was killed at its time cap."""
+    return RemoteError(
+        "timeout", f"{name!r} ran longer than {cap:g} s and was stopped", {"max_seconds": cap}
+    )
