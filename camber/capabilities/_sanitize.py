@@ -121,9 +121,12 @@ def prose(text: str) -> str:
 OWN_NAMES = frozenset({"<fleet>"})
 
 
-def name(value, *, limit: int = MAX_NAME) -> str:
-    """A data value (a name, an id, a unit) as a quoted span for a result's text."""
-    s = str(value) if value in OWN_NAMES else shown(value)
+def name(value, *, limit: int = MAX_NAME, own: bool = False) -> str:
+    """A data value (a name, an id, a unit) as a quoted span for a result's text. ``own``: the
+    value is CAMBER's own pseudo-equipment (a fleet finding's ``<fleet>``), shown as it is when
+    it is one of :data:`OWN_NAMES`; equipment from the data with the same id is defanged like
+    any other name (0.111, #320)."""
+    s = str(value) if own and value in OWN_NAMES else shown(value)
     s = clip(s, limit, key=value).replace("\\", "\\\\").replace('"', '\\"')
     return f'{OPEN}"{s}"{CLOSE}'
 
@@ -195,19 +198,30 @@ def lead(text: str) -> str:
     return f"Summary: {text}" if re.match(r"(?i)[\W_]*notice\b", text) else text
 
 
-def cap_strings(x, depth: int = 0):
+def cap_strings(x, depth: int = 0, *, cuts: list | None = None, keep=()):
     """``x`` (JSON data) with every string longer than :data:`MAX_VALUE` cut (see :func:`clip`)
-    and no span marks left."""
+    and no span marks left. Each cut string is appended to ``cuts`` (when given). The values of
+    the top-level keys of ``x`` named in ``keep`` are not cut (0.111, #320: a capability's own
+    output, such as the caller's text that ``check_citations`` returns)."""
+    return _cap(x, depth, cuts, keep, cut=True)
+
+
+def _cap(x, depth: int, cuts, keep, *, cut: bool):
     if depth > 40:
         return x
     if isinstance(x, str):
         if OPEN in x or CLOSE in x:
             x = unmark(x)
+        if not cut or len(x) <= MAX_VALUE:
+            return x
+        if cuts is not None:
+            cuts.append(x)
         return clip(x, MAX_VALUE)
     if isinstance(x, dict):
-        return {k: cap_strings(v, depth + 1) for k, v in x.items()}
-    if isinstance(x, list):
-        return [cap_strings(v, depth + 1) for v in x]
-    if isinstance(x, tuple):
-        return [cap_strings(v, depth + 1) for v in x]
+        return {
+            k: _cap(v, depth + 1, cuts, (), cut=cut and not (depth == 0 and k in keep))
+            for k, v in x.items()
+        }
+    if isinstance(x, (list, tuple)):
+        return [_cap(v, depth + 1, cuts, (), cut=cut) for v in x]
     return x

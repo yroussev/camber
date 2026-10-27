@@ -32,11 +32,13 @@ from ._common import (
     finding_fact,
     finding_ids,
     finding_row,
+    is_fleet_id,
     jsonable,
     mask_summary,
     narrow,
     reference_conditions,
     reference_findings,
+    reference_notes_banner,
     rule_names,
     run,
     severity_counts,
@@ -46,7 +48,7 @@ from ._common import (
     with_rules,
 )
 from ._page import OFFSET, limit_arg, page
-from ._sanitize import plain
+from ._sanitize import name, plain
 
 _RULES = {
     "type": "array",
@@ -167,11 +169,14 @@ def _run_for(ctx, arguments: dict):
     return run(ctx, config, base_dir), from_caller, notice, (start, end)
 
 
-def _rows(ctx, fid: str, res) -> list:
+def _rows(ctx, fid: str, res, notes: list | None = None) -> list:
     """The run's findings as rows, each marked ``conditional_on`` the configured sensor
-    references of its inputs that disagree (0.111, #313)."""
+    references of its inputs that disagree (0.111, #313); what could not be compared is added
+    to ``notes`` (#320)."""
     ids = finding_ids(res.findings)
-    refs, _notes = reference_findings(ctx, fid, res)
+    refs, ref_notes = reference_findings(ctx, fid, res)
+    if notes is not None:
+        notes.extend(ref_notes)
     conds = reference_conditions(res.findings, refs, getattr(res, "registry", None))
     rows = []
     for i, f, cond in zip(ids, res.findings, conds):
@@ -182,11 +187,36 @@ def _rows(ctx, fid: str, res) -> list:
     return rows
 
 
+#: conditional results left out of the page that the fact of :func:`_left_out_fact` names
+_LEFT_OUT = 10
+
+
+def _left_out_fact(rows: list) -> dict:
+    """The fact of the conditional findings and results the page does not list (other pages,
+    or below ``min_severity``): each named, so the notice about them can be cited (0.111,
+    #320)."""
+    named = [
+        f"{name(r['equip'], own=is_fleet_id(r['rule'], r['equip']))} {r['rule']} ({r['severity']})"
+        for r in rows[:_LEFT_OUT]
+    ]
+    more = f" and {len(rows) - _LEFT_OUT} more" if len(rows) > _LEFT_OUT else ""
+    return {
+        "id": "C1@rule_run",
+        "kind": "conditional_not_listed",
+        "value": len(rows),
+        "text": f"{len(rows)} result(s) not listed here also rest on an input whose configured "
+        f"sensor reference disagrees with it, so each is conditional on that sensor (a pass "
+        f"too): {'; '.join(named)}{more}",
+        "finding_ids": [r["finding_id"] for r in rows],
+    }
+
+
 def rule_run(ctx, arguments: dict) -> CapabilityResult:
     """Run the FDD rules on one allowed facility and return the findings, worst first."""
     fid = arguments["facility_id"]
     res, from_caller, config_notice, (start, end) = _run_for(ctx, arguments)
-    rows = by_severity(_rows(ctx, fid, res))
+    ref_notes: list = []
+    rows = by_severity(_rows(ctx, fid, res, ref_notes))
     counts = severity_counts(rows)
     sev_floor = SEVERITIES.index(arguments.get("min_severity") or "info")
     listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= sev_floor]
@@ -243,12 +273,26 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)
-    # #313; 0.111 (#318): count what is listed, and name the conditional results left out
+    # #313; 0.111 (#318): count what is listed, and name the conditional results left out;
+    # #320: listed is this page, and a fact names the ones left out, so the notice can be cited
     hidden: dict = {}
     for r in rows:
         if r.get("conditional_on") and SEVERITIES.index(r["severity"]) > sev_floor:
             hidden[r["severity"]] = hidden.get(r["severity"], 0) + 1
-    notice = conditional_banner(sum(1 for r in listed if r.get("conditional_on")), hidden)
+    on_page = {r["finding_id"] for r in shown}
+    elsewhere = [r for r in listed if r.get("conditional_on") and r["finding_id"] not in on_page]
+    notice = conditional_banner(
+        sum(1 for r in shown if r.get("conditional_on")), hidden, len(elsewhere)
+    )
+    if notice:
+        banners.append(notice)
+    left_out = elsewhere + [
+        r for r in rows if r.get("conditional_on") and SEVERITIES.index(r["severity"]) > sev_floor
+    ]
+    if left_out:
+        facts.append(_left_out_fact(left_out))
+        text.append(cite(facts[-1]))
+    notice = reference_notes_banner(ref_notes, arguments.get("equips"))  # 0.111 (#320)
     if notice:
         banners.append(notice)
     data = {
@@ -509,7 +553,9 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
 
     fid, want = arguments["facility_id"], arguments["finding_id"]
     rule = want.split("@", 1)[0]
-    if want == f"{rule}@{FLEET_SHOWN}":  # 0.111 (#318): the fleet id as it was once shown
+    # 0.111 (#318): the fleet id as it was once shown; only a fleet rule's (#320: a unit stored
+    # with that id is a unit, whatever its name)
+    if want == f"{rule}@{FLEET_SHOWN}" and is_fleet_id(rule, FLEET):
         want = f"{rule}@{FLEET}"
     if rule not in rule_names():
         raise CapabilityError("not_found", f"no finding {want!r}: {rule!r} is not a rule")

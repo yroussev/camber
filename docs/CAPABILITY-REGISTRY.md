@@ -128,9 +128,14 @@ reads high. A comparison at warn or fault makes its point `suspect` (flag `refer
 score and `below_floor` are unchanged, so the check is not declined. Instead every finding
 whose rule reads that point on that equipment carries `conditional_on` (the comparison) in
 `rule_run` and `finding_detail`, its fact says "conditional on sensor_drift:supply_air_temp
-warn ...", and a notice says to treat it as a sensor problem first. In `rcx_report` such an
+warn ...", and a notice says to treat it as a sensor problem first. The notice counts the
+findings on the page returned as "listed" and names the conditional ones on other pages or below
+`min_severity` apart; `rule_run`'s fact `C1@rule_run` names those (0.111, #320), so the notice's
+claim can be cited. In `rcx_report` such an
 issue names it in its fact the same way, and the sensor issue ranks just above the first issue
-that is conditional on it, whatever their severities.
+that is conditional on it, whatever their severities. A reference that cannot be compared (its
+equipment has no data for the role, say) is named in a notice of `sensor_trust`, `rule_run` and
+`rcx_report` alike, since the findings on that point were not checked against it (0.111, #320).
 
 **The trust floor and `sensor_trust` read one score** (0.111, #311). A rule's input is scored
 on its equipment's whole run frame -- every role at the run config's resample, over the run's
@@ -141,7 +146,12 @@ a present input of a group the rule needs one of -- and the decline names each i
 reads that is below the floor, optional ones included, with that score ("declined -- untrusted
 input(s): co2 (trust 0.14), oa_airflow (trust 0.08)"; 0.111, #318). An optional input below the
 floor does not decline a check on its own: the rule runs without trusting it, and
-`sensor_trust` shows its score. A trend logged in
+`sensor_trust` shows its score. The exception is an input that is optional only because the rule
+then returns no verdict, which the check is judged on whenever it is there (0.111, #320): the
+outdoor-air signal of `dcv_verification` (OA flow, else the OA damper), the OAT of
+`outdoor_air_fraction`, the wet-bulb source of `condenser_water_reset` and
+`cooling_tower_approach` (a wet-bulb point, else the OAT and RH), and the fan signal of
+`night_weekend_setback` (the status, else the speed) gate the check like a required input. A trend logged in
 bursts covers only its bursts on that grid, so it can be below the floor although every stored
 sample is sound.
 
@@ -260,7 +270,10 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    handler's own fact ids are citations: any other `[F1@x]` reads `(F1@x)`, and a fact's `text`
    holds no citation at all. `data` keeps the stored values exactly (so an id can be passed
    back), except that any string in `data` or `facts` longer than 2,000 characters is cut the
-   same way, so one huge name does not make a whole facility `too_large`. Schema `pattern`s use
+   same way, so one huge name does not make a whole facility `too_large`; a result with a cut
+   value has `truncated` set and a notice saying how many were cut (0.111, #320). A capability's
+   own output named in `Capability.own_output` is never cut: `check_citations` returns the
+   caller's `verified_text` and sentences whole. Schema `pattern`s use
    ECMA-262's `$` (the end of the string; Python's `$` also matches before a final newline). New
    equipment ids, classes and roles with such characters are refused at ingest (see
    [SCALE.md](SCALE.md#facility-identity-why-an-id-not-a-name)).

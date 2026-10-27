@@ -110,7 +110,11 @@ for 12 days of a year is 4 % of it. Every analog role in `STUCK_HOURS` is theref
 the **absolute duration** of its runs -- 24 h for temperatures, humidity, flows, static, pump head
 and power, 48 h for CO2 (an empty building over a weekend). A run longer than the limit sets the
 `stuck` flag, is listed in `stuck_intervals` (`start`, `end`, `hours`, `value`), and caps the trust
-at "suspect" (0.75, less the stuck share of the samples); `longest_flat_hours` is always reported.
+at "suspect" (0.75, less the stuck share of the samples); `longest_flat_hours` is reported whenever
+the duration is judged. It is null for a role without a limit (valves, dampers, setpoints, status
+points), for a fan-dependent role read without a fan gate (as the trust floor and `sensor_trust`'s
+`rules` view read it; the report's view is gated), and for a plant point that never ran (0.111,
+#320: it was documented as always reported).
 Flows, static, pump head and power legitimately sit at their "off" value for a weekend, so a run
 at or below 2 % of the series' 99th-percentile magnitude is never counted. The fan-dependent roles
 (`FAN_GATED_ROLES`) are judged on fan-on stretches only, in the gated mode: without a gate a duct

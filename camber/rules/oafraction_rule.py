@@ -120,6 +120,12 @@ class OutdoorAirFraction:
         self.excess_margin_pct = 5.0
         self.under_margin_pct = 5.0
 
+    def gate_inputs(self, columns) -> tuple:
+        """The outdoor-air temperature, for the trust gate (0.111, #320): the outdoor-air fraction
+        is (MAT - RAT) / (OAT - RAT), so the check cannot be made without it (an optional role
+        only so that a unit without it gets an "insufficient data" finding)."""
+        return (Role.OAT,) if Role.OAT in columns else ()
+
     def _gate(self, frame: pd.DataFrame):
         """``(fan-on mask | None, label)``; ``(None, "off")`` when gating is disabled."""
         if not self.fan_gate:

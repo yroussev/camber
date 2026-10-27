@@ -644,18 +644,34 @@ def cite(fact: dict) -> str:
     return f"{defang(str(fact['text'])).rstrip(' .;')} [{fact['id']}]."
 
 
+@lru_cache(maxsize=1)
+def fleet_rules() -> frozenset:
+    """The names of the built-in fleet rules, whose one finding is on :data:`FLEET`."""
+    from ..rules.builtin import builtin_registry, is_fleet
+
+    reg = builtin_registry()
+    return frozenset(n for n in reg.names() if is_fleet(reg.get(n)))
+
+
+def is_fleet_id(rule: str, equip: str) -> bool:
+    """True when ``equip`` is the fleet pseudo-equipment of a finding of ``rule``: a fleet
+    rule's :data:`FLEET`, not stored equipment that happens to have that id (0.111, #320)."""
+    return equip == FLEET and rule in fleet_rules()
+
+
 def finding_fact(fact_id: str, row: dict) -> dict:
     """The fact that cites one finding row; its text names the equipment as a quoted value
     (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
     equip, summary = row["equip"], row["summary"]
+    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
     flat = " ".join(equip.split())
     # #314: the rest of the summary is the rule's text about the data (it may name more units,
     # zones or points): a span, so a name with a slash in it is not taken for a path
     if flat and summary.startswith(f"{flat}:"):
-        summary = name(equip) + ":" + prose(summary[len(flat) + 1 :])
+        summary = name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
     else:
         summary = prose(summary)
-    text = f"{name(equip)} {row['rule']} ({row['severity']}): {summary}"
+    text = f"{name(equip, own=own)} {row['rule']} ({row['severity']}): {summary}"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
     return {
@@ -698,6 +714,29 @@ def reference_findings(ctx, facility_id: str, run) -> tuple:
         return [], [f"The configured sensor references could not be read: {e}"]
 
 
+def reference_notes_banner(notes, equips=None) -> str | None:
+    """The NOTICE of the configured sensor references that could not be compared (0.111, #320),
+    from the ``notes`` of :func:`reference_findings` (with ``equips``: only theirs), or ``None``.
+    A finding on such a point is not conditional on its reference: nothing was compared."""
+    from ._sanitize import shown
+
+    kept = [
+        n
+        for n in notes
+        if equips is None
+        or not n.startswith("Sensor reference for ")
+        or any(f"for {e} " in n or f"for {e}:" in n for e in equips)
+    ]
+    if not kept:
+        return None
+    return (
+        f"{len(kept)} configured sensor reference(s) could not be compared, so the findings that "
+        "read those points are not checked against them: "
+        + "; ".join(shown(n).rstrip(" .") for n in kept)
+        + ". sensor_trust shows the configured comparisons."
+    )
+
+
 def reference_conditions(findings, ref_findings, registry) -> list:
     """Per finding of ``findings``, the labels of the reference warnings (warn or fault) it is
     conditional on: a configured reference for one of its inputs, on its equipment, disagrees.
@@ -720,18 +759,28 @@ def reference_conditions(findings, ref_findings, registry) -> list:
     return out
 
 
-def conditional_banner(n: int, hidden: dict | None = None) -> str | None:
+def conditional_banner(n: int, hidden: dict | None = None, elsewhere: int = 0) -> str | None:
     """The NOTICE of ``n`` listed findings conditional on a disagreeing sensor reference (#313).
 
     ``hidden`` (0.111, #318) counts, by severity, the conditional results the ``min_severity``
-    floor left out of the list: they are named, never counted as listed findings."""
+    floor left out of the list, and ``elsewhere`` (#320) the conditional findings on other pages
+    of it: they are named, never counted as listed findings."""
     hidden = {k: int(v) for k, v in (hidden or {}).items() if v}
-    if not n and not hidden:
+    if not n and not hidden and not elsewhere:
         return None
-    what = ", ".join(f"{v} {k}" for k, v in hidden.items())
+    items, hows = [], []
+    if elsewhere:
+        items.append(f"{elsewhere} finding(s) on other pages of this list")
+        hows.append("another offset or a larger limit lists them")
+    if hidden:
+        items.append(
+            ", ".join(f"{v} {k}" for k, v in hidden.items()) + " result(s) below min_severity"
+        )
+        hows.append("a lower min_severity lists them")
     more = (
-        f"{what} result(s) below min_severity rest on such an input too and are not listed (a "
-        "lower min_severity lists them); a pass measured with that input is conditional as well."
+        " and ".join(items)
+        + f" rest on such an input too and are not listed ({'; '.join(hows)})"
+        + ("; a pass measured with that input is conditional as well." if hidden else ".")
     )
     if not n:
         return (
@@ -742,7 +791,7 @@ def conditional_banner(n: int, hidden: dict | None = None) -> str | None:
         f"{n} listed finding(s) rest on an input whose configured sensor reference disagrees "
         "with it (conditional_on names the comparison): treat each as a possible sensor problem "
         "first and check that sensor before acting on the equipment. sensor_trust shows the "
-        "comparison." + (f" {more}" if hidden else "")
+        "comparison." + (f" {more}" if items else "")
     )
 
 

@@ -78,16 +78,22 @@ def _forms(path) -> set:
     return {s for s in out if len(s) > 2}
 
 
+#: one path separator as a message may spell it (0.111, #320): any run of ``/`` and ``\\`` (a
+#: name quoted in a text has its backslashes doubled, and a repr / JSON one doubles them again),
+#: URL-encoded (``%2F``, ``%5C``), and followed by any ``./`` segments
+_SEP_CH = r"(?:[/\\]|%2[Ff]|%5[Cc])"
+_SEP = rf"{_SEP_CH}+(?:\.{_SEP_CH}+)*"
+
+
 @functools.lru_cache(maxsize=32)
 def _roots_pattern(extra: tuple):
     """One pattern for every spelling (:func:`_forms`) of the known roots ``extra``, longest
-    first, matched case-insensitively and with ``/`` and ``\\`` (single or doubled) as one
-    separator (0.111, #318): ``/USERS/name`` and ``\\Users\\name`` name the home directory too
-    on a case-insensitive file system. ``None`` when there is none."""
+    first, matched case-insensitively and with ``/`` and ``\\`` as one separator (0.111, #318):
+    ``/USERS/name`` and ``\\Users\\name`` name the home directory too on a case-insensitive file
+    system; since #320 also doubled or URL-encoded and with a ``/./`` segment (:data:`_SEP`).
+    ``None`` when there is none."""
     forms = sorted({f for e in extra for f in _forms(e)}, key=len, reverse=True)
-    alts = dict.fromkeys(
-        "".join(r"[/\\]{1,2}" if ch in "/\\" else re.escape(ch) for ch in f) for f in forms
-    )
+    alts = dict.fromkeys("".join(_SEP if ch in "/\\" else re.escape(ch) for ch in f) for f in forms)
     return re.compile("|".join(alts), re.IGNORECASE) if alts else None
 
 

@@ -37,7 +37,8 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   that declines because a required input scores below it is announced in a NOTICE line, with
   the count, the rules and every input below it with its score; `sensor_trust` reports the same
   scores and marks those inputs `below_floor`. An optional input below the floor does not
-  decline a check on its own. A finding resting on an input whose configured sensor
+  decline a check on its own, unless the rule cannot judge without it (the outdoor-air signal
+  of `dcv_verification`, for one; see CAPABILITY-REGISTRY.md). A finding resting on an input whose configured sensor
   reference disagrees is not declined but marked `conditional_on` that sensor.
 - **Model-sized results.** A tool returns one page of each list by default, so a typical result
   stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
@@ -100,9 +101,12 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   rule parameter, a parameter value that is not a finite number or is outside its documented
   range without a `"basis"` for it, a value of the wrong type (text or true / false for a number,
   a fraction for a whole-number parameter such as `start_hour`, anything but true / false for a
-  flag, a word not listed for a choice), a `"basis"` that is not a non-empty text, a bad `units`,
+  flag, a word not listed for a choice; since #320 also null where the parameter has a value by
+  default, a list or an object where it takes one value, and one value where it takes a list), a
+  `"basis"` that is not a non-empty text, a bad `units`,
   `ventilation` (a zones file that cannot be read included) or `report.rcx` block (in
-  `report.rcx.references`: a threshold that is not a finite number or not above 0, a sensor used
+  `report.rcx.references`: a value that is not an object, a threshold that is not a finite
+  number or not above 0, a warn level above its fault level, a sensor used
   as its own reference, or a unit, reference equipment or reference file the config's source
   does not have), a facility the store does not hold, a config that names
   no facility or one that is not allowed, or any other suffix stops the server (exit 2) with one

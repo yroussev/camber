@@ -267,8 +267,54 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **`camber mcp` usage mistakes are one line (#315).** A missing, malformed or out-of-range
   option now prints one line on stderr (exit 2), as docs/CLI.md says, instead of the usage block
   and the error; `camber mcp -h` shows `[--config PATH ...]` for the repeatable option.
+- **`check_citations` returns the whole corrected text (#320).** With `detail: true`, its
+  `verified_text` was cut at 2,000 characters, mid-sentence and with `truncated: false`, so a
+  fully supported triage of normal length lost its last sentences without a word. The tool's
+  own output (`verified_text` and the sentences) is now never cut. The 2,000-character cap
+  still applies to values from the data, and a result with a value cut by it now has
+  `truncated: true` and a notice saying how many values were cut.
+- **A rule parameter of the wrong shape is refused (#320).** A config with `null` where a
+  parameter has a value by default, a list (`[7]`) or an object where it takes one value, or one
+  value where it takes a list (`occupied_days: 3`) was accepted at launch; every call then failed
+  as `invalid_params` with Python error text, which no argument the model sends can fix.
+  `camber mcp --config`, `camber run` and `rule_run`'s `params` now refuse it with the same one
+  line as the other type errors (`'start_hour': null is not a whole number (...)`). A parameter
+  whose default is null still accepts null.
+- **Sensor reference edges (#320).** In `report.rcx.references`, a warn level above the fault
+  level (`bias_warn` 5 with `bias_fault` 1, which rated a +3 bias "fault") and a value that is
+  not an object (`0`, `null`, `[]`, read as "no references") are now refused at launch. A
+  reference that starts but cannot be compared (its equipment has no data for the role) is now
+  named in a notice of `rule_run` and `rcx_report` too, not only of `sensor_trust`.
+- **The trust floor gates an input a rule cannot judge without (#320).** `dcv_verification`
+  was judged on an outdoor-air flow below the trust floor, because that input is optional (a
+  zone's CO2 alone is joined to its air handler), although the verdict is about that very
+  signal. The signal a check is judged on now gates it like a required input: the OA flow (else
+  the OA damper) of `dcv_verification`, the OAT of `outdoor_air_fraction`, the wet-bulb source of
+  `condenser_water_reset` and `cooling_tower_approach`, and the fan signal of
+  `night_weekend_setback`. At the default floor no finding of any catalog dataset changes.
+- **Equipment named like the fleet is not taken for it (#320).** A unit stored with the id
+  `<fleet>` was shown like the fleet pseudo-equipment of a fleet rule's finding, and
+  `finding_detail` read `...@‹fleet›` as the fleet, so the finding id of a unit stored as
+  `‹fleet›` returned another unit's finding (or `not_found`). Only a fleet rule's `<fleet>` is
+  now shown as such (a unit with that id is shown defanged like any name), and the `‹fleet›`
+  spelling is taken for the fleet only in a fleet rule's finding id.
+- **Counts and wording (#320).** `rule_run`'s notice about findings that rest on a disagreeing
+  sensor reference counted the findings on other pages as "listed" (with `limit: 1` it said 2
+  listed); it now counts the page and names the other pages apart. A new fact (`C1@rule_run`)
+  names the conditional results the page does not list, a hidden `ok` included, so the notice can
+  be cited. `sensor_trust` says "Of 11 matching points" for a selection of equipment or roles
+  rather than "Of 11 points on" the facility. docs/SENSOR-HEALTH.md said `longest_flat_hours` is
+  always reported; it now says when it is null (a role with no duration limit, a fan-dependent
+  point read without a fan gate, a plant point that never ran), and the output schema says so too.
+- **A `basis` of invisible characters is empty (#320).** A rule entry's `basis` holding only a
+  zero-width (or other invisible) character counted as a stated reason and kept an out-of-range
+  value; it is now refused like an empty one.
 
 ### Security
+- **Three more spellings of a home path are redacted (#320).** A data name holding the home
+  directory URL-encoded (`%2FUsers%2F...`), with a `/./` segment, or with doubled backslashes (the
+  repr / JSON form of a Windows path) still showed the account name in tool text and facts. The
+  server's own directories are now taken out in those spellings too.
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
   now taken out of a name in any letter case and with either path separator, so an equipment id
   such as `/USERS/<name>/AHU-10` or `\Users\<name>\AHU-8` no longer shows the account name in

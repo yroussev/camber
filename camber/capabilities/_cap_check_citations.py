@@ -222,5 +222,6 @@ CAPABILITIES = (
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,
         handler=check_citations,
+        own_output=("verified_text", "sentences"),  # the caller's own text, never cut (#320)
     ),
 )

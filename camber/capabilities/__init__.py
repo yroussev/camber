@@ -203,6 +203,9 @@ class Capability:
     output_schema: dict  # JSON Schema 2020-12 object schema of CapabilityResult.data
     handler: Callable[[CallContext, dict], CapabilityResult]
     long_running: bool = False  # a candidate for MCP Tasks (0.111) / A2A tasks (0.112)
+    # 0.111 (#320): top-level keys of ``data`` that hold the capability's own output (not values
+    # from the data), never cut at :data:`~._sanitize.MAX_VALUE`
+    own_output: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -459,7 +462,12 @@ class Registry:
         data, banners = _truncate(res.data, ctx.caps.max_rows)
         banners = [*cuts, *(b for b in banners if b not in cuts)]
         token = call_token(cap.name, arguments, ctx)
-        facts_in, text_in, data = _sanitized(res, data)
+        facts_in, text_in, data, cut = _sanitized(res, data, cap.own_output)
+        if cut:  # 0.111 (#320): a cut value is said, like a cut list
+            banners.append(
+                f"{cut} value(s) longer than 2,000 characters are cut in this result (each ends "
+                "with an ellipsis and a hash of the whole value)"
+            )
         facts, text_in, data = _scoped(facts_in, text_in, data, token)
         errors = validate(data, cap.output_schema)
         if errors:
@@ -746,12 +754,14 @@ def _scoped(facts: list, text: str, data, token: str) -> tuple:
     return out, _CITE.sub(sub, text), walk(data) if mapping else data
 
 
-def _sanitized(res: CapabilityResult, data) -> tuple:
-    """``(facts, text, data)`` of ``res`` with the data in them made safe (0.111, #291): the text
-    one line with only the handler's own fact ids as citations (see
+def _sanitized(res: CapabilityResult, data, own_output=()) -> tuple:
+    """``(facts, text, data, cut)`` of ``res`` with the data in them made safe (0.111, #291): the
+    text one line with only the handler's own fact ids as citations (see
     :func:`~camber.capabilities._sanitize.finish`), each fact's text one line with no citation,
-    and no string in ``data`` or ``facts`` longer than :data:`~._sanitize.MAX_VALUE`."""
-    facts = cap_strings(list(res.facts or []))
+    and no string in ``data`` or ``facts`` longer than :data:`~._sanitize.MAX_VALUE` (except the
+    capability's ``own_output`` keys of ``data``; ``cut``: how many strings were cut, #320)."""
+    cuts: list = []
+    facts = cap_strings(list(res.facts or []), cuts=cuts)
     own = {f["id"] for f in facts if isinstance(f, dict) and isinstance(f.get("id"), str)}
     facts = [
         {**f, "text": unmark(plain(finish(f["text"])))}
@@ -759,7 +769,8 @@ def _sanitized(res: CapabilityResult, data) -> tuple:
         else f
         for f in facts
     ]
-    return facts, plain(finish(str(res.text or ""), known_ids=own)), cap_strings(data)
+    data = cap_strings(data, cuts=cuts, keep=own_output)
+    return facts, plain(finish(str(res.text or ""), known_ids=own)), data, len(cuts)
 
 
 def _redact_data(data, secrets: list, depth: int = 0):

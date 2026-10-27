@@ -207,6 +207,16 @@ class CoolingTowerApproach:
             title=f"{equip}: cooling-tower approach",
         )
 
+    def gate_inputs(self, columns) -> tuple:
+        """The wet-bulb source the verdict rests on, for the trust gate (0.111, #320): a
+        wet-bulb point, else the OAT and RH it is derived from (optional roles only so that a
+        plant without one gets an "insufficient data" finding)."""
+        if Role.WETBULB_TEMP in columns:
+            return (Role.WETBULB_TEMP,)
+        if Role.OAT in columns and Role.OUTDOOR_RH in columns:
+            return (Role.OAT, Role.OUTDOOR_RH)
+        return ()
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         run_mask, run_source = self._run_gate(frame)
