@@ -38,6 +38,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   --purge-store` (or `drop_facility(forget=True)`) now keeps the fence until the facility's
   registry entry is removed too: a call in the last few milliseconds of a removal got a
   non-retryable `not_found` or `invalid_params`, where it now gets the retryable `unavailable`.
+- **More edge cases of the store's write fence, and Ctrl-C at start (#321).** A fence mark
+  naming a process id too large for the system (a damaged or hand-edited store file) made every
+  call on the facility and every `facilities` listing fail with an internal error, and `camber
+  datasets ingest --force` crashed on it; such a mark (or a malformed one) now blocks nothing
+  and the next writer clears it. An ingest killed in the few milliseconds between the two
+  renames of its swap left the facility registered without its data, so calls answered a
+  non-retryable `not_found` or `invalid_params` and the listing called it "active with 0
+  points" until the next ingest; calls now get the retryable `unavailable`, and the next
+  command that takes the store lock finishes the swap from the leftovers it kept. A first
+  ingest now writes the facility's registry entry before it lifts its fence, so a `facilities`
+  listing in between no longer says the registry needs repair. And Ctrl-C in the first moments
+  after `camber` starts now ends it quietly with exit status 130, instead of a traceback or a
+  misleading numpy import error with status 1.
 - **Equipment and point names with a slash read as themselves again (#307).** Since the 0.111
   path redaction, a name such as a Niagara ORD (`/Drivers/BacnetNetwork/AHU_1`),
   `slot:/Config/AHU-6`, `/AHU-4` or anything holding `</` became `<path>` in summaries, banners

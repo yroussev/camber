@@ -20,8 +20,11 @@ the writer reports idle, so a catalog a reader rebuilt mid-swap is never served 
 Random tokens, not a counter, so a lost file cannot make an old snapshot look current (no ABA).
 A busy marker of a process that is gone (a writer killed mid-swap) does not block readers, nor
 does one whose pid now belongs to another process: ``<started>`` is when the writer started, and
-a live pid that started at another time is not that writer (#317). The next writer to take the
-store lock resets such a marker (:func:`recover`), and its recovery settles the partition. The
+a live pid that started at another time is not that writer (#317), nor does a malformed marker
+or a pid no process can have (#321). One exception: while such a writer's partition is absent
+and its data sit in the swap's ``_swap-*`` leftovers (killed between the swap's two renames),
+the marker still counts as busy, so readers are told to retry rather than find no data. The next
+writer to take the store lock settles that swap and resets the marker (:func:`recover`). The
 directory starts with ``_``, so dataset discovery, ``ParquetStore.facilities()`` and the swap
 recovery never read it as data.
 """
@@ -43,6 +46,8 @@ _STAGING = "_staging"
 _STORE_FILES = (FENCE_DIR, "_facilities.json", "_lock", "_catalog.gen", "_catalog.json")
 _WAIT = 1.0  # seconds a reader waits for a busy writer before it gives up (retryable)
 _POLL = 0.02
+_PID_MAX = 2**31 - 1  # pid_t is 32 bits: a larger pid names no process (#321)
+_SWAP_ENDS = (".old", ".ready")  # a partition swap stopped inside its fence leaves one (._swap)
 
 _DEPTH: dict = {}  # (root, fid) -> [owning thread, how many fences it holds there (they nest)]
 _DEPTH_LOCK = threading.Lock()
@@ -165,23 +170,39 @@ def _held_elsewhere(root: str, fid: str) -> bool:
 
 
 def _read(root: str, fid: str):
-    """``(text, busy)`` of ``fid``'s fence: ``(None, False)`` when it has none."""
+    """``(text, busy)`` of ``fid``'s fence: ``(None, False)`` when it has none. A gone writer's
+    marker is busy too while its partition is mid-swap (absent, its data in ``_swap-*``), until
+    the next writer to take the store lock settles it (:func:`recover`, #321)."""
     try:
         with open(_file(root, fid), encoding="ascii") as fh:
             text = fh.read()
-    except (OSError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError, ValueError):
         return None, False
-    return text, _busy(root, fid, text.split())
+    words = text.split()
+    busy = _busy(root, fid, words)
+    if not busy and words[:1] == ["busy"]:
+        busy = _mid_swap(root, fid)
+    return text, busy
+
+
+def _mid_swap(root: str, fid: str) -> bool:
+    """Whether ``fid``'s partition is absent while a swap's leftovers hold its data."""
+    part = os.path.join(root, f"{_PARTITION}{fid}")
+    stem = os.path.join(root, f"_swap-{_PARTITION}{fid}")
+    return not os.path.lexists(part) and any(os.path.lexists(stem + e) for e in _SWAP_ENDS)
 
 
 def _busy(root: str, fid: str, words) -> bool:
     """Whether the writer a fence's ``words`` name is still at work: its process is alive and,
-    when the marker records it, started when that writer did (else the pid was reused, #317)."""
+    when the marker records it, started when that writer did (else the pid was reused, #317).
+    A malformed marker, or one whose pid no process can have, names no writer (#321)."""
     if len(words) not in (3, 4) or words[0] != "busy" or not words[1].isdigit():
         return False
     from ._leftovers import _process_alive
 
     pid = int(words[1])
+    if not 0 < pid <= _PID_MAX:
+        return False
     if pid == os.getpid():
         return _held_elsewhere(root, fid)  # an earlier process with this pid is gone
     if not _process_alive(pid):
@@ -196,8 +217,9 @@ def recover(root: str) -> list:
     """Reset each busy marker in the store at ``root`` whose writer is gone (killed mid-change,
     or its pid since reused) to a fresh idle token; returns those facility ids (#317).
 
-    The caller holds the store lock, so no other writer is at work; the partition itself is
-    settled by the ingest's recovery. The catalog is invalidated first, as a writer does."""
+    The caller holds the store lock, so no other writer is at work. A swap such a writer left
+    half done on the facility's partition is finished or rolled back first (#321). The catalog
+    is invalidated first, as a writer does."""
     root = os.path.abspath(root)
     try:
         names = sorted(os.listdir(os.path.join(root, FENCE_DIR)))
@@ -210,12 +232,16 @@ def recover(root: str) -> list:
         with _DEPTH_LOCK:
             if (root, fid) in _DEPTH:
                 continue  # a fence this process holds
-        text, busy = _read(root, fid)
-        if text is not None and text.startswith("busy") and not busy:
+        text, _ = _read(root, fid)
+        if text is not None and text.startswith("busy") and not _busy(root, fid, text.split()):
             stale.append(fid)
     if stale:
+        from . import _swap  # lazy: it imports this module
         from .parquet_store import _invalidate_catalog_at  # lazy: it imports this module
 
+        for fid in stale:  # its writer died inside the fence, maybe in a partition swap
+            if _mid_swap(root, fid):
+                _swap.recover(os.path.join(root, f"{_PARTITION}{fid}"))
         _invalidate_catalog_at(root)
         for fid in stale:
             _write(root, fid, f"idle {os.urandom(8).hex()}\n")

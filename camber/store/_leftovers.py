@@ -23,6 +23,8 @@ def _process_alive(pid: int) -> bool:
     """Whether process ``pid`` may still be running (conservative: unsure counts as alive)."""
     if pid == os.getpid():
         return True
+    if not 0 < pid <= 2**31 - 1:  # pid_t is 32 bits: no process has such a pid (#321)
+        return False
     if os.name == "nt":  # pragma: no cover - os.kill(pid, 0) signals the process on Windows
         return True
     try:

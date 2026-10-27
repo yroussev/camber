@@ -75,6 +75,7 @@ from .. import __version__
 from ..model.mapping import MappingProvider
 from ..model.roles import _ANY_ON_ROLES, Role
 from ..store import FacilityRegistry, ParquetStore
+from ..store._fence import fence
 from ..store._leftovers import STAGING_DIR
 from ..store._lock import store_lock
 from ..store.parquet_store import _scratch_store
@@ -618,8 +619,6 @@ def recover_staging(store: ParquetStore) -> list:
                 _swap.discard(path)
                 done.append({"path": path, "action": "stale_partition_removed"})
             else:
-                from ..store._fence import fence
-
                 with fence(store.root, fid):
                     os.rename(path, final)
                 _swap._fsync_dir(store.root)
@@ -1201,8 +1200,11 @@ def _ingest_locked(
                 reg._guard_write(fid)
         for fid, (name, rows, n_eq, extra) in facs.items():
             _reclaim(reg, fid, entry.id)
-            _swap_in(st, staging, fid)
-            _register(st, fid, name, {**base, **extra, "rows": rows, "equipment": n_eq})
+            # one fence over the swap and the registry entry: a first ingest's partition is
+            # never seen without its entry (#321)
+            with fence(st.root, fid):
+                _swap_in(st, staging, fid)
+                _register(st, fid, name, {**base, **extra, "rows": rows, "equipment": n_eq})
             result.rows += rows
             result.equipment += n_eq
             result.facilities.append(fid)

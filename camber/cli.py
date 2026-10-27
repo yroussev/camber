@@ -38,9 +38,11 @@ subprocess wrapper lives here, not in ``camber.agent``, so that package stays pu
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
+import signal
 import sys
 
 __all__ = [
@@ -4143,8 +4145,49 @@ def _ensure_utf8_streams():
                 pass
 
 
+_SIGINT_SEEN: list[int] = []  # set once Ctrl-C arrived while main() ran (#321)
+
+
+def _note_sigint(signum, frame):
+    _SIGINT_SEEN.append(signum)
+    signal.default_int_handler(signum, frame)  # raises KeyboardInterrupt, as before
+
+
+def _interrupted(exc: BaseException | None) -> bool:
+    """Whether ``exc`` is, or came from, a Ctrl-C: an import interrupted half way may surface
+    as another error (numpy's "you should not try to import numpy from its source directory")."""
+    seen: set = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, KeyboardInterrupt):
+            return True
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return bool(_SIGINT_SEEN)
+
+
 def main(argv=None):
-    """CLI entry point: parse args and dispatch to the requested subcommand."""
+    """CLI entry point: parse args and dispatch to the requested subcommand. Ctrl-C ends it
+    quietly with exit status 130, however early it comes (#321)."""
+    _SIGINT_SEEN.clear()
+    noted = False
+    with contextlib.suppress(ValueError):  # ValueError: not the main thread (an embedding)
+        if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
+            signal.signal(signal.SIGINT, _note_sigint)
+            noted = True
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except BaseException as e:
+        if not _interrupted(e):
+            raise
+        return 130
+    finally:
+        if noted and signal.getsignal(signal.SIGINT) is _note_sigint:
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+
+
+def _main(argv):
     _ensure_utf8_streams()
     parser = _build_parser()
     args, extra = parser.parse_known_args(argv)
