@@ -2527,9 +2527,10 @@ def _param_basis(name: str, params: dict, basis) -> dict | None:
         raise ValueError(f"rule {name!r}: 'basis' must map parameter names to text")
     for k, v in basis.items():  # 0.111 (#315): the operator's reason, not "" or a number
         # #320: invisible characters (zero-width, bidi, controls) do not make it non-empty
-        if not isinstance(v, str) or not "".join(
-            c for c in v if unicodedata.category(c) not in ("Cc", "Cf")
-        ).strip():
+        if (
+            not isinstance(v, str)
+            or not "".join(c for c in v if unicodedata.category(c) not in ("Cc", "Cf")).strip()
+        ):
             raise ValueError(
                 f"rule {name!r}: the 'basis' of {k!r} must be a non-empty text saying where its "
                 f"value came from (got {v!r})"

@@ -1242,7 +1242,7 @@ def _check_reference_spec(spec: dict, where: str) -> None:
             )
 
 
-def _parse_references(refs: dict, base_dir: str) -> tuple:
+def _parse_references(refs, base_dir: str) -> tuple:
     """``(per-equipment references, site OAT reference | None)`` from ``report.rcx.references``
     (0.108, #267).
 

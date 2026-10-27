@@ -46,10 +46,10 @@ from camber.capabilities import (  # noqa: E402
 from camber.capabilities._sanitize import MAX_VALUE  # noqa: E402
 from camber.config import _preflight_config, run_config  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
-from camber.rules import base  # noqa: E402
-from camber.store import ParquetStore  # noqa: E402
 from camber.report.rcx import RcxOptions  # noqa: E402
+from camber.rules import base  # noqa: E402
 from camber.rules.param_docs import _value_problem  # noqa: E402
+from camber.store import ParquetStore  # noqa: E402
 
 FID = fx.FID
 

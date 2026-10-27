@@ -3176,7 +3176,8 @@ def _shape_problem(rp: RuleParam, kind: str, value) -> str | None:
         nullable, maps = False, isinstance(d, dict)
         lists = isinstance(d, (list, tuple))
         scalars = not (maps or lists)
-    what = _WHAT.get(kind) or "one of " + ", ".join(repr(w) for w in rp.doc.range)
+    listed = rp.doc.range if rp.doc is not None else ()
+    what = _WHAT.get(kind) or "one of " + ", ".join(repr(w) for w in listed)
     if value is None:
         return None if nullable else f"null is not {what}"
     if isinstance(value, dict):
