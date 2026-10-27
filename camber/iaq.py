@@ -129,6 +129,10 @@ def analyze_co2_ventilation(
     if masks_out is not None:
         masks_out["under"] = _on(rise > delta_high_ppm)
         masks_out["over"] = _on(near)
+        # 0.111 (#310): the occupied samples with a plausible CO2 (n_occupied), the shares'
+        # denominator; over-ventilation's, with an economizer mask, leaves the economizer out
+        masks_out["judged"] = _on(pd.Series(True, index=co2.index))
+        masks_out["over_judged"] = masks_out["judged"]
     over_pct: float | None = round(100.0 * float(near.mean()), 1)
     econ_kw: dict = {}
     if economizer_mask is not None:
@@ -139,6 +143,7 @@ def analyze_co2_ventilation(
         rest = near[~econ]
         if masks_out is not None:
             masks_out["over"] = _on(near & ~econ)
+            masks_out["over_judged"] = _on(~econ)
         econ_kw = {
             "econ_hours_pct": round(100.0 * float(econ.mean()), 1),
             "over_vent_econ_pct": round(100.0 * float(near[econ].mean()), 1)

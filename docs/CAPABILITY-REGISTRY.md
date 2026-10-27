@@ -157,8 +157,13 @@ a window inside the data where some points are missing) is still an answer.
 same run as `rule_run` with the arguments given (every rule of it, so a verdict one rule takes
 from another reads the same), so pass the same `rules`, `params`, `equips` and window as the
 `rule_run` call. A span in `violations` is a run of flagged samples with no gap longer than one
-and a half intervals; `share` is of the `judged_samples` the rule's mask covers, not of the
-whole window. A drift finding id carries its family (`ahu:coil_valve_drift@AHU-1`).
+and a half intervals. `share` is of the `judged_samples`: the samples the rule itself judged
+(its own mask: fan-on, occupied, running, both valves shut ...), never the whole window, and
+`judged_basis` names them ("fan-on samples"), so it is the share the `rule_run` summary states
+(#310). A finding that judges named conditions (one per coil, per G36 fault condition, per
+failure mode) has the union of their flagged samples in `violations` and lists each condition
+in `conditions` with its own judged samples; each one is stated as a fact, and those are the
+shares its summary states. A drift finding id carries its family (`ahu:coil_valve_drift@AHU-1`).
 
 **Catalog metadata is public.** `dataset_search` and `dataset_entry` list research-only entries
 too, each with its licence, `access` and a notice (and a banner) that this server refuses any

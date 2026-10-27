@@ -301,11 +301,14 @@ class CompressorStaging:
         if Role.COMPRESSOR_STAGE not in frame.columns:
             return None
         mask, events = _stage_change_evidence(frame[Role.COMPRESSOR_STAGE])
+        stage = pd.to_numeric(frame[Role.COMPRESSOR_STAGE], errors="coerce").round()
         return Evidence(
             renderer="multitrend",
             roles=[Role.COMPRESSOR_STAGE],
             mask=mask,
             events=events,
+            judged=(stage > 0).fillna(False),  # 0.111 (#310): a stage change is between two
+            judged_basis="running samples",  # running stages, so the share is of those
             label="between stage changes",
             title=f"{equip}: compressor staging",
         )

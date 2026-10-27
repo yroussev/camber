@@ -401,6 +401,7 @@ class ActuatorStuck:
             },
             "worst": worst,
             "mask": mask,
+            "valid": valid,  # 0.111 (#310): the n_active samples, stuck_share's denominator
         }
 
     def _phrase(self, role: Role, worst: dict) -> str:
@@ -541,6 +542,8 @@ class ActuatorStuck:
             renderer="multitrend",
             roles=[role, *(r for r in context if r in frame.columns)],
             mask=res["mask"],
+            judged=res["valid"],
+            judged_basis="active samples",
             label="held flat against demand",
             title=f"{equip}: {role.value} stuck",
             normalize="unit",

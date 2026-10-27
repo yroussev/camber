@@ -169,7 +169,11 @@ class ChillerStaging:
         )
         starts = running & ~running.shift(1, fill_value=False)
         mask = pd.Series(False, index=w.index)
-        if res.starts_per_day >= self.max_starts_per_day:
+        # 0.111 (#310): the share is of the running samples; on a part-load verdict alone, of
+        # the running samples with a load (low_load_pct's denominator)
+        judged, basis = running.astype(bool), "running samples"
+        cycling = res.starts_per_day >= self.max_starts_per_day
+        if cycling:
             started = starts.cumsum().where(running) > 0  # runs a counted start began
             mask |= started.fillna(False).astype(bool)
         low = res.low_load_pct if res.low_load_pct == res.low_load_pct else 0.0
@@ -181,11 +185,16 @@ class ChillerStaging:
             if peak > 0:
                 lf = 100.0 * tons / peak
                 mask |= (lf < self.low_load_pct).reindex(w.index, fill_value=False)
+                if not cycling:
+                    judged = pd.Series(w.index.isin(tons.index), index=w.index)
+                    basis = "running samples with a load"
         return Evidence(
             renderer="multitrend",
             roles=[Role.POWER],
             mask=mask.reindex(frame.index, fill_value=False),
             events=starts.reindex(frame.index, fill_value=False),
+            judged=judged.reindex(frame.index, fill_value=False),
+            judged_basis=basis,
             label="short runs / low part load",
             title=f"{equip}: chiller staging",
         )

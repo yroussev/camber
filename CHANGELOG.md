@@ -117,7 +117,6 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **A config's `source.store` no longer overrides `--store` (#296).** Run tools read the
   config's store while the others read `--store`. A config whose store is not the `--store`
   directory (any spelling of the same directory is fine) is now refused at startup.
-
 - **MCP and CLI papercuts from the 0.110.0 acceptance test (#304).**
   - `camber mcp --store ""` is refused instead of reading the current directory, and
     `--min-trust -inf` (or `-1e3`) gets the "from 0 to 1" message instead of "expected one

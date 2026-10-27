@@ -280,11 +280,9 @@ class OutdoorAirFraction:
             return None
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        gate = self._gate(frame)[0]
         w = _oaf_samples(
-            frame.rename(columns=cols),
-            denom_min_f=self.denom_min_f,
-            gate=self._gate(frame)[0],
-            occ=occ,
+            frame.rename(columns=cols), denom_min_f=self.denom_min_f, gate=gate, occ=occ
         )
         if w is None or w.empty:
             return None
@@ -319,6 +317,21 @@ class OutdoorAirFraction:
         tmpl = DiagnosticTemplate(
             name, Role.OAT, ycol, expected, "OAT (°F)", ylabel, "the rule's own parameters"
         )
+        # 0.111 (#310): the chart's red points are of every judged (occupied, fan-on, stable)
+        # sample; the finding's two shares have their own denominators -- excess OA of the
+        # cooling-weather samples, under-ventilation of every judged one
+        cooling = w["OAT"] > cut
+        every = pd.Series(True, index=w.index)
+        basis = "occupied fan-on samples" if gate is not None else "occupied samples"
         return Evidence(
-            renderer="diagnostic", template=tmpl, frame=derived, title=f"{equip}: OA fraction"
+            renderer="diagnostic",
+            template=tmpl,
+            frame=derived,
+            title=f"{equip}: OA fraction",
+            judged_basis=basis,
+            masks={"excess OA": cooling & (y > hi_ok), "under-ventilation": y < lo_ok},
+            masks_judged={
+                "excess OA": (cooling, basis.replace(" samples", " cooling-weather samples")),
+                "under-ventilation": (every, basis),
+            },
         )

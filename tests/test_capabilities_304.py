@@ -86,8 +86,10 @@ def test_rule_run_headline_counts_rules_and_skipped_pairs_apart(site):
     head = res.facts[0]["text"]
     n_found = len({f["rule"] for f in res.data["findings"]})
     assert res.data["count"] == len(res.data["findings"])
-    assert re.search(r"\d+ rules were run on 2 equipment of demo-fac and \d+ of them gave", head)
-    assert f"and {n_found} of them gave findings" in head
+    assert re.search(
+        r"\d+ rules were run on 2 equipment of demo-fac and \d+ of them returned", head
+    )
+    assert f"and {n_found} of them returned a result" in head
     skipped = res.data["skipped"]
     n_pairs, n_rules = len(skipped), len({s["rule"] for s in skipped})
     assert f"{n_pairs} rule-equipment pair(s) ({n_rules} rule(s)) skipped" in head

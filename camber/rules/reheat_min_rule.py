@@ -149,6 +149,9 @@ class ReheatMinimization:
             renderer="multitrend",
             roles=[Role.HEAT_VALVE, Role.AIRFLOW, sp],
             mask=self._violation(w),
+            # 0.111 (#310): reheat_above_min_pct is of the occupied reheating samples
+            judged=w[Role.HEAT_VALVE] > self.valve_thr,
+            judged_basis="occupied reheating samples",
             label="reheat above minimum",
             title=f"{equip}: reheat above the minimum airflow (G36 §5.6.5)",
             normalize="unit",

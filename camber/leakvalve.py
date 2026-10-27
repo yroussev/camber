@@ -139,7 +139,9 @@ def analyze_leak_valves(
 
     ``masks_out`` (0.102, #119), a dict, is filled with ``"hw"`` and ``"chw"``: boolean Series on
     ``df``'s index of the samples counted in ``hw_leak_pct`` and ``chw_leak_pct`` -- what an
-    evidence chart shades. Left empty when nothing is judged. The result is unchanged.
+    evidence chart shades, and (0.111, #310) with ``"hw_judged"``, ``"chw_judged"`` and
+    ``"judged"``: the both-valves-shut samples those shares are of. Left empty when nothing is
+    judged. The result is unchanged.
     """
     # The cooling coil + air temps are required; the heating coil is optional, so a
     # cooling-only AHU (no heating valve) is still screened for a cooling-coil leak.
@@ -216,6 +218,10 @@ def analyze_leak_valves(
     if masks_out is not None:
         masks_out["hw"] = _on(df.index, hw_ok[hw_ok > delta_thr_f].index if hw_judged else [])
         masks_out["chw"] = _on(df.index, chw_ok[chw_ok < chw_line].index)
+        # 0.111 (#310): the samples each share is of (both valves shut, read by the coil's basis)
+        masks_out["hw_judged"] = _on(df.index, hw_ok.index if hw_judged else [])
+        masks_out["chw_judged"] = _on(df.index, chw_ok.index)
+        masks_out["judged"] = _on(df.index, bc.index)
     return LeakValveResult(
         equip=equip,
         n_both_closed=n,

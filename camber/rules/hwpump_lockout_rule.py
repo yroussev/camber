@@ -202,13 +202,21 @@ class HWPumpSummerLockout:
     def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
         """The occupied samples (the hours the rule judges) in which the pump ran at an OAT above
         the lockout: any running at all (duty above 0), the samples ``summer_run_pct`` weights."""
+        return self._masks(frame)[0]
+
+    def _masks(self, frame: pd.DataFrame) -> tuple:
+        """``(warm, judged)``: :meth:`violation_mask`, and (0.111, #310) the occupied running
+        samples with an OAT reading, ``summer_run_pct``'s denominator."""
         from ..schedules import occupied_mask
 
         legacy, _role = self._legacy(frame)
         if legacy is None or "OAT" not in legacy.columns:
-            return pd.Series(False, index=frame.index)
-        warm = (legacy["PumpRun"] > 0) & (legacy["OAT"] > self.summer_lockout_oat_f)
-        return warm & occupied_mask(frame.index)
+            none = pd.Series(False, index=frame.index)
+            return none, none
+        occ = occupied_mask(frame.index)
+        ran = legacy["PumpRun"] > 0
+        warm = ran & (legacy["OAT"] > self.summer_lockout_oat_f)
+        return warm & occ, ran & legacy["OAT"].notna() & occ
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: the outdoor temperature and the pump's speed (else its run signal), the
@@ -221,10 +229,13 @@ class HWPumpSummerLockout:
         # a speed in % reads on the same axis as the outdoor temperature in °F; a 0/1 status
         # sits along the bottom of it
         shown = Role.HW_PUMP_SPEED if _num(frame, Role.HW_PUMP_SPEED) is not None else role
+        warm, judged = self._masks(frame)
         return Evidence(
             renderer="multitrend",
             roles=[Role.OAT, shown],
-            mask=self.violation_mask(frame),
+            mask=warm,
+            judged=judged,
+            judged_basis="occupied running samples",
             label=f"pump running above {self.summer_lockout_oat_f:g}°F (occupied hours)",
             title=f"{equip}: hot-water pump in warm weather",
         )

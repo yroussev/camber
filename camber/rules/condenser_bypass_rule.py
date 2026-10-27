@@ -215,6 +215,9 @@ class CondenserBypassLeak:
             renderer="multitrend",
             roles=roles,
             mask=self.violation_mask(frame),
+            # 0.111 (#310): warm_share is of the samples with the bypass shut (n_shut)
+            judged=self._shut_running(frame)[0].fillna(False).astype(bool),
+            judged_basis="samples with the bypass shut",
             label=f"bypass shut, entering > tower leaving + {self.warn_f:g}F",
             title=f"{equip}: condenser water, tower leaving vs chiller entering",
         )

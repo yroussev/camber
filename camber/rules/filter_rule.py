@@ -136,13 +136,18 @@ class FilterFouling:
             return None
         dp = pd.to_numeric(frame[Role.FILTER_DIFF_PRESS], errors="coerce")
         over = (dp > self.change_dp_inwc).fillna(False)
+        judged = dp.notna()  # 0.111 (#310): n_judged, pct_over_threshold's denominator
         gate, _src = self._gate(frame)
         if gate is not None:
-            over &= gate.reindex(frame.index).fillna(False).astype(bool)
+            on = gate.reindex(frame.index).fillna(False).astype(bool)
+            over &= on
+            judged &= on
         return Evidence(
             renderer="multitrend",
             roles=[Role.FILTER_DIFF_PRESS],
             mask=over,
+            judged=judged,
+            judged_basis="fan-on samples" if gate is not None else "samples with a reading",
             label="above change-out",
             title=f"{equip}: filter ΔP",
         )

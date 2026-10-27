@@ -372,10 +372,21 @@ class SimultaneousHeatCool:
         from ..charts.evidence import Evidence
 
         if Role.HEAT_VALVE in frame.columns and Role.COOL_VALVE in frame.columns:
+            from ..ahu import _considered
+
+            # 0.111 (#310): the shares are of the occupied samples with both valves trended
+            # (n_considered)
+            both = self._valve_coverage(
+                frame[~frame.index.duplicated(keep="last")] if not frame.index.is_unique else frame
+            )[1]
+            cols = {role: col for role, col in _ROLE_TO_AHU_COL.items() if role in both.columns}
+            occ = _considered(both.rename(columns=cols), True).index
             return Evidence(
                 renderer="diagnostic",
                 template=no_simultaneous_template(active=5.0),
                 mask=self.violation_mask(frame),
+                judged=pd.Series(True, index=occ),
+                judged_basis="occupied samples with both valves trended",
                 label="both valves open (counted)",
                 title=f"{equip}: simultaneous heat/cool",
             )

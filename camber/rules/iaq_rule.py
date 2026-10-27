@@ -119,8 +119,9 @@ class CO2Ventilation:
         outside economizer mode. A boolean Series on ``frame``'s (de-duplicated) index."""
         return self._violation(frame)[0]
 
-    def _violation(self, frame: pd.DataFrame) -> tuple:
-        """``(mask, label)`` for :meth:`violation_mask` and the evidence chart."""
+    def _violation(self, frame: pd.DataFrame, judged_out: dict | None = None) -> tuple:
+        """``(mask, label)`` for :meth:`violation_mask` and the evidence chart; ``judged_out``
+        (0.111, #310) receives the mask's denominator as ``"judged"`` and ``"basis"``."""
         if not frame.index.is_unique:
             frame = frame[~frame.index.duplicated(keep="last")]
         econ, basis = self._mask_for(frame)
@@ -129,7 +130,13 @@ class CO2Ventilation:
         none = pd.Series(False, index=frame.index)
         under = f.metrics.get("under_vent_pct")
         over = f.metrics.get("over_vent_pct")
-        if under is not None and under < 5.0 and over is not None and over >= 60.0:
+        over_led = under is not None and under < 5.0 and over is not None and over >= 60.0
+        if judged_out is not None:
+            judged_out["judged"] = out.get("over_judged" if over_led else "judged", none)
+            judged_out["basis"] = "occupied samples" + (
+                " outside the economizer" if over_led and "econ_hours_pct" in f.metrics else ""
+            )
+        if over_led:
             return out.get("over", none), "CO2 near outdoor (over-ventilated)"
         high = f"CO2 > {f.metrics['outdoor_co2_ppm'] + 700:.0f} ppm" if under is not None else ""
         return out.get("under", none), f"{high} (under-ventilated)".strip()
@@ -140,12 +147,15 @@ class CO2Ventilation:
 
         if Role.CO2 not in frame.columns:
             return None
-        mask, label = self._violation(frame)
+        judged: dict = {}
+        mask, label = self._violation(frame, judged)
         roles = [r for r in (Role.CO2, Role.OUTDOOR_CO2) if r in frame.columns]
         return Evidence(
             renderer="multitrend",
             roles=roles,
             mask=mask,
+            judged=judged.get("judged"),
+            judged_basis=judged.get("basis", ""),
             label=label,
             title=f"{equip}: CO2 ventilation",
             frame=frame[~frame.index.duplicated(keep="last")]

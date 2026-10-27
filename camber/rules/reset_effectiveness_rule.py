@@ -117,12 +117,16 @@ class ResetEffectiveness:
             caveats=[caveat],
         )
 
-    def _mode_masks(self, frame: pd.DataFrame) -> dict:
+    def _mode_masks(self, frame: pd.DataFrame, judged_out: dict | None = None) -> dict:
         """Per failure mode, the cycles behind it (#298), on the rows
         :func:`~camber.g36_reset.reset_effectiveness` judges: ``not_responding`` the demand cycles
         parked at the trim end, ``not_trimming`` the idle cycles parked at the demand end,
         ``diverges`` the cycles that moved against the T&R command, ``stuck`` the cycles on which
-        the T&R trajectory moved. Only the modes the finding reports are kept."""
+        the T&R trajectory moved. Only the modes the finding reports are kept.
+
+        ``judged_out`` (0.111, #310), a dict, receives each mode's denominator as a ``(mask,
+        basis)`` pair: the high-demand cycles, the idle cycles, the cycles the T&R command moved,
+        and every judged cycle for ``stuck``."""
         p, kw = self._params, self._kwargs
         band = p.sp_max - p.sp_min
         w = frame[[self._sp_role, self._req_role]].dropna()
@@ -148,6 +152,15 @@ class ResetEffectiveness:
             "not_trimming": idle & (np.abs(actual - demand_end) <= tol),
             "diverges": moved & (act_move * exp_move < 0),
         }
+        if judged_out is not None:
+            every = np.ones(len(w), dtype=bool)
+            for k, (v, basis) in {
+                "stuck": (every, "reset cycles"),
+                "not_responding": (hi, "high-demand cycles"),
+                "not_trimming": (idle, "idle cycles"),
+                "diverges": (moved, "cycles the T&R command moved"),
+            }.items():
+                judged_out[k] = (pd.Series(v, index=w.index), basis)
         return {k: pd.Series(v, index=w.index) for k, v in masks.items()}
 
     def evidence(self, equip: str, frame: pd.DataFrame):
@@ -159,7 +172,8 @@ class ResetEffectiveness:
             return None
         f = self.analyze(equip, frame)
         modes = list((f.metrics or {}).get("failure_modes") or [])
-        all_masks = self._mode_masks(frame)
+        judged: dict = {}
+        all_masks = self._mode_masks(frame, judged)
         if not all_masks:
             return None
         masks = {m: all_masks[m] for m in modes if m in all_masks}
@@ -171,6 +185,10 @@ class ResetEffectiveness:
             roles=[self._sp_role, self._req_role],
             mask=mask,
             masks=masks or None,
+            # 0.111 (#310): the mask covers the judged cycles alone; each mode's share is of its
+            # own cycles (pct_high_demand_unresponsive of the high-demand ones ...)
+            judged_basis="reset cycles",
+            masks_judged={m: judged[m] for m in masks},
             label="reset not following its requests",
             title=f"{equip}: {self._label} reset vs its requests",
             normalize=True,

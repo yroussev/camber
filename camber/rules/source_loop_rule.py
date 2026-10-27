@@ -140,11 +140,14 @@ class SourceLoopDeltaT:
         sup = pd.to_numeric(frame[Role.SOURCE_LOOP_SUPPLY_TEMP], errors="coerce")
         ret = pd.to_numeric(frame[Role.SOURCE_LOOP_RETURN_TEMP], errors="coerce")
         run = self._running(frame, []).fillna(False)
-        flat = run & sup.notna() & ret.notna() & ((ret - sup).abs() < self.flat_deltat_f)
+        pumping = run & sup.notna() & ret.notna()  # 0.111 (#310): flat_pct's denominator
+        flat = pumping & ((ret - sup).abs() < self.flat_deltat_f)
         return Evidence(
             renderer="multitrend",
             roles=list(need),
             mask=flat,
+            judged=pumping,
+            judged_basis="pumping samples",
             label=f"|delta-T| under {self.flat_deltat_f:g}°F",
             title=f"{equip}: source-loop delta-T",
         )

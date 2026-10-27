@@ -424,4 +424,8 @@ class EconomizerHighLimit:
             template=tmpl,
             frame=derived,
             title=f"{equip}: economizer high-limit",
+            # 0.111 (#310): not_locked_out_pct is of the judged samples above the high limit
+            # (n_above_limit); the at/below-limit side is drawn but never judged
+            judged=j["valid"],
+            judged_basis=f"samples above the {hl:g}°F high limit",
         )

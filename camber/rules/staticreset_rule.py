@@ -157,22 +157,32 @@ class StaticPressureReset:
         """The samples behind a "no reset" verdict (0.102, #119): when the rule finds the setpoint
         not resetting, the judged (fan-on) setpoint samples on days it held still -- every judged
         sample when it is flat or too thin to tell. All False when it resets."""
+        return self._masks(frame)[0]
+
+    def _masks(self, frame: pd.DataFrame) -> tuple:
+        """``(held, judged, fan_gated)``: :meth:`violation_mask`, and (0.111, #310) the fan-on
+        setpoint samples the rule reads, its share's denominator."""
         from ..setpoint_reset import _held_samples
 
         none = pd.Series(False, index=frame.index)
         if Role.DUCT_STATIC_SP not in frame.columns:
-            return none
-        f = self.analyze("", frame)
-        if f.metrics.get("resets", True):
-            return none
+            return none, none, False
         fan, _src = fan_on_mask(frame)
         keep = None if fan is None else fan.reindex(frame.index).fillna(False).astype(bool)
         sp = frame[Role.DUCT_STATIC_SP] if keep is None else frame[Role.DUCT_STATIC_SP][keep]
+        read = none | sp.notna().reindex(frame.index, fill_value=False).astype(bool)
+        f = self.analyze("", frame)
+        if f.metrics.get("resets", True):
+            return none, read, keep is not None
         if f.metrics.get("sp_behaviour") in ("flat", "insufficient"):
-            judged = sp.notna()
+            held = sp.notna()
         else:
-            judged = _held_samples(sp, move_min=self.move_min_inwc)
-        return none | judged.reindex(frame.index, fill_value=False).astype(bool)
+            held = _held_samples(sp, move_min=self.move_min_inwc)
+        return (
+            none | held.reindex(frame.index, fill_value=False).astype(bool),
+            read,
+            keep is not None,
+        )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: the static setpoint (and pressure), the held, unreset hours shaded (#119)."""
@@ -181,10 +191,13 @@ class StaticPressureReset:
         if Role.DUCT_STATIC_SP not in frame.columns:
             return None
         roles = [r for r in (Role.DUCT_STATIC_SP, Role.DUCT_STATIC) if r in frame.columns]
+        held, read, gated = self._masks(frame)
         return Evidence(
             renderer="multitrend",
             roles=roles,
-            mask=self.violation_mask(frame),
+            mask=held,
+            judged=read,
+            judged_basis="fan-on setpoint samples" if gated else "setpoint samples",
             label="setpoint held (no reset)",
             title=f"{equip}: duct static-pressure reset",
         )
