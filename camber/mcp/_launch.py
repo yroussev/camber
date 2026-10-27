@@ -267,14 +267,20 @@ def _log_templates(ctx, refused: dict | None = None) -> None:
 _MPL_PREFIX = "camber-mcp-mpl-"
 #: a directory named without a process id (0.111 development builds) is swept once this old
 _MPL_LEGACY_AGE = 86400.0
+#: the largest process id any POSIX system hands out (a C ``pid_t`` is 32 bits)
+_MAX_PID = (1 << 31) - 1
 
 
 def _pid_running(pid: int) -> bool:
+    """Whether process ``pid`` exists; a number that is no process id counts as running, so
+    its directory is kept (#316: ``os.kill`` raised ``OverflowError`` past ``pid_t``)."""
+    if not 0 < pid <= _MAX_PID:
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    except OSError:  # e.g. another user's process: running
+    except (OSError, OverflowError, ValueError):  # e.g. another user's process: running
         return True
     return True
 
@@ -289,7 +295,8 @@ def sweep_matplotlib_dirs(tmpdir: str | None = None) -> int:
     import tempfile
 
     tmpdir = tmpdir or tempfile.gettempdir()
-    pattern = re.compile(re.escape(_MPL_PREFIX) + r"(?:(\d+)-)?[A-Za-z0-9_]+\Z")
+    # at most 10 digits: a longer number is no process id, and is never converted (#316)
+    pattern = re.compile(re.escape(_MPL_PREFIX) + r"(?:([0-9]{1,10})-)?[A-Za-z0-9_]+\Z")
     removed = 0
     try:
         names = os.listdir(tmpdir)
@@ -332,6 +339,9 @@ def isolate_matplotlib() -> str | None:
         return None
     try:
         sweep_matplotlib_dirs()
+    except Exception:  # noqa: BLE001 - housekeeping: a name nobody expected never stops a start
+        log.debug("the matplotlib directory sweep failed", exc_info=True)
+    try:
         path = tempfile.mkdtemp(prefix=f"{_MPL_PREFIX}{os.getpid()}-")
     except OSError:
         return None
@@ -342,17 +352,21 @@ def isolate_matplotlib() -> str | None:
 def _on_signals():
     """Make ``SIGTERM`` and ``SIGHUP`` stop the session like Ctrl-C does (a log line, every call
     stopped, the temporary directory removed; #309): raise :class:`Terminated` in this thread,
-    once. The previous handlers, to restore, or ``None`` off the main thread."""
+    once. Ctrl-C still raises ``KeyboardInterrupt``, also once: after the first of these signals
+    all three are ignored, so a second cannot interrupt the cleanup (#316). The previous
+    handlers, to restore, or ``None`` off the main thread."""
     import signal
     import threading
 
     if threading.current_thread() is not threading.main_thread():
         return None
-    wanted = [getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n)]
+    wanted = [getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, n)]
 
     def handler(signum, _frame):
         for sig in wanted:  # cleanup runs once; a second signal must not interrupt it
             signal.signal(sig, signal.SIG_IGN)
+        if signum == signal.SIGINT:
+            raise KeyboardInterrupt
         raise Terminated(signum)
 
     previous = {}
@@ -400,6 +414,37 @@ def launch(
     waiting (#292); see :class:`WorkerPool`.
     """
     _setup_logging()
+    previous = _on_signals()  # first: a signal while the tools load exits quietly too (#316)
+    try:
+        return _launch(
+            store,
+            allow=allow,
+            allow_all_active=allow_all_active,
+            config=config,
+            min_trust=min_trust,
+            max_concurrent=max_concurrent,
+            max_queued=max_queued,
+        )
+    except KeyboardInterrupt:  # before the session started, or while it ended
+        log.info("interrupted; exiting")
+        return 130
+    except Terminated as exc:
+        return _terminated(exc)
+    finally:
+        _restore_signals(previous)
+        settle_stderr()
+
+
+def _launch(
+    store: str,
+    *,
+    allow: list | None,
+    allow_all_active: bool,
+    config,
+    min_trust: float,
+    max_concurrent: int,
+    max_queued: int,
+) -> int:
     try:
         import camber.capabilities as capabilities
     except ImportError as exc:
@@ -434,22 +479,15 @@ def launch(
             "; ".join(why[1] for why in refused.values()),
         )
     _log_templates(ctx, refused)
-    previous = _on_signals()
     mpl_dir = None
     try:
         mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
         return _serve(capabilities, ctx, max_concurrent, max_queued, len(refused))
-    except Terminated as exc:  # before the session started
-        return _terminated(exc)
     finally:
-        try:
-            if mpl_dir is not None:
-                import shutil
+        if mpl_dir is not None:
+            import shutil
 
-                shutil.rmtree(mpl_dir, ignore_errors=True)
-        finally:
-            _restore_signals(previous)
-            settle_stderr()
+            shutil.rmtree(mpl_dir, ignore_errors=True)
 
 
 def settle_stderr() -> None:
@@ -457,8 +495,8 @@ def settle_stderr() -> None:
     to the null device, so that the interpreter's own flush at exit does not turn a clean exit
     into status 120 (#314)."""
     try:
-        sys.stderr.flush()
-    except (OSError, ValueError):
+        sys.stderr.flush()  # None when the server started with fd 2 closed (#316)
+    except (OSError, ValueError, AttributeError):
         try:
             sys.stderr = open(os.devnull, "w")  # noqa: SIM115 - kept open until exit
         except OSError:

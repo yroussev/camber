@@ -146,7 +146,12 @@ def _write(outstream: IO[bytes], data: bytes) -> bool:
     """Write and flush one line; ``False`` (logged) when that failed. A closed pipe is the client
     leaving: ``BrokenPipeError`` propagates and ends the loop."""
     try:
-        outstream.write(data)
+        view = memoryview(data)
+        while view:  # an unbuffered stream may take part of it (a signal mid-write)
+            n = outstream.write(view)
+            if n is None:
+                break
+            view = view[n:]
         outstream.flush()
     except BrokenPipeError:
         raise
@@ -384,7 +389,9 @@ def serve_stdio(
     saved_stdout = sys.stdout
     os.dup2(2, 1)
     sys.stdout = sys.stderr
-    out = os.fdopen(os.dup(proto_fd), "wb")
+    # unbuffered (#316): closing a buffered stream waits for the lock of a write blocked on a
+    # client that stopped reading, so a signal could not end the session; this close does not
+    out = os.fdopen(os.dup(proto_fd), "wb", buffering=0)
     # with workers, stdin is read by a thread that may still be blocked in a read when the
     # client closes stdout and this returns: it reads a private duplicate, never sys.stdin, whose
     # lock the interpreter needs at exit (left open: closing it would wait for that read)

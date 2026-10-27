@@ -133,9 +133,12 @@ allowlist or the trust floor; to serve something else, start another server.
 Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary directory
 (`camber-mcp-mpl-<server pid>-*`) removed when the server exits, unless `MPLCONFIGDIR` is set, so
 a call writes nothing under your home directory (0.111, #304). `SIGTERM` and `SIGHUP` stop the
-server like Ctrl-C: a log line, every call stopped, the directory removed, exit status 143 or 129.
-No process can clean up after `SIGKILL`; the next `camber mcp` to start removes the directories of
-servers that are no longer running (#309).
+server like Ctrl-C: a log line, every call stopped, the directory removed, exit status 143 or 129
+(130 for Ctrl-C), also while the server is blocked writing to a client that stopped reading; a
+second signal does not interrupt that cleanup (#316). No process can clean up after `SIGKILL`; the
+next `camber mcp` to start removes the directories of servers that are no longer running (#309),
+and those named without a process id (0.111 development builds) once they are a day old. A name
+it cannot read as a process id is left alone, and nothing the sweep meets stops the start (#316).
 
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
 with the outcome and the time taken) goes to stderr. Anything a tool prints by mistake is sent to
@@ -147,8 +150,8 @@ one is started with the server and a replacement is started as soon as one is ki
 other message -- `ping`, `server/discover`, `initialize`, the lists, `prompts/get`,
 `completion/complete` and `notifications/cancelled` -- is answered at once, even while long calls run, so replies to
 concurrent requests may come in a different order from the requests; each carries its own id.
-The worker of a call is killed with every process it started (matplotlib's font scan runs some),
-and its CPU and memory released, when:
+The worker of a call is killed with every process it started (matplotlib's font scan runs some;
+also when the worker itself was killed from outside, #316), and its CPU and memory released, when:
 
 - the call runs past its time cap (120 s, answered within about a second of it): the reply is
   `timeout` ("... and was stopped");
@@ -157,11 +160,16 @@ and its CPU and memory released, when:
 - the client closes stdin, or closes its end of stdout: every running call is stopped and the
   server exits within about a second. Read the replies you want before closing stdin.
 
-A worker is also replaced after a call during which it grew past 1 GiB, so an idle server does not
-hold the memory of its largest call. A worker that ends on its own (a crash, or the system stopping
-it for lack of memory) is replaced: when it was idle, before any call is given to it; when it was
-running a call, that call answers `unavailable` with `"retryable": true` (retry it, and narrow it
-if it fails again).
+A worker is also replaced after an unusually large call: one that took its memory past 1 GiB and
+past twice what it held after its first call (#316). So an idle server does not hold the memory
+of a rare large call, while a worker whose every call needs more than 1 GiB (a large facility, or
+`coverage` on a multi-year building) keeps it and does not load the data again for each call.
+The first call a worker serves sets its level, so one may stay at what that call needed. A
+worker that ends on its own (a crash, or the system stopping it for lack of memory) is replaced:
+when it was idle, before any call is given to it; when it was running a call, or died while
+starting for one (after one more try on a fresh worker, #316), that call answers `unavailable`
+with `"retryable": true` (retry it, and narrow it if it fails again). Every call the server
+accepts gets exactly one reply, unless the client cancels it.
 
 **Waiting for a worker.** The time cap counts from when a call reaches a worker, not from when it
 was sent. While `--max-concurrent` calls are running, every further tool call waits in the queue,

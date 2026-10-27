@@ -55,6 +55,16 @@ def _spawn(ctx, args):
     return CapabilityResult(data={}, text="waited", facts=[])
 
 
+def _spawn_group(ctx, args):
+    """Start a child process in a process group of its own but in the worker's session (as
+    macOS's ``system_profiler -nospawn`` is), write its pid to ``path``, then wait (#316)."""
+    child = subprocess.Popen(["sleep", "60"], preexec_fn=os.setpgrp)
+    with open(args["path"], "w") as f:
+        f.write(str(child.pid))
+    time.sleep(60)
+    return CapabilityResult(data={}, text="waited", facts=[])
+
+
 def _grow(ctx, args):
     """Touch ``mb`` megabytes, then let them go: the worker's peak memory grows (#309)."""
     block = b"x" * (int(args["mb"]) << 20)
@@ -86,6 +96,7 @@ def default_registry() -> Registry:
         )
     for name, handler, schema in (
         ("spawn", _spawn, {"path": {"type": "string"}}),
+        ("spawn_group", _spawn_group, {"path": {"type": "string"}}),
         ("grow", _grow, {"mb": {"type": "integer", "minimum": 0}}),
     ):
         reg.register(
@@ -104,3 +115,17 @@ def default_registry() -> Registry:
             )
         )
     return reg
+
+
+def dying_registry() -> Registry:
+    """:func:`default_registry`, but a worker that finds a token file in the directory
+    ``$CAMBER_TEST_DIE_DIR`` takes it and is killed while starting, as the system stopping
+    processes for memory would (#316): one token, one worker dead before it was ready."""
+    folder = os.environ.get("CAMBER_TEST_DIE_DIR")
+    for name in sorted(os.listdir(folder)) if folder else ():
+        try:
+            os.remove(os.path.join(folder, name))
+        except OSError:  # another worker took it
+            continue
+        os.kill(os.getpid(), signal.SIGKILL)
+    return default_registry()

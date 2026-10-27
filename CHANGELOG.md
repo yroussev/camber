@@ -225,6 +225,23 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - The default run of your own facility (no run config) no longer runs every rule on a class
     CAMBER does not recognise (a `LOGGER`) when the facility has recognised ones, so such a unit
     no longer gets a `warn` from a check that says it was not evaluated.
+- **`camber mcp` answers every call it accepted, even when its workers are killed (#316).** A
+  call handed to a worker that died while it was still starting (the system stopping several
+  processes at once for lack of memory) got no reply at all, was logged nowhere, and kept its id
+  "in progress", so a retry with the same id was refused. Such a call is now tried once more on a
+  fresh worker and, if that one dies too, answered `unavailable` with `"retryable": true`.
+- **A stray temp directory no longer stops `camber mcp` from starting (#316).** A directory named
+  `camber-mcp-mpl-<a number too large for a process id>-...` in the temp directory made every
+  start crash with a traceback; on a shared `/tmp` any local user could create one. Such names
+  are now skipped, and the startup sweep of leftover directories can no longer fail the start.
+  Directories from 0.111 development builds (named without a process id) are removed once they
+  are a day old; you can delete them sooner.
+- **`camber mcp` workers and signals (#316).** `SIGTERM`, `SIGHUP` and Ctrl-C now end a server
+  that is blocked writing to a client that stopped reading (it waited until the client closed
+  the pipe). A worker killed from outside no longer leaves the font-scan process it started
+  running for a few seconds. With stderr closed or unwritable the server exits 0 again (143, 129
+  or 130 after a signal), Ctrl-C while the server is starting or stopping exits 130 without a
+  traceback, and a second Ctrl-C no longer interrupts the cleanup.
 
 ### Security
 - **A renamed or copied research-only facility directory is no longer served as your own data
@@ -302,6 +319,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   now says so on a later one instead of "offset N is past its 1 row(s)" (#314).
 - The `rcx_executive_summary` prompt tells the model to page the issues, so an issue
   conditional on a sensor fix beyond the first page is not missed (#314).
+- `camber mcp` keeps a worker that needs a lot of memory for every call instead of replacing it
+  after each one (#316). A worker was replaced after any call that took it past 1 GiB, so every
+  call on a facility whose load alone passes that, even a one-row `points`, loaded it again (0.02 s
+  became 2.5 s). Now it is replaced only after a call that takes it past 1 GiB and past twice
+  the memory it held after its first call: an unusually large call. The first call a worker
+  serves sets that level, so a worker may now keep what a large facility needs between calls.
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and

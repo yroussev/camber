@@ -574,3 +574,245 @@ def test_camber_mcp_stops_cleanly_on_sigterm_and_sighup(tmp_path, sig):
     assert rc == 128 + getattr(signal, sig), err
     assert f"{sig} received; exiting" in err and "Traceback" not in err
     assert list(tmp.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------- #316 (UAT round 3)
+
+
+def test_a_dir_name_with_no_valid_pid_never_breaks_the_sweep(tmp_path, monkeypatch):
+    import tempfile
+
+    from camber.mcp import _launch
+
+    names = [
+        "camber-mcp-mpl-2147483648-x",  # past a C pid_t
+        "camber-mcp-mpl-99999999999999999999-x",
+        "camber-mcp-mpl-9999999999-x",
+        "camber-mcp-mpl-0-x",
+    ]
+    for name in names:
+        (tmp_path / name).mkdir()
+    assert _launch.sweep_matplotlib_dirs(str(tmp_path)) == 0
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(names)
+    # the start goes on whatever the sweep meets
+    monkeypatch.delenv("MPLCONFIGDIR", raising=False)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+    def broken(*_a):
+        raise OverflowError("signed integer is greater than maximum")
+
+    monkeypatch.setattr(_launch, "sweep_matplotlib_dirs", broken)
+    path = _launch.isolate_matplotlib()
+    assert path and os.path.isdir(path) and os.path.dirname(path) == str(tmp_path)
+    assert os.environ["MPLCONFIGDIR"] == path
+    os.rmdir(path)
+
+
+def _die_dir(tmp_path, monkeypatch, tokens: int):
+    folder = tmp_path / "die"
+    folder.mkdir(exist_ok=True)
+    for i in range(tokens):
+        (folder / f"t{i:03d}").touch()
+    monkeypatch.setenv("CAMBER_TEST_DIE_DIR", str(folder))
+    return folder
+
+
+def _replies_by_id(s, ids, within: float):
+    got: dict = {}
+    end = time.monotonic() + within
+    while time.monotonic() < end and set(got) != set(ids):
+        try:
+            _, msg = s.reply(max(0.05, end - time.monotonic()))
+        except queue.Empty:
+            break
+        got.setdefault(msg.get("id"), []).append(msg)
+    with pytest.raises(queue.Empty):  # and nothing more: one reply per call
+        _, extra = s.reply(0.5)
+        got.setdefault(extra.get("id"), []).append(extra)
+    return got
+
+
+@pytest.mark.parametrize("deaths", [1, 2])
+def test_a_call_whose_worker_dies_while_starting_is_answered(
+    session, tmp_path, monkeypatch, deaths
+):
+    die = _die_dir(tmp_path, monkeypatch, 0)
+    s = session(max_concurrent=2, factory="_slow_registry:dying_registry")
+    assert len(s.note_pids()) == 1  # the second worker starts with the call that needs it
+    for i in range(deaths):  # and dies before it is ready, as do the next ``deaths - 1``
+        (die / f"t{i:03d}").touch()
+    s.call(1, "sleep", seconds=1.5)
+    s.call(2, "pid")
+    got = _replies_by_id(s, [1, 2], 30.0)
+    assert sorted(got) == [1, 2] and all(len(v) == 1 for v in got.values()), got
+    errors = [v[0]["result"] for v in got.values() if v[0]["result"].get("isError")]
+    if deaths == 1:  # one more try on a fresh worker answers it
+        assert errors == []
+    else:  # and when that one dies too, a retryable error does
+        assert [e["_meta"]["camber/error"] for e in errors] == [
+            {"code": "unavailable", "data": {"retryable": True}}
+        ]
+    assert not list(die.iterdir())
+    for i in (1, 2):  # the ids are free, and the server serves again
+        s.call(i, "pid")
+    got = _replies_by_id(s, [1, 2], 30.0)
+    assert all("pid" in v[0]["result"]["structuredContent"] for v in got.values()), got
+
+
+def test_every_accepted_call_gets_exactly_one_reply_through_a_kill_storm(
+    session, tmp_path, monkeypatch
+):
+    die = _die_dir(tmp_path, monkeypatch, 0)
+    s = session(max_concurrent=2, max_queued=8, factory="_slow_registry:dying_registry")
+    for i in range(12):
+        (die / f"t{i:03d}").touch()
+    for pid in s.note_pids():
+        os.kill(pid, signal.SIGKILL)
+    ids = list(range(100, 108))
+    for i in ids:
+        s.call(i, "pid")
+    got = _replies_by_id(s, ids, 60.0)
+    assert sorted(got) == ids and all(len(v) == 1 for v in got.values()), got
+    for msgs in got.values():
+        res = msgs[0]["result"]
+        assert not res.get("isError") or res["_meta"]["camber/error"]["code"] == "unavailable"
+    for i in ids:  # none is still "in progress"
+        s.call(i, "pid")
+    got = _replies_by_id(s, ids, 60.0)
+    assert sorted(got) == ids and all(len(v) == 1 for v in got.values()), got
+
+
+def test_a_worker_killed_from_outside_takes_its_session_with_it(session, tmp_path):
+    s = session(max_concurrent=1)
+    (worker,) = s.note_pids()
+    path = tmp_path / "child.pid"
+    s.call(1, "spawn_group", path=str(path))
+    assert _wait_for(lambda: path.exists() and path.read_text(), 10.0)
+    child = int(path.read_text())
+    try:
+        os.kill(worker, signal.SIGKILL)  # not the server's doing: the system's
+        _, msg = s.reply()
+        assert msg["result"]["_meta"]["camber/error"]["code"] == "unavailable"
+        assert _wait_dead([child], 3.0), "the worker's child outlived it"
+    finally:
+        if _alive(child):
+            os.kill(child, signal.SIGKILL)
+
+
+def test_a_worker_keeps_the_memory_its_usual_calls_need(session):
+    s = session(max_concurrent=1, recycle_bytes=100 << 20)
+    (first,) = s.note_pids()
+    for i in (1, 2):  # past the threshold, but no more than the first call: kept
+        s.call(i, "grow", mb=250)
+        assert s.reply(60)[1]["result"]["structuredContent"]["pid"] == first
+        assert s.note_pids() == [first]
+    s.call(3, "grow", mb=900)  # more than twice what its first call took: replaced
+    assert s.reply(60)[1]["result"]["structuredContent"]["pid"] == first
+    assert _wait_dead([first], 3.0)
+    fresh = _wait_for(lambda: s.note_pids(), 30.0)
+    assert fresh and fresh != [first]
+
+
+def _driver(tmp_path, **kw):
+    (tmp_path / "facility_id=hq").mkdir(exist_ok=True)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir(exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if k != "MPLCONFIGDIR"}
+    env["TMPDIR"] = str(tmp)
+    proc = subprocess.Popen(
+        [sys.executable, os.path.join(HERE, "_mcp_driver.py"), "mcp", "--store", str(tmp_path)]
+        + ["--allow", "hq"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        env=env,
+        **kw,
+    )
+    return proc, tmp
+
+
+def _reap(proc):
+    if proc.poll() is None:
+        proc.kill()
+        proc.wait()
+    for f in (proc.stdin, proc.stdout, proc.stderr):
+        if f is not None:
+            try:
+                f.close()
+            except OSError:
+                pass
+
+
+@pytest.mark.parametrize("sig", ["SIGTERM", "SIGINT"])
+def test_a_signal_ends_a_server_blocked_on_a_client_that_stopped_reading(tmp_path, sig):
+    proc, tmp = _driver(tmp_path, stderr=subprocess.PIPE)
+    try:
+        assert _wait_for(lambda: any(p.name.startswith("camber-mcp-mpl-") for p in tmp.iterdir()))
+        msg = {"jsonrpc": "2.0", "method": "tools/list", "params": {"_meta": META}}
+        data = b"".join(
+            json.dumps(dict(msg, id=i)).encode() + b"\n" for i in range(1, 1001)
+        )  # far more replies than a pipe holds, and none of them read
+
+        def feed():
+            try:
+                proc.stdin.write(data)
+                proc.stdin.flush()
+            except (BrokenPipeError, ValueError):
+                pass
+
+        threading.Thread(target=feed, daemon=True).start()
+        time.sleep(3.0)
+        assert proc.poll() is None
+        t0 = time.monotonic()
+        proc.send_signal(getattr(signal, sig))
+        rc = proc.wait(10)
+        took = time.monotonic() - t0
+        err = proc.stderr.read().decode()
+    finally:
+        _reap(proc)
+    assert rc == 128 + getattr(signal, sig), err
+    assert took < 5.0 and "Traceback" not in err
+    assert list(tmp.iterdir()) == []
+
+
+def test_a_closed_stderr_is_no_failure(tmp_path):
+    proc, _tmp = _driver(tmp_path, preexec_fn=lambda: os.close(2))
+    try:
+        out, _ = proc.communicate(
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}).encode() + b"\n", 30
+        )
+    finally:
+        _reap(proc)
+    assert proc.returncode == 0
+    assert json.loads(out.splitlines()[0]) == {"jsonrpc": "2.0", "id": 1, "result": {}}
+
+
+def test_ctrl_c_before_the_session_or_twice_exits_quietly(tmp_path, monkeypatch, capsys):
+    from camber.mcp import _launch
+
+    def interrupted(*_a, **_k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(_launch, "_launch", interrupted)
+    (tmp_path / "facility_id=hq").mkdir()
+    assert _launch.launch(str(tmp_path), allow=["hq"]) == 130
+    # the first Ctrl-C, SIGTERM or SIGHUP turns the others off for the cleanup
+    previous = _launch._on_signals()
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(1.0)
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            assert signal.getsignal(sig) == signal.SIG_IGN
+    finally:
+        _launch._restore_signals(previous)
+    assert signal.getsignal(signal.SIGINT) is signal.default_int_handler
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_settle_stderr_survives_a_missing_stderr(monkeypatch):
+    from camber.mcp._launch import settle_stderr
+
+    monkeypatch.setattr(sys, "stderr", None)
+    settle_stderr()
+    assert sys.stderr is not None
+    sys.stderr.close()
