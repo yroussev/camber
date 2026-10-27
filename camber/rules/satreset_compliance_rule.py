@@ -155,7 +155,7 @@ class SupplyAirResetCompliance:
             return None
         sat, oat = Role.SUPPLY_AIR_TEMP, Role.OAT
         w = frame[[sat, oat]].dropna()
-        gate = self._gate(frame)[0]
+        gate, meta = self._gate(frame)
         if gate is not None:  # as sat_reset_compliance applies it
             w = w[pd.Series(gate).reindex(w.index).fillna(False).astype(bool)]
         w = w[(w[sat] > 40) & (w[sat] < 90)]
@@ -163,16 +163,26 @@ class SupplyAirResetCompliance:
         gap = gap - w[sat]  # positive: colder than the target
         m = f.metrics
         opportunity = m["pct_below_target"] >= self.warn_pct and m["mean_gap_f"] >= self.warn_gap_f
+        # 0.111 (#310): the share is of the gated samples with a plausible SAT (``n``), or, on
+        # the not-tracking warn, of the warm-weather ones among them (``n_warm``)
+        fan = meta["fan_gate"] not in ("off", FAN_GATE_NONE)
+        occupied = meta["occupancy_gate"] != "off"
+        basis = ("occupied " if occupied else "") + ("fan-on samples" if fan else "samples")
         if f.severity == "warn" and not opportunity:  # the not-tracking warn
-            mask = (w[oat] >= float(self._reset_kwargs["oat_min"])) & (-gap > self.tol_f)
+            warm = w[oat] >= float(self._reset_kwargs["oat_min"])
+            mask = warm & (-gap > self.tol_f)
             label = "SAT above the target (warm weather)"
+            judged, basis = warm, "warm-weather " + basis
         else:
             mask = gap > self.tol_f
             label = "SAT below the target"
+            judged = None
         return Evidence(
             renderer="multitrend",
             roles=[sat, oat],
             mask=mask,
+            judged=judged,
+            judged_basis=basis,
             label=label,
             title=f"{equip}: SAT vs the {self.target_label} OAT reset target",
         )

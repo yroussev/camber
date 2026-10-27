@@ -114,12 +114,7 @@ class AirflowTracking:
         off_pct = under + over
         mean_abs = float(rel[active].abs().mean())
         sev = "fault" if off_pct >= self.fault_pct else "warn" if off_pct >= self.warn_pct else "ok"
-        if ungated:
-            hours = "active hours"
-        elif fan_src == FAN_GATE_NONE:
-            hours = "occupied hours"
-        else:
-            hours = "fan-on hours" if occ_label == "none trended" else "occupied fan-on hours"
+        hours = self._hours(fan_src, occ_label)
         return Finding(
             rule=self.name,
             equip=equip,
@@ -145,12 +140,27 @@ class AirflowTracking:
         from ..charts.evidence import Evidence
 
         rel = self._rel_error(frame)
-        low, high = self._off(rel, frame[Role.AIRFLOW_SP])
-        off = ((low | high) & self._gate(frame)[0]).fillna(False)
+        sp = frame[Role.AIRFLOW_SP]
+        low, high = self._off(rel, sp)
+        gate, fan_src, occ_label = self._gate(frame)
+        # 0.111 (#310): the samples analyze counts in n_active, the share's denominator
+        active = (rel.notna() & (sp.abs() > self.min_sp) & gate).fillna(False)
+        off = ((low | high) & active).fillna(False)
         return Evidence(
             renderer="multitrend",
             roles=[Role.AIRFLOW, Role.AIRFLOW_SP],
             mask=off,
             label="off setpoint",
             title=f"{equip}: airflow vs setpoint",
+            judged=active,
+            judged_basis=self._hours(fan_src, occ_label).replace("hours", "samples"),
         )
+
+    @staticmethod
+    def _hours(fan_src, occ_label) -> str:
+        """What the judged samples are, as the summary names them."""
+        if fan_src == FAN_GATE_NONE and occ_label == "none trended":
+            return "active hours"
+        if fan_src == FAN_GATE_NONE:
+            return "occupied hours"
+        return "fan-on hours" if occ_label == "none trended" else "occupied fan-on hours"

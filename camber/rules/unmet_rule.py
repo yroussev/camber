@@ -125,11 +125,14 @@ class UnmetHours:
         too_hot, too_cold = self._unmet_masks(frame)
         # restrict to occupied hours -- the same gate the finding's count uses, so the shaded
         # evidence matches the reported unmet %
-        mask = (too_hot | too_cold) & self._occupied_mask(frame)
+        occ = self._occupied_mask(frame) & frame[Role.SPACE_TEMP].notna()
+        mask = (too_hot | too_cold) & occ
         return Evidence(
             renderer="multitrend",
             roles=roles,
             mask=mask,
+            judged=occ,  # 0.111 (#310): the n_occupied samples unmet_pct is of
+            judged_basis="occupied samples",
             label="unmet (occupied)",
             title=f"{equip}: unmet setpoint",
         )

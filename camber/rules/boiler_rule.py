@@ -120,12 +120,16 @@ class BoilerSummerLockout:
         duty = pd.to_numeric(frame[Role.BOILER_STATUS], errors="coerce").clip(0.0, 1.0)
         oat = pd.to_numeric(frame[Role.OAT], errors="coerce")
         hot = occ & (duty > 0) & (oat > self.summer_lockout_oat_f)
+        # 0.111 (#310): summer_run_pct is of the occupied firing samples with an OAT reading
+        fired = (occ & (duty > 0) & oat.notna()).fillna(False)
         return Evidence(
             renderer="multitrend",
             roles=[
                 r for r in (Role.BOILER_STATUS, Role.OAT, Role.HW_SUPPLY_TEMP) if r in frame.columns
             ],
             mask=hot.fillna(False),
+            judged=fired,
+            judged_basis="occupied firing samples",
             label=f"firing above {self.summer_lockout_oat_f:g}°F OAT",
             title=f"{equip}: boiler firing in warm weather",
             normalize="unit",

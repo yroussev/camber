@@ -93,11 +93,14 @@ class HWPlantDeltaT:
         dt = pd.to_numeric(frame[Role.HW_SUPPLY_TEMP], errors="coerce") - pd.to_numeric(
             frame[Role.HW_RETURN_TEMP], errors="coerce"
         )
-        low = occ & (duty > 0.5) & (dt > -2) & (dt < 120) & (dt < self.design_deltaT_min_f)
+        judged = (occ & (duty > 0.5) & (dt > -2) & (dt < 120)).fillna(False)  # #310: its n
+        low = judged & (dt < self.design_deltaT_min_f)
         return Evidence(
             renderer="multitrend",
             roles=[r for r in (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP) if r in frame.columns],
             mask=low.fillna(False),
+            judged=judged,
+            judged_basis="occupied running samples",
             label=f"delta-T under {self.design_deltaT_min_f:g}°F",
             title=f"{equip}: HW loop delta-T",
         )

@@ -245,6 +245,14 @@ class _HPBase:
         """The samples the finding counts as flagged (#298); ``None`` when the rule flags none."""
         return None
 
+    #: what :meth:`_judged`'s samples are (0.111, #310)
+    _judged_basis = "occupied samples"
+
+    def _judged(self, mode, valid) -> pd.Series:
+        """The samples the finding's share is of (0.111, #310): the occupied samples with a mode
+        and a zone temperature, unless a rule says otherwise."""
+        return valid
+
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J (#298): the discharge air and the zone, with the occupied samples the
         finding counts shaded (see each rule's ``_flagged``)."""
@@ -265,6 +273,8 @@ class _HPBase:
             renderer="multitrend",
             roles=roles,
             mask=mask,
+            judged=self._judged(mode, valid),
+            judged_basis=self._judged_basis,
             label=self._flag_label,
             title=f"{equip}: {self.name}",  # type: ignore[attr-defined]
         )
@@ -311,6 +321,12 @@ class HPModeVsNeed(_HPBase):
         """The occupied samples in the mode the room does not need."""
         cool_cold, heat_hot = self._wrong(mode, cold, hot, valid)
         return cool_cold | heat_hot
+
+    _judged_basis = "occupied running samples"
+
+    def _judged(self, mode, valid):
+        """The occupied running samples, ``wrong_mode_pct_of_running``'s denominator."""
+        return valid & (mode != 0)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Hours (and share of occupied running time) spent in the mode the room does not need."""

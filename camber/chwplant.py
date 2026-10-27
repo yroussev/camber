@@ -166,6 +166,9 @@ def analyze_chw_plant(
         held = sup <= chwst_low_f
         masks_out["chwst_low"] = pd.Series(df.index.isin(sup.index[held.to_numpy()]), df.index)
         masks_out["low_deltaT"] = pd.Series(False, index=df.index)
+        # 0.111 (#310): the running samples the shares are of
+        masks_out["running"] = pd.Series(df.index.isin(sup.index), df.index)
+        masks_out["deltaT_judged"] = pd.Series(False, index=df.index)
 
     # Reset is CHWST-vs-OAT modulation. Without OAT (or without enough overlapping data)
     # we CANNOT evaluate it -- report None, never a confident "no reset" (False).
@@ -191,6 +194,7 @@ def analyze_chw_plant(
         if masks_out is not None:
             low = dt < design_deltaT_min_f
             masks_out["low_deltaT"] = pd.Series(df.index.isin(dt.index[low.to_numpy()]), df.index)
+            masks_out["deltaT_judged"] = pd.Series(df.index.isin(dt.index), df.index)
     else:
         dt_median = low_dt_pct = float("nan")
 
@@ -345,3 +349,10 @@ def chw_tracking_mask(df: pd.DataFrame, *, running=None, above_f: float = 3.0, s
     """The boolean "running and CHWST above setpoint + ``above_f``" mask on ``df``'s index."""
     gate, _src = _tracking_frame(df, running, settle_intervals=settle_intervals)
     return (gate & ((df["CHWS_Temp"] - df["CHWS_SP"]) > above_f)).fillna(False)
+
+
+def _chw_tracking_judged(df: pd.DataFrame, *, running=None, settle_intervals=1) -> pd.Series:
+    """The running samples :func:`analyze_chw_tracking` judges (``n_running``), the denominator
+    of ``above_pct`` (0.111, #310), as a boolean Series on ``df``'s index."""
+    gate, _src = _tracking_frame(df, running, settle_intervals=settle_intervals)
+    return pd.Series(gate, index=df.index).fillna(False).astype(bool)

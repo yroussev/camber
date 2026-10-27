@@ -200,7 +200,13 @@ class OvercoolingMinFlow:
         valve_role, _ = _reheat_valve_role(frame)
         wanted = (Role.SPACE_TEMP, Role.COOL_SP, Role.AIRFLOW, flow_sp, valve_role)
         roles = [r for r in wanted if r is not None and r in frame.columns]
-        masks = self.violation_masks(frame)
+        out: dict = {}
+        self._run("", frame, masks_out=out)
+        none = pd.Series(False, index=frame.index)
+        masks = {
+            "overcooling at min flow": out.get("overcool", none),
+            "with reheat": out.get("with_reheat", none),
+        }
         if valve_role is not None:
             mask, label = masks["with reheat"], "overcooled at min flow, reheat open"
         else:
@@ -210,6 +216,8 @@ class OvercoolingMinFlow:
             roles=roles,
             mask=mask,
             masks=masks,
+            judged=out.get("considered", none),  # 0.111 (#310): n_considered
+            judged_basis="occupied samples",
             label=label,
             title=f"{equip}: overcooling at minimum flow",
             normalize="unit" if len(roles) > 2 else False,

@@ -623,20 +623,34 @@ def _step_hours(index: pd.DatetimeIndex) -> float:
     return max(float(step / pd.Timedelta(hours=1)), 1e-9)
 
 
-def mask_summary(mask, *, max_spans: int = 20, events=None) -> dict:
-    """A boolean evidence mask as hours: ``{"hours", "samples", "judged_samples", "share",
-    "n_spans", "spans": [{"start", "end", "hours"}, ...]}`` -- the longest ``max_spans`` contiguous
-    runs, in time order. ``share`` is of the ``judged_samples`` (the samples the mask covers,
-    often only those the rule judged, not the whole window). A run breaks where the mask's own
-    samples are more than one and a half intervals apart (#298): a mask over the occupied hours
-    alone does not join Monday evening to Tuesday morning. With ``events`` (a bool Series of
-    counted event instants, e.g. starts) the result also has ``events``, their count."""
+def mask_summary(
+    mask, *, max_spans: int = 20, events=None, judged=None, basis: str | None = None
+) -> dict:
+    """A boolean evidence mask as hours: ``{"hours", "samples", "judged_samples", "judged_basis",
+    "share", "n_spans", "spans": [{"start", "end", "hours"}, ...]}`` -- the longest ``max_spans``
+    contiguous runs, in time order. A run breaks where the mask's own samples are more than one
+    and a half intervals apart (#298): a mask over the occupied hours alone does not join Monday
+    evening to Tuesday morning. With ``events`` (a bool Series of counted event instants, e.g.
+    starts) the result also has ``events``, their count.
+
+    ``share`` is of the ``judged_samples``: the samples the rule judged (#310). ``judged``, a
+    bool Series, names them (the rule's own mask: fan-on, occupied, running ...), and ``basis``
+    says what they are ("fan-on samples"); with no ``judged`` the mask's own index is the judged
+    set. A flagged sample outside ``judged`` is counted in it, so the share never exceeds 1."""
     m = pd.Series(mask).fillna(False).astype(bool)
     if not isinstance(m.index, pd.DatetimeIndex):
         m.index = pd.DatetimeIndex(pd.to_datetime(m.index))
     m = m.sort_index()
     step = _step_hours(m.index)
     n_on = int(m.sum())
+    if judged is None:
+        n_judged = len(m)
+    else:
+        j = pd.Series(judged).fillna(False).astype(bool)
+        if not isinstance(j.index, pd.DatetimeIndex):
+            j.index = pd.DatetimeIndex(pd.to_datetime(j.index))
+        on = j.index[j.to_numpy()].union(m.index[m.to_numpy()])
+        n_judged = int((~on.duplicated()).sum())
     spans: list = []
     if n_on:
         gap = pd.Series(m.index, index=m.index).diff() > pd.Timedelta(hours=1.5 * step)
@@ -653,8 +667,9 @@ def mask_summary(mask, *, max_spans: int = 20, events=None) -> dict:
     out = {
         "hours": round(n_on * step, 2),
         "samples": n_on,
-        "judged_samples": len(m),
-        "share": round(n_on / len(m), 4) if len(m) else 0.0,
+        "judged_samples": n_judged,
+        "judged_basis": str(basis or "samples"),
+        "share": round(n_on / n_judged, 4) if n_judged else 0.0,
         "n_spans": len(spans),
         "spans": sorted(longest, key=lambda s: s["start"]),
     }
@@ -665,7 +680,15 @@ def mask_summary(mask, *, max_spans: int = 20, events=None) -> dict:
 
 MASK: dict = {
     "type": "object",
-    "required": ["hours", "samples", "judged_samples", "share", "n_spans", "spans"],
+    "required": [
+        "hours",
+        "samples",
+        "judged_samples",
+        "judged_basis",
+        "share",
+        "n_spans",
+        "spans",
+    ],
     "additionalProperties": False,
     "properties": {
         "hours": {"type": "number", "minimum": 0},
@@ -673,7 +696,13 @@ MASK: dict = {
         "judged_samples": {
             "type": "integer",
             "minimum": 0,
-            "description": "the samples the mask covers (share is of these, not of the window)",
+            "description": "the samples the rule judged, its own mask (fan-on, occupied, "
+            "running ...): share is of these, not of the whole window",
+        },
+        "judged_basis": {
+            "type": "string",
+            "description": "what the judged samples are, e.g. 'fan-on samples' or 'occupied "
+            "samples'",
         },
         "share": {"type": "number", "minimum": 0, "maximum": 1},
         "events": {

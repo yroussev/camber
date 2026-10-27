@@ -398,11 +398,18 @@ class ControlHunting:
         hunting = _hunting_stretches(
             sig, flips, self.warn_per_hr, gap_factor=self.gap_factor, gate=gate
         )
+        judged = sig.notna()
+        if gate is not None:
+            judged &= pd.Series(gate).reindex(frame.index).fillna(False).astype(bool)
+        name = str(getattr(role, "value", role)).replace("_", " ")
         return Evidence(
             renderer="multitrend",
             roles=[role],
             mask=hunting.reindex(frame.index, fill_value=False),
             events=flips.reindex(frame.index, fill_value=False),
+            # 0.111 (#310): the samples the rate is read over -- the signal's, fan-on when gated
+            judged=judged,
+            judged_basis=("fan-on " if gate is not None else "") + f"{name} samples",
             label=f"hunting at {self.warn_per_hr:g}/hr or faster",
             title=f"{equip}: {getattr(role, 'value', role)} hunting",
         )

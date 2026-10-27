@@ -180,8 +180,8 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     shown = page(listed, arguments, default=_PAGE, what="findings", order="worst first")
     skipped = page(every_skip, arguments, default=_PAGE, what="skipped")
     n_rules = len(res.rules_run)
-    # #304: rules, not rule x equipment pairs: how many gave a finding, and the skipped pairs
-    # with the number of distinct rules among them
+    # #304: rules, not rule x equipment pairs: how many returned a result (an ok included, #310),
+    # and the skipped pairs with the number of distinct rules among them
     n_found = len({r["rule"] for r in rows})
     n_skip_rules = len({s["rule"] for s in every_skip})
     skips = (
@@ -198,13 +198,14 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "value": len(rows),
             "counts": counts,
             "text": f"{n_rules} rules were run on {res.equipment} equipment of {fid} and "
-            f"{n_found} of them gave findings: {counts['fault']} fault, {counts['warn']} warn, "
+            f"{n_found} of them returned a result: {counts['fault']} fault, {counts['warn']} warn, "
             f"{counts['info']} info and {counts['ok']} ok; {skips}{declined}",
         }
     ]
     text = [
         f"{n_rules} rules were run on {res.equipment} equipment of {fid} and {n_found} of them "
-        f"gave findings, with {counts['fault']} fault and {counts['warn']} warn findings"
+        f"returned a result (ok included), with {counts['fault']} fault and {counts['warn']} warn "
+        "findings"
         f"{declined} [F1@rule_run]."
     ]
     for i, r in enumerate(shown[:_FACTS], start=2):
@@ -323,7 +324,16 @@ DETAIL_OUTPUT = {
             "description": "named sub-conditions (e.g. one per G36 fault condition)",
             "items": {
                 "type": "object",
-                "required": ["name", "hours", "samples", "share", "n_spans", "spans"],
+                "required": [
+                    "name",
+                    "hours",
+                    "samples",
+                    "judged_samples",
+                    "judged_basis",
+                    "share",
+                    "n_spans",
+                    "spans",
+                ],
                 "additionalProperties": False,
                 "properties": {"name": {"type": "string"}, **MASK["properties"]},
             },
@@ -343,7 +353,10 @@ _CHART_WORDS = {
 def _chart(ev) -> dict | None:
     if ev is None:
         return None
-    roles = [str(jsonable(r)) for r in ev.roles or []]
+    plotted = list(ev.roles or [])
+    if not plotted and ev.template is not None:  # #310: a diagnostic scatter plots its two axes
+        plotted = [ev.template.x, ev.template.y]
+    roles = [str(jsonable(r)) for r in plotted]
     renderer = str(ev.renderer)
     template = getattr(ev.template, "name", None) if ev.template is not None else None
     words = _CHART_WORDS.get(renderer, "a {renderer} chart of {roles}").format(
@@ -367,12 +380,20 @@ def _chart(ev) -> dict | None:
 def _violations(ev, frame):
     if ev is None:
         return None
-    mask = ev.mask
+    mask, basis = ev.mask, getattr(ev, "judged_basis", None) or None
     if mask is None and ev.template is not None:
         from ..charts.diagnostic import template_violations
 
         mask = template_violations(ev.frame if ev.frame is not None else frame, ev.template)
-    return None if mask is None else mask_summary(mask, events=getattr(ev, "events", None))
+        basis = basis or "samples on the evidence chart"  # the rows with both template inputs
+    if mask is None:
+        return None
+    return mask_summary(
+        mask,
+        events=getattr(ev, "events", None),
+        judged=getattr(ev, "judged", None),
+        basis=basis,
+    )
 
 
 def _no_spans_note(rule_obj, ev, failed: bool) -> str:
@@ -467,9 +488,16 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     conditions = []
     masks = getattr(ev, "masks", None) if ev is not None else None
     if isinstance(masks, dict):
+        own = getattr(ev, "masks_judged", None) or {}
         for name in sorted(masks, key=str):
             if masks[name] is not None:
-                conditions.append({"name": str(name), **mask_summary(masks[name])})
+                judged = own.get(name, getattr(ev, "judged", None))
+                basis = getattr(ev, "judged_basis", None) or None
+                if isinstance(judged, tuple):  # (mask, basis) for a condition's own denominator
+                    judged, basis = judged
+                conditions.append(
+                    {"name": str(name), **mask_summary(masks[name], judged=judged, basis=basis)}
+                )
     params = _parameters(rule, dict(entry.get("params") or {}), rule_obj)
 
     row["fact"] = "F1@finding_detail"
@@ -485,12 +513,30 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "evidence_hours",
                 "value": viol["hours"],
                 "text": f"The rule flagged {viol['hours']:g} hours{events} ({viol['samples']} "
-                f"of the {viol['judged_samples']} samples it judged, {viol['share']:.1%}) in "
-                f"{viol['n_spans']} contiguous span(s)",
+                f"of {viol['judged_samples']} judged {viol['judged_basis']}, "
+                f"{viol['share']:.1%}) in {viol['n_spans']} contiguous span(s)",
                 "share": viol["share"],
             }
         )
         text.append(cite(facts[-1]))
+        # 0.111 (#310): a finding that judges named conditions (one per coil, per G36 fault
+        # condition) states each condition's share of its own judged samples -- the shares the
+        # rule_run summary states
+        for c in conditions:
+            if not c["samples"]:
+                continue
+            n = len(facts) + 1
+            facts.append(
+                {
+                    "id": f"F{n}@finding_detail",
+                    "kind": "condition_hours",
+                    "value": c["hours"],
+                    "text": f"{c['name']}: the rule flagged {c['hours']:g} hours ({c['samples']} "
+                    f"of {c['judged_samples']} judged {c['judged_basis']}, {c['share']:.1%})",
+                    "share": c["share"],
+                }
+            )
+            text.append(cite(facts[-1]))
     if params:
         listed = ", ".join(
             (f"{p['name']} = {p['value']}" if p["value"] is not None else f"{p['name']} not set")

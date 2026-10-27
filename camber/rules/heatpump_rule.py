@@ -126,6 +126,9 @@ class HeatPumpDefrost:
             roles=roles,
             mask=mask,
             events=events,
+            # 0.111 (#310): the rule reads every command sample
+            judged=pd.to_numeric(frame[Role.REVERSING_VALVE_CMD], errors="coerce").notna(),
+            judged_basis="reversing-valve command samples",
             label="reversed out of heating",
             title=f"{equip}: reversing-valve cycling",
         )

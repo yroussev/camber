@@ -139,6 +139,20 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+- **`finding_detail` states the share the rule states, of the samples the rule judged (#310).**
+  "N of the M samples it judged" divided by every sample in the window for most rules, so the
+  same flagged hours read as two different citable shares: a dirty filter "66.7 %" in
+  `finding_detail` where `rule_run` said 100 % of fan-on samples, a low delta-T loop "32.7 %"
+  where it said 100 % of running hours. `judged_samples` is now the rule's own mask (fan-on,
+  occupied, running, both valves shut ...), a new `judged_basis` names it, and the fact reads
+  "(2688 of 2688 judged fan-on samples, 100.0%)". A finding that judges named
+  conditions (each coil of `leaking_valve`, each G36 fault condition, each failure mode of a
+  reset, excess OA and under-ventilation) states each condition's share of its own samples as a
+  fact, matching the summary. The flagged hours, the spans and every finding are unchanged.
+- `leaking_valve` calls its denominator "both-valves-shut samples", not "closed hours"; the
+  `rule_run` headline says how many rules "returned a result (ok included)" rather than "gave
+  findings"; and `finding_detail`'s `chart.roles` names a diagnostic scatter's two axes instead
+  of `[]` (#310).
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**

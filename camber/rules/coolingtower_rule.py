@@ -200,6 +200,9 @@ class CoolingTowerApproach:
             ),
             frame=out["judged"],
             mask=out["high"],
+            # 0.111 (#310): pct_hours_high_approach is of these (n_operating)
+            judged=pd.Series(True, index=out["judged"].index),
+            judged_basis="operating samples",
             label=f"approach > {limit:g} F",
             title=f"{equip}: cooling-tower approach",
         )
