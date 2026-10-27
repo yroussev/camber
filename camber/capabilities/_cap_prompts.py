@@ -61,13 +61,19 @@ def triage_ahu(args: dict) -> list:
         "what to do first.",
         _steps(
             f"Call points with {_j(facility_id=fid, equip=equip)} to see what it trends.",
-            f"Call sensor_trust with {_j(facility_id=fid, equips=[equip])}; a fault resting on "
-            "an untrusted input is a sensor problem first.",
+            f"Call sensor_trust with {_j(facility_id=fid, equips=[equip])}. Read its references "
+            "too: a point whose configured sensor reference disagrees (reference verdict warn "
+            "or fault) is suspect however high its trust score, because an offset has no shape "
+            "in the trend. A passing reference comparison is evidence the sensor reads right.",
             f"Call rule_run with {_j(facility_id=fid, equips=[equip])}.",
             "For each fault or warn finding (at most five, worst first), call finding_detail "
             "with its finding_id and the same facility_id and equips.",
+            "Rank the causes. A fault resting on an untrusted input, or marked conditional_on a "
+            "sensor whose reference disagrees, is a sensor problem first: rank that sensor "
+            "above the fault and say the fault may follow from it.",
             "Write a short triage: the likely causes ranked, the evidence hours, which inputs "
-            "are suspect, and the first checks to make on site.",
+            "are suspect (and which a reference confirmed), and the first checks to make on "
+            "site (the sensor before the equipment it may be misreporting).",
         ),
         _CITE_RULES,
         _FINISH,
@@ -106,7 +112,8 @@ def explain_finding(args: dict) -> list:
             "inputs it rests on.",
             "Explain in plain words what the rule checks, what it saw (the hours and the time "
             "spans), the threshold it used, how far the inputs can be trusted, and which "
-            "evidence chart shows it.",
+            "evidence chart shows it. If the finding is conditional_on a sensor whose configured "
+            "reference disagrees, say first that it may be that sensor, not the equipment.",
         ),
         _CITE_RULES,
         _FINISH,
@@ -141,8 +148,9 @@ def data_quality_review(args: dict) -> list:
             f"Call coverage with {_j(facility_id=fid, group_by='equip')}, then again for the "
             "worst equipment with their equips to see the points and gaps.",
             f"Call sensor_trust with {_j(facility_id=fid)}. Its coverage is over each point's "
-            "own span (from its first sample); the coverage tool's is over the whole window, so "
-            "one point can read differently in the two: say which one you quote.",
+            "own span (from its first sample) on the rule run's time grid; the coverage tool's "
+            "is over the whole window, so one point can read differently in the two: say which "
+            "one you quote. A point whose configured reference disagrees is suspect.",
             "Write a review: overall coverage, the equipment and points with the worst gaps, "
             "the untrusted or suspect sensors and their flags, and what to fix first (trend "
             "setup, sensor calibration or replacement).",
@@ -163,9 +171,10 @@ def compare_equipment(args: dict) -> list:
             f"Call coverage with {_j(facility_id=fid, equips=names, group_by='equip')}.",
             f"Call sensor_trust with {_j(facility_id=fid, equips=names)}.",
             f"Call rule_run with {_j(facility_id=fid, equips=names, min_severity='ok')}.",
-            "Compare them side by side: data coverage, sensor trust, and the findings each "
-            "rule gave each unit (one unit failing where its peers pass is the signal). Name "
-            "the unit to look at first and why.",
+            "Compare them side by side: data coverage, sensor trust (and any sensor-reference "
+            "comparison), and the findings each rule gave each unit (one unit failing where its "
+            "peers pass is the signal; a finding conditional_on a disagreeing reference is a "
+            "sensor problem first). Name the unit to look at first and why.",
         ),
         _CITE_RULES,
         _FINISH,
@@ -181,9 +190,12 @@ def sensor_trust_review(args: dict) -> list:
             f"{_j(facility_id=fid, view='report')} to see the points judged in their operating "
             "state.",
             f"Call rule_run with {_j(facility_id=fid)} to see which findings rest on suspect "
-            "inputs (their caveats name untrusted roles).",
-            "List each sensor below the trust floor or suspect, with its equipment, role, "
-            "score, the flags that explain it, and what it blocks. Order by impact.",
+            "inputs (a declined check names its untrusted inputs; conditional_on names a "
+            "sensor whose configured reference disagrees).",
+            "List each sensor below the trust floor or suspect (a reference that disagrees "
+            "makes a sensor suspect whatever its score), with its equipment, role, score, the "
+            "flags or reference comparison that explain it, and what it blocks. Order by "
+            "impact.",
         ),
         _CITE_RULES,
         _FINISH,
@@ -216,8 +228,9 @@ PROMPTS = (
     Prompt(
         "triage_ahu",
         "Triage an air handler",
-        "Find what is wrong with one air handler: its points, sensor trust, rule findings and "
-        "the evidence behind the worst of them, ranked, with cited facts.",
+        "Find what is wrong with one air handler: its points, sensor trust and sensor-reference "
+        "comparisons, rule findings and the evidence behind the worst of them, ranked sensor "
+        "problems first, with cited facts.",
         (_FID, PromptArg("equip", "the air handler's equipment id (see points)", True)),
         triage_ahu,
     ),

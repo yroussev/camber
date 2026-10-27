@@ -28,6 +28,8 @@ As a backstop, :meth:`Registry.run` records any missing optional roles on every 
 
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -36,7 +38,7 @@ import pandas as pd
 from ..model.entities import missing_inputs, roles_any_of
 from ..model.mapping import MappingProvider
 from ..resolve import resolve
-from ..sensorhealth import untrusted_roles
+from ..sensorhealth import _input_health
 
 
 @dataclass
@@ -154,25 +156,78 @@ def _gate_roles(rule, frame: pd.DataFrame) -> tuple:
     return req + tuple(dict.fromkeys(extra)) if extra else req
 
 
-def _untrusted(rule, ref, frame: pd.DataFrame, mapping, resample, min_trust) -> list:
-    """The rule's gated inputs on ``frame`` below ``min_trust`` (see :func:`untrusted_roles`).
+#: equipment health the trust gate computed, by (ref, mapping, shared, resample) identity: a run
+#: scores each unit once, not once per rule (0.111, #311)
+_HEALTH: OrderedDict = OrderedDict()
+_HEALTH_MAX = 512
+_HEALTH_LOCK = threading.Lock()
 
-    0.111 (#297): a plant point is judged on its equipment's running samples, so when a gated
-    input is a plant role (:data:`~camber.sensorhealth.PLANT_GATED_ROLES`) and the rule's own frame
-    lacks the run signals, they are resolved for the trust gate alone -- the rule never sees them.
-    Without them a condenser-water temperature trended only while the chiller runs reads as a
-    point missing two thirds of the time.
+
+def _equip_health(ref, mapping, resample, shared, frame: pd.DataFrame) -> dict:
+    """``{Role: SensorTrust}`` of ``ref``'s whole run frame (every role at ``resample``, the
+    ``shared`` points merged), scored by :func:`~camber.sensorhealth._input_health` -- the frame
+    and the scoring the ``sensor_trust`` capability reads (0.111, #311). ``frame`` (the rule's own)
+    stands in when the equipment resolves to nothing."""
+    from ..model.roles import Role
+
+    key = (id(ref), id(mapping), id(shared), str(resample))
+    with _HEALTH_LOCK:
+        hit = _HEALTH.get(key)
+        if hit is not None and hit[0] is ref and hit[1] is mapping and hit[2] is shared:
+            _HEALTH.move_to_end(key)
+            return hit[3]
+    full = resolve(ref, mapping, tuple(Role), resample=resample)
+    full = frame if full is None or full.empty else _merge_shared(full, shared)
+    health = _input_health(full)
+    with _HEALTH_LOCK:
+        _HEALTH[key] = (ref, mapping, shared, health)
+        while len(_HEALTH) > _HEALTH_MAX:
+            _HEALTH.popitem(last=False)
+    return health
+
+
+def _untrusted(rule, ref, frame: pd.DataFrame, mapping, resample, min_trust, shared=None) -> list:
+    """``[(role, trust)]``: the rule's gated inputs on ``frame`` that score below ``min_trust``.
+
+    0.111 (#311): each input is scored on its equipment's whole run frame by
+    :func:`_equip_health`, the same read the ``sensor_trust`` capability reports, so a check is
+    declined exactly when ``sensor_trust`` puts an input below the floor -- whichever rule asks.
+    (0.111, #297: a plant point is judged on its equipment's running samples, which that frame
+    carries even when the rule's own frame does not load the run signals.)
     """
-    from ..sensorhealth import PLANT_GATE_INPUTS, PLANT_GATED_ROLES
+    roles = [r for r in _gate_roles(rule, frame) if r in frame.columns]
+    if not roles:
+        return []
+    health = _equip_health(ref, mapping, resample, shared, frame)
+    missing = [r for r in roles if r not in health]
+    if missing:  # a column the whole-frame read does not hold: scored on the rule's frame
+        health = {**health, **_input_health(frame[missing])}
+    out = []
+    for r in roles:
+        t = health.get(r)
+        if t is not None and t.trust < min_trust:
+            out.append((r, float(t.trust)))
+    return out
 
-    roles = _gate_roles(rule, frame)
-    gate_frame = None
-    want = tuple(r for r in PLANT_GATE_INPUTS if r not in frame.columns)
-    if want and any(r in PLANT_GATED_ROLES for r in roles if r in frame.columns):
-        extra = resolve(ref, mapping, want, resample=resample)
-        if extra is not None and not extra.empty:
-            gate_frame = frame.join(extra[[c for c in extra.columns if c not in frame.columns]])
-    return untrusted_roles(frame, roles, min_trust=min_trust, gate_frame=gate_frame)
+
+def _decline(rule, ref, bad: list, min_trust) -> Finding:
+    """The ``info`` finding of a check the trust floor declined (``bad`` from
+    :func:`_untrusted`); it names each input with its trust score (0.111, #311)."""
+    return Finding(
+        rule=rule.name,
+        equip=ref.equip,
+        severity="info",
+        metrics={
+            "declined": True,
+            "min_trust": min_trust,
+            "untrusted_roles": [r.value for r, _t in bad],
+            "trust": {r.value: round(t, 4) for r, t in bad},
+        },
+        summary=(
+            f"{ref.equip}: declined -- untrusted input(s): "
+            + ", ".join(f"{r.value} (trust {t:.2f})" for r, t in bad)
+        ),
+    )
 
 
 def _cannot_run(rule, frame: pd.DataFrame) -> bool:
@@ -474,24 +529,9 @@ class Registry:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
+                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust, shared)
                 if bad:
-                    out.append(
-                        Finding(
-                            rule=rule.name,
-                            equip=ref.equip,
-                            severity="info",
-                            metrics={
-                                "declined": True,
-                                "min_trust": min_trust,
-                                "untrusted_roles": [r.value for r in bad],
-                            },
-                            summary=(
-                                f"{ref.equip}: declined -- untrusted input(s): "
-                                + ", ".join(r.value for r in bad)
-                            ),
-                        )
-                    )
+                    out.append(_decline(rule, ref, bad, min_trust))
                     continue
             f = rule.analyze(ref.equip, frame)
             _note_missing_optional(f, _missing_optional(rule, frame))
@@ -545,24 +585,9 @@ class Registry:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
+                bad = _untrusted(rule, ref, frame, mapping, resample, min_trust, shared)
                 if bad:
-                    out.append(
-                        Finding(
-                            rule=rule.name,
-                            equip=ref.equip,
-                            severity="info",
-                            metrics={
-                                "declined": True,
-                                "min_trust": min_trust,
-                                "untrusted_roles": [r.value for r in bad],
-                            },
-                            summary=(
-                                f"{ref.equip}: declined -- untrusted input(s): "
-                                + ", ".join(r.value for r in bad)
-                            ),
-                        )
-                    )
+                    out.append(_decline(rule, ref, bad, min_trust))
                     continue
             base_frame = _slice_period(frame, baseline, label="baseline")
             cur_frame = _slice_period(frame, current, label="current")
@@ -633,7 +658,9 @@ class Registry:
             if _cannot_run(rule, frame):
                 _record_skip(skipped, rule, ref, frame)
                 continue
-            if min_trust is not None and _untrusted(rule, ref, frame, mapping, resample, min_trust):
+            if min_trust is not None and _untrusted(
+                rule, ref, frame, mapping, resample, min_trust, shared
+            ):
                 continue
             frames[ref.equip] = frame
             if applies is None:

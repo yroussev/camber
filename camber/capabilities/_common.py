@@ -58,6 +58,14 @@ FINDING_ROW = {
         "caveats": {"type": "array", "items": {"type": "string"}},
         "metrics": {"type": "object", "description": "the finding's scalar metrics"},
         "fact": {"type": "string", "description": "the fact id that cites this finding"},
+        "conditional_on": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "present when the finding rests on an input whose configured sensor "
+            "reference disagrees (report.rcx.references; sensor_trust shows the comparison): "
+            "the sensor problems it is conditional on. Treat such a fault as a possible sensor "
+            "problem first",
+        },
     },
 }
 
@@ -551,8 +559,9 @@ def severity_counts(rows: list) -> dict:
 
 
 def trust_declines(findings) -> tuple:
-    """``([(rule, equip, roles)], floor)``: the checks the trust floor declined, and the floor
-    they declined under (0.111, #297).
+    """``([(rule, equip, roles, scores)], floor)``: the checks the trust floor declined, and the
+    floor they declined under (0.111, #297). ``scores`` maps each declined input to the trust it
+    scored (0.111, #311; empty for a drift reference's decline).
 
     A check declines when one of its inputs (``roles``), or its drift reference's, scores below
     the trust floor; it then reports an ``info`` finding, so a fault count says nothing about it.
@@ -564,28 +573,44 @@ def trust_declines(findings) -> tuple:
             continue
         roles = [str(r) for r in m.get("untrusted_roles") or ()]
         if roles or m.get("reason") == "reference_untrusted":
-            out.append((str(getattr(f, "rule", "")), str(getattr(f, "equip", "")), roles))
+            scores = {
+                str(k): float(v)
+                for k, v in (m.get("trust") or {}).items()
+                if isinstance(v, (int, float))
+            }
+            out.append((str(getattr(f, "rule", "")), str(getattr(f, "equip", "")), roles, scores))
             if isinstance(m.get("min_trust"), (int, float)):
                 floor = max(floor or 0.0, float(m["min_trust"]))
-    return sorted(out), floor
+    return sorted(out, key=lambda d: d[:3]), floor
+
+
+def _score_range(values: list) -> str:
+    lo, hi = min(values), max(values)
+    return f"trust {lo:.2f}" if f"{lo:.2f}" == f"{hi:.2f}" else f"trust {lo:.2f} to {hi:.2f}"
 
 
 def trust_banner(declines: list, floor) -> str | None:
     """The NOTICE for :func:`trust_declines` (None when nothing was declined): how many checks,
-    which, and on what inputs -- a declined check is not a pass."""
+    which, and on what inputs with the trust they scored -- a declined check is not a pass."""
     if not declines:
         return None
     per_rule: dict = {}
-    for rule, _equip, _roles in declines:
+    scored: dict = {}
+    for rule, _equip, roles, scores in declines:
         per_rule[rule] = per_rule.get(rule, 0) + 1
+        for r in roles:
+            scored.setdefault(r, [])
+            if r in scores:
+                scored[r].append(scores[r])
     which = ", ".join(f"{r} on {n} equipment" for r, n in sorted(per_rule.items()))
-    roles = sorted({r for _rule, _equip, rs in declines for r in rs})
+    roles = [f"{r} ({_score_range(v)})" if v else r for r, v in sorted(scored.items())]
     inputs = f"; untrusted input(s): {', '.join(roles)}" if roles else ""
     under = f" {floor:g}" if floor is not None else ""
     return (
         f"{len(declines)} check(s) declined because an input scored below the trust floor"
         f"{under} ({which}{inputs}). The fault and warn counts do not cover them: a declined "
-        "check is not a pass. sensor_trust shows why each input scored low."
+        "check is not a pass. sensor_trust over the same window reports these scores and the "
+        "flags behind them."
     )
 
 
@@ -611,6 +636,9 @@ def finding_fact(fact_id: str, row: dict) -> dict:
     flat = " ".join(equip.split())
     if flat and summary.startswith(f"{flat}:"):
         summary = name(equip) + summary[len(flat) :]
+    text = f"{name(equip)} {row['rule']} ({row['severity']}): {summary}"
+    if row.get("conditional_on"):  # 0.111 (#313)
+        text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
     return {
         "id": fact_id,
         "kind": "finding",
@@ -618,9 +646,71 @@ def finding_fact(fact_id: str, row: dict) -> dict:
         "rule": row["rule"],
         "equip": row["equip"],
         "finding_id": row["finding_id"],
-        "text": f"{name(equip)} {row['rule']} ({row['severity']}): {summary}",
+        "text": text,
         "metrics": row["metrics"],
     }
+
+
+# --------------------------------------------------------------------------- sensor references
+
+
+def reference_spec(ctx, facility_id: str) -> tuple:
+    """``(references, base_dir)``: the ``report.rcx.references`` block of the run config
+    :func:`caller_config` finds for ``facility_id`` (``None`` when it has none) and the
+    directory its relative paths resolve against (0.111, #313)."""
+    config, base_dir, _notice = caller_config(ctx, facility_id)
+    rcx = ((config or {}).get("report") or {}).get("rcx") or {}
+    refs = rcx.get("references") if isinstance(rcx, dict) else None
+    return (refs if isinstance(refs, dict) and refs else None), base_dir
+
+
+def reference_findings(ctx, facility_id: str, run) -> tuple:
+    """``(findings, notes)``: the configured sensor references of ``facility_id`` compared on
+    ``run``'s frames, as ``rcx_report`` compares them (one ``sensor_drift:<role>`` finding each,
+    a passing one included). ``notes`` say what could not be compared (0.111, #313)."""
+    spec, base_dir = reference_spec(ctx, facility_id)
+    if not spec:
+        return [], []
+    from ..report.rcx import _reference_findings
+
+    try:
+        return _reference_findings(run, spec, base_dir or ".")
+    except ValueError as e:
+        return [], [f"The configured sensor references could not be read: {e}"]
+
+
+def reference_conditions(findings, ref_findings, registry) -> list:
+    """Per finding of ``findings``, the labels of the reference warnings (warn or fault) it is
+    conditional on: a configured reference for one of its inputs, on its equipment, disagrees.
+    The same test ``rcx_report`` makes an issue conditional with (0.111, #313)."""
+    from ..rules.triage import _rule_roles, _taints, sensor_causes
+
+    causes = sensor_causes(ref_findings)
+    if not causes:
+        return [[] for _f in findings]
+    rmap = {n: registry.get(n) for n in registry.names()} if registry is not None else {}
+    out: list = []
+    for f in findings:
+        m = getattr(f, "metrics", None) or {}
+        if m.get("declined") is True:
+            out.append([])
+            continue
+        roles = _rule_roles(rmap, str(getattr(f, "rule", "")))
+        equip = str(getattr(f, "equip", ""))
+        out.append([plain(c.label()) for c in causes if _taints(c, equip, roles)])
+    return out
+
+
+def conditional_banner(n: int) -> str | None:
+    """The NOTICE of ``n`` findings conditional on a disagreeing sensor reference (#313)."""
+    if not n:
+        return None
+    return (
+        f"{n} finding(s) rest on an input whose configured sensor reference disagrees with it "
+        "(conditional_on names the comparison): treat each as a possible sensor problem first "
+        "and check that sensor before acting on the equipment. sensor_trust shows the "
+        "comparison."
+    )
 
 
 # --------------------------------------------------------------------------- masks

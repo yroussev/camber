@@ -545,6 +545,7 @@ def _run_one_reference(
     from .rules.base import (
         _cannot_run,
         _class_declined,
+        _decline,
         _merge_shared,
         _missing_optional,
         _note_missing_optional,
@@ -567,14 +568,15 @@ def _run_one_reference(
         problem = ("reference_missing_inputs", f"the reference {name} lacks this detector's inputs")
     else:
         bad = (
-            _untrusted(rule, ref_equip, ref_frame, mapping, resample, min_trust)
+            _untrusted(rule, ref_equip, ref_frame, mapping, resample, min_trust, shared)
             if min_trust is not None
             else []
         )
         if bad:
             problem = (
                 "reference_untrusted",
-                f"the reference {name} has untrusted input(s): " + ", ".join(r.value for r in bad),
+                f"the reference {name} has untrusted input(s): "
+                + ", ".join(f"{r.value} (trust {t:.2f})" for r, t in bad),
             )
         else:
             ref_slice = _slice_period(ref_frame, ref_window, label="reference")
@@ -611,24 +613,9 @@ def _run_one_reference(
             out.append(_ref_decline(rule, ref.equip, problem[0], problem[1]))
             continue
         if min_trust is not None:
-            bad = _untrusted(rule, ref, frame, mapping, resample, min_trust)
+            bad = _untrusted(rule, ref, frame, mapping, resample, min_trust, shared)
             if bad:
-                out.append(
-                    Finding(
-                        rule=rule.name,
-                        equip=ref.equip,
-                        severity="info",
-                        metrics={
-                            "declined": True,
-                            "min_trust": min_trust,
-                            "untrusted_roles": [r.value for r in bad],
-                        },
-                        summary=(
-                            f"{ref.equip}: declined -- untrusted input(s): "
-                            + ", ".join(r.value for r in bad)
-                        ),
-                    )
-                )
+                out.append(_decline(rule, ref, bad, min_trust))
                 continue
         cur = _slice_period(frame, current, label="current")
         if cur.empty:
