@@ -31,6 +31,7 @@ class CallContext:
     min_trust: float = 0.5
     caps: Caps = field(default_factory=Caps)
     caller: str = "local"
+    config_snapshot: tuple = field(default=(), compare=False, repr=False)
 
 
 @dataclass(frozen=True)

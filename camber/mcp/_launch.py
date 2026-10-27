@@ -90,6 +90,11 @@ def check_config(path: str, store: str, allowed: frozenset) -> str:
     ``allowed``; and a store source reads the ``--store`` directory (``store``), whatever path
     spells it (a different store would serve data the operator did not name).
     """
+    return _checked_config(path, store, allowed)[0]
+
+
+def _checked_config(path: str, store: str, allowed: frozenset) -> tuple:
+    """:func:`check_config`'s ``(facility, loaded config)``."""
     from ..config import _config_facility, _preflight_config, _unknown_keys_note, load_config
 
     where = f"--config {path}"
@@ -128,13 +133,13 @@ def check_config(path: str, store: str, allowed: frozenset) -> str:
         )
     try:
         _preflight_config(config, base_dir=base)
-    except (KeyError, ValueError, TypeError) as exc:
+    except (KeyError, ValueError, TypeError, OSError) as exc:
         why = exc.args[0] if isinstance(exc, KeyError) and exc.args else exc
         raise LaunchError(f"{where}: {why}") from None
     note = _unknown_keys_note(config)  # #304: a warning, as camber run gives
     if note:
         log.warning("%s: %s", where, note)
-    return fid
+    return fid, config
 
 
 def resolve_quiet(path: str) -> str:
@@ -149,22 +154,30 @@ def check_configs(configs, store: str, allowed: frozenset):
     """The absolute ``--config`` paths, each checked with :func:`check_config`: ``None`` for
     none, one path for one, a tuple for several (one per facility; two for the same facility
     are refused)."""
+    return _checked_configs(configs, store, allowed)[0]
+
+
+def _checked_configs(configs, store: str, allowed: frozenset) -> tuple:
+    """:func:`check_configs`'s paths, and the ``((path, loaded config), ...)`` snapshot the
+    calls read instead of the files (#308: an edit while the server ran bypassed the checks)."""
     if configs is None:
-        return None
+        return None, ()
     paths = [configs] if isinstance(configs, (str, os.PathLike)) else list(configs)
     seen: dict = {}
+    snapshot = []
     for p in paths:
-        fid = check_config(os.fspath(p), store, allowed)
+        fid, config = _checked_config(os.fspath(p), store, allowed)
         if fid in seen:
             raise LaunchError(
                 f"--config {p} and --config {seen[fid]} are both for facility {fid!r}; give "
                 "one config per facility"
             )
         seen[fid] = p
-    out = tuple(os.path.abspath(os.fspath(p)) for p in paths)
+        snapshot.append((os.path.abspath(os.fspath(p)), config))
+    out = tuple(path for path, _config in snapshot)
     if not out:
-        return None
-    return out[0] if len(out) == 1 else out
+        return None, ()
+    return (out[0] if len(out) == 1 else out), tuple(snapshot)
 
 
 def build_context(
@@ -178,19 +191,22 @@ def build_context(
     """The ``camber.capabilities.CallContext`` every tool call of this launch runs under.
 
     ``config`` is one run config path or a list of them, one per facility; each is checked at
-    startup (:func:`check_config`)."""
+    startup (:func:`check_config`) and the calls read it as loaded then (#308)."""
     from ..capabilities import CallContext
 
     if not 0.0 <= float(min_trust) <= 1.0:
         raise LaunchError(f"--min-trust must be from 0 to 1 (got {min_trust})")
     root = resolve_store(store)
     allowed = resolve_allowlist(root, allow, allow_all_active)
+    paths, snapshot = _checked_configs(config, root, allowed)
     return CallContext(
         store=root,
         allowed_facilities=allowed,
-        config=check_configs(config, root, allowed),
+        config=paths,
         min_trust=float(min_trust),
         caller="mcp",
+        # only when there is one: a registry of the same shape may not know the field
+        **({"config_snapshot": snapshot} if snapshot else {}),
     )
 
 
@@ -199,10 +215,10 @@ def _log_templates(ctx) -> None:
     it with the dataset's packaged config template (#296)."""
     try:
         from ..capabilities._common import dataset_template
-        from ..capabilities._policy import config_paths
-        from ..config import _config_facility, load_config
+        from ..capabilities._policy import config_paths, read_config
+        from ..config import _config_facility
 
-        named = {_config_facility(load_config(p)) for p in config_paths(ctx)}
+        named = {_config_facility(read_config(ctx, p)) for p in config_paths(ctx)}
         for fid in sorted(ctx.allowed_facilities - named):
             _cfg, dataset_id = dataset_template(ctx, fid)
             if dataset_id:

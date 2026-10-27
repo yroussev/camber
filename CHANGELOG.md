@@ -139,6 +139,22 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+- An integer argument given as a whole-number float (`"limit": 5.0`, `"offset": 25.0`) runs as
+  that integer. In the paged tools (`facilities`, `points`, `coverage`, `sensor_trust`,
+  `rule_run`, `rcx_report`, `rule_params`, `check_citations`) it passed validation and then
+  failed as a JSON-RPC internal error naming a Python exception (#308).
+- `camber mcp` reads each `--config` once, when it starts, and serves that copy for the life of
+  the process. An edit to the file while the server ran was read by the next call without the
+  startup check: it could point `rule_run` at another store while `points` read `--store`, or
+  (one stray comma) drop the tuned rules with the false notice "No run config names this
+  facility" (#308).
+- The `--config` startup check also reads the `report.rcx` section the way `camber report` does
+  (a `references` entry naming no CAMBER role made every `rcx_report` call an internal error), and
+  a ventilation zones file that cannot be read now exits 2 with one line naming the config, not 1
+  with a bare `[Errno 2]` (#308).
+- A message line over 1 MiB is refused with its own `id` when the line's first bytes name one,
+  so the client's call ends at once; with `"id": null` the official SDK waited for its own
+  timeout (#308).
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**
@@ -195,6 +211,15 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `rule_params` rows carry `run_with` (`rule_run` or `drift`), and an `rcx_report` issue's
   `finding_ids`; the `equip` of a heat-pump room-imbalance finding is now `<fleet>`, so its
   finding id is `hp_room_imbalance@<fleet>` (#304).
+- `camber run`, `camber mcp --config` and `rule_run`'s `params` refuse a rule parameter that is
+  not a finite number (`NaN` or infinity) or is outside its documented range (`camber rules params
+  RULE`). A NaN minimum outdoor-air percentage turned every fault of the rule into "ok" with no
+  warning, and 500 for a 0 to 100 % parameter faulted every unit. A value outside the range is
+  kept when the rule entry's `"basis"` says where it came from (a calibration, the building's own
+  sequence); the two packaged templates that use one (ornl-frp-vav, nist-heatpump-fdd) now give
+  it (#308).
+- A run config that repeats a key in one object (JSON or YAML) is refused, as MCP messages are;
+  the last value silently won, which could move a config to another facility (#308).
 
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and

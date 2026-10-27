@@ -8,21 +8,107 @@ and everything else is answered at once by the reading thread; see :func:`serve`
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import queue
+import re
 import select
 import sys
 import threading
 from typing import IO, Any
 
-from ._server import INTERNAL_ERROR, INVALID_REQUEST, McpServer, ToolCall, _error, encode_reply
+from ._server import (
+    INTERNAL_ERROR,
+    INVALID_REQUEST,
+    McpServer,
+    ToolCall,
+    _error,
+    _is_lone_surrogate_free,
+    _valid_id,
+    encode_reply,
+)
 
 log = logging.getLogger("camber.mcp")
 
 #: Longest message line accepted, in bytes (newline included). A longer line is answered with an
 #: Invalid Request error and skipped without being held in memory.
 MAX_MESSAGE_BYTES = 1_048_576
+
+
+#: one JSON token: a whole string, a structural character, or a run of literal characters
+_TOKEN = re.compile(r'\s*(?:("[^"\\]*(?:\\.[^"\\]*)*")|([{}\[\]:,])|([^\s"{}\[\]:,]+))')
+
+
+def head_id(head: bytes) -> Any:
+    """The request id an oversized message line names, read from its first bytes, else ``None``.
+
+    0.111 (#308): a refusal with ``"id": null`` reaches no caller, so the official MCP SDK waited
+    for its own timeout. The id is taken only when it is unambiguous: the line starts a JSON
+    object, its top level names ``"id"`` exactly once in the bytes read, and the value is a
+    complete string or integer (a token cut at the end of ``head`` is not trusted)."""
+    text = head.decode("utf-8", errors="replace")
+    pos, depth, found, key, expect = 0, 0, [], None, "start"
+    while True:
+        m = _TOKEN.match(text, pos)
+        if m is None or m.end() >= len(text):  # the last token may be cut: never used
+            break
+        pos = m.end()
+        string, struct, literal = m.groups()
+        if expect == "start":
+            if struct != "{":
+                return None
+            depth, expect = 1, "key"
+            continue
+        if struct in ("{", "["):
+            if depth == 1 and key == "id":
+                return None  # an object or array id is no id
+            depth, key = depth + 1, None
+            continue
+        if struct in ("}", "]"):
+            depth -= 1
+            if depth == 0:
+                break
+            continue
+        if depth != 1:
+            continue
+        if expect == "key" and string is not None:
+            try:
+                key = json.loads(string)
+            except ValueError:
+                return None
+            expect = "colon"
+        elif expect == "colon" and struct == ":":
+            expect = "value"
+        elif expect == "value" and (string is not None or literal is not None):
+            if key == "id":
+                try:
+                    value = json.loads(string if string is not None else literal)
+                except ValueError:
+                    return None
+                found.append(value)
+            key, expect = None, "comma"
+        elif expect == "comma" and struct == ",":
+            expect = "key"
+        else:
+            return None  # not the JSON-RPC object shape
+    if len(found) != 1 or not _valid_id(found[0]):
+        return None
+    value = found[0]
+    if isinstance(value, str) and not _is_lone_surrogate_free(value):
+        return None
+    return value
+
+
+def _oversized(line: bytes, max_message_bytes: int) -> dict:
+    """The refusal of a message longer than ``max_message_bytes``, answering its id when the line
+    names one in its first bytes (:func:`head_id`)."""
+    log.warning("refused a message longer than %d bytes", max_message_bytes)
+    return _error(
+        head_id(line),
+        INVALID_REQUEST,
+        f"Invalid Request: message longer than {max_message_bytes} bytes",
+    )
 
 
 def _skip_rest_of_line(instream: IO[bytes], chunk: int) -> bool:
@@ -93,13 +179,7 @@ def serve(
                 return 0
             if len(line) > max_message_bytes:
                 more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes)
-                refusal = _error(
-                    None,
-                    INVALID_REQUEST,
-                    f"Invalid Request: message longer than {max_message_bytes} bytes",
-                )
-                log.warning("refused a message longer than %d bytes", max_message_bytes)
-                _reply(outstream, refusal)
+                _reply(outstream, _oversized(line, max_message_bytes))
                 if not more:
                     return 0
                 continue
@@ -167,14 +247,7 @@ def _read_lines(instream: IO[bytes], max_message_bytes: int, lines: queue.Queue)
                 return
             if len(line) > max_message_bytes:
                 more = line.endswith(b"\n") or _skip_rest_of_line(instream, max_message_bytes)
-                log.warning("refused a message longer than %d bytes", max_message_bytes)
-                lines.put(
-                    _error(
-                        None,
-                        INVALID_REQUEST,
-                        f"Invalid Request: message longer than {max_message_bytes} bytes",
-                    )
-                )
+                lines.put(_oversized(line, max_message_bytes))
                 if not more:
                     return
                 continue

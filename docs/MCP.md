@@ -76,10 +76,14 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   one config each (two configs for the same facility are refused), so `--allow-all-active` can
   serve tuned results for every facility. Each config is checked at startup the way `camber run`
   checks it: a file that cannot be parsed (a trailing comma, an empty file, YAML without the
-  extra), a config that is not an object, a wrong shape, an unknown rule or rule parameter, a
-  bad `units` or `ventilation` block, a facility the store does not hold, a config that names no
-  facility or one that is not allowed, or any other suffix stops the server (exit 2) with one
-  line on stderr naming the file and the problem.
+  extra), a config that is not an object or repeats a key, a wrong shape, an unknown rule or
+  rule parameter, a parameter value that is not a finite number or is outside its documented
+  range without a `"basis"` for it, a bad `units`, `ventilation` (a zones file that cannot be
+  read included) or `report.rcx` block, a facility the store does not hold, a config that names
+  no facility or one that is not allowed, or any other suffix stops the server (exit 2) with one
+  line on stderr naming the file and the problem. Each config is read once, at startup: the
+  tools use that copy, so editing the file while the server runs changes nothing until a
+  restart (0.111, #308).
 - A store-backed config's `source.store` must be the `--store` directory (a relative path is
   resolved from the config's own directory; any spelling of the same directory, a symlink
   included, is accepted). A config that points at another store is refused at startup: the
@@ -182,7 +186,10 @@ A request with the 2026-07-28 `_meta` is always served statelessly; `initialize`
 2025-11-25 session for the rest of the process. A request with neither is refused (-32602).
 Messages are one JSON object per line in UTF-8; batches are refused, and so is a line over 1 MiB,
 an object that repeats a key, and a string holding a lone UTF-16 surrogate escape such as
-`"\ud800"` (valid JSON syntax, but not a character).
+`"\ud800"` (valid JSON syntax, but not a character). The refusal of a line over 1 MiB carries the
+request's `id` when the line's first bytes name it (top level, once, a complete string or
+integer), else `null`. An integer argument may be sent as a whole-number float (`5.0` is the
+integer 5, as JSON Schema says); `5.5` is `invalid_params`.
 
 **Errors.** Following the specification, a problem the model can fix by changing its call is a
 tool result with `isError: true` and a `code: message` text (`invalid_params`, `not_found`,

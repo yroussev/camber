@@ -109,6 +109,20 @@ def config_paths(ctx) -> list:
     return [os.fspath(c) for c in config if c]
 
 
+def read_config(ctx, path) -> dict:
+    """The run config at ``path`` as ``ctx`` sees it: a copy of the one ``ctx.config_snapshot``
+    holds for that path (``camber mcp`` loads and checks each ``--config`` once, at startup:
+    0.111, #308), else the file read now (:func:`camber.config.load_config`, which raises)."""
+    import copy
+
+    for snap_path, config in getattr(ctx, "config_snapshot", None) or ():
+        if os.fspath(snap_path) == os.fspath(path):
+            return copy.deepcopy(config)
+    from ..config import load_config
+
+    return load_config(os.fspath(path))
+
+
 def known_roots(ctx=None) -> list:
     """The local directories no client-visible message may name: the call's store, its config
     and the config's directory, the stores and folders that config reads, the dataset data
@@ -123,9 +137,7 @@ def known_roots(ctx=None) -> list:
         base = os.path.dirname(os.path.abspath(os.path.expanduser(str(config))))
         roots.append(base)
         try:
-            from ..config import load_config
-
-            source = load_config(str(config)).get("source") or {}
+            source = read_config(ctx, config).get("source") or {}
             paths = [source.get("store"), source.get("folder"), *(source.get("folders") or [])]
         except Exception:  # noqa: BLE001 - an unreadable config names no further path
             paths = []
@@ -263,7 +275,7 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
     store facility: its ``facility_id`` (or ``site``) must still be in the allowlist, and it is
     refused when it is named for a research-only catalog dataset.
     """
-    from ..config import _check_config_shape, load_config, run_config
+    from ..config import _check_config_shape, run_config
     from . import CapabilityError
 
     if config is None:
@@ -273,9 +285,10 @@ def run_config_for(ctx, config: dict | None = None, *, base_dir: str | None = No
                 "invalid_params",
                 "this caller has no run config" if not paths else "this caller has several",
             )
-        if not os.path.isfile(paths[0]):
+        snapshot = {os.fspath(p) for p, _c in getattr(ctx, "config_snapshot", None) or ()}
+        if paths[0] not in snapshot and not os.path.isfile(paths[0]):
             raise CapabilityError("not_found", "the run config this caller names does not exist")
-        config = load_config(paths[0])
+        config = read_config(ctx, paths[0])
         base_dir = base_dir or os.path.dirname(os.path.abspath(paths[0]))
     config = dict(_check_config_shape(config))
     source = config.get("source") or {}

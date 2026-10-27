@@ -24,6 +24,9 @@
           }
         },
         "min_samples": 1
+      },
+      "basis": {
+        "min_samples": "CAMBER judgment: each row is already an averaged steady-state test point, so one row is a judged sample"
       }
     }
   ],

@@ -185,7 +185,7 @@ def test_an_oversized_line_is_refused_and_the_stream_goes_on():
     out = io.BytesIO()
     assert serve(_server(), io.BytesIO(big + ok), out, max_message_bytes=400) == 0
     first, second = _lines(out.getvalue())
-    assert first["error"]["code"] == -32600 and first["id"] is None
+    assert first["error"]["code"] == -32600 and first["id"] == 1  # #308: read from its head
     assert "400 bytes" in first["error"]["message"]
     assert second["id"] == 2 and "tools" in second["result"]
 
