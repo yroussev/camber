@@ -293,8 +293,15 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   rather than "Of 11 points on" the facility. docs/SENSOR-HEALTH.md said `longest_flat_hours` is
   always reported; it now says when it is null (a role with no duration limit, a fan-dependent
   point read without a fan gate, a plant point that never ran), and the output schema says so too.
+- **A `basis` of invisible characters is empty (#320).** A rule entry's `basis` holding only a
+  zero-width (or other invisible) character counted as a stated reason and kept an out-of-range
+  value; it is now refused like an empty one.
 
 ### Security
+- **Three more spellings of a home path are redacted (#320).** A data name holding the home
+  directory URL-encoded (`%2FUsers%2F...`), with a `/./` segment, or with doubled backslashes (the
+  repr / JSON form of a Windows path) still showed the account name in tool text and facts. The
+  server's own directories are now taken out in those spellings too.
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
   now taken out of a name in any letter case and with either path separator, so an equipment id
   such as `/USERS/<name>/AHU-10` or `\Users\<name>\AHU-8` no longer shows the account name in

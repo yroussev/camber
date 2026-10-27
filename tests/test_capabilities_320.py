@@ -16,6 +16,8 @@
 6. The conditional notice counts this page as "listed", names the other pages, and a fact
    carries the conditional results left out; ``sensor_trust`` says "matching points" for a
    selection.
+7. A ``basis`` of invisible characters only is empty; a home path in a data name is redacted
+   also URL-encoded, with a ``/./`` segment and with doubled backslashes.
 """
 
 import json
@@ -381,3 +383,37 @@ def test_sensor_trust_says_matching_points_for_a_selection(bias):
     one = REG.call("sensor_trust", {"facility_id": fid, "equips": ["AHU__sat_bias"]}, ctx)
     assert " matching points on " in one.text and " matching points judged" in one.facts[0]["text"]
     assert " matching points" not in every.text
+
+
+# ------------------------------------------------------------- 7. basis and redaction
+
+
+@pytest.mark.parametrize("basis", ["\u200b", " \u200b\u200d ", "\u202e", "\x00"], ids=repr)
+def test_a_basis_of_invisible_characters_is_empty(store, tmp_path, basis):
+    config = _config("night_weekend_setback", {"start_hour": 30})
+    config["rules"][0]["basis"] = {"start_hour": basis}
+    with pytest.raises(ValueError, match="'basis' of 'start_hour' must be a non-empty text"):
+        _preflight_config(config, base_dir=str(tmp_path))
+    config["rules"][0]["basis"] = {"start_hour": "\u200bthe building's own sequence"}
+    _preflight_config(config, base_dir=str(tmp_path))
+
+
+def test_a_home_path_is_redacted_in_three_more_spellings():
+    from urllib.parse import quote
+
+    from camber.capabilities._policy import redact, redact_names
+    from camber.capabilities._sanitize import name, unmark
+
+    home = os.path.expanduser("~")
+    user = os.path.basename(home)
+    spellings = [
+        quote(home, safe="") + "%2FAHU-22",
+        home.replace(f"/{user}", f"/./{user}") + "/AHU-19",
+        home.replace("/", "\\\\") + "\\\\AHU-17",
+    ]
+    for s in spellings:
+        assert user in s
+        quoted = unmark(name(s))  # a quoted name doubles its backslashes
+        for out in (redact_names(s, home), redact(s, home), redact_names(quoted, home)):
+            assert user not in out, (s, out)
+    assert redact_names("AHU-1/2 %2F x", home) == "AHU-1/2 %2F x"
