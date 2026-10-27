@@ -20,7 +20,9 @@ as "clean" (the honesty convention in `camber/rules/base.py`).
 `untrusted`). The runner's trust gate scores each input on its equipment's whole run frame (every
 role at the run's resample, over the run's window, with the shared points merged) with
 `frame_sensor_health(frame, plant_gate="auto")`, the read the `sensor_trust` capability reports, so
-a check is declined exactly when that capability puts an input below the floor (0.111, #311).
+a check is declined exactly when that capability puts a required input (or a present input of a
+`roles_any_of` group) below the floor (0.111, #311); the decline then names every input the rule
+reads that is below it, optional ones included (0.111, #318).
 `untrusted_roles(frame, roles, min_trust=...)` scores the roles of a frame you hold.
 
 **Gated mode.** `sensor_trust(series, role, gate=fan_on)` (or `frame_sensor_health(frame,

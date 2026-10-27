@@ -78,7 +78,15 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ._page import collect
-from ._policy import known_roots, redact, redact_value, research_only, run_config_for
+from ._policy import (
+    known_roots,
+    redact,
+    redact_names,
+    redact_roots,
+    redact_value,
+    research_only,
+    run_config_for,
+)
 from ._sanitize import (
     cap_strings,
     finish,
@@ -316,7 +324,8 @@ class Registry:
         no equipment of a recognised class other than an air handler (#314). A name that is not
         one clean line of at most 200 characters is never offered (the prompt could not take it
         whole), nor one the sanitiser would change (HTML or markdown
-        markup, a URL, a fact-id bracket) or one that starts with ``NOTICE`` (#307). Any other
+        markup, a URL, a fact-id bracket), one that starts with ``NOTICE`` (#307) or one that holds
+        a directory of the server's own that results redact (#318). Any other
         argument completes to nothing; an unknown prompt or argument is
         ``CapabilityError("invalid_params")``.
         """
@@ -352,9 +361,17 @@ class Registry:
         else:
             pool = []
         # #307: a name the sanitiser would change (markup, a link, a fact-id bracket) or one that
-        # reads as a NOTICE is not offered: shown sanitised, it would name nothing
+        # reads as a NOTICE is not offered: shown sanitised, it would name nothing; nor one that
+        # holds one of the server's own directories, which every result shows redacted (#318)
+        roots = known_roots(ctx) if pool else []
         pool = [
-            s for s in pool if s == shown(s) and s == lead(s) and 0 < len(s) <= 200 and "," not in s
+            s
+            for s in pool
+            if s == shown(s)
+            and s == lead(s)
+            and 0 < len(s) <= 200
+            and "," not in s
+            and redact_roots(s, *roots) == s
         ]
         low = value.lower()
         hits = sorted(
@@ -395,6 +412,14 @@ class Registry:
                 res,
                 text=unmark(redact(res.text, *secrets)),
                 banners=[unmark(redact(b, *secrets)) for b in res.banners],
+                # 0.111 (#318): a fact's text names data values, so it loses the known roots
+                # (with the rest of their path) only, as a quoted name in the text does
+                facts=[
+                    {**f, "text": redact_names(f["text"], *secrets)}
+                    if isinstance(f, dict) and isinstance(f.get("text"), str)
+                    else f
+                    for f in res.facts or []
+                ],
             )
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None

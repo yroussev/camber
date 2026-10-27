@@ -26,12 +26,13 @@ Private module -- not public API.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import unicodedata
 
-#: characters that end an unquoted path
-_END = r"""\s'"`,;)\]}<>"""
+#: characters that end an unquoted path (``‹ ›`` are defanged markup: 0.111, #318)
+_END = r"""\s'"`,;)\]}<>\u2039\u203a"""
 #: where a path starts: a slash followed by a path character (so " / " between words is not a
 #: path), ``~/``, a Windows drive or a UNC share
 _START = rf"""(?:~[/\\]|/(?=[^{_END}/])|[A-Za-z]:[/\\]|(?:\\\\)+(?=\w))"""
@@ -42,7 +43,7 @@ _CLOSE = r"""(?=[\s,.;:)\]}]|$)"""
 _ABS_PATH = re.compile(
     rf"""(?<=')(?:{_START}).*?(?='{_CLOSE})"""
     rf"""|(?<=")(?:{_START}).*?(?="{_CLOSE})"""
-    rf"""|(?<![\w.~/\\>])(?:{_START})[^{_END}]*"""
+    rf"""|(?<![\w.~/\\>\u2039])(?:{_START})[^{_END}]*"""
 )
 #: a placeholder followed by another or by the rest of the path it stood for -- across a space
 #: when the next word goes on with a separator (``<path>/John Smith/My Drive`` is one path,
@@ -77,6 +78,33 @@ def _forms(path) -> set:
     return {s for s in out if len(s) > 2}
 
 
+@functools.lru_cache(maxsize=32)
+def _roots_pattern(extra: tuple):
+    """One pattern for every spelling (:func:`_forms`) of the known roots ``extra``, longest
+    first, matched case-insensitively and with ``/`` and ``\\`` (single or doubled) as one
+    separator (0.111, #318): ``/USERS/name`` and ``\\Users\\name`` name the home directory too
+    on a case-insensitive file system. ``None`` when there is none."""
+    forms = sorted({f for e in extra for f in _forms(e)}, key=len, reverse=True)
+    alts = dict.fromkeys(
+        "".join(r"[/\\]{1,2}" if ch in "/\\" else re.escape(ch) for ch in f) for f in forms
+    )
+    return re.compile("|".join(alts), re.IGNORECASE) if alts else None
+
+
+def redact_roots(text, *extra) -> str:
+    """``text`` with each known root of ``extra`` (see :func:`known_roots`) replaced by
+    ``<path>``, in any spelling :func:`_roots_pattern` matches; nothing else is touched."""
+    pat = _roots_pattern(tuple(str(e) for e in extra if e))
+    return str(text) if pat is None else pat.sub("<path>", str(text))
+
+
+def redact_names(text, *extra) -> str:
+    """``text`` that names values from the data (a fact's text) redacted as a quoted name is
+    (0.111, #318): each known root, with the rest of the path it starts, becomes ``<path>``;
+    the generic path pattern does not apply, so a name with a slash in it stays."""
+    return _ADJACENT.sub("<path>", redact_roots(text, *extra))
+
+
 def redact(text, *extra) -> str:
     """``text`` with every local path replaced by ``<path>``.
 
@@ -88,9 +116,7 @@ def redact(text, *extra) -> str:
     only, never the pattern, and keeps its marks."""
     from ._sanitize import SPAN
 
-    out = str(text)
-    for f in sorted({f for e in extra if e for f in _forms(e)}, key=len, reverse=True):
-        out = out.replace(f, "<path>")
+    out = redact_roots(text, *extra)
     # a quoted span is a value from the data (0.111, #307): a slash in it is a name, not a path
     # of this machine, so only the known roots above come out of it
     parts = SPAN.split(out)

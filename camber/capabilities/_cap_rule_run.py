@@ -8,6 +8,10 @@ store-backed config built from the facility's stored equipment classes.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pandas as pd
+
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import (
     COUNTS,
@@ -15,6 +19,8 @@ from ._common import (
     EQUIPS,
     FACILITY,
     FINDING_ROW,
+    FLEET,
+    FLEET_SHOWN,
     MASK,
     SEVERITIES,
     SEVERITY,
@@ -40,6 +46,7 @@ from ._common import (
     with_rules,
 )
 from ._page import OFFSET, limit_arg, page
+from ._sanitize import plain
 
 _RULES = {
     "type": "array",
@@ -181,8 +188,8 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     res, from_caller, config_notice, (start, end) = _run_for(ctx, arguments)
     rows = by_severity(_rows(ctx, fid, res))
     counts = severity_counts(rows)
-    floor = SEVERITIES.index(arguments.get("min_severity") or "info")
-    listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= floor]
+    sev_floor = SEVERITIES.index(arguments.get("min_severity") or "info")
+    listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= sev_floor]
     every_skip = sorted(
         (
             {
@@ -236,7 +243,12 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)
-    notice = conditional_banner(sum(1 for r in rows if r.get("conditional_on")))  # #313
+    # #313; 0.111 (#318): count what is listed, and name the conditional results left out
+    hidden: dict = {}
+    for r in rows:
+        if r.get("conditional_on") and SEVERITIES.index(r["severity"]) > sev_floor:
+            hidden[r["severity"]] = hidden.get(r["severity"], 0) + 1
+    notice = conditional_banner(sum(1 for r in listed if r.get("conditional_on")), hidden)
     if notice:
         banners.append(notice)
     data = {
@@ -417,6 +429,27 @@ def _violations(ev, frame):
     )
 
 
+def _reported_only(ev, finding):
+    """``ev`` narrowed to the conditions the finding reports (0.111, #318): a rule that names
+    the conditions it reported (``flagged_fcs``: G36 fault conditions at or above ``warn_pct``)
+    keeps only those as named conditions and as the union of flagged hours, so a condition
+    below the reporting threshold is neither stated as flagged nor counted in the total."""
+    flagged = (getattr(finding, "metrics", None) or {}).get("flagged_fcs")
+    if ev is None or not isinstance(ev.masks, dict) or not isinstance(flagged, list):
+        return ev
+    keep = {str(k) for k in flagged}
+    masks = {k: v for k, v in ev.masks.items() if str(k) in keep}
+    mask = None
+    for m in masks.values():
+        mask = m if mask is None else (mask | m)
+    if mask is None and isinstance(ev.mask, pd.Series):
+        mask = pd.Series(False, index=ev.mask.index)
+    judged = ev.masks_judged
+    if isinstance(judged, dict):
+        judged = {k: v for k, v in judged.items() if str(k) in keep}
+    return replace(ev, mask=mask, masks=masks, masks_judged=judged)
+
+
 def _no_spans_note(rule_obj, ev, failed: bool) -> str:
     """Why a finding has no flagged-hour spans (#298)."""
     if rule_obj is not None and hasattr(rule_obj, "analyze_fleet"):
@@ -464,8 +497,8 @@ def _parameters(rule: str, entry_params: dict, rule_obj=None) -> list:
                 row["value"], row["fallback"] = used, True
         if p.get("unit"):
             row["unit"] = str(p["unit"])
-        if p.get("basis"):
-            row["basis"] = str(p["basis"])
+        if p.get("basis"):  # 0.111 (#318): no issue tags in what a model reads, as rule_params
+            row["basis"] = plain(str(p["basis"]))
         out.append(row)
     return out
 
@@ -476,6 +509,8 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
 
     fid, want = arguments["facility_id"], arguments["finding_id"]
     rule = want.split("@", 1)[0]
+    if want == f"{rule}@{FLEET_SHOWN}":  # 0.111 (#318): the fleet id as it was once shown
+        want = f"{rule}@{FLEET}"
     if rule not in rule_names():
         raise CapabilityError("not_found", f"no finding {want!r}: {rule!r} is not a rule")
     res, _from_caller, _notice, _w = _run_for(ctx, arguments)
@@ -497,7 +532,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
         rule_obj = res.registry.get(rule)
         frame = res.frame_for(f.equip)
         if frame is not None and not frame.empty:
-            ev = finding_evidence(rule_obj, f.equip, frame)
+            ev = _reported_only(finding_evidence(rule_obj, f.equip, frame), f)
     except Exception:  # noqa: BLE001 - a rule that cannot draw simply has no evidence
         ev, failed = None, True
     chart = _chart(ev)

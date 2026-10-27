@@ -9,6 +9,8 @@ over the network is left out (a CSV reference is kept), and no LLM writes prose.
 
 from __future__ import annotations
 
+import re
+
 from . import Capability, CapabilityResult
 from ._common import (
     DATE,
@@ -235,16 +237,19 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
 
     index = []
     facts = []
+    names = _names_pattern(res, every_fact)
     for f in every_fact:
         if f.id.partition("@")[2] in left_out and f.id not in kept:
             continue
-        index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": plain(f.text)})
+        # 0.111 (#318): the report's fact text names equipment as summaries and finding facts do
+        f_text = names.sub(lambda m: name(m.group(0)), f.text) if names else f.text
+        index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": plain(f_text)})
         facts.append(
             {
                 "id": f.id,
                 "kind": f.kind,
                 "equip": f.equip or "",
-                "text": f.text,
+                "text": f_text,
                 "data": jsonable(f.data),
             }
         )
@@ -338,6 +343,26 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "fact_index": index,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
+
+
+def _names_pattern(res, facts):
+    """One pattern for every equipment id the run and the report's facts name (the longest
+    first, never inside a longer word), so each can be shown as a quoted name; ``None`` when
+    there is none."""
+    ids = {str(getattr(r, "equip", "") or "") for r in getattr(res, "refs", None) or ()}
+    ids |= {str(getattr(f, "equip", "") or "") for f in getattr(res, "findings", None) or ()}
+    ids |= {str(getattr(f, "equip", "") or "") for f in facts}
+    ids |= {" ".join(e.split()) for e in ids}  # as the report's one-line text writes it
+    ids.discard("")
+    if not ids:
+        return None
+    alts = (
+        ("(?<!\\w)" if re.match(r"\w", e) else "")
+        + re.escape(e)
+        + ("(?!\\w)" if re.search(r"\w\Z", e) else "")
+        for e in sorted(ids, key=lambda e: (-len(e), e))
+    )
+    return re.compile("|".join(alts))
 
 
 CAPABILITIES = (

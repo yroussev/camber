@@ -116,9 +116,14 @@ def prose(text: str) -> str:
     return f"{OPEN}{s}{CLOSE}" if s.strip() else s
 
 
+#: CAMBER's own pseudo-equipment names, not data: shown as they are, so a model can pass them
+#: back (the ``<fleet>`` of a fleet finding; 0.111, #318)
+OWN_NAMES = frozenset({"<fleet>"})
+
+
 def name(value, *, limit: int = MAX_NAME) -> str:
     """A data value (a name, an id, a unit) as a quoted span for a result's text."""
-    s = shown(value)
+    s = str(value) if value in OWN_NAMES else shown(value)
     s = clip(s, limit, key=value).replace("\\", "\\\\").replace('"', '\\"')
     return f'{OPEN}"{s}"{CLOSE}'
 

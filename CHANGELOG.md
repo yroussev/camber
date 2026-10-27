@@ -256,6 +256,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   and the error; `camber mcp -h` shows `[--config PATH ...]` for the repeatable option.
 
 ### Security
+- **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
+  now taken out of a name in any letter case and with either path separator, so an equipment id
+  such as `/USERS/<name>/AHU-10` or `\Users\<name>\AHU-8` no longer shows the account name in
+  an error. Fact text is redacted the same way as the summary (a stored id holding a home path
+  appeared verbatim in facts), completion no longer offers such an id, and an echoed value
+  holding a closing tag such as `</b>` is no longer taken for a path.
 - **A renamed or copied research-only facility directory is no longer served as your own data
   (#312).** Renaming `facility_id=ds-<research-only dataset>` to another name left its registry
   entry pointing at a directory that no longer existed, and the renamed facility was served in
