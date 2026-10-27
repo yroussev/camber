@@ -142,6 +142,13 @@ every comparison false, so the rule would report "ok" everywhere) and should lie
 `basis` names its source, for a site whose own sequence or calibration really is unusual
 (0.111, #308). A key repeated in one object of a JSON or YAML config is refused too.
 
+A value must also have the parameter's type (0.111, #315). A number is a JSON or YAML number,
+not text: `"500"`, `"nan"` and a bare YAML `nan` (which YAML reads as text; `.nan` is its NaN)
+are refused, as is `true` for a number. An hour, a count or a weekday takes a whole number
+(`7` or `7.0`, not `7.5`). A flag takes `true` or `false` (YAML `no` is text here and is refused,
+not run as true), and a choice takes one of the words `camber rules params RULE` lists. A
+`basis` entry must be a non-empty text.
+
 JSON and YAML configs that say the same thing give identical results. `camber run`,
 `camber report`, `camber explain`, `camber drift`, `camber fleet` and `python -m camber.config`
 all read `.yaml` / `.yml`. To start from a catalog template in YAML:

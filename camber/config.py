@@ -2520,10 +2520,16 @@ def _param_basis(name: str, params: dict, basis) -> dict | None:
     ``{param: {"value": ..., "basis": ...}}``. A basis for a parameter the entry does not set
     records the rule's default. Unknown parameters raise ``ValueError`` (fail fast on a typo).
     """
-    if not basis:
+    if basis is None:
         return None
     if not isinstance(basis, dict):
         raise ValueError(f"rule {name!r}: 'basis' must map parameter names to text")
+    for k, v in basis.items():  # 0.111 (#315): the operator's reason, not "" or a number
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError(
+                f"rule {name!r}: the 'basis' of {k!r} must be a non-empty text saying where its "
+                f"value came from (got {v!r})"
+            )
     from .rules.param_docs import rule_params
 
     defaults = {rp.name: rp.default for rp in rule_params(name)}
@@ -2614,14 +2620,14 @@ def _tuned_rule(name: str, params: dict, basis=None):
     is not finite, or one outside the parameter's documented range when the rule entry's
     ``basis`` does not say where it came from (0.111, #308: a NaN minimum turned every fault of
     the rule into "ok", and a 500 % minimum faulted every unit, with no warning)."""
-    from .rules.param_docs import _value_problem
+    from .rules.param_docs import _as_documented, _value_problem
 
     for key in sorted(params):
         # a stated basis (a calibration, the building's own sequence) keeps an unusual value
         problem = _value_problem(name, key, params[key], check_range=key not in (basis or {}))
         if problem:
             raise ValueError(problem)
-    return make_rule(name, **params)
+    return make_rule(name, **_as_documented(name, params))  # #315: 7.0 runs as the hour 7
 
 
 def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
@@ -2658,6 +2664,7 @@ def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
     source = config.get("source") or {}
     if not isinstance(source, dict):
         raise ValueError("'source' must be an object")
+    stored = None  # a store source's {equip: class}
     if source.get("kind") == "store":
         if not source.get("store") or not source.get("facility_id"):
             raise ValueError("a store source needs 'store' and 'facility_id'")
@@ -2665,15 +2672,38 @@ def _preflight_config(config: dict, *, base_dir: str = ".") -> dict:
         fid = source["facility_id"]
         if fid not in store.facilities():
             raise ValueError(f"facility {fid!r} has no data in store {store.root!r}")
+        stored = store.equipment(facility_id=fid).get(fid) or {}
         so = config.get("shared_oat") or {}
-        if so.get("equip") and so["equip"] not in (store.equipment(facility_id=fid).get(fid) or {}):
+        if so.get("equip") and so["equip"] not in stored:
             raise ValueError(f"shared_oat equip {so['equip']!r} is not stored in facility {fid!r}")
     report = config.get("report")
     if isinstance(report, dict) and report.get("rcx") is not None:
         from .report.rcx import RcxOptions
 
-        RcxOptions.from_config(report, base_dir=base_dir)
+        opts = RcxOptions.from_config(report, base_dir=base_dir)
+        _check_reference_sources(opts.references or {}, stored)
     return config
+
+
+def _check_reference_sources(references: dict, stored) -> None:
+    """Refuse (``ValueError``) a ``report.rcx.references`` entry the run could never compare
+    (0.111, #315): a reference CSV that is not a file, and, for a store source (``stored`` is its
+    ``{equip: class}``), a unit or a reference equipment the facility does not store. Each was
+    only a banner of ``sensor_trust`` while ``rule_run`` and ``rcx_report`` presented the findings
+    that rest on the reference as firm."""
+    for equip, roles in sorted(references.items()):
+        where = f"report.rcx.references[{equip!r}]"
+        if stored is not None and equip not in stored:
+            raise ValueError(f"{where}: no equipment {equip!r} is stored in this facility")
+        for role, spec in sorted(roles.items()):
+            if spec.get("csv") and not os.path.isfile(spec["csv"]):
+                raise ValueError(f"{where}[{role!r}]: reference file {spec['csv']!r} not found")
+            other = spec.get("equip")
+            if other and stored is not None and other not in stored:
+                raise ValueError(
+                    f"{where}[{role!r}]: reference equipment {other!r} is not stored in this "
+                    "facility"
+                )
 
 
 def run_config(config: dict, *, base_dir: str = ".", persist: bool = True) -> RunResult:

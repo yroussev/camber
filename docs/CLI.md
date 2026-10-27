@@ -729,8 +729,8 @@ client starts it; you do not run it by hand.
 - A call past its time cap (120 s) is stopped with the tool error `timeout`; a call whose worker
   ended under it, or that a re-ingest of its facility overlapped, answers `unavailable` with
   `"retryable": true`.
-- Any launch mistake (a missing store, a bad config, a value out of range, an empty `--allow`)
-  exits 2 with one line on stderr.
+- Any launch mistake (a missing store, a bad config, a value out of range, an empty `--allow`,
+  an unknown option) exits 2 with one line on stderr; `camber mcp -h` shows the usage.
 - Logs go to stderr; stdout carries protocol messages only. The server exits when the client
   closes stdin or its end of stdout, stopping every call still running. `SIGTERM` and `SIGHUP`
   stop it like Ctrl-C (exit status 143, 129 and 130).
