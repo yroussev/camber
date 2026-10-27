@@ -83,12 +83,20 @@ def redact(text, *extra) -> str:
     Each of ``extra`` (known roots: see :func:`known_roots`) goes first, by exact prefix in
     every spelling of :func:`_forms`, with the rest of the path after it: to the closing quote
     when it is quoted, so a space or a comma does not end it. A pattern then takes the absolute
-    paths left (a quoted one whole), and adjacent placeholders collapse into one."""
+    paths left (a quoted one whole), and adjacent placeholders collapse into one. A quoted span
+    of :func:`camber.capabilities._sanitize.name` (a value from the data) gets the known roots
+    only, never the pattern, and keeps its marks."""
+    from ._sanitize import SPAN
+
     out = str(text)
     for f in sorted({f for e in extra if e for f in _forms(e)}, key=len, reverse=True):
         out = out.replace(f, "<path>")
-    out = _ABS_PATH.sub("<path>", _ROOTED.sub("<path>", out))
-    return _ADJACENT.sub("<path>", out)
+    # a quoted span is a value from the data (0.111, #307): a slash in it is a name, not a path
+    # of this machine, so only the known roots above come out of it
+    parts = SPAN.split(out)
+    for i in range(0, len(parts), 2):
+        parts[i] = _ABS_PATH.sub("<path>", _ROOTED.sub("<path>", parts[i]))
+    return "".join(_ADJACENT.sub("<path>", p) for p in parts)
 
 
 def redact_value(text, *extra) -> str:

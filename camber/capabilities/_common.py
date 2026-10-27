@@ -130,19 +130,25 @@ _SHOWN = 10
 _AVAILABLE = 50
 
 
-def _listing(values) -> str:
-    """Up to :data:`_SHOWN` of ``values`` as quoted spans, with how many more there are."""
+def _listing(values, *, sent: bool = False) -> str:
+    """Up to :data:`_SHOWN` of ``values`` as quoted spans, with how many more there are;
+    ``sent``: values the caller sent, quoted but redacted as the tool's own words (#307)."""
+    from ._sanitize import echo
+
     values = sorted(values)
-    shown = ", ".join(name(v) for v in values[:_SHOWN])
+    shown = ", ".join((echo if sent else name)(v) for v in values[:_SHOWN])
     more = len(values) - _SHOWN
     return f"{shown} and {more} more" if more > 0 else (shown or "none")
 
 
-def _safe(values) -> list:
-    """``values`` as error data: sorted, at most :data:`_AVAILABLE`, each one line and cut."""
-    from ._sanitize import MAX_NAME, clip, one_line
+def _safe(values, *, sent: bool = False) -> list:
+    """``values`` as error data: sorted, at most :data:`_AVAILABLE`, each one line and cut. A
+    value from the data (not ``sent`` by the caller) is marked as a span, so the registry's
+    redaction leaves its slashes alone (#307); the marks go before the error leaves it."""
+    from ._sanitize import CLOSE, MAX_NAME, OPEN, clip, one_line
 
-    return [clip(defang(one_line(v)), MAX_NAME, key=v) for v in sorted(values)[:_AVAILABLE]]
+    out = [clip(defang(one_line(v)), MAX_NAME, key=v) for v in sorted(values)[:_AVAILABLE]]
+    return out if sent else [f"{OPEN}{v}{CLOSE}" for v in out]
 
 
 #: the ``equip`` of a fleet rule's finding (one finding over many equipment)
@@ -188,9 +194,13 @@ def check_selection(store, facility_id: str, arguments: dict) -> None:
             )
             raise CapabilityError(
                 "not_found",
-                f"facility {facility_id!r} stores no {what} {_listing(unknown)}; its "
+                f"facility {facility_id!r} stores no {what} {_listing(unknown, sent=True)}; its "
                 f"{plural} are {_listing(have)} (exact match; see the points capability){fleet}",
-                data={"argument": arg, "unknown": _safe(unknown), "available": _safe(have)},
+                data={
+                    "argument": arg,
+                    "unknown": _safe(unknown, sent=True),
+                    "available": _safe(have),
+                },
             )
 
 

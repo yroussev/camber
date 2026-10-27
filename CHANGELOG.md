@@ -17,6 +17,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- **Equipment and point names with a slash read as themselves again (#307).** Since the 0.111
+  path redaction, a name such as a Niagara ORD (`/Drivers/BacnetNetwork/AHU_1`),
+  `slot:/Config/AHU-6`, `/AHU-4` or anything holding `</` became `<path>` in summaries, banners
+  and errors (four air handlers all read `"<path>"` while the facts named them). A name from the
+  data now gets only the server's own directories (store, config, data directory, home, temp,
+  working directory, Python prefix) taken out, and the `not_found` listing of stored ids shows
+  them exactly. Paths of the server are still redacted everywhere, and a value the caller sent
+  is echoed redacted as before.
+- HTML tags, markdown links and URLs in data-borne names no longer reach summaries as markup
+  (#307): `<img ...>` reads `‹img ...›`, `[click](https://...)` reads `[click] (https[:]//...)`,
+  so a client that renders markdown or HTML shows the name but no tag or clickable link.
+- Prompt-argument completion no longer offers names that hold markup, a link or a fact-id
+  bracket, or that start with `NOTICE` (#307).
 - The notice after the summary's citation check says what it removed: "N sentence(s) ... were
   removed: they state a figure that no fact they cite carries", or a count of citations of an
   unknown fact id (the sentences kept), instead of "N statement(s) were removed" for both. A

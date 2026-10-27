@@ -42,8 +42,9 @@ answers `completion/complete` for a prompt's arguments in both revisions: `facil
 allowed facilities a call would read (never a research-only one), `equip` and `equips` (its last
 comma-separated id) from the stored equipment of the facility already chosen
 (`context.arguments.facility_id`), at most 100 values, those starting with what was typed first.
-A name that is not one clean line of at most 200 characters is never offered, and any other
-argument completes to nothing. A host shows these to the person filling in a prompt. The model
+A name that is not one clean line of at most 200 characters is never offered, nor one that the
+summaries' sanitiser would change (HTML or markdown markup, a URL, a fact-id bracket) or that
+starts with `NOTICE` (0.111, #307), and any other argument completes to nothing. A host shows these to the person filling in a prompt. The model
 itself cannot list or start a prompt in most hosts, only a person can.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.

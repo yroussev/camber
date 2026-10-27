@@ -6,8 +6,12 @@ Facility, equipment and point names, units and metadata come from the data, so a
 (``equipment "AHU-2"``): one line (newlines and tabs become spaces), with control characters
 (C0 / C1, ESC sequences, BEL, NUL), bidi overrides and isolates, zero-width and other invisible
 format characters taken out, a fact-id bracket inside it (``[F1@rule_run]``) turned into
-parentheses so it never reads as a citation, and a long value cut (an ellipsis and a hash of the
-whole value, so two cut values stay apart).
+parentheses so it never reads as a citation, markup defanged (see :func:`markup`: no HTML tag, no
+markdown link and no clickable URL), and a long value cut (an ellipsis and a hash of the whole
+value, so two cut values stay apart). A quoted span is also opaque to the generic path pattern
+of :func:`camber.capabilities._policy.redact` (0.111, #307): a name with a slash, such as a
+Niagara ORD ``/Drivers/BacnetNetwork/AHU_1``, reaches the text as it is, and only the server's
+own directories are taken out of it.
 
 :meth:`camber.capabilities.Registry.call` then makes every result one-line text by
 construction, whatever a handler did: it strips the same characters from ``text``, every fact's
@@ -40,6 +44,8 @@ _BREAKS = frozenset("\t\n\r\v\f\x1c\x1d\x1e\x1f\x85  ")
 _CITE = re.compile(r"\[([A-Za-z]+\d+(?:@[A-Za-z0-9_\-]+)?)\]")
 #: a quoted span, with its marks
 _SPAN = re.compile(f"{OPEN}[^{OPEN}{CLOSE}]*{CLOSE}")
+#: :data:`_SPAN` as one group, to split a text into its own words and its quoted spans
+SPAN = re.compile(f"({_SPAN.pattern})")
 
 
 def _drop(ch: str) -> bool:
@@ -62,6 +68,19 @@ def one_line(value, *, keep_marks: bool = False) -> str:
     return " ".join("".join(out).split())
 
 
+#: a URL scheme (``https://``) or a ``www.`` host, which a markdown client makes a link
+_URL = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*):(?=//)|\b(www)\.(?=\w)")
+
+
+def markup(text: str) -> str:
+    """``text`` with no markup a client could render (0.111, #307): ``<`` and ``>`` written
+    ``‹`` and ``›`` (no HTML tag or autolink), a markdown link or image ``[x](url)`` broken into
+    ``[x] (url)``, and a URL defanged the usual way (``https[:]//``, ``www[.]``), so the name stays
+    recognisable but nothing in it is a tag or a link."""
+    s = text.replace("<", "\u2039").replace(">", "\u203a").replace("](", "] (")
+    return _URL.sub(lambda m: f"{m.group(1)}[:]" if m.group(1) else f"{m.group(2)}[.]", s)
+
+
 def defang(text: str) -> str:
     """``text`` with each citation-shaped ``[F1@ctx]`` written ``(F1@ctx)``."""
     return _CITE.sub(r"(\1)", text)
@@ -76,9 +95,21 @@ def clip(value: str, limit: int, *, key=None) -> str:
     return f"{value[: max(limit - 8, 1)]}…~{digest.hexdigest()[:6]}"
 
 
+def shown(value) -> str:
+    """A data value as :func:`name` shows it, before the cut and the quotes."""
+    return markup(defang(one_line(value)))
+
+
+def echo(value, *, limit: int = MAX_NAME) -> str:
+    """A value the caller sent (not one from the data) quoted like :func:`name`, but not a quoted
+    span: the path pattern still applies to it, so an echo never tells the caller which paths
+    are the server's own (0.111, #307)."""
+    return unmark(name(value, limit=limit))
+
+
 def name(value, *, limit: int = MAX_NAME) -> str:
     """A data value (a name, an id, a unit) as a quoted span for a result's text."""
-    s = defang(one_line(value))
+    s = shown(value)
     s = clip(s, limit, key=value).replace("\\", "\\\\").replace('"', '\\"')
     return f'{OPEN}"{s}"{CLOSE}'
 
@@ -127,7 +158,7 @@ def plain(text: str) -> str:
     from the data) is left as it is."""
     if "(" not in text:
         return text
-    parts = re.split(f"({_SPAN.pattern})", text)
+    parts = SPAN.split(text)
     return "".join(p if p.startswith(OPEN) else _INTERNAL.sub("", p) for p in parts)
 
 

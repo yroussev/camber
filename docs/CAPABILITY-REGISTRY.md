@@ -219,7 +219,9 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    `NOTICE:` in the MCP summary is therefore always a banner, and a text that would itself start
    with `NOTICE` reads `Summary: NOTICE ...`. A handler names a data value with
    `camber.capabilities._sanitize.name()`, which quotes it (`equipment "AHU-2"`), writes a
-   fact-id bracket inside it as `(F1@rule_run)` and cuts it at 100 characters (an ellipsis and
+   fact-id bracket inside it as `(F1@rule_run)`, defangs markup (0.111, #307: `<` and `>` read
+   `‹` and `›`, a markdown link `[x](url)` reads `[x] (url)`, and a URL `https[:]//...` or
+   `www[.]...`, so no client renders a tag or a link) and cuts it at 100 characters (an ellipsis and
    six hex digits of a hash keep two cut names apart); a quoted value is one word to the citation
    check, so a sentence break or a number inside a name is never "removed". In `text`, only the
    handler's own fact ids are citations: any other `[F1@x]` reads `(F1@x)`, and a fact's `text`
@@ -256,6 +258,11 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    (`<path>/John Smith/My Drive/x` is one path; a last word with no separator cannot be told
    from the sentence, so quote paths in messages). The JSON pointers of an
    `invalid_params` refusal by the input schema (`/facility_id: ...`) are left as they are.
+   A name from the data (a quoted value, and the stored ids an error's `data` lists) is not a
+   path of this machine, so only the known roots come out of it, never the pattern (0.111,
+   #307): a Niagara ORD such as `"/Drivers/BacnetNetwork/AHU_1"` or `"slot:/Config/AHU-6"`
+   reads as it is, as in the facts. A value the caller sent, echoed in an error, is redacted
+   like the tool's own words, so an error never tells the caller which paths exist.
 
 **In-process, the timeout cannot stop a handler.** The handler runs in a worker thread; Python
 cannot kill a thread, so on a timeout the call returns `timeout` at once while the handler

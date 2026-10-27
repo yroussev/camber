@@ -84,6 +84,7 @@ from ._sanitize import (
     one_line,
     plain,
     show_spans,
+    shown,
     unmark,
 )
 
@@ -306,8 +307,10 @@ class Registry:
         would refuse); ``equip`` and ``equips`` (its last comma-separated id) from the stored
         equipment of ``context["facility_id"]`` when a call could read that facility, else to
         nothing. A name that is not one clean line of at most 200 characters is never offered
-        (the prompt could not take it whole). Any other argument completes to nothing; an
-        unknown prompt or argument is ``CapabilityError("invalid_params")``.
+        (the prompt could not take it whole), nor one the sanitiser would change (HTML or markdown
+        markup, a URL, a fact-id bracket) or one that starts with ``NOTICE`` (#307). Any other
+        argument completes to nothing; an unknown prompt or argument is
+        ``CapabilityError("invalid_params")``.
         """
         p = self._prompts.get(prompt) if isinstance(prompt, str) else None
         if p is None:
@@ -329,7 +332,11 @@ class Registry:
             pool = _equipment(ctx, fid) if fid and _readable(ctx, fid) else []
         else:
             pool = []
-        pool = [s for s in pool if s == one_line(s) and 0 < len(s) <= 200 and "," not in s]
+        # #307: a name the sanitiser would change (markup, a link, a fact-id bracket) or one that
+        # reads as a NOTICE is not offered: shown sanitised, it would name nothing
+        pool = [
+            s for s in pool if s == shown(s) and s == lead(s) and 0 < len(s) <= 200 and "," not in s
+        ]
         low = value.lower()
         hits = sorted(
             (s for s in pool if low in s.lower()),
@@ -355,16 +362,19 @@ class Registry:
         secrets = known_roots(ctx)
         try:
             res = self._call(name, arguments, ctx)
+            # the quoted spans keep their marks until here, so a name from the data gets the
+            # known roots only (#307), then the marks go
             return replace(
                 res,
-                text=redact(res.text, *secrets),
-                banners=[redact(b, *secrets) for b in res.banners],
+                text=unmark(redact(res.text, *secrets)),
+                banners=[unmark(redact(b, *secrets)) for b in res.banners],
             )
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
             data = _redact_data(e.data, secrets)
-            msg = redact(one_line(e.message), *secrets)  # one line: data cannot add a NOTICE
+            # one line: data cannot add a NOTICE; the spans' marks kept for redact (#307)
+            msg = unmark(redact(one_line(e.message, keep_marks=True), *secrets))
             raise CapabilityError(e.code, msg, data=data) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
             store_err = _unavailable(e, ctx)
@@ -407,9 +417,9 @@ class Registry:
         json.dumps(data, allow_nan=False)  # NaN / inf in data is the handler's bug: internal
         hidden, spans = hide_spans(text_in)  # a quoted data value is one word to the filter
         text, cite_banners = _grounded(hidden, facts)
-        text = lead(unmark(show_spans(text, spans)))
+        text = lead(show_spans(text, spans))  # the marks stay for call()'s redact (#307)
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
-        own = [unmark(finish(b)) for b in [*(res.banners or []), *banners]]
+        own = [finish(b) for b in [*(res.banners or []), *banners]]
         out = replace(
             res,
             data=data,
@@ -651,14 +661,15 @@ def _sanitized(res: CapabilityResult, data) -> tuple:
 
 
 def _redact_data(data, secrets: list, depth: int = 0):
-    """``data`` (an error's ``data``) with every string in it path-redacted like the message."""
+    """``data`` (an error's ``data``) with every string in it path-redacted like the message; a
+    value from the data comes marked as a span (see ``_common._safe``) and keeps its slashes."""
     if depth > 20:
         return None
     if isinstance(data, str):
-        return redact_value(data, *secrets)
+        return unmark(redact_value(data, *secrets))
     if isinstance(data, dict):
         return {
-            redact_value(k, *secrets) if isinstance(k, str) else k: _redact_data(
+            unmark(redact_value(k, *secrets)) if isinstance(k, str) else k: _redact_data(
                 v, secrets, depth + 1
             )
             for k, v in data.items()
