@@ -356,6 +356,17 @@ def _unit_interval(value: str) -> float:
     return x
 
 
+def _one_line_errors(parser):
+    """Make ``parser`` report a usage mistake as one line on stderr (exit 2), not the usage block
+    and the error (``mcp``, 0.111, #315: docs/CLI.md promises one line); ``-h`` shows the usage."""
+
+    def error(message):
+        parser.exit(2, f"{parser.prog}: error: {message} (see {parser.prog} -h)\n")
+
+    parser.error = error
+    return parser
+
+
 def _whole_number(low: int, high: int):
     """argparse ``type``: an integer from ``low`` to ``high`` written in ASCII digits
     (``mcp --max-concurrent``, 0.111; the upper bound and the digits #309)."""
@@ -3271,7 +3282,12 @@ def _build_parser() -> argparse.ArgumentParser:
     pmcp = sub.add_parser(
         "mcp",
         help="Model Context Protocol server on stdio for AI clients (read-only; docs/MCP.md)",
+        # #315: the usage docs/CLI.md shows (argparse wrote "[--config PATH]" for a repeatable one)
+        usage="%(prog)s --store PATH (--allow FACILITY [--allow FACILITY ...] | "
+        "--allow-all-active)\n"
+        "       [--config PATH ...] [--min-trust 0.5] [--max-concurrent 2] [--max-queued 8]",
     )
+    _one_line_errors(pmcp)
     pmcp.add_argument(
         "--store",
         required=True,
@@ -3319,7 +3335,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="tool calls that may wait for a free worker, 0-1024; beyond that a call is "
         "refused as busy (default 8)",
     )
-    pmcp.set_defaults(func=_cmd_mcp)
+    pmcp.set_defaults(func=_cmd_mcp, _parser_error=pmcp.error)
 
     pb = sub.add_parser(
         "bacnet-discover",
@@ -4130,7 +4146,11 @@ def _ensure_utf8_streams():
 def main(argv=None):
     """CLI entry point: parse args and dispatch to the requested subcommand."""
     _ensure_utf8_streams()
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args, extra = parser.parse_known_args(argv)
+    if extra:  # what parse_args does, through the subcommand's own error when it has one (#315)
+        error = getattr(args, "_parser_error", None) or parser.error
+        error(f"unrecognized arguments: {' '.join(extra)}")
     from ._yaml import MissingYamlExtra
 
     try:

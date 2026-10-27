@@ -525,7 +525,11 @@ reading, such as a duct logger or a calibrated portable, shows it. `report.rcx.r
   (evaluated only over at least 28 days), the RMSE and the correlation (below 0.7 the sensor is
   not tracking the reference: fault). The defaults suit °F; set `bias_warn`, `bias_fault`,
   `drift_warn`, `drift_fault`, `min_correlation`, `min_samples` or `min_drift_days` per reference
-  for other units.
+  for other units. Each must be a finite number: the bias and drift thresholds above 0,
+  `min_correlation` from -1 to 1, `min_samples` a whole number of at least 1 and
+  `min_drift_days` 0 or more; anything else, or a sensor named as its own reference, is a
+  config error (0.111, #315). `camber mcp --config` also refuses at startup a unit or a reference
+  equipment the store facility does not hold, or a reference file that does not exist.
 - **What it raises.** Each comparison is a `sensor_drift:<role>` finding on the unit, scoped to
   it. At warn or fault it is an issue, and the unit's findings whose rule reads that role become
   conditional, their dollars at risk, as for any sensor problem. The data section lists every

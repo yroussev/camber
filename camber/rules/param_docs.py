@@ -3091,30 +3091,99 @@ def _number(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def _param_type(rp: RuleParam) -> str | None:
+    """The documented type of one parameter (0.111, #315): ``"flag"`` (true / false),
+    ``"choice"`` (one of the listed words), ``"integer"`` (a whole-number range: an hour, a
+    count, a weekday; its default is an integer), ``"number"`` (any other numeric range, which may
+    also list keywords such as ``"auto"``), or ``None`` when it is not documented."""
+    doc = rp.doc
+    if doc is None:
+        return None
+    if doc.is_choice:
+        return "flag" if all(isinstance(v, bool) for v in doc.range) else "choice"
+    if len([r for r in doc.range if _number(r)]) != 2:
+        return None
+    d = rp.default
+    ds = list(d.values()) if isinstance(d, dict) else d
+    ds = list(ds) if isinstance(ds, (list, tuple)) else [ds]
+    if ds and all(isinstance(v, int) and not isinstance(v, bool) for v in ds):
+        return "integer"
+    return "number"
+
+
+def _type_problem(kind: str, doc: ParamDoc, v) -> str | None:
+    """Why ``v`` (one value of a parameter of type ``kind``) is not of that type, else ``None``."""
+    import math
+
+    words = [r for r in doc.range if isinstance(r, str)]
+    if kind == "flag":
+        return None if isinstance(v, bool) else "is not true or false"
+    if kind == "choice":
+        if isinstance(v, str) and v in words:
+            return None
+        return "is not one of " + ", ".join(repr(w) for w in words)
+    if isinstance(v, str):
+        if v in words:
+            return None
+        return "is text, not a number" + (
+            f" (or one of {', '.join(repr(w) for w in words)})" if words else ""
+        )
+    if not _number(v):
+        return "is not a number"
+    if isinstance(v, float) and not math.isfinite(v):
+        return "is not a finite number"
+    if kind == "integer" and not float(v).is_integer():
+        return "is not a whole number"
+    return None
+
+
+def _leaves(value) -> list:
+    """The values of a parameter value, through its maps and lists (a per-unit map of per-key
+    targets is checked value by value)."""
+    if isinstance(value, dict):
+        return [x for v in value.values() for x in _leaves(v)]
+    if isinstance(value, (list, tuple)):
+        return [x for v in value for x in _leaves(v)]
+    return [value]
+
+
 def _value_problem(rule: str, name: str, value, *, check_range: bool = True) -> str | None:
     """What is wrong with ``value`` for the parameter ``name`` of the registered rule ``rule``,
     else ``None`` (0.111, #308): a number that is not finite (NaN quietly turns every comparison
     against it into "ok"), or (with ``check_range``) one outside the documented numeric range. A
-    dict-valued (tier map) or list-valued parameter is checked value by value. ``None``,
-    keywords, flags and unknown parameters are left to the rule's constructor."""
+    dict-valued (tier map) or list-valued parameter is checked value by value (nested maps too,
+    since #315). Since #315 the value must also be of the parameter's documented type
+    (:func:`_param_type`): a number, not text or true / false (``"nan"`` and ``"500"`` ran as
+    thresholds); a whole number for an integer parameter (``7.5`` ran as hour 8); true / false
+    for a flag (``"no"`` ran as true); one of the listed words for a choice. ``None`` and unknown
+    parameters are left to the rule's constructor."""
     import math
 
-    values = list(value.values()) if isinstance(value, dict) else value
-    values = list(values) if isinstance(values, (list, tuple)) else [values]
+    values = _leaves(value)
     for v in values:
         if isinstance(v, float) and not math.isfinite(v):
             return f"rule {rule!r} parameter {name!r}: {v!r} is not a finite number"
-    if not check_range:
-        return None
     try:
-        docs = {rp.name: rp.doc for rp in rule_params(rule)}
+        params = {rp.name: rp for rp in rule_params(rule)}
     except KeyError:
         return None
-    doc = docs.get(name)
-    if doc is None:
+    rp = params.get(name)
+    if rp is None or rp.doc is None:
+        return None
+    doc = rp.doc
+    kind = _param_type(rp)
+    if kind is not None and value is not None:
+        for v in values:
+            why = _type_problem(kind, doc, v)
+            if why:
+                return (
+                    f"rule {rule!r} parameter {name!r}: {v!r} {why} ({doc.unit}; see "
+                    f"`camber rules params {rule}`)"
+                )
+    if not check_range:
         return None
     nums = [r for r in doc.range if _number(r)]
-    if len(nums) != 2:
+    if len(nums) != 2 or doc.is_choice:
         return None
     lo, hi = nums
     for v in values:
@@ -3125,6 +3194,30 @@ def _value_problem(rule: str, name: str, value, *, check_range: bool = True) -> 
                 'is kept only when the rule entry\'s "basis" says where it came from'
             )
     return None
+
+
+def _as_documented(rule: str, params: dict) -> dict:
+    """``params`` with an integral float (``7.0``) of an integer parameter as that integer
+    (0.111, #315), the way the tools' integer arguments run (#308)."""
+    try:
+        kinds = {rp.name: _param_type(rp) for rp in rule_params(rule)}
+    except KeyError:
+        return params
+
+    def whole(v):
+        return int(v) if isinstance(v, float) and v.is_integer() else v
+
+    out = dict(params)
+    for k, v in params.items():
+        if kinds.get(k) != "integer":
+            continue
+        if isinstance(v, dict):
+            out[k] = {kk: whole(vv) for kk, vv in v.items()}
+        elif isinstance(v, (list, tuple)):
+            out[k] = type(v)(whole(vv) for vv in v)
+        else:
+            out[k] = whole(v)
+    return out
 
 
 def documented_rules() -> list[str]:

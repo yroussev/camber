@@ -97,8 +97,13 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   checks it: a file that cannot be parsed (a trailing comma, an empty file, YAML without the
   extra), a config that is not an object or repeats a key, a wrong shape, an unknown rule or
   rule parameter, a parameter value that is not a finite number or is outside its documented
-  range without a `"basis"` for it, a bad `units`, `ventilation` (a zones file that cannot be
-  read included) or `report.rcx` block, a facility the store does not hold, a config that names
+  range without a `"basis"` for it, a value of the wrong type (text or true / false for a number,
+  a fraction for a whole-number parameter such as `start_hour`, anything but true / false for a
+  flag, a word not listed for a choice), a `"basis"` that is not a non-empty text, a bad `units`,
+  `ventilation` (a zones file that cannot be read included) or `report.rcx` block (in
+  `report.rcx.references`: a threshold that is not a finite number or not above 0, a sensor used
+  as its own reference, or a unit, reference equipment or reference file the config's source
+  does not have), a facility the store does not hold, a config that names
   no facility or one that is not allowed, or any other suffix stops the server (exit 2) with one
   line on stderr naming the file and the problem. Each config is read once, at startup: the
   tools use that copy, so editing the file while the server runs changes nothing until a

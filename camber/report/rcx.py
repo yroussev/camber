@@ -1176,6 +1176,48 @@ _REFERENCE_THRESHOLDS = (
 )
 
 
+#: the thresholds above that must be above zero, and those that count samples or days
+_POSITIVE_THRESHOLDS = ("bias_warn", "bias_fault", "drift_warn", "drift_fault")
+
+
+def _check_reference_spec(spec: dict, where: str) -> None:
+    """Refuse (``ValueError``) a reference spec whose values cannot be used (0.111, #315): a
+    threshold that is not a finite number (a NaN ``bias_warn`` made a biased sensor "agree", a
+    text one failed every call that compares it), a bias or drift threshold at or below zero, a
+    ``min_correlation`` outside -1 to 1, a ``min_samples`` that is not a whole number of at least
+    1, a negative ``min_drift_days``, an ``equip`` / ``csv`` / column / label that is not text, or
+    a ``role`` that is not a CAMBER role."""
+    import math
+
+    from ..model.roles import Role
+
+    for key in ("equip", "csv", "time_col", "value_col", "label", "role"):
+        v = spec.get(key)
+        if v is not None and (not isinstance(v, str) or not v.strip()):
+            raise ValueError(f"{where}: {key!r} must be a non-empty text (got {v!r})")
+    if spec.get("role"):
+        try:
+            Role(spec["role"])
+        except ValueError:
+            raise ValueError(f"{where}: role {spec['role']!r} is not a CAMBER role") from None
+    for key in _REFERENCE_THRESHOLDS:
+        if key not in spec:
+            continue
+        v = spec[key]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError(f"{where}: {key} must be a finite number (got {v!r})")
+        if key in _POSITIVE_THRESHOLDS and v <= 0:
+            raise ValueError(f"{where}: {key} must be above 0 (got {v!r})")
+        if key == "min_correlation" and not -1 <= v <= 1:
+            raise ValueError(f"{where}: min_correlation must be from -1 to 1 (got {v!r})")
+        if key == "min_samples" and (v < 1 or not float(v).is_integer()):
+            raise ValueError(
+                f"{where}: min_samples must be a whole number of 1 or more (got {v!r})"
+            )
+        if key == "min_drift_days" and v < 0:
+            raise ValueError(f"{where}: min_drift_days must be 0 or more (got {v!r})")
+
+
 def _parse_references(refs: dict, base_dir: str) -> tuple:
     """``(per-equipment references, site OAT reference | None)`` from ``report.rcx.references``
     (0.108, #267).
@@ -1236,6 +1278,13 @@ def _parse_references(refs: dict, base_dir: str) -> tuple:
                     f"report.rcx.references[{equip!r}][{role!r}]: unknown key(s) "
                     + ", ".join(unknown)
                 )
+            _check_reference_spec(spec, f"report.rcx.references[{equip!r}][{role!r}]")
+            if spec.get("equip") is not None and str(spec["equip"]) == str(equip):
+                if Role(spec.get("role") or role) == Role(role):  # 0.111 (#315)
+                    raise ValueError(
+                        f"report.rcx.references[{equip!r}][{role!r}]: a sensor cannot be its own "
+                        "reference (name another equipment, or another role of this one)"
+                    )
             per[role] = spec
         out[str(equip)] = per
     return out, site_oat

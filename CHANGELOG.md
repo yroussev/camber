@@ -225,6 +225,26 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - The default run of your own facility (no run config) no longer runs every rule on a class
     CAMBER does not recognise (a `LOGGER`) when the facility has recognised ones, so such a unit
     no longer gets a `warn` from a check that says it was not evaluated.
+- **A rule parameter of the wrong type is refused, not run (#315).** The checks `camber run`,
+  `camber mcp --config` and `rule_run`'s `params` make caught a NaN or out-of-range number but
+  not the same value written as text: `min_oa_pct: "nan"` (or a bare YAML `nan`) turned two
+  costed faults into "ok", `"500"` ran as a threshold, `fan_gate: "no"` ran as true and
+  `start_hour: 7.5` ran as hour 8 while the facts said 7.5. Every rule parameter is now checked
+  against its documented type: a number (not text, not true / false), a whole number for an
+  hour, a count or a weekday (`7.0` runs as `7`), true / false for a flag, a listed word for a
+  choice. A parameter's `basis` must be a non-empty text to keep a value outside the range.
+- **`report.rcx.references` is checked before anything runs (#315).** A NaN `bias_warn` made a
+  sensor 3 °F off "agree with its reference" and dropped the conditional mark from the findings
+  that rest on it, and a text threshold failed `sensor_trust`, `rule_run` and `rcx_report` with
+  an internal error. A threshold must now be a finite number (the bias and drift ones above 0,
+  `min_correlation` from -1 to 1, `min_samples` a whole number of at least 1), and a sensor
+  cannot be its own reference; `camber report` and `camber mcp --config` refuse such a config.
+  `camber mcp --config` also refuses at startup (exit 2, one line) a reference to a unit or an
+  equipment the store facility does not hold, or to a CSV file that does not exist, which before
+  showed only as a banner in `sensor_trust`.
+- **`camber mcp` usage mistakes are one line (#315).** A missing, malformed or out-of-range
+  option now prints one line on stderr (exit 2), as docs/CLI.md says, instead of the usage block
+  and the error; `camber mcp -h` shows `[--config PATH ...]` for the repeatable option.
 
 ### Security
 - **A renamed or copied research-only facility directory is no longer served as your own data
