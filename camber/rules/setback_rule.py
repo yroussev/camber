@@ -92,6 +92,14 @@ class NightWeekendSetback:
         self.end_hour = end_hour
         self.occupied_days = tuple(occupied_days)
 
+    def gate_inputs(self, columns) -> tuple:
+        """The fan signal the verdict rests on (the status, else the speed), for the trust gate
+        (0.111, #320): the check is about when the fan runs, so it cannot be made without one."""
+        for role in (Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED):
+            if role in columns:
+                return (role,)
+        return ()
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         if (

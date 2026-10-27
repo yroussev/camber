@@ -37,7 +37,8 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   that declines because a required input scores below it is announced in a NOTICE line, with
   the count, the rules and every input below it with its score; `sensor_trust` reports the same
   scores and marks those inputs `below_floor`. An optional input below the floor does not
-  decline a check on its own. A finding resting on an input whose configured sensor
+  decline a check on its own, unless the rule cannot judge without it (the outdoor-air signal
+  of `dcv_verification`, for one; see CAPABILITY-REGISTRY.md). A finding resting on an input whose configured sensor
   reference disagrees is not declined but marked `conditional_on` that sensor.
 - **Model-sized results.** A tool returns one page of each list by default, so a typical result
   stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice

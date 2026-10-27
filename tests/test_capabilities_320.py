@@ -9,12 +9,16 @@
 3. ``report.rcx.references``: a warn level above the fault level and a value that is not an
    object are refused; a reference that cannot be compared is said in ``rule_run`` and
    ``rcx_report`` too.
+4. The outdoor-air signal ``dcv_verification`` is judged on gates the check like a required
+   input, although it is an optional role.
 """
 
 import json
 import os
 import sys
+import types
 
+import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,6 +36,8 @@ from camber.capabilities import (  # noqa: E402
 )
 from camber.capabilities._sanitize import MAX_VALUE  # noqa: E402
 from camber.config import _preflight_config, run_config  # noqa: E402
+from camber.model.roles import Role  # noqa: E402
+from camber.rules import base  # noqa: E402
 from camber.report.rcx import RcxOptions  # noqa: E402
 from camber.rules.param_docs import _value_problem  # noqa: E402
 
@@ -210,3 +216,55 @@ def test_a_reference_that_cannot_be_compared_is_said_by_rule_run_and_rcx_report(
         assert "DemoAHU2" in notice[0] and "co2" in notice[0]
     other = REG.call("rule_run", {"facility_id": FID, "equips": ["DemoAHU2"]}, ctx)
     assert not [b for b in other.banners if "could not be compared" in b]
+
+
+# ------------------------------------------------------------- 4. a needed optional input
+
+
+def _gate(monkeypatch, rule, scores):
+    health = {r: types.SimpleNamespace(trust=t) for r, t in scores.items()}
+    monkeypatch.setattr(base, "_equip_health", lambda *a, **k: health)
+    frame = pd.DataFrame({r: [1.0, 2.0] for r in scores})
+    return base._untrusted(rule, types.SimpleNamespace(equip="AHU-1"), frame, None, "1h", 0.5)
+
+
+def test_dcv_declines_on_the_untrusted_oa_signal_it_judges(monkeypatch):
+    from camber.rules.ventilation_rule import DemandControlledVentilation
+
+    rule = DemandControlledVentilation()
+    bad = _gate(monkeypatch, rule, {Role.CO2: 0.9, Role.OA_AIRFLOW: 0.1, Role.OCCUPANCY: 0.9})
+    assert bad == [(Role.OA_AIRFLOW, 0.1)]
+    # the damper only fills the flow's gaps: its score alone does not decline the check
+    scores = {Role.CO2: 0.9, Role.OA_AIRFLOW: 0.9, Role.OA_DAMPER: 0.1}
+    assert _gate(monkeypatch, rule, scores) == []
+    assert _gate(monkeypatch, rule, {Role.CO2: 0.9, Role.OA_DAMPER: 0.2}) == [(Role.OA_DAMPER, 0.2)]
+    # a zone's CO2 alone (no OA signal) is gated on the CO2 only
+    assert _gate(monkeypatch, rule, {Role.CO2: 0.9, Role.OCCUPANCY: 0.1}) == []
+    full = DemandControlledVentilation(full_outdoor_air=True)
+    assert _gate(monkeypatch, full, {Role.CO2: 0.9, Role.AIRFLOW: 0.1}) == [(Role.AIRFLOW, 0.1)]
+
+
+def test_the_other_rules_gate_the_input_they_cannot_judge_without(monkeypatch):
+    from camber.rules.builtin import builtin_registry
+
+    reg = builtin_registry()
+    oaf = reg.get("outdoor_air_fraction")
+    temps = {Role.MIXED_AIR_TEMP: 0.9, Role.RETURN_AIR_TEMP: 0.9}
+    assert _gate(monkeypatch, oaf, {**temps, Role.OAT: 0.1}) == [(Role.OAT, 0.1)]
+    setback = reg.get("night_weekend_setback")
+    assert _gate(monkeypatch, setback, {Role.SUPPLY_FAN_STATUS: 0.2}) == [
+        (Role.SUPPLY_FAN_STATUS, 0.2)
+    ]
+    assert (
+        _gate(monkeypatch, setback, {Role.SUPPLY_FAN_STATUS: 0.9, Role.SUPPLY_FAN_SPEED: 0.1}) == []
+    )
+    for name in ("condenser_water_reset", "cooling_tower_approach"):
+        rule = reg.get(name)
+        cws = {Role.CW_SUPPLY_TEMP: 0.9}
+        assert _gate(monkeypatch, rule, {**cws, Role.WETBULB_TEMP: 0.1}) == [
+            (Role.WETBULB_TEMP, 0.1)
+        ]
+        derived = {**cws, Role.OAT: 0.9, Role.OUTDOOR_RH: 0.1}
+        assert _gate(monkeypatch, rule, derived) == [(Role.OUTDOOR_RH, 0.1)]
+        # a wet-bulb point is read first: the OAT and RH are not used then
+        assert _gate(monkeypatch, rule, {**cws, Role.WETBULB_TEMP: 0.9, Role.OAT: 0.1}) == []

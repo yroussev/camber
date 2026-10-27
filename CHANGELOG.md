@@ -272,6 +272,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   not an object (`0`, `null`, `[]`, read as "no references") are now refused at launch. A
   reference that starts but cannot be compared (its equipment has no data for the role) is now
   named in a notice of `rule_run` and `rcx_report` too, not only of `sensor_trust`.
+- **The trust floor gates an input a rule cannot judge without (#320).** `dcv_verification`
+  was judged on an outdoor-air flow below the trust floor, because that input is optional (a
+  zone's CO2 alone is joined to its air handler), although the verdict is about that very
+  signal. The signal a check is judged on now gates it like a required input: the OA flow (else
+  the OA damper) of `dcv_verification`, the OAT of `outdoor_air_fraction`, the wet-bulb source of
+  `condenser_water_reset` and `cooling_tower_approach`, and the fan signal of
+  `night_weekend_setback`. At the default floor no finding of any catalog dataset changes.
 
 ### Security
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are

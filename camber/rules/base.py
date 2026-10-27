@@ -150,9 +150,15 @@ def _roles_to_load(rule) -> tuple:
 
 
 def _gate_roles(rule, frame: pd.DataFrame) -> tuple:
-    """The roles the sensor-health gate judges: required, plus the any-of roles present."""
+    """The roles the sensor-health gate judges: required, plus the any-of roles present, plus
+    the optional inputs the rule's ``gate_inputs(columns)`` names (0.111, #320: an input that is
+    optional only because the rule then returns nothing, such as the outdoor-air signal of
+    ``dcv_verification``, which it cannot judge without)."""
     req = tuple(rule.roles_required)
     extra = [r for g in roles_any_of(rule) for r in g if r in frame.columns and r not in req]
+    needed = getattr(rule, "gate_inputs", None)
+    if callable(needed):
+        extra += [r for r in needed(frame.columns) if r in frame.columns and r not in req]
     return req + tuple(dict.fromkeys(extra)) if extra else req
 
 

@@ -234,6 +234,18 @@ class DemandControlledVentilation:
             cooldown=frame.get(Role.COOLDOWN),
         )
 
+    def gate_inputs(self, columns) -> tuple:
+        """The ventilation signal the verdict rests on (the best one trended, see
+        :meth:`_oa_segments`), for the trust gate (0.111, #320). It is an optional role only so
+        that a zone's CO₂ alone is not "missing an input" (it returns no verdict, and
+        :class:`DcvSystemVerification` joins it to its air handler); a frame that has it is
+        judged on it, so a check on an untrusted OA signal is declined like one on an untrusted
+        CO₂."""
+        for role in _oa_candidates(self.full_outdoor_air):
+            if role in columns:
+                return (role,)
+        return ()
+
     def _floor_for(self, equip: str):
         if isinstance(self.oa_floor_cfm, Mapping):
             return self.oa_floor_cfm.get(equip)

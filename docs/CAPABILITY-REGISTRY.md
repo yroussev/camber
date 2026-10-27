@@ -143,7 +143,12 @@ a present input of a group the rule needs one of -- and the decline names each i
 reads that is below the floor, optional ones included, with that score ("declined -- untrusted
 input(s): co2 (trust 0.14), oa_airflow (trust 0.08)"; 0.111, #318). An optional input below the
 floor does not decline a check on its own: the rule runs without trusting it, and
-`sensor_trust` shows its score. A trend logged in
+`sensor_trust` shows its score. The exception is an input that is optional only because the rule
+then returns no verdict, which the check is judged on whenever it is there (0.111, #320): the
+outdoor-air signal of `dcv_verification` (OA flow, else the OA damper), the OAT of
+`outdoor_air_fraction`, the wet-bulb source of `condenser_water_reset` and
+`cooling_tower_approach` (a wet-bulb point, else the OAT and RH), and the fan signal of
+`night_weekend_setback` (the status, else the speed) gate the check like a required input. A trend logged in
 bursts covers only its bursts on that grid, so it can be below the floor although every stored
 sample is sound.
 
