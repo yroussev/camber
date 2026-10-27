@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from typing import Any
 
 from ._server import SUPPORTED_VERSIONS, McpServer
-from ._stdio import serve_stdio
-from ._workers import WorkerPool
+from ._stdio import Terminated, _terminated, serve_stdio
+from ._workers import MAX_CONCURRENT, MAX_QUEUED, WorkerPool
 
 log = logging.getLogger("camber.mcp")
 
@@ -216,23 +217,115 @@ def _log_templates(ctx) -> None:
         pass
 
 
+#: the matplotlib directory of one server: ``camber-mcp-mpl-<server pid>-<random>``
+_MPL_PREFIX = "camber-mcp-mpl-"
+#: a directory named without a process id (0.111 development builds) is swept once this old
+_MPL_LEGACY_AGE = 86400.0
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:  # e.g. another user's process: running
+        return True
+    return True
+
+
+def sweep_matplotlib_dirs(tmpdir: str | None = None) -> int:
+    """Remove the matplotlib directories that servers killed without a chance to clean up
+    (``SIGKILL``) left in ``tmpdir``: this user's, whose server process is gone. The number
+    removed (0.111, #309)."""
+    import re
+    import shutil
+    import stat
+    import tempfile
+
+    tmpdir = tmpdir or tempfile.gettempdir()
+    pattern = re.compile(re.escape(_MPL_PREFIX) + r"(?:(\d+)-)?[A-Za-z0-9_]+\Z")
+    removed = 0
+    try:
+        names = os.listdir(tmpdir)
+    except OSError:
+        return 0
+    uid = os.getuid() if hasattr(os, "getuid") else None
+    for name in names:
+        m = pattern.match(name)
+        if m is None:
+            continue
+        path = os.path.join(tmpdir, name)
+        try:
+            st = os.lstat(path)
+        except OSError:
+            continue
+        if not stat.S_ISDIR(st.st_mode) or (uid is not None and st.st_uid != uid):
+            continue
+        if m.group(1) is not None:
+            if int(m.group(1)) == os.getpid() or _pid_running(int(m.group(1))):
+                continue
+        elif time.time() - st.st_mtime < _MPL_LEGACY_AGE:
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+        removed += not os.path.exists(path)
+    return removed
+
+
 def isolate_matplotlib() -> str | None:
     """Point matplotlib's config and font cache at a fresh temporary directory for this server and
     its worker processes, unless ``MPLCONFIGDIR`` is already set; the directory (to remove at
     exit), or ``None``.
 
     0.111 (#304): rcx_report draws its charts with matplotlib, which otherwise writes its font
-    cache under ``$HOME`` on first use: the only file a read-only server would leave behind."""
+    cache under ``$HOME`` on first use: the only file a read-only server would leave behind.
+    #309: the name carries this process's id, and the directories of servers that were killed
+    (``SIGKILL``, which no process can clean up after) are swept first."""
     import tempfile
 
     if os.environ.get("MPLCONFIGDIR"):
         return None
     try:
-        path = tempfile.mkdtemp(prefix="camber-mcp-mpl-")
+        sweep_matplotlib_dirs()
+        path = tempfile.mkdtemp(prefix=f"{_MPL_PREFIX}{os.getpid()}-")
     except OSError:
         return None
     os.environ["MPLCONFIGDIR"] = path
     return path
+
+
+def _on_signals():
+    """Make ``SIGTERM`` and ``SIGHUP`` stop the session like Ctrl-C does (a log line, every call
+    stopped, the temporary directory removed; #309): raise :class:`Terminated` in this thread,
+    once. The previous handlers, to restore, or ``None`` off the main thread."""
+    import signal
+    import threading
+
+    if threading.current_thread() is not threading.main_thread():
+        return None
+    wanted = [getattr(signal, n) for n in ("SIGTERM", "SIGHUP") if hasattr(signal, n)]
+
+    def handler(signum, _frame):
+        for sig in wanted:  # cleanup runs once; a second signal must not interrupt it
+            signal.signal(sig, signal.SIG_IGN)
+        raise Terminated(signum)
+
+    previous = {}
+    for sig in wanted:
+        try:
+            previous[sig] = signal.signal(sig, handler)
+        except (OSError, ValueError):
+            pass
+    return previous
+
+
+def _restore_signals(previous) -> None:
+    import signal
+
+    for sig, h in (previous or {}).items():
+        try:
+            signal.signal(sig, h if h is not None else signal.SIG_DFL)
+        except (OSError, ValueError):
+            pass
 
 
 def _setup_logging() -> None:
@@ -277,13 +370,32 @@ def launch(
             config=config,
             min_trust=min_trust,
         )
-        if int(max_concurrent) < 1 or int(max_queued) < 0:
-            raise LaunchError("--max-concurrent must be 1 or more and --max-queued 0 or more")
+        if not 1 <= int(max_concurrent) <= MAX_CONCURRENT:
+            raise LaunchError(f"--max-concurrent must be from 1 to {MAX_CONCURRENT}")
+        if not 0 <= int(max_queued) <= MAX_QUEUED:
+            raise LaunchError(f"--max-queued must be from 0 to {MAX_QUEUED}")
     except LaunchError as exc:  # a usage mistake: exit 2, like the argument parser's (#296)
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _log_templates(ctx)
-    mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
+    previous = _on_signals()
+    mpl_dir = None
+    try:
+        mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
+        return _serve(capabilities, ctx, max_concurrent, max_queued)
+    except Terminated as exc:  # before the session started
+        return _terminated(exc)
+    finally:
+        try:
+            if mpl_dir is not None:
+                import shutil
+
+                shutil.rmtree(mpl_dir, ignore_errors=True)
+        finally:
+            _restore_signals(previous)
+
+
+def _serve(capabilities, ctx, max_concurrent: int, max_queued: int) -> int:
     server = McpServer(capabilities.default_registry(), ctx)
     # the workers build the same registry: the module this process imported it from
     workers = WorkerPool(
@@ -303,10 +415,4 @@ def launch(
         workers.max_concurrent,
         workers.max_queued,
     )
-    try:
-        return serve_stdio(server, workers=workers)
-    finally:
-        if mpl_dir is not None:
-            import shutil
-
-            shutil.rmtree(mpl_dir, ignore_errors=True)
+    return serve_stdio(server, workers=workers)

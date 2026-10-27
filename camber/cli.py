@@ -356,17 +356,16 @@ def _unit_interval(value: str) -> float:
     return x
 
 
-def _at_least(low: int):
-    """argparse ``type``: an integer of at least ``low`` (``mcp --max-concurrent``, 0.111)."""
+def _whole_number(low: int, high: int):
+    """argparse ``type``: an integer from ``low`` to ``high`` written in ASCII digits
+    (``mcp --max-concurrent``, 0.111; the upper bound and the digits #309)."""
 
     def parse(value: str) -> int:
-        try:
-            n = int(value)
-        except (TypeError, ValueError):
-            raise argparse.ArgumentTypeError(f"not a whole number: {value!r}") from None
-        if n < low:
-            raise argparse.ArgumentTypeError(f"must be {low} or more (got {value})")
-        return n
+        if not re.fullmatch(r"-?[0-9]+", str(value)):
+            raise argparse.ArgumentTypeError(f"not a whole number: {value!r}")
+        if len(value) > 12 or not low <= int(value) <= high:
+            raise argparse.ArgumentTypeError(f"must be from {low} to {high} (got {value})")
+        return int(value)
 
     return parse
 
@@ -3307,18 +3306,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pmcp.add_argument(
         "--max-concurrent",
-        type=_at_least(1),
+        type=_whole_number(1, 64),
         default=2,
         metavar="N",
-        help="tool calls run at once, each in its own worker process (default 2)",
+        help="tool calls run at once, each in its own worker process, 1-64 (default 2)",
     )
     pmcp.add_argument(
         "--max-queued",
-        type=_at_least(0),
+        type=_whole_number(0, 1024),
         default=8,
         metavar="N",
-        help="tool calls that may wait for a free worker; beyond that a call is refused "
-        "as busy (default 8)",
+        help="tool calls that may wait for a free worker, 0-1024; beyond that a call is "
+        "refused as busy (default 8)",
     )
     pmcp.set_defaults(func=_cmd_mcp)
 

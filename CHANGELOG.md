@@ -139,6 +139,27 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   - docs/MCP.md no longer says the tools "read trends" (none returns time-series values), and
     docs/CLI.md says that `datasets ingest` takes the cache lock only while it writes to the
     cache, as it always has.
+- `camber mcp` worker processes, from the second round of the 0.111 acceptance test (#309):
+  - A worker that ended while idle (a crash, or the system stopping it for lack of memory) is
+    replaced before a call is given to it; the next call no longer fails with -32603. A call
+    whose worker ends under it is the retryable tool error `unavailable`, not -32603.
+  - `--max-concurrent` is 1 to 64 and `--max-queued` 0 to 1024, in plain digits. A huge value
+    started one thread per slot and crashed with a traceback or used memory without bound; it
+    now exits 2 with one line, as other launch mistakes do.
+  - `SIGTERM` and `SIGHUP` stop the server like Ctrl-C (a log line, calls stopped, exit 143 or
+    129) and remove matplotlib's temporary directory, which they left behind. The directory of
+    a server that was killed with `SIGKILL` is removed by the next `camber mcp` to start.
+  - Killing a worker also kills the processes it started: matplotlib's font scan
+    (`system_profiler` on macOS) no longer runs on for about 11 s after a cancel, a timeout or
+    the server's exit.
+  - A worker is replaced after a call that grew it past 1 GiB, so an idle server no longer holds
+    the memory of its largest call.
+  - A `tools/call` that reuses the id of a call still in progress is refused (-32600); both used
+    to run and be answered with the same id, and one cancel stopped both.
+  - A timeout says the call "was stopped" (the worker is killed, not abandoned) and comes within
+    about a second of the 120 s cap instead of 5 s after it.
+  - docs/MCP.md says that the time cap counts from when a call reaches a worker, how long a call
+    can wait in the queue behind long ones, and a wait over a second is logged.
 
 ### Security
 - **Text from the data can no longer forge notices or pass for the tool's words (#291).**

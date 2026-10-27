@@ -178,7 +178,7 @@ def test_a_timed_out_call_is_killed_and_its_worker_replaced(session):
     _, msg = s.reply()
     res = msg["result"]
     assert res["isError"] and res["_meta"]["camber/error"]["code"] == "timeout"
-    assert res["content"][0]["text"] == "timeout: 'spin' ran longer than 1 s and was abandoned"
+    assert res["content"][0]["text"] == "timeout: 'spin' ran longer than 1 s and was stopped"
     assert _wait_dead([first], 2.0)  # the CPU loop stopped with its process
     s.call(2, "pid")
     _, msg = s.reply()
@@ -390,3 +390,187 @@ def test_camber_mcp_exits_cleanly_when_the_client_closes_stdout_only(tmp_path):
             proc.wait()
     assert rc == 0, err.decode()
     assert b"Fatal Python error" not in err and b"closed the output stream" in err
+
+
+# ---------------------------------------------------------------------------- #309 (UAT round 2)
+
+
+def _wait_for(pred, within: float = 10.0):
+    end = time.monotonic() + within
+    while time.monotonic() < end:
+        got = pred()
+        if got:
+            return got
+        time.sleep(0.05)
+    return pred()
+
+
+def test_a_worker_that_died_while_idle_is_replaced_before_the_next_call(session):
+    s = session(max_concurrent=2)
+    for i in range(6):  # every idle worker killed, and a call sent at once
+        dead = s.note_pids()
+        for pid in dead:
+            os.kill(pid, signal.SIGKILL)
+        s.call(i, "pid")
+        _, msg = s.reply()
+        assert "result" in msg and not msg["result"].get("isError"), msg
+        assert msg["result"]["structuredContent"]["pid"] not in dead
+    # with no call at all, a dead worker is noticed and replaced on its own
+    dead = s.note_pids()
+    for pid in dead:
+        os.kill(pid, signal.SIGKILL)
+    fresh = _wait_for(lambda: [p for p in s.note_pids() if p not in dead], 5.0)
+    assert fresh and all(_alive(p) for p in fresh)
+
+
+def test_a_worker_killed_mid_call_is_a_retryable_tool_error(session):
+    s = session(max_concurrent=1)
+    (first,) = s.note_pids()
+    s.call(1, "sleep", seconds=30)
+    time.sleep(0.5)
+    os.kill(first, signal.SIGKILL)  # as the system does when memory runs out
+    _, msg = s.reply()
+    res = msg["result"]
+    assert res["isError"]
+    assert res["_meta"]["camber/error"] == {"code": "unavailable", "data": {"retryable": True}}
+    assert "retry the call" in res["content"][0]["text"]
+    s.call(2, "pid")
+    assert s.reply()[1]["result"]["structuredContent"]["pid"] != first
+
+
+@pytest.mark.parametrize("how", ["cancel", "end_of_input"])
+def test_a_killed_worker_takes_its_child_processes_with_it(session, tmp_path, how):
+    s = session(max_concurrent=1)
+    path = tmp_path / f"child-{how}.pid"
+    s.call(1, "spawn", path=str(path))
+    assert _wait_for(lambda: path.exists() and path.read_text(), 10.0)
+    child = int(path.read_text())
+    assert _alive(child)
+    if how == "cancel":
+        s.cancel(1)
+    else:
+        s.close()
+    assert _wait_dead([child], 2.0), "the worker's child outlived it"
+
+
+def test_a_second_call_with_an_id_in_progress_is_refused(session):
+    s = session(max_concurrent=2)
+    s.call(7, "sleep", seconds=0.8)
+    time.sleep(0.1)
+    t0 = time.monotonic()
+    s.call(7, "pid")
+    at, msg = s.reply()
+    assert at - t0 < 0.5 and msg["id"] == 7 and msg["error"]["code"] == -32600
+    _, msg = s.reply()
+    assert msg["id"] == 7 and msg["result"]["structuredContent"] == {"slept": True}
+    s.call(7, "pid")  # free again once answered
+    assert "pid" in s.reply()[1]["result"]["structuredContent"]
+    with pytest.raises(queue.Empty):
+        s.reply(0.3)
+
+
+def test_a_frozen_worker_is_stopped_at_the_cap_with_the_default_grace(session):
+    s = session(max_seconds=0.5, max_concurrent=1)
+    t0 = time.monotonic()
+    s.call(1, "freeze")
+    at, msg = s.reply()
+    assert 0.5 < at - t0 < 3.0
+    text = msg["result"]["content"][0]["text"]
+    assert text == "timeout: 'freeze' ran longer than 0.5 s and was stopped"
+
+
+def test_a_worker_that_grew_past_the_threshold_is_replaced(session):
+    s = session(max_concurrent=1, recycle_bytes=400 << 20)
+    (first,) = s.note_pids()
+    s.call(1, "grow", mb=1)
+    assert s.reply()[1]["result"]["structuredContent"]["pid"] == first
+    assert s.note_pids() == [first]  # a small call keeps its worker
+    s.call(2, "grow", mb=600)
+    assert s.reply(60)[1]["result"]["structuredContent"]["pid"] == first
+    assert _wait_dead([first], 3.0)
+    fresh = _wait_for(lambda: s.note_pids(), 30.0)
+    assert fresh and fresh != [first]
+
+
+def test_the_worker_limits_have_an_upper_bound(tmp_path):
+    from camber.cli import _build_parser
+    from camber.mcp import launch
+    from camber.mcp._workers import MAX_CONCURRENT, MAX_QUEUED
+
+    def parse(*extra):
+        return _build_parser().parse_args(["mcp", "--store", "s", "--allow", "a", *extra])
+
+    args = parse("--max-concurrent", str(MAX_CONCURRENT), "--max-queued", str(MAX_QUEUED))
+    assert (args.max_concurrent, args.max_queued) == (MAX_CONCURRENT, MAX_QUEUED)
+    for bad in (
+        ["--max-concurrent", str(MAX_CONCURRENT + 1)],
+        ["--max-concurrent", "100000"],
+        ["--max-concurrent", "99999999999999999999"],
+        ["--max-concurrent", "1e20"],
+        ["--max-concurrent", "٣"],  # an Arabic-Indic three
+        ["--max-concurrent", " 2"],
+        ["--max-concurrent", "0x10"],
+        ["--max-queued", str(MAX_QUEUED + 1)],
+    ):
+        with pytest.raises(SystemExit):
+            parse(*bad)
+    with pytest.raises(ValueError):
+        WorkerPool("x:y", max_concurrent=MAX_CONCURRENT + 1)
+    with pytest.raises(ValueError):
+        WorkerPool("x:y", max_queued=MAX_QUEUED + 1)
+    (tmp_path / "facility_id=hq").mkdir()
+    assert launch(str(tmp_path), allow=["hq"], max_concurrent=10**20) == 2
+    assert launch(str(tmp_path), allow=["hq"], max_queued=MAX_QUEUED + 1) == 2
+
+
+def test_the_matplotlib_dirs_of_killed_servers_are_swept(tmp_path):
+    from camber.mcp._launch import sweep_matplotlib_dirs
+
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    stale = tmp_path / f"camber-mcp-mpl-{gone.pid}-abc123"
+    live = tmp_path / f"camber-mcp-mpl-{os.getppid()}-abc123"
+    old = tmp_path / "camber-mcp-mpl-k2j_4x9q"
+    recent = tmp_path / "camber-mcp-mpl-zz9_8y7p"
+    other = tmp_path / "camber-mcp-mplfoo"
+    for d in (stale, live, old, recent, other):
+        d.mkdir()
+    (stale / "fontlist.json").write_text("{}")
+    os.utime(old, (time.time() - 2 * 86400,) * 2)
+    assert sweep_matplotlib_dirs(str(tmp_path)) == 2
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        p.name for p in (live, recent, other)
+    )
+
+
+@pytest.mark.parametrize("sig", ["SIGTERM", "SIGHUP"])
+def test_camber_mcp_stops_cleanly_on_sigterm_and_sighup(tmp_path, sig):
+    (tmp_path / "facility_id=hq").mkdir()
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "MPLCONFIGDIR"}
+    env["TMPDIR"] = str(tmp)
+    proc = subprocess.Popen(
+        [sys.executable, os.path.join(HERE, "_mcp_driver.py"), "mcp", "--store", str(tmp_path)]
+        + ["--allow", "hq"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    try:
+        assert _wait_for(lambda: any(p.name.startswith("camber-mcp-mpl-") for p in tmp.iterdir()))
+        time.sleep(1.0)  # serving
+        proc.send_signal(getattr(signal, sig))
+        rc = proc.wait(10)
+        err = proc.stderr.read().decode()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        proc.stdin.close()
+        proc.stdout.close()
+        proc.stderr.close()
+    assert rc == 128 + getattr(signal, sig), err
+    assert f"{sig} received; exiting" in err and "Traceback" not in err
+    assert list(tmp.iterdir()) == []

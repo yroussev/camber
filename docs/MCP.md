@@ -93,8 +93,9 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   `--config` for the facility to use your own. Any other facility without a config runs every
   stored equipment class with every built-in rule at its defaults, with a banner saying so.
 - `--min-trust` is a number from 0 to 1 (default 0.5).
-- `--max-concurrent N` is how many tool calls run at once (default 2), each in its own worker
-  process; `--max-queued N` is how many more may wait for a free worker (default 8). A call
+- `--max-concurrent N` is how many tool calls run at once (1 to 64, default 2), each in its own
+  worker process; `--max-queued N` is how many more may wait for a free worker (0 to 1024,
+  default 8). Both take plain digits; anything else, or a value out of range, exits 2. A call
   beyond that is refused at once with the tool error `busy` (retry shortly). Each worker holds
   the memory of the call it runs, so raise these with care on a large store.
 
@@ -104,9 +105,12 @@ Any other launch mistake (a missing or unreadable store, `--min-trust` out of ra
 The configuration is fixed for the life of the process. The client cannot change the store, the
 allowlist or the trust floor; to serve something else, start another server.
 
-Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary directory removed when
-the server exits, unless `MPLCONFIGDIR` is set, so a call writes nothing under your home
-directory (0.111, #304).
+Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary directory
+(`camber-mcp-mpl-<server pid>-*`) removed when the server exits, unless `MPLCONFIGDIR` is set, so
+a call writes nothing under your home directory (0.111, #304). `SIGTERM` and `SIGHUP` stop the
+server like Ctrl-C: a log line, every call stopped, the directory removed, exit status 143 or 129.
+No process can clean up after `SIGKILL`; the next `camber mcp` to start removes the directories of
+servers that are no longer running (#309).
 
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
 with the outcome and the time taken) goes to stderr. Anything a tool prints by mistake is sent to
@@ -118,13 +122,29 @@ one is started with the server and a replacement is started as soon as one is ki
 other message -- `ping`, `server/discover`, `initialize`, the lists, `prompts/get`,
 `completion/complete` and `notifications/cancelled` -- is answered at once, even while long calls run, so replies to
 concurrent requests may come in a different order from the requests; each carries its own id.
-The worker of a call is killed, and its CPU and memory released, when:
+The worker of a call is killed with every process it started (matplotlib's font scan runs some),
+and its CPU and memory released, when:
 
-- the call runs past its time cap (120 s): the reply is `timeout`;
+- the call runs past its time cap (120 s, answered within about a second of it): the reply is
+  `timeout` ("... and was stopped");
 - the client sends `notifications/cancelled` for it: there is no reply, as the specification
   asks (a call still waiting for a worker is simply dropped);
 - the client closes stdin, or closes its end of stdout: every running call is stopped and the
   server exits within about a second. Read the replies you want before closing stdin.
+
+A worker is also replaced after a call during which it grew past 1 GiB, so an idle server does not
+hold the memory of its largest call. A worker that ends on its own (a crash, or the system stopping
+it for lack of memory) is replaced: when it was idle, before any call is given to it; when it was
+running a call, that call answers `unavailable` with `"retryable": true` (retry it, and narrow it
+if it fails again).
+
+**Waiting for a worker.** The time cap counts from when a call reaches a worker, not from when it
+was sent. While `--max-concurrent` calls are running, every further tool call waits in the queue,
+even a quick one such as `rule_params`, `check_citations` or `dataset_search`: behind two long
+calls it can wait up to the time cap, and the last of a full queue up to (`--max-queued` /
+`--max-concurrent` + 1) times the cap (5 × 120 s with the defaults). A wait over a second is logged
+on stderr. Give quick calls room with a higher `--max-concurrent`, or set the client's request
+timeout above the longest wait you allow.
 
 No extra is needed: the server uses the standard library only. `pip install "camber-toolkit[mcp]"`
 is accepted and installs nothing more; it marks the intent.
@@ -191,13 +211,14 @@ in `_meta["camber/error"]`. `busy` means the server is already running and queue
 as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "max_queued": M}`. `unavailable` means the stored data could not be read: its `data` says
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
 `camber datasets ingest` replaced) or not (a damaged or unreadable file), and names the facility.
+It is also the answer when the worker running the call ended under it (`"retryable": true`).
 A date the calendar does not have (`2025-02-30`) is `invalid_params`; a window outside the
 stored data is an ordinary, empty result with a notice. Everything else is a JSON-RPC error:
 
 | Code | When |
 |---|---|
 | -32700 | the line is not JSON or not UTF-8 |
-| -32600 | not a JSON-RPC 2.0 request object: a batch, a line over 1 MiB, a duplicate key, a lone surrogate, an integer too long to read, `jsonrpc` not `"2.0"`, a missing `method`, an `id` that is not a string or integer, a second `initialize` |
+| -32600 | not a JSON-RPC 2.0 request object: a batch, a line over 1 MiB, a duplicate key, a lone surrogate, an integer too long to read, `jsonrpc` not `"2.0"`, a missing `method`, an `id` that is not a string or integer, a second `initialize`, a `tools/call` with the id of a call still in progress (#309) |
 | -32601 | an unknown method, or one the request's protocol revision does not have |
 | -32602 | bad `params`: missing or malformed `_meta` keys, no handshake and no `_meta`, an unknown tool or prompt, a prompt argument missing, unknown or not a string, an unknown cursor, a completion `ref` that is not a known prompt (`ref/resource` included) or an unknown argument |
 | -32022 | `UnsupportedProtocolVersion`, with the supported versions in `data` |
