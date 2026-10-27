@@ -678,9 +678,12 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
         )
         return
     if p["legacy"]:
-        for f in sorted(os.listdir(fdir)):
-            if f.endswith(".parquet"):
-                _swap.discard(os.path.join(fdir, f))
+        from ..store._fence import guard
+
+        with guard(fdir):  # one fence over every file, so no reader sees half of them (#306)
+            for f in sorted(os.listdir(fdir)):
+                if f.endswith(".parquet"):
+                    _swap.discard(os.path.join(fdir, f))
         store._invalidate_catalog()
         from ..resolve import clear_store_cache
 

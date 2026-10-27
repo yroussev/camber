@@ -17,6 +17,18 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Fixed
+- **A reader no longer gets a wrong answer while a facility is re-ingested (#306).** A forced
+  `camber datasets ingest` swaps a facility's partition in with two renames, and for a moment
+  between them the facility is absent; a `camber mcp` call (or a store read from the CLI) that
+  listed it then answered from an empty or partly listed facility -- a fault fewer, 0 %
+  coverage, "no stored data", `not_found` -- with nothing to tell it from a real answer. Every
+  writer that replaces or removes a facility's files (the ingest's swap, `datasets remove`, a
+  subset's dropped facility, `prune`, `drop_partition`, `retention apply`, `migrate-partitions`,
+  a facility archive or purge) now marks the facility in a per-facility write fence
+  (`<store>/_fence/<facility_id>`). A read waits up to a second for a swap in progress, a read
+  that a swap overlapped is read again once, and a capability call that a swap overlapped is
+  `unavailable` with `"retryable": true` whatever it would have answered; a retry gets the new
+  data. Readers still take no lock, and calls on other facilities are not affected.
 - The notice after the summary's citation check says what it removed: "N sentence(s) ... were
   removed: they state a figure that no fact they cite carries", or a count of citations of an
   unknown fact id (the sentences kept), instead of "N statement(s) were removed" for both. A

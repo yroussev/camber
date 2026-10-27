@@ -448,8 +448,9 @@ def _workspace_of_store(root: str):
 
 
 # What a ParquetStore root holds besides its ``facility_id=`` partitions (0.107, #215, #217): the
-# registry, the tombstones, the workspace marker, the point catalog and its generation, and the
-# single-writer lock file. One list for `camber serve` and the store commands (0.108, #233).
+# registry, the tombstones, the workspace marker, the point catalog and its generation, the
+# single-writer lock file and the write fences (#306). One list for `camber serve` and the store
+# commands (0.108, #233).
 _STORE_MARKERS = (
     _FACILITIES,
     _TOMBSTONES,
@@ -458,6 +459,7 @@ _STORE_MARKERS = (
     "_catalog.gen",
     "_migrated.json",
     "_lock",
+    "_fence",
 )
 
 

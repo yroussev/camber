@@ -190,7 +190,8 @@ tool result with `isError: true` and a `code: message` text (`invalid_params`, `
 in `_meta["camber/error"]`. `busy` means the server is already running and queueing as many calls
 as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "max_queued": M}`. `unavailable` means the stored data could not be read: its `data` says
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
-`camber datasets ingest` replaced) or not (a damaged or unreadable file), and names the facility.
+`camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
+call never answers from a half-swapped facility) or not (a damaged or unreadable file), and names the facility.
 A date the calendar does not have (`2025-02-30`) is `invalid_params`; a window outside the
 stored data is an ordinary, empty result with a notice. Everything else is a JSON-RPC error:
 
