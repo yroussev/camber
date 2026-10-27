@@ -260,7 +260,10 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    handler's own fact ids are citations: any other `[F1@x]` reads `(F1@x)`, and a fact's `text`
    holds no citation at all. `data` keeps the stored values exactly (so an id can be passed
    back), except that any string in `data` or `facts` longer than 2,000 characters is cut the
-   same way, so one huge name does not make a whole facility `too_large`. Schema `pattern`s use
+   same way, so one huge name does not make a whole facility `too_large`; a result with a cut
+   value has `truncated` set and a notice saying how many were cut (0.111, #320). A capability's
+   own output named in `Capability.own_output` is never cut: `check_citations` returns the
+   caller's `verified_text` and sentences whole. Schema `pattern`s use
    ECMA-262's `$` (the end of the string; Python's `$` also matches before a final newline). New
    equipment ids, classes and roles with such characters are refused at ingest (see
    [SCALE.md](SCALE.md#facility-identity-why-an-id-not-a-name)).

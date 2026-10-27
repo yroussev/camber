@@ -254,6 +254,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **`camber mcp` usage mistakes are one line (#315).** A missing, malformed or out-of-range
   option now prints one line on stderr (exit 2), as docs/CLI.md says, instead of the usage block
   and the error; `camber mcp -h` shows `[--config PATH ...]` for the repeatable option.
+- **`check_citations` returns the whole corrected text (#320).** With `detail: true`, its
+  `verified_text` was cut at 2,000 characters, mid-sentence and with `truncated: false`, so a
+  fully supported triage of normal length lost its last sentences without a word. The tool's
+  own output (`verified_text` and the sentences) is now never cut. The 2,000-character cap
+  still applies to values from the data, and a result with a value cut by it now has
+  `truncated: true` and a notice saying how many values were cut.
 
 ### Security
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are
