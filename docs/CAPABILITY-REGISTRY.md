@@ -130,7 +130,9 @@ whose rule reads that point on that equipment carries `conditional_on` (the comp
 `rule_run` and `finding_detail`, its fact says "conditional on sensor_drift:supply_air_temp
 warn ...", and a notice says to treat it as a sensor problem first. In `rcx_report` such an
 issue names it in its fact the same way, and the sensor issue ranks just above the first issue
-that is conditional on it, whatever their severities.
+that is conditional on it, whatever their severities. A reference that cannot be compared (its
+equipment has no data for the role, say) is named in a notice of `sensor_trust`, `rule_run` and
+`rcx_report` alike, since the findings on that point were not checked against it (0.111, #320).
 
 **The trust floor and `sensor_trust` read one score** (0.111, #311). A rule's input is scored
 on its equipment's whole run frame -- every role at the run config's resample, over the run's

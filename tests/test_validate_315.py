@@ -54,7 +54,7 @@ _WRONG_TYPE = [
     ("outdoor_air_fraction", {"min_oa_pct": "500"}, "'500' is text, not a number"),
     ("outdoor_air_fraction", {"min_oa_pct": "-50"}, "is text, not a number"),
     ("outdoor_air_fraction", {"min_oa_pct": True}, "True is not a number"),
-    ("outdoor_air_fraction", {"min_oa_pct_by_month": [20.0] * 11 + ["9"]}, "is text"),
+    ("outdoor_air_fraction", {"min_oa_pct_by_month": {"1": 20.0, "2": "9"}}, "is text"),
     ("outdoor_air_fraction", {"fan_gate": "no"}, "'no' is not true or false"),
     ("outdoor_air_fraction", {"fan_gate": 0}, "is not true or false"),
     ("night_weekend_setback", {"start_hour": 7.5}, "7.5 is not a whole number"),

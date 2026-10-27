@@ -260,6 +260,18 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   own output (`verified_text` and the sentences) is now never cut. The 2,000-character cap
   still applies to values from the data, and a result with a value cut by it now has
   `truncated: true` and a notice saying how many values were cut.
+- **A rule parameter of the wrong shape is refused (#320).** A config with `null` where a
+  parameter has a value by default, a list (`[7]`) or an object where it takes one value, or one
+  value where it takes a list (`occupied_days: 3`) was accepted at launch; every call then failed
+  as `invalid_params` with Python error text, which no argument the model sends can fix.
+  `camber mcp --config`, `camber run` and `rule_run`'s `params` now refuse it with the same one
+  line as the other type errors (`'start_hour': null is not a whole number (...)`). A parameter
+  whose default is null still accepts null.
+- **Sensor reference edges (#320).** In `report.rcx.references`, a warn level above the fault
+  level (`bias_warn` 5 with `bias_fault` 1, which rated a +3 bias "fault") and a value that is
+  not an object (`0`, `null`, `[]`, read as "no references") are now refused at launch. A
+  reference that starts but cannot be compared (its equipment has no data for the role) is now
+  named in a notice of `rule_run` and `rcx_report` too, not only of `sensor_trust`.
 
 ### Security
 - **Redaction gaps closed (#318).** The server's own directories (home, store, temp ...) are

@@ -37,6 +37,7 @@ from ._common import (
     narrow,
     reference_conditions,
     reference_findings,
+    reference_notes_banner,
     rule_names,
     run,
     severity_counts,
@@ -167,11 +168,14 @@ def _run_for(ctx, arguments: dict):
     return run(ctx, config, base_dir), from_caller, notice, (start, end)
 
 
-def _rows(ctx, fid: str, res) -> list:
+def _rows(ctx, fid: str, res, notes: list | None = None) -> list:
     """The run's findings as rows, each marked ``conditional_on`` the configured sensor
-    references of its inputs that disagree (0.111, #313)."""
+    references of its inputs that disagree (0.111, #313); what could not be compared is added
+    to ``notes`` (#320)."""
     ids = finding_ids(res.findings)
-    refs, _notes = reference_findings(ctx, fid, res)
+    refs, ref_notes = reference_findings(ctx, fid, res)
+    if notes is not None:
+        notes.extend(ref_notes)
     conds = reference_conditions(res.findings, refs, getattr(res, "registry", None))
     rows = []
     for i, f, cond in zip(ids, res.findings, conds):
@@ -186,7 +190,8 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     """Run the FDD rules on one allowed facility and return the findings, worst first."""
     fid = arguments["facility_id"]
     res, from_caller, config_notice, (start, end) = _run_for(ctx, arguments)
-    rows = by_severity(_rows(ctx, fid, res))
+    ref_notes: list = []
+    rows = by_severity(_rows(ctx, fid, res, ref_notes))
     counts = severity_counts(rows)
     sev_floor = SEVERITIES.index(arguments.get("min_severity") or "info")
     listed = [r for r in rows if SEVERITIES.index(r["severity"]) <= sev_floor]
@@ -249,6 +254,9 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         if r.get("conditional_on") and SEVERITIES.index(r["severity"]) > sev_floor:
             hidden[r["severity"]] = hidden.get(r["severity"], 0) + 1
     notice = conditional_banner(sum(1 for r in listed if r.get("conditional_on")), hidden)
+    if notice:
+        banners.append(notice)
+    notice = reference_notes_banner(ref_notes, arguments.get("equips"))  # 0.111 (#320)
     if notice:
         banners.append(notice)
     data = {

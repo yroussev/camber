@@ -3,21 +3,39 @@
 1. ``check_citations`` returns the caller's whole ``verified_text`` (and sentences), never cut
    at the 2,000-character cap for values from the data; any value that is cut is said
    (``truncated`` and a notice).
+2. A rule parameter of the wrong shape (null where it has a value by default, a list or a map
+   where it takes one value, one value where it takes a list) is refused at launch, by
+   ``camber run`` and in ``rule_run``'s ``params``, in the #315 wording.
+3. ``report.rcx.references``: a warn level above the fault level and a value that is not an
+   object are refused; a reference that cannot be compared is said in ``rule_run`` and
+   ``rcx_report`` too.
 """
 
+import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import _rcx_fixture as fx  # noqa: E402
 
 from camber.capabilities import (  # noqa: E402
     CallContext,
     Capability,
+    CapabilityError,
     CapabilityResult,
     Registry,
     default_registry,
 )
 from camber.capabilities._sanitize import MAX_VALUE  # noqa: E402
+from camber.config import _preflight_config, run_config  # noqa: E402
+from camber.report.rcx import RcxOptions  # noqa: E402
+from camber.rules.param_docs import _value_problem  # noqa: E402
+
+FID = fx.FID
 
 REG = default_registry()
 
@@ -74,3 +92,121 @@ def test_a_cut_value_from_the_data_is_said(tmp_path):
     assert len(res.data["name"]) == MAX_VALUE and res.data["ok"] == "short"
     assert res.truncated
     assert any("1 value(s) longer than 2,000 characters are cut" in b for b in res.banners)
+
+
+# ------------------------------------------------------------- 2. parameter shapes
+
+
+@pytest.fixture()
+def store(tmp_path):
+    return fx.make_store(tmp_path, meta=None)
+
+
+def _config(rule, params):
+    return {
+        "source": {"kind": "store", "store": "store", "facility_id": FID},
+        "equipment": [{"class": "AHU"}],
+        "rules": [{"name": rule, "params": params}],
+    }
+
+
+_WRONG_SHAPE = [
+    ("night_weekend_setback", {"start_hour": None}, "null is not a whole number"),
+    ("night_weekend_setback", {"start_hour": [7]}, r"\[7\] is a list, not a whole number"),
+    ("night_weekend_setback", {"start_hour": {"v": 7}}, "is a map, not a whole number"),
+    ("night_weekend_setback", {"occupied_days": 3}, r"3 is not a list \(each item a whole"),
+    ("night_weekend_setback", {"min_unoccupied_run_pct": None}, "null is not a number"),
+    ("outdoor_air_fraction", {"min_oa_pct": [20]}, r"\[20\] is a list, not a number"),
+    ("outdoor_air_fraction", {"min_oa_pct_by_month": [20.0] * 12}, "is a list, not a map"),
+    ("outdoor_air_fraction", {"fan_gate": None}, "null is not true or false"),
+]
+
+
+@pytest.mark.parametrize(
+    "rule, params, message", _WRONG_SHAPE, ids=[m for _r, _p, m in _WRONG_SHAPE]
+)
+def test_a_wrong_shape_is_refused_at_launch_and_by_a_run(store, tmp_path, rule, params, message):
+    for check in (_preflight_config, run_config):
+        with pytest.raises(ValueError, match=message) as e:
+            check(_config(rule, params), base_dir=str(tmp_path))
+        assert f"see `camber rules params {rule}`" in str(e.value)
+
+
+def test_a_wrong_shape_in_rule_run_params_is_refused(store):
+    ctx = CallContext(store=store.root, allowed_facilities=frozenset({FID}))
+    for params, message in (
+        ({"night_weekend_setback": {"min_unoccupied_run_pct": None}}, "null is not a number"),
+        ({"night_weekend_setback": {"occupied_days": 3}}, "3 is not a list"),
+        ({"outdoor_air_fraction": {"min_oa_pct": {"v": 7}}}, "is a map, not a number"),
+    ):
+        with pytest.raises(CapabilityError) as e:
+            REG.call("rule_run", {"facility_id": FID, "rules": list(params), "params": params}, ctx)
+        assert e.value.code == "invalid_params" and message in e.value.message
+        assert "NoneType" not in e.value.message and "iterable" not in e.value.message
+
+
+def test_the_shapes_a_parameter_takes_pass():
+    ok = [
+        ("night_weekend_setback", "unoccupied_heat_sp_f", None),  # its default is null
+        ("night_weekend_setback", "occupied_days", [0, 1, 2]),
+        ("dcv_verification", "oa_floor_cfm", {"ROOM-1": 100.0}),  # one number or a map
+        ("dcv_verification", "oa_floor_cfm", 100.0),
+        ("reheat_capacity_shortfall", "heat_sp_f", {"VAV-1": 70.0}),
+        ("overcooling_severity", "tiers", {"info": 1.0, "warn": 2.0, "fault": 3.0}),
+        ("overcooling_severity", "shortfall_share_pct", None),
+        ("outdoor_air_fraction", "min_oa_pct_by_month", {"6": 12.0}),
+    ]
+    for rule, key, value in ok:
+        assert _value_problem(rule, key, value) is None, (rule, key, value)
+
+
+# ------------------------------------------------------------- 3. references
+
+
+def _refs(spec, unit="DemoAHU", role="supply_air_temp"):
+    return fx.config(references={unit: {role: spec}})
+
+
+@pytest.mark.parametrize(
+    "spec, message",
+    [
+        ({"equip": "DemoAHU2", "bias_warn": 5, "bias_fault": 1}, r"bias_warn \(5\) must not be"),
+        ({"equip": "DemoAHU2", "bias_warn": 6}, r"bias_warn \(6\) must not be above bias_fault"),
+        ({"equip": "DemoAHU2", "drift_fault": 0.5}, "drift_warn .* must not be above drift_fault"),
+    ],
+    ids=["both", "warn-over-default-fault", "fault-under-default-warn"],
+)
+def test_an_inverted_threshold_is_refused(store, tmp_path, spec, message):
+    with pytest.raises(ValueError, match=message):
+        _preflight_config(_refs(spec), base_dir=str(tmp_path))
+
+
+@pytest.mark.parametrize("refs", [0, None, [], "x", 1.5], ids=repr)
+def test_references_that_are_not_an_object_are_refused(store, tmp_path, refs):
+    config = fx.config(references=refs)
+    with pytest.raises(ValueError, match="report.rcx.references must map an equipment id"):
+        _preflight_config(config, base_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="report.rcx.references must map"):
+        RcxOptions.from_config(config["report"], base_dir=str(tmp_path))
+
+
+def test_empty_references_and_good_thresholds_pass(store, tmp_path):
+    _preflight_config(fx.config(references={}), base_dir=str(tmp_path))
+    spec = {"equip": "DemoAHU2", "bias_warn": 1.0, "bias_fault": 1.0, "drift_warn": 0.5}
+    _preflight_config(_refs(spec), base_dir=str(tmp_path))
+
+
+def test_a_reference_that_cannot_be_compared_is_said_by_rule_run_and_rcx_report(store, tmp_path):
+    path = tmp_path / "cfg.json"
+    path.write_text(json.dumps(_refs({"equip": "DemoAHU2", "role": "co2"})), encoding="utf-8")
+    _preflight_config(json.loads(path.read_text()), base_dir=str(tmp_path))  # starts
+    ctx = CallContext(store=store.root, allowed_facilities=frozenset({FID}), config=str(path))
+    for cap in ("rule_run", "rcx_report"):
+        res = REG.call(cap, {"facility_id": FID}, ctx)
+        notice = [b for b in res.banners if "could not be compared" in b]
+        assert len(notice) == 1, (cap, res.banners)
+        assert notice[0].startswith("1 configured sensor reference(s) could not be compared")
+        assert "DemoAHU supply_air_temp could not be loaded" in notice[0]
+        assert "DemoAHU2" in notice[0] and "co2" in notice[0]
+    other = REG.call("rule_run", {"facility_id": FID, "equips": ["DemoAHU2"]}, ctx)
+    assert not [b for b in other.banners if "could not be compared" in b]

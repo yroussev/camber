@@ -3137,6 +3137,57 @@ def _type_problem(kind: str, doc: ParamDoc, v) -> str | None:
     return None
 
 
+def _annotation(rule: str, name: str, depth: int = 0) -> str:
+    """The constructor annotation of the parameter ``name`` of the registered rule ``rule`` as
+    text (a delegating rule's parameter: the delegate's), or ``""`` when it has none."""
+    factories = _rule_factories()
+    if rule not in factories or depth > 5:
+        return ""
+    for p in _signature_params(factories[rule][0]):
+        if p.name == name:
+            ann = p.annotation
+            if ann is inspect.Parameter.empty:
+                return ""
+            return ann if isinstance(ann, str) else getattr(ann, "__name__", str(ann))
+    target = DELEGATES.get(rule)
+    return _annotation(target, name, depth + 1) if target else ""
+
+
+_WHAT = {"flag": "true or false", "integer": "a whole number", "number": "a number"}
+
+
+def _shape_problem(rp: RuleParam, kind: str, value) -> str | None:
+    """Why ``value`` is not of the shape the parameter ``rp`` takes (0.111, #320), else ``None``:
+    null where the parameter has a value by default, a list or a map where it takes one value,
+    or one value where it takes a list. The shapes come from the constructor's annotation, else
+    from the default; a parameter with neither (no annotation, no default) is not checked."""
+    import re
+
+    words = set(re.findall(r"\w+", _annotation(rp.rule, rp.name)))
+    d = rp.default
+    if words:
+        nullable = d is None or "None" in words or "Optional" in words
+        maps = bool(words & {"dict", "Mapping", "Any"})
+        lists = bool(words & {"list", "tuple", "Sequence", "Iterable", "Collection", "Any"})
+        scalars = bool(words & {"float", "int", "bool", "str", "Any"}) or not (maps or lists)
+    elif d is None:
+        return None
+    else:
+        nullable, maps = False, isinstance(d, dict)
+        lists = isinstance(d, (list, tuple))
+        scalars = not (maps or lists)
+    what = _WHAT.get(kind) or "one of " + ", ".join(repr(w) for w in rp.doc.range)
+    if value is None:
+        return None if nullable else f"null is not {what}"
+    if isinstance(value, dict):
+        return None if maps else f"{value!r} is a map, not {'a list' if lists else what}"
+    if isinstance(value, (list, tuple)):
+        return None if lists else f"{value!r} is a list, not {'a map' if maps else what}"
+    if lists and not scalars and not maps:
+        return f"{value!r} is not a list (each item {what})"
+    return None
+
+
 def _leaves(value) -> list:
     """The values of a parameter value, through its maps and lists (a per-unit map of per-key
     targets is checked value by value)."""
@@ -3172,6 +3223,13 @@ def _value_problem(rule: str, name: str, value, *, check_range: bool = True) -> 
         return None
     doc = rp.doc
     kind = _param_type(rp)
+    if kind is not None:  # 0.111 (#320): null, a list or a map where one value is documented
+        why = _shape_problem(rp, kind, value)
+        if why:
+            return (
+                f"rule {rule!r} parameter {name!r}: {why} ({doc.unit}; see "
+                f"`camber rules params {rule}`)"
+            )
     if kind is not None and value is not None:
         for v in values:
             why = _type_problem(kind, doc, v)

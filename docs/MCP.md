@@ -100,9 +100,12 @@ camber mcp --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-a
   rule parameter, a parameter value that is not a finite number or is outside its documented
   range without a `"basis"` for it, a value of the wrong type (text or true / false for a number,
   a fraction for a whole-number parameter such as `start_hour`, anything but true / false for a
-  flag, a word not listed for a choice), a `"basis"` that is not a non-empty text, a bad `units`,
+  flag, a word not listed for a choice; since #320 also null where the parameter has a value by
+  default, a list or an object where it takes one value, and one value where it takes a list), a
+  `"basis"` that is not a non-empty text, a bad `units`,
   `ventilation` (a zones file that cannot be read included) or `report.rcx` block (in
-  `report.rcx.references`: a threshold that is not a finite number or not above 0, a sensor used
+  `report.rcx.references`: a value that is not an object, a threshold that is not a finite
+  number or not above 0, a warn level above its fault level, a sensor used
   as its own reference, or a unit, reference equipment or reference file the config's source
   does not have), a facility the store does not hold, a config that names
   no facility or one that is not allowed, or any other suffix stops the server (exit 2) with one

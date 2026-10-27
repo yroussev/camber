@@ -203,7 +203,9 @@ class RcxOptions:
                 ref["cache_dir"] = os.path.join(base_dir, ref["cache_dir"])
             opts.oat_reference = ref
         refs = spec.get("references")
-        if refs:  # 0.108 (#267): sensor references for any point, per equipment
+        # 0.108 (#267): sensor references for any point, per equipment; 0.111 (#320): a value
+        # that is not an object (0, null, []) is refused, not read as "no references"
+        if "references" in spec:
             opts.references, site_oat = _parse_references(refs, base_dir)
             if site_oat is not None:
                 if opts.oat_reference:
@@ -1180,6 +1182,17 @@ _REFERENCE_THRESHOLDS = (
 _POSITIVE_THRESHOLDS = ("bias_warn", "bias_fault", "drift_warn", "drift_fault")
 
 
+def _reference_defaults() -> dict:
+    """The comparison thresholds :func:`camber.sensordrift.compare_to_reference` uses when a
+    reference spec does not set them."""
+    import inspect
+
+    from ..sensordrift import compare_to_reference
+
+    params = inspect.signature(compare_to_reference).parameters
+    return {k: params[k].default for k in _REFERENCE_THRESHOLDS}
+
+
 def _check_reference_spec(spec: dict, where: str) -> None:
     """Refuse (``ValueError``) a reference spec whose values cannot be used (0.111, #315): a
     threshold that is not a finite number (a NaN ``bias_warn`` made a biased sensor "agree", a
@@ -1216,6 +1229,17 @@ def _check_reference_spec(spec: dict, where: str) -> None:
             )
         if key == "min_drift_days" and v < 0:
             raise ValueError(f"{where}: min_drift_days must be 0 or more (got {v!r})")
+    # 0.111 (#320): a warn level above the fault level rated a bias between them "fault"
+    for what in ("bias", "drift"):
+        if f"{what}_warn" not in spec and f"{what}_fault" not in spec:
+            continue
+        defaults = _reference_defaults()
+        warn = spec.get(f"{what}_warn", defaults[f"{what}_warn"])
+        fault = spec.get(f"{what}_fault", defaults[f"{what}_fault"])
+        if warn > fault:
+            raise ValueError(
+                f"{where}: {what}_warn ({warn!r}) must not be above {what}_fault ({fault!r})"
+            )
 
 
 def _parse_references(refs: dict, base_dir: str) -> tuple:

@@ -23,6 +23,8 @@ from ._common import (
     finding_ids,
     jsonable,
     narrow,
+    reference_findings,
+    reference_notes_banner,
     rule_names,
     run,
     trust_banner,
@@ -257,6 +259,10 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
     declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
+    if notice:
+        banners.append(notice)
+    # 0.111 (#320): a configured reference that could not be compared is said here too
+    notice = reference_notes_banner(reference_findings(ctx, fid, res)[1], arguments.get("equips"))
     if notice:
         banners.append(notice)
     n = int(k.get("n_issues") or 0)

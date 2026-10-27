@@ -698,6 +698,29 @@ def reference_findings(ctx, facility_id: str, run) -> tuple:
         return [], [f"The configured sensor references could not be read: {e}"]
 
 
+def reference_notes_banner(notes, equips=None) -> str | None:
+    """The NOTICE of the configured sensor references that could not be compared (0.111, #320),
+    from the ``notes`` of :func:`reference_findings` (with ``equips``: only theirs), or ``None``.
+    A finding on such a point is not conditional on its reference: nothing was compared."""
+    from ._sanitize import shown
+
+    kept = [
+        n
+        for n in notes
+        if equips is None
+        or not n.startswith("Sensor reference for ")
+        or any(f"for {e} " in n or f"for {e}:" in n for e in equips)
+    ]
+    if not kept:
+        return None
+    return (
+        f"{len(kept)} configured sensor reference(s) could not be compared, so the findings that "
+        "read those points are not checked against them: "
+        + "; ".join(shown(n).rstrip(" .") for n in kept)
+        + ". sensor_trust shows the configured comparisons."
+    )
+
+
 def reference_conditions(findings, ref_findings, registry) -> list:
     """Per finding of ``findings``, the labels of the reference warnings (warn or fault) it is
     conditional on: a configured reference for one of its inputs, on its equipment, disagrees.
