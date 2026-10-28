@@ -496,10 +496,14 @@ Version numbers are given only where a release is already planned.
     - [x] #276 no-persist runs (`persist=False`, `--no-persist`);
     - [x] #277 `camber mcp` over stdio, MCP 2026-07-28 and 2025-11-25;
     - [x] #278 13 read-only capabilities and 8 prompts.
+  - **0.111 — the MCP server hardened by a five-round acceptance test** (released 2026-10-31). Closes #282–#293, #295–#304, #306–#318, #320, #321:
+    - [x] #289–#293, #295–#304 the 0.110.0 findings: protocol, killable workers, paging, the trust floor, errors, redaction, notices;
+    - [x] #306–#314 round 2: a fenced re-ingest, fact ids, validation, workers, judged samples, sensor references;
+    - [x] #315–#318, #320, #321 rounds 3–5: config types, workers, fence edge cases, citations, gating.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
-- **Next — MCP Tasks (0.111, #279) and an A2A server (0.112, #280)** over the same capability registry.
+- **Next — 0.112:** citation strength (#294), research-only provenance in the stored data (#319) and the 0.111 leftovers (#322), then an A2A server (#280) over the same capability registry. MCP Tasks (#279) is not scheduled yet.
 
 
 ## Road to 1.0
