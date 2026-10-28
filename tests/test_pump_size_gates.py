@@ -267,7 +267,7 @@ def test_full_size_results_are_unchanged():
             )
             assert list(f.caveats) == want["caveats"]
             for key, val in want["metrics"].items():
-                assert _r6(f.metrics[key]) == pytest.approx(val, rel=1e-6, abs=1e-6), (
-                    g["case"],
-                    key,
-                )
+                # pytest 9.2 refuses approx() of text, so only numbers get a tolerance
+                numeric = isinstance(val, (int, float)) and not isinstance(val, bool)
+                expected = pytest.approx(val, rel=1e-6, abs=1e-6) if numeric else val
+                assert _r6(f.metrics[key]) == expected, (g["case"], key)
