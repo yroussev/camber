@@ -310,6 +310,160 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   zero-width (or other invisible) character counted as a stated reason and kept an out-of-range
   value; it is now refused like an empty one.
 
+- `camber mcp` no longer exits when a request holds a lone UTF-16 surrogate escape (such as
+  `"\ud800"`) in its id, method, tool name, prompt argument or anywhere else: the request is
+  refused with an Invalid Request error (-32600) and the server keeps serving. More generally, a
+  reply that cannot be serialised or written is now logged on stderr and answered with an Internal
+  error (-32603) instead of ending the session (#289).
+- **`camber mcp` stops work that timed out, was cancelled or whose client has gone, and answers
+  other requests while a call runs (#292).** The server handled one request at a time, so a
+  `ping` or `server/discover` waited up to a minute behind a long `rule_run`; it ignored
+  `notifications/cancelled`; and a call that hit its time cap answered `timeout` while it went on
+  running, so each retry added another (three retries on a large facility kept about 4.5 cores
+  and 10 GB busy for over five minutes; six timeouts under a short cap reached 32 GB). Closing
+  stdin waited for the call in flight to finish, and a server with abandoned scans could crash
+  (SIGSEGV) on exit. Now each tool call runs in a worker process that is killed, releasing its
+  CPU and memory, on a timeout, a cancel, or when the client closes stdin or stdout; at most
+  `--max-concurrent` calls (default 2) run at once and `--max-queued` (default 8) wait, and a call
+  beyond that gets the retryable tool error `busy` at once. Every other message is answered
+  immediately, so replies may come out of order (each with its own id); a cancelled call gets no
+  reply; the server exits within about a second of stdin closing. Results are unchanged. Using
+  `McpServer`, `serve` or `serve_stdio` from Python works as before, in-process, unless you pass
+  `workers=WorkerPool(...)`.
+- **The trust floor no longer withholds healthy plant checks, and says when it declines one
+  (#297).** A condenser-water temperature or chiller approach trended only while the chiller
+  runs (blank while it is off) scored about 0.39 for "low coverage", so under the default trust
+  floor of 0.5 every `camber mcp` and `trust_gate` run declined the plant checks that read it.
+  On the two synthetic chilled-water plant sets this dropped 5 of the command line's true
+  detections, and the RCx report ranked 1 issue instead of 6. A plant point is now scored on the
+  share of running samples it holds (flag `logged_while_running`, `SensorTrust.run_coverage`),
+  and a cooling tower is judged on its running samples, gated on its condenser-water flow. A
+  rule's trust gate now finds the chiller's status or power even when the rule does not read
+  them. With the default floor, `rule_run`, `drift` and `rcx_report` now give the same results
+  as the command line on every labelled synthetic set. Whenever the floor declines checks,
+  these three capabilities add a NOTICE with the count, the rules and the untrusted inputs, and
+  their summary gives the count. The benchmark gates are unchanged.
+- **`rcx_report` honours `top_n` (#299).** Every issue came back whatever `top_n` said (73
+  issues and 1.2 MB on one fleet). It now returns the `top_n` best-ranked issues (default: the
+  config's, else 8; up to 200), with only their facts and sections; `offset` gets the next ones.
+  The KPIs still count every issue.
+- **`truncated` is set whenever a list was cut (#299).** `coverage` cut `gaps` to 500 with a
+  notice but left `truncated` false. Every list a capability cuts now sets the flag and adds a
+  notice, by construction.
+- **The 2 MB cap bounds what is sent (#299).** It was measured on the result's data alone, while
+  a `camber mcp` reply carries that data twice plus the facts, so replies of 3-4 MB passed. The
+  registry now counts the whole result (data, summary, facts and notices) and `camber mcp` the
+  whole reply; a larger one is `too_large`.
+- JSON-RPC error replies to a request whose id cannot be read (a parse error, a batch, a line over
+  1 MiB, a bad id) now carry `"id": null`. The official MCP SDK dropped these replies before, so
+  the client waited until its own timeout (#300).
+- `camber mcp` refuses a request object that repeats a key at any depth (-32600) instead of
+  taking the last value, so a proxy that reads the first key cannot see a different method, id or
+  protocol version from the one served (#300).
+- A request with an integer too long to read (more than 4300 digits) is now an Invalid Request
+  (-32600), not a misleading "Invalid JSON" parse error (#300).
+- A second `initialize` is refused (-32600) and the session keeps its negotiated version;
+  `initialize` now needs a `capabilities` object, and `clientInfo` must be an object when sent, in
+  both protocol revisions, matching the stateless path's rules (#300).
+- docs/MCP.md lists the JSON-RPC error codes as the server returns them and names the required
+  2026-07-28 `_meta` keys (#300).
+
+- **A store or data problem is a tool error a model can act on, not an internal error** (#301).
+  Over MCP these were JSON-RPC -32603 "internal error" responses; they are now `isError` tool
+  results with the new, documented code `unavailable`, whose data says whether a retry will
+  likely work and names the facility:
+  - a truncated, empty or non-Parquet part file, or an unreadable facility directory, affects
+    only that facility (`unavailable`, not retryable). Calls on other facilities keep working,
+    and `facilities` still lists every facility, marking the unreadable one.
+  - a read while `camber datasets ingest --force` rewrites a facility no longer fails reads of
+    other facilities: a read of one facility lists only that facility's files, and the catalog
+    scan goes one facility at a time. A part file that vanishes during a read is retried once,
+    then reported as `unavailable` (retryable).
+- `coverage` with a `start` after the last stored sample (or an `end` before the first) returns
+  an empty result with a notice instead of an internal error; `sensor_trust` adds the same
+  notice. A date the calendar does not have, such as `2025-02-30` or `2025-13-45`, is
+  `invalid_params` in every capability that takes a `start` / `end` (#301).
+- An integer argument given as a whole-number float (`"limit": 5.0`, `"offset": 25.0`) runs as
+  that integer. In the paged tools (`facilities`, `points`, `coverage`, `sensor_trust`,
+  `rule_run`, `rcx_report`, `rule_params`, `check_citations`) it passed validation and then
+  failed as a JSON-RPC internal error naming a Python exception (#308).
+- `camber mcp` reads each `--config` once, when it starts, and serves that copy for the life of
+  the process. An edit to the file while the server ran was read by the next call without the
+  startup check: it could point `rule_run` at another store while `points` read `--store`, or
+  (one stray comma) drop the tuned rules with the false notice "No run config names this
+  facility" (#308).
+- The `--config` startup check also reads the `report.rcx` section the way `camber report` does
+  (a `references` entry naming no CAMBER role made every `rcx_report` call an internal error), and
+  a ventilation zones file that cannot be read now exits 2 with one line naming the config, not 1
+  with a bare `[Errno 2]` (#308).
+- A message line over 1 MiB is refused with its own `id` when the line's first bytes name one,
+  so the client's call ends at once; with `"id": null` the official SDK waited for its own
+  timeout (#308). A line that repeats its top-level `id` is answered with `id: null` (#318).
+- `camber mcp` worker processes, from the second round of the 0.111 acceptance test (#309):
+  - A worker that ended while idle (a crash, or the system stopping it for lack of memory) is
+    replaced before a call is given to it; the next call no longer fails with -32603. A call
+    whose worker ends under it is the retryable tool error `unavailable`, not -32603.
+  - `--max-concurrent` is 1 to 64 and `--max-queued` 0 to 1024, in plain digits. A huge value
+    started one thread per slot and crashed with a traceback or used memory without bound; it
+    now exits 2 with one line, as other launch mistakes do.
+  - `SIGTERM` and `SIGHUP` stop the server like Ctrl-C (a log line, calls stopped, exit 143 or
+    129) and remove matplotlib's temporary directory, which they left behind. The directory of
+    a server that was killed with `SIGKILL` is removed by the next `camber mcp` to start.
+  - Killing a worker also kills the processes it started: matplotlib's font scan
+    (`system_profiler` on macOS) no longer runs on for about 11 s after a cancel, a timeout or
+    the server's exit.
+  - A `tools/call` that reuses the id of a call still in progress is refused (-32600); both used
+    to run and be answered with the same id, and one cancel stopped both.
+  - A timeout says the call "was stopped" (the worker is killed, not abandoned) and comes within
+    about a second of the 120 s cap instead of 5 s after it.
+  - docs/MCP.md says that the time cap counts from when a call reaches a worker, how long a call
+    can wait in the queue behind long ones, and a wait over a second is logged.
+- **`finding_detail` states the share the rule states, of the samples the rule judged (#310).**
+  "N of the M samples it judged" divided by every sample in the window for most rules, so the
+  same flagged hours read as two different citable shares: a dirty filter "66.7 %" in
+  `finding_detail` where `rule_run` said 100 % of fan-on samples, a low delta-T loop "32.7 %"
+  where it said 100 % of running hours. `judged_samples` is now the rule's own mask (fan-on,
+  occupied, running, both valves shut ...), a new `judged_basis` names it, and the fact reads
+  "(2688 of 2688 judged fan-on samples, 100.0%)". A finding that judges named
+  conditions (each coil of `leaking_valve`, each G36 fault condition, each failure mode of a
+  reset, excess OA and under-ventilation) states each condition's share of its own samples as a
+  fact, matching the summary. The flagged hours, the spans and every finding are unchanged.
+- `leaking_valve` calls its denominator "both-valves-shut samples", not "closed hours"; the
+  `rule_run` headline says how many rules "returned a result (ok included)" rather than "gave
+  findings"; and `finding_detail`'s `chart.roles` names a diagnostic scatter's two axes instead
+  of `[]` (#310).
+- **`camber mcp` answers every call it accepted, even when its workers are killed (#316).** A
+  call handed to a worker that died while it was still starting (the system stopping several
+  processes at once for lack of memory) got no reply at all, was logged nowhere, and kept its id
+  "in progress", so a retry with the same id was refused. Such a call is now tried once more on a
+  fresh worker and, if that one dies too, answered `unavailable` with `"retryable": true`.
+- **A stray temp directory no longer stops `camber mcp` from starting (#316).** A directory named
+  `camber-mcp-mpl-<a number too large for a process id>-...` in the temp directory made every
+  start crash with a traceback; on a shared `/tmp` any local user could create one. Such names
+  are now skipped, and the startup sweep of leftover directories can no longer fail the start.
+- **`camber mcp` workers and signals (#316).** `SIGTERM`, `SIGHUP` and Ctrl-C now end a server
+  that is blocked writing to a client that stopped reading (it waited until the client closed
+  the pipe). A worker killed from outside no longer leaves the font-scan process it started
+  running for a few seconds. With stderr closed or unwritable the server exits 0 again (143, 129
+  or 130 after a signal), Ctrl-C while the server is starting or stopping exits 130 without a
+  traceback, and a second Ctrl-C no longer interrupts the cleanup.
+- **Accuracy and rendering fixes from the third acceptance round (#318).**
+  - A check the trust floor declines now names every input it reads that is below the floor,
+    optional ones included ("declined -- untrusted input(s): co2 (trust 0.02), oa_airflow (trust
+    0.01), occupancy (trust 0.02)"), not only the required one. An optional input below the
+    floor on its own still does not decline the check; the docs now say which inputs decide.
+  - `rule_run`'s notice about findings that rest on a disagreeing sensor reference counts the
+    findings it lists, and says how many more results (such as an `ok` verdict) rest on that
+    input but are below `min_severity` and not listed. It used to say "3 finding(s)" next to a
+    list of two.
+  - `finding_detail` on a G36 AFDD finding states only the fault conditions the rule reported:
+    a condition below the `warn_pct` reporting threshold is no longer called "flagged", and its
+    hours are no longer added to the finding's flagged hours (566 h against the 540 h the rule
+    reported).
+  - `rcx_report`'s facts name equipment the way summaries and `finding_detail` facts do:
+    quoted, with markup defanged and the server's own directories taken out.
+  - `finding_detail`'s parameter bases no longer carry internal issue references such as
+    "(#94)", as `rule_params` already did not.
 ### Security
 - **Three more spellings of a home path are redacted (#320).** A data name holding the home
   directory URL-encoded (`%2FUsers%2F...`), with a `/./` segment, or with doubled backslashes (the
@@ -403,6 +557,38 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   the memory it held after its first call: an unusually large call. The first call a worker
   serves sets that level, so a worker may now keep what a large facility needs between calls.
 
+- `rcx_report` runs the run config's `drift` section, as `camber report --layout rcx` does, so
+  drift issues are ranked through MCP too. The fact of an issue that rests on a sensor that a
+  configured reference (`report.rcx.references`) finds wrong now says it is conditional on that
+  check (#297).
+- `finding_detail`'s `violations` has `judged_samples` and, for an event rule, `events`, and
+  its result has `violations_note`; a parameter entry can carry `fallback` (#298).
+- **Capability results are model-sized by default (#299).** A plain `rule_run`, `rcx_report`,
+  `sensor_trust` or `coverage` call on a 650-point fleet returned 0.3 to 1.2 MB, far more than a
+  model's context. Every list now comes a page at a time -- `rule_run` 25 findings, `sensor_trust`
+  100 points, `coverage` 50 rows per list, `points` 250, `facilities` 100, `drift` 25,
+  `rule_params` 25 rules (10 with `detail`), `rcx_report` 8 issues and 20 appendix facts -- and
+  takes `limit` (up to 1,000) and `offset` for more; a notice says what was left out and the call
+  that gets it. Typical results are now 50 to 100 KB on the wire.
+- **`check_citations` returns a compact verdict (#299).** 50 KB of text in gave up to 764 KB out.
+  It now returns the counts per verdict and the sentences that fail; `detail: true` lists every
+  sentence and adds `verified_text` (no longer returned by default). `cited` lists each id once.
+- `rule_params` facts carry each parameter's name, default, unit and range, not its basis and
+  calibration prose, which stay in `data` (#299).
+- **A shorter MCP tool list (#299).** Tool descriptions are tighter, and `tools/list` leaves out
+  the default `$schema`, the `annotations.title` that repeats the tool's title and the
+  descriptions inside output schemas (46 KB to about 43 KB, with the new paging arguments). The
+  JSON text block of a tool result is compact. See docs/MCP.md for why the result is still sent
+  both as text and as `structuredContent`.
+- `camber run`, `camber mcp --config` and `rule_run`'s `params` refuse a rule parameter that is
+  not a finite number (`NaN` or infinity) or is outside its documented range (`camber rules params
+  RULE`). A NaN minimum outdoor-air percentage turned every fault of the rule into "ok" with no
+  warning, and 500 for a 0 to 100 % parameter faulted every unit. A value outside the range is
+  kept when the rule entry's `"basis"` says where it came from (a calibration, the building's own
+  sequence); the two packaged templates that use one (ornl-frp-vav, nist-heatpump-fdd) now give
+  it (#308).
+- A run config that repeats a key in one object (JSON or YAML) is refused, as MCP messages are;
+  the last value silently won, which could move a config to another facility (#308).
 ### Added
 - **Prompt-argument completion in `camber mcp` (#304).** The server declares `completions` and
   answers `completion/complete` in both protocol revisions: `facility_id` from the allowed
