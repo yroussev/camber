@@ -275,7 +275,8 @@ def test_the_tool_list_is_shorter():
     )
     tools = out["result"]["tools"]
     size = len(json.dumps(tools, separators=(",", ":"), ensure_ascii=False))
-    assert size < 45_000, size  # 48 KB in 0.110.0
+    # 48 KB in 0.110.0, 44.6 KB in 0.111.0; 0.112 adds the claim, unit and reason fields
+    assert size < 46_000, size
     for t in tools:
         assert "$schema" not in t["inputSchema"] and "$schema" not in t["outputSchema"]
         assert "title" not in t["annotations"] and t["title"]
