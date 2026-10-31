@@ -126,6 +126,7 @@ SUPPORTED = [
     f"Both findings are faults [{f2}; {f3}].",
     f"Both findings are faults [{f2},{f3}].",
     f"AHU__economizer has no missed free cooling [{F4['id']}].",
+    f"AHU__economizer shows no sign of missed free cooling [{F4['id']}].",
     f"It gave 4 fault, 0 warn and 2 ok results [{f1}].",
 ]
 
@@ -180,6 +181,7 @@ WRONG_CLAIM = [
     # negation and direction
     f"AHU__excess_oa did not run mechanical cooling in 46% of the 64 hours [{f2}].",
     f"AHU__excess_oa has no fault [{f3}].",
+    f"AHU__excess_oa needs no action [{f3}].",
     f"meter_A's consumption rose 3.2% against the baseline [{ma}].",
     f"The outdoor air wastes energy [{f3}].",
     # qualitative verdicts

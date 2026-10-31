@@ -66,9 +66,8 @@ INPUT_SCHEMA = {
         },
         "per_sentence": {
             "type": "boolean",
-            "description": "every sentence must cite a fact, and its numbers must trace to the "
-            "facts that sentence cites (default true); false: numbers may trace to any fact the "
-            "text cites, and an uncited sentence without numbers passes",
+            "description": "default true: each sentence must cite facts and match them; "
+            "false: figures may match any cited fact, uncited sentences pass",
         },
         "detail": {
             "type": "boolean",
@@ -344,10 +343,10 @@ CAPABILITIES = (
         title="Check citations",
         description=(
             "Check your draft before showing it: pass the text only; each [id] is looked up "
-            "among this session's facts. A sentence is supported, unknown_citation (not of "
+            "in this session's facts. A sentence is supported, unknown_citation (not of "
             "this session), forgotten_citation (rerun that tool), "
             "uncited, unsupported_number (figure, sign or unit) or unsupported_claim (name, "
-            "verdict or direction); failing ones are listed with why. Call it last. Cheap."
+            "verdict or direction); failures come with why. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

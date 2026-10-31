@@ -901,8 +901,11 @@ def _claim_problems(p: _Parsed, facts: list) -> list:
         elif n == "none":
             if not any(fc.claims.nothing or "neg" in fc.claims.negs for fc in facts):
                 why.append("'none': no cited fact gives a zero count or negates")
-        elif not any(n[1] in fc.claims.nothing for fc in facts):
-            why.append(f"'no {n[1]}': no cited fact says there is none")
+        elif n[1] in _NOUNS.values():  # "no faults": a fact with "no fault" or "0 fault"
+            if not any(n[1] in fc.claims.nothing for fc in facts):
+                why.append(f"'no {n[1]}': no cited fact says there is none")
+        elif not any(fc.claims.negs or fc.claims.nothing for fc in facts):
+            why.append(f"'no {n[1]}': no cited fact negates")  # "no data": any negation
     return why
 
 
