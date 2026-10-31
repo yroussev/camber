@@ -659,18 +659,24 @@ def is_fleet_id(rule: str, equip: str) -> bool:
     return equip == FLEET and rule in fleet_rules()
 
 
-def finding_fact(fact_id: str, row: dict) -> dict:
-    """The fact that cites one finding row; its text names the equipment as a quoted value
-    (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
-    equip, summary = row["equip"], row["summary"]
-    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
+def summary_text(equip: str, summary: str, *, own: bool = False) -> str:
+    """A rule's one-line summary of a finding on ``equip`` as a fact's text writes it: the
+    equipment it starts with (``AHU-1: ...``) as a quoted name, the rest as the rule's prose."""
+    summary = " ".join(str(summary or "").split())
     flat = " ".join(equip.split())
     # #314: the rest of the summary is the rule's text about the data (it may name more units,
     # zones or points): a span, so a name with a slash in it is not taken for a path
     if flat and summary.startswith(f"{flat}:"):
-        summary = name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
-    else:
-        summary = prose(summary)
+        return name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
+    return prose(summary)
+
+
+def finding_fact(fact_id: str, row: dict) -> dict:
+    """The fact that cites one finding row; its text names the equipment as a quoted value
+    (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
+    equip = row["equip"]
+    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
+    summary = summary_text(equip, row["summary"], own=own)
     text = f"{name(equip, own=own)} {row['rule']} ({row['severity']}): {summary}"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
@@ -684,6 +690,121 @@ def finding_fact(fact_id: str, row: dict) -> dict:
         "text": text,
         "metrics": row["metrics"],
     }
+
+
+# --------------------------------------------------------------------------- structured facts
+# 0.112 (#294): a fact added for a figure a model is asked to state carries it as fields too --
+# ``value`` with its ``unit``, the ``subject`` it is about (facility, equipment, point) and, where
+# one applies, a ``verdict`` (a closed set of words per kind) -- so a citation check can test
+# the subject and the unit, not only that the digits appear somewhere in the fact.
+
+
+def subject(facility_id=None, equip=None, role=None, **more) -> dict:
+    """The ``subject`` of a fact: the facility, equipment and point (role) it is about, only the
+    ones given (``more``: e.g. ``condition``)."""
+    out = {"facility_id": facility_id, "equip": equip, "role": role, **more}
+    return {k: str(v) for k, v in out.items() if v is not None}
+
+
+def when(ts) -> str:
+    """A time stamp as a fact's text writes it: ``2025-05-14 06:00`` (its ISO form is a field)."""
+    return pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+
+@lru_cache(maxsize=1)
+def _percent_slugs() -> frozenset:
+    from ..units import PERCENT_ROLES
+
+    return frozenset(str(r.value) for r in PERCENT_ROLES)
+
+
+def role_unit(role) -> str | None:
+    """The unit CAMBER's rules read a point of ``role`` in (0.112, #294): ``°F`` for a
+    temperature or temperature setpoint, ``%`` for a valve, damper, speed or humidity (see
+    :mod:`camber.units`), else ``None`` (the point's own units, which the store does not record).
+    The adapters convert to these at ingest, so a bias or a constant reading is in this unit."""
+    slug = str(jsonable(role))
+    if slug in _percent_slugs():
+        return "%"
+    if slug == "oat" or "temp" in slug.split("_") or slug in ("cool_sp", "heat_sp"):
+        return "°F"
+    return None
+
+
+def with_unit(x: float, unit: str | None, fmt: str = "g") -> str:
+    """``x`` formatted with ``fmt`` and its unit (``+3.0 °F``, ``0 %``), or alone."""
+    return f"{x:{fmt}} {unit}" if unit else f"{x:{fmt}}"
+
+
+#: a point needs this many samples before "it never moves over the window" is said of it
+FLAT_MIN_SAMPLES = 24
+
+
+def flat_roles(frame, roles=None) -> dict:
+    """``{role slug: {"value", "n_samples", "start", "end"}}`` of the numeric points of ``frame``
+    that never move over it: every valid sample reads the same value (``roles``: only these
+    slugs). A point with fewer than :data:`FLAT_MIN_SAMPLES` valid samples is left out."""
+    out: dict = {}
+    if frame is None or getattr(frame, "empty", True):
+        return out
+    for col in frame.columns:
+        slug = str(jsonable(col))
+        if roles is not None and slug not in roles:
+            continue
+        s = pd.to_numeric(frame[col], errors="coerce").dropna()
+        if len(s) < FLAT_MIN_SAMPLES or not isinstance(s.index, pd.DatetimeIndex):
+            continue
+        first = float(s.iloc[0])
+        if float(s.max()) - float(s.min()) > 1e-9 * max(1.0, abs(first)):
+            continue
+        out[slug] = {
+            "value": round(first, 6),
+            "n_samples": int(len(s)),
+            "start": s.index.min().isoformat(),
+            "end": s.index.max().isoformat(),
+        }
+    return out
+
+
+def flat_fact(fact_id: str, facility_id: str, equip: str, role: str, info: dict, why="") -> dict:
+    """The fact that the point ``role`` of ``equip`` never moves over the window (``info`` from
+    :func:`flat_roles`); ``why`` says what rests on it (``"leaking_valve reads it"``)."""
+    v, unit = info["value"], role_unit(role)
+    tail = f"; {why}" if why else ""
+    return {
+        "id": fact_id,
+        "kind": "flat_point",
+        "equip": equip,
+        "role": role,
+        "value": v,
+        "unit": unit,
+        "verdict": "flat",
+        "subject": subject(facility_id, equip, role),
+        "n_samples": info["n_samples"],
+        "start": info["start"],
+        "end": info["end"],
+        "text": f"{name(equip)} {name(role)} never moves over the window: all "
+        f"{info['n_samples']:,} valid samples from {when(info['start'])} to {when(info['end'])} "
+        f"read {with_unit(v, unit)}, so it is flat for the whole window{tail}",
+    }
+
+
+def notice_facts(banners: list, context: str) -> list:
+    """One fact per notice of a result (0.112, #294), ``N1@<context>`` (``context`` carries the
+    call's token), kind ``notice``: the server's own NOTICE lines, so a draft that repeats one
+    can cite it. A notice states a condition of the result (a cut list, a declined check, a
+    licence); it is not a measured value."""
+    return [
+        {
+            "id": f"N{k}@{context}",
+            "kind": "notice",
+            "basis": "notice",
+            "value": "notice",
+            "text": str(b),
+        }
+        for k, b in enumerate(banners, start=1)
+        if isinstance(b, str) and b.strip()
+    ]
 
 
 # --------------------------------------------------------------------------- sensor references

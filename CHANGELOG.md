@@ -36,6 +36,14 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `forgotten_citation` in `verdicts` and a sentence's `forgotten` ids; code that compares
   `verdicts` with a fixed dict needs the new key. The built-in prompts no longer ask the model to
   pass facts back.
+- The built-in prompts point at the new facts: cite a span, gap, rank or notice by its own fact,
+  number a ranked list with a marker at the start of the line, say a fault is explained by a
+  sensor only when `finding_detail` says so, and never cite a claimed figure for a measured
+  result (#294).
+- Results have more facts (#294). No existing fact id is renumbered: the new facts take their
+  own prefixes (`S`, `L`, `P`, `G`, `A`, `N`, and `R` in `finding_detail`). A caller that
+  expects a result's facts to be only its `F` facts, or counts them, should filter on `kind` (a
+  notice is `kind` `notice`).
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
@@ -46,6 +54,31 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `CallContext(ledger=...)` and `Registry.call` records into it and `check_citations` reads from
   it (`Registry.ledger_view` picks out the facts one call needs, for a transport that runs calls
   in another process).
+- **Facts for what a model is asked to say** (#294). A sentence giving one of these can now be
+  cited, where before `check_citations` always stripped it:
+  - `finding_detail`: each flagged span (`S1@finding_detail-...`: start, end, hours), the
+    longest span in the hours fact, the rule's inputs that never move over the window, and for
+    a finding conditional on a sensor reference, the finding re-judged with that sensor's bias
+    taken off ("... ok; so the finding is explained by the sensor offset", or "the finding
+    stands") and how many of its flagged hours fall in the window the reference comparison
+    covers (none, part or all).
+  - `coverage`: each point's coverage and each listed gap with its dates (at most 200 of each
+    per page).
+  - `sensor_trust` and `rcx_report`: the points that never move over the window (a valve that
+    never opens, a setpoint that never resets), which can score trusted yet decide a diagnosis.
+  - `rcx_report`: each issue's fact reads "Issue 1 of 6 on ...", so a numbered ranking can be
+    cited.
+  - every capability: each notice is a fact too (`N1@<capability>-...`), its text exactly the
+    banner's.
+  - `mv_summary` takes an optional `claim`: each figure it states becomes a `claimed_figure`
+    fact ("The claim under check states 15%: the claim's own figure, not a measured or computed
+    result"); `check_savings_claim` passes the claim to it.
+  - The new facts carry their figure as fields: `value`, `unit`, `subject` (facility,
+    equipment, point) and, where one applies, a `verdict`. See docs/CAPABILITY-REGISTRY.md.
+- `sensor_trust` gives a sensor reference's bias its unit (`°F` for a temperature, `%` for a
+  valve, damper or speed) in the summary, the reference's fact and a new `unit` field of
+  `data.references`.
+
 
 ## [0.111.0] — 2026-10-31
 

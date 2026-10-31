@@ -262,6 +262,8 @@ def test_rule_params_default_page_and_slim_facts(store):
     detail = REG.call("rule_params", {"detail": True}, ctx)
     assert len(detail.data["rules"]) == 10 and detail.truncated
     for f in detail.facts[1:]:  # a fact keeps the figures, not the prose
+        if f["kind"] == "notice":  # 0.112 (#294): a banner's own fact
+            continue
         assert all(set(p) <= {"name", "default", "unit", "range"} for p in f["params"])
     assert any("basis" in p for r in detail.data["rules"] for p in r["params"])
 
