@@ -206,6 +206,9 @@ class Capability:
     # 0.111 (#320): top-level keys of ``data`` that hold the capability's own output (not values
     # from the data), never cut at :data:`~._sanitize.MAX_VALUE`
     own_output: tuple[str, ...] = ()
+    # 0.112 (#322): the handler reads each facility under its own write fence and reports one it
+    # cannot read in its result, so the registry takes no fence snapshot around the call
+    fences_itself: bool = False
 
 
 @dataclass(frozen=True)
@@ -400,7 +403,8 @@ class Registry:
         # before the generic pattern, which a path with a space or a comma would get past
         secrets = known_roots(ctx)
         try:
-            fence = _fence_snapshot(arguments, ctx)
+            cap = self._caps.get(name) if isinstance(name, str) else None
+            fence = {} if cap is not None and cap.fences_itself else _fence_snapshot(arguments, ctx)
             try:
                 res = self._call(name, arguments, ctx)
             except _SchemaError:

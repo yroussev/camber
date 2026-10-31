@@ -102,11 +102,13 @@ def _kill_in_swap_gap(st):
 
 def test_a_writer_killed_in_the_swap_gap_leaves_readers_a_retryable_error(store):
     _kill_in_swap_gap(store)
-    for name, args in (("points", {"facility_id": FID}), ("facilities", {})):
-        with pytest.raises(CapabilityError) as ei:
-            REG.call(name, args, _ctx(store))
-        assert ei.value.code == "unavailable", (name, ei.value)
-        assert ei.value.data == {"retryable": True, "facility_id": FID}
+    with pytest.raises(CapabilityError) as ei:
+        REG.call("points", {"facility_id": FID}, _ctx(store))
+    assert ei.value.code == "unavailable", ei.value
+    assert ei.value.data == {"retryable": True, "facility_id": FID}
+    # the listing lists it, marked unavailable (#322; test_edges_322.py)
+    (row,) = REG.call("facilities", {}, _ctx(store)).data["facilities"]
+    assert row["unavailable"] == {"retryable": True, "reason": "being_replaced"}
     with pytest.raises(StoreReadError) as ei:
         ParquetStore(store.root).read_long(facility_id=FID)
     assert ei.value.retryable

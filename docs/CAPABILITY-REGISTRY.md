@@ -289,7 +289,8 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    removal, and a first ingest, keep the mark until the facility's registry entry is gone or
    written too, and a mark left by a writer that was killed (its process gone, or its process id
    since reused by another process) blocks no call; the next writer to take the store lock
-   clears it (0.111, #317). The exception is a writer killed between the two renames of its
+   clears it (0.111, #317). So does a malformed mark, among them one whose process id is not 1
+   to 10 ASCII digits (0.112, #322). The exception is a writer killed between the two renames of its
    swap: until the next writer to take the store lock finishes that swap, the facility's calls
    stay `unavailable` with `"retryable": true` (0.111, #321). Its
    `data` is `{"retryable": bool}`, plus `"facility_id"` when the read was of one facility the
@@ -298,7 +299,11 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    retry will not help until it is repaired or the facility re-ingested). The message names no
    path and no facility outside the allowlist. One facility's damaged file does not affect
    another facility's calls, and the `facilities` listing still lists it, with
-   `"unavailable": {"retryable": ...}` and a null `start` / `end`. A call reads only the
+   `"unavailable": {"retryable": ..., "reason": "unreadable"}`, a null `start` / `end` and zero
+   counts. `facilities` checks each facility's fence on its own (0.112, #322): a facility a writer
+   is replacing, or one a killed writer left mid-swap, is listed with
+   `"unavailable": {"retryable": true, "reason": "being_replaced"}` and a banner saying to retry
+   later, while the other facilities are listed as usual; its own calls stay `unavailable`. A call reads only the
    facilities it is about (0.111, #293): while the store's point catalog is stale (after a
    write; a call never writes it back), a call on one facility scans that facility's partition
    only, and `facilities` reads each listed facility's catalog entry and its files' statistics,
@@ -363,7 +368,10 @@ A handler names facilities only through `facility_id` / `facility_ids`, keeps a 
 `ctx.allowed_facilities` and leaves out research-only facilities (`research_only(meta)`), calls
 `run_config_for(ctx)` for any config run, puts every figure its `text` states into a fact it
 cites, and writes every name from the data in its `text`, facts and banners with
-`camber.capabilities._sanitize.name()`. The schemas use a subset of JSON Schema 2020-12: `type`, `properties`, `required`,
+`camber.capabilities._sanitize.name()`. A listing over many facilities that reports a facility
+it cannot read in its own result sets `fences_itself=True` (as `facilities` does, 0.112): the
+registry then takes no fence snapshot around the call, and the handler checks each facility's
+fence itself (`camber.store._fence.snapshot` / `changed`). The schemas use a subset of JSON Schema 2020-12: `type`, `properties`, `required`,
 `additionalProperties`, `enum`, `const`, `items`, `minItems` / `maxItems`, `minimum` /
 `maximum` (and the exclusive forms), `minLength` / `maxLength` and `pattern`. `default` is an
 annotation and is not applied. Registering a schema with any other keyword is a `ValueError`, so a

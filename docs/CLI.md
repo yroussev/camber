@@ -1,7 +1,9 @@
 # Command-line interface
 
-The `camber` console script (installed with the package; also `python -m camber.cli`) exposes the
-analysis pipeline and the grounded agent as subcommands.
+The `camber` console script (installed with the package; also `python -m camber`) exposes the
+analysis pipeline and the grounded agent as subcommands. `camber --version` prints the installed
+version (0.112). Ctrl-C ends any command quietly with exit status 130, also while it is still
+starting.
 
 ```
 camber run     <config.json> [--out DIR] [--no-persist]   # run a config, print/write findings
@@ -733,7 +735,8 @@ client starts it; you do not run it by hand.
   an unknown option) exits 2 with one line on stderr; `camber mcp -h` shows the usage.
 - Logs go to stderr; stdout carries protocol messages only. The server exits when the client
   closes stdin or its end of stdout, stopping every call still running. `SIGTERM` and `SIGHUP`
-  stop it like Ctrl-C (exit status 143, 129 and 130).
+  stop it like Ctrl-C (exit status 143, 129 and 130), also while it loads, before it reads
+  stdin (#322).
 
 See [MCP.md](MCP.md) for client setup and the protocol details.
 
