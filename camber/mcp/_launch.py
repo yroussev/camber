@@ -349,6 +349,22 @@ def isolate_matplotlib() -> str | None:
     return path
 
 
+#: the signals :func:`_on_signals`'s handler took, this session (#322)
+_SIGNALLED: list = []
+
+
+def _raise_if_signalled() -> None:
+    """Raise what the first signal of this session raised, when one came and its exception was
+    lost: a ``KeyboardInterrupt`` raised inside a C extension's import can be swallowed there
+    (pandas), and the handler ignores later signals, so the session would run on (#322)."""
+    if _SIGNALLED:
+        import signal
+
+        if _SIGNALLED[0] == signal.SIGINT:
+            raise KeyboardInterrupt
+        raise Terminated(_SIGNALLED[0])
+
+
 def _on_signals():
     """Make ``SIGTERM`` and ``SIGHUP`` stop the session like Ctrl-C does (a log line, every call
     stopped, the temporary directory removed; #309): raise :class:`Terminated` in this thread,
@@ -362,10 +378,15 @@ def _on_signals():
         return None
     wanted = [getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, n)]
 
-    def handler(signum, _frame):
+    def handler(signum, frame):
         for sig in wanted:  # cleanup runs once; a second signal must not interrupt it
             signal.signal(sig, signal.SIG_IGN)
+        _SIGNALLED.append(signum)
         if signum == signal.SIGINT:
+            # the CLI's own handler first: it notes the Ctrl-C, so one that an import turned into
+            # another error (numpy's "source directory" ImportError) still exits 130 (#322)
+            if callable(previous.get(signum)):
+                previous[signum](signum, frame)
             raise KeyboardInterrupt
         raise Terminated(signum)
 
@@ -414,6 +435,7 @@ def launch(
     waiting (#292); see :class:`WorkerPool`.
     """
     _setup_logging()
+    _SIGNALLED.clear()
     previous = _on_signals()  # first: a signal while the tools load exits quietly too (#316)
     try:
         return _launch(
@@ -524,4 +546,5 @@ def _serve(capabilities, ctx, max_concurrent: int, max_queued: int, n_refused: i
         workers.max_concurrent,
         workers.max_queued,
     )
+    _raise_if_signalled()  # a Ctrl-C an import swallowed while loading starts no session
     return serve_stdio(server, workers=workers)

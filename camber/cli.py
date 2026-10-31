@@ -3134,6 +3134,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
     )
+    from . import __version__
+
+    ap.add_argument("--version", action="version", version=f"camber {__version__}")  # #322
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("run", help="run a config and print/write findings")
@@ -4165,15 +4168,34 @@ def _interrupted(exc: BaseException | None) -> bool:
     return bool(_SIGINT_SEEN)
 
 
+def _quiet_hook(hook):
+    """``hook`` (``sys.excepthook`` / ``sys.unraisablehook``) that drops a Ctrl-C: an extension
+    module's import that a Ctrl-C interrupted may print the ``KeyboardInterrupt`` and swallow it
+    (pandas); it is noted instead, and the command still ends with 130 (#322)."""
+
+    def quiet(*args):
+        exc_type = args[0] if len(args) == 3 else getattr(args[0], "exc_type", None)
+        if isinstance(exc_type, type) and issubclass(exc_type, KeyboardInterrupt):
+            _SIGINT_SEEN.append(signal.SIGINT)
+            return None
+        return hook(*args)
+
+    return quiet
+
+
 def main(argv=None):
     """CLI entry point: parse args and dispatch to the requested subcommand. Ctrl-C ends it
-    quietly with exit status 130, however early it comes (#321)."""
+    quietly with exit status 130, however early it comes (#321, #322)."""
     _SIGINT_SEEN.clear()
     noted = False
     with contextlib.suppress(ValueError):  # ValueError: not the main thread (an embedding)
         if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
             signal.signal(signal.SIGINT, _note_sigint)
             noted = True
+    hooks = {"excepthook": sys.excepthook, "unraisablehook": sys.unraisablehook}
+    if noted:
+        for name, hook in hooks.items():
+            setattr(sys, name, _quiet_hook(hook))
     try:
         return _main(argv)
     except SystemExit:
@@ -4185,6 +4207,9 @@ def main(argv=None):
     finally:
         if noted and signal.getsignal(signal.SIGINT) is _note_sigint:
             signal.signal(signal.SIGINT, signal.default_int_handler)
+        if noted:
+            for name, hook in hooks.items():
+                setattr(sys, name, hook)
 
 
 def _main(argv):

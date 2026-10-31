@@ -48,6 +48,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   with only the failing sentences removed: paragraphs, list markers, headings and the trailing
   line break stay. `camber.agent.verify.check` repairs a text the same way, so `camber explain`,
   `camber ask` and the RCx report's prose keep their lines too.
+- A store fence whose process id has 4,301 or more digits, or is otherwise not 1 to 10 ASCII
+  digits, is a malformed fence: it no longer makes every call on its facility and the whole
+  `facilities` listing fail with an internal error, and `datasets ingest --force` resets it
+  instead of failing (#322).
+- Ctrl-C early in `camber mcp` exits 130 quietly. An interrupted import inside numpy or pandas
+  could turn the Ctrl-C into a misleading numpy `ImportError` traceback with exit status 1, or
+  swallow it so that the server started anyway and ignored further Ctrl-C (#322).
 
 ### Changed
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
@@ -76,6 +83,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   own prefixes (`S`, `L`, `P`, `G`, `A`, `N`, and `R` in `finding_detail`). A caller that
   expects a result's facts to be only its `F` facts, or counts them, should filter on `kind` (a
   notice is `kind` `notice`).
+- The `facilities` capability no longer fails as a whole with `unavailable` while one allowed
+  facility is being replaced (a re-ingest, prune or removal in progress, or one killed between
+  the two renames of its swap). It lists every facility and marks that one with
+  `"unavailable": {"retryable": true, "reason": "being_replaced"}`, null `start` / `end`, zero
+  counts and a banner saying to retry later; calls on the facility itself still answer
+  `unavailable` with `"retryable": true`. Every `unavailable` row now carries a `reason`
+  (`being_replaced` or `unreadable`). A client that retried the whole listing on `unavailable`
+  should read the rows' `unavailable` instead (#322).
+- The `camber` console script now starts from `camber.__main__:main` (`camber.cli:main` still
+  works), so a Ctrl-C while the CLI loads exits 130 quietly. Packagers that list the entry point
+  themselves should change it (#322).
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
@@ -110,6 +128,7 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `sensor_trust` gives a sensor reference's bias its unit (`°F` for a temperature, `%` for a
   valve, damper or speed) in the summary, the reference's fact and a new `unit` field of
   `data.references`.
+- `camber --version` prints the installed version, and `python -m camber` runs the CLI (#322).
 
 
 ## [0.111.0] — 2026-10-31

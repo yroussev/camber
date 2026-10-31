@@ -108,10 +108,12 @@ def test_a_busy_marker_whose_pid_was_reused_does_not_block_readers(store, other)
 @needs_start_time
 def test_a_busy_marker_of_a_live_writer_still_blocks_readers(store, other):
     _mark(store, f"busy {other} {_fence._started(other)} 0123456789abcdef\n")
-    for name, args in (("points", {"facility_id": FID}), ("facilities", {})):
-        with pytest.raises(CapabilityError) as ei:
-            REG.call(name, args, _ctx(store))
-        assert ei.value.code == "unavailable" and ei.value.data["retryable"] is True
+    with pytest.raises(CapabilityError) as ei:
+        REG.call("points", {"facility_id": FID}, _ctx(store))
+    assert ei.value.code == "unavailable" and ei.value.data["retryable"] is True
+    # the listing marks it instead of failing as a whole (#322)
+    (row,) = REG.call("facilities", {}, _ctx(store)).data["facilities"]
+    assert row["unavailable"] == {"retryable": True, "reason": "being_replaced"}
 
 
 @needs_start_time

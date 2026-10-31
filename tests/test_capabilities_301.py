@@ -117,7 +117,10 @@ def test_a_damaged_part_file_is_unavailable_for_that_facility_only(store, how):
     listing = REG.call("facilities", {}, _ctx(store)).data["facilities"]
     by_id = {r["facility_id"]: r for r in listing}
     assert set(by_id) == {FID, OTHER}
-    assert by_id[FID]["unavailable"] == {"retryable": False} and by_id[FID]["start"] is None
+    assert (
+        by_id[FID]["unavailable"] == {"retryable": False, "reason": "unreadable"}
+        and by_id[FID]["start"] is None
+    )
     assert "unavailable" not in by_id[OTHER] and by_id[OTHER]["start"]
 
 
