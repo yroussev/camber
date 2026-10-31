@@ -122,7 +122,7 @@ capability cannot cut a list and leave the flag false.
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors (`run_with`: `rule_run` for a rule, `drift` for a detector, which `rule_run` refuses), the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
-| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and the text with the unsupported sentences removed | cheap |
+| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings and blank lines kept. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
@@ -378,12 +378,60 @@ the call, and records the result's facts in the session's ledger, kept in the se
 itself). A server with several client sessions (the coming A2A server) keeps one ledger per
 session.
 
-**What "supported" means.** A sentence is `supported` when every id it cites is a fact this
-server issued to this session (with a ledger) and every figure it states appears in a fact it
-cites (with `per_sentence: false`, in any fact the text cites). The ledger settles where a cited
-fact came from; it does not make the sentence's wording true of that fact. How a sentence is
-compared with the facts it cites is the number match just described (each figure must appear
-in a cited fact); its tightening is described in the 0.112 notes on `camber.agent.verify`.
+**What "supported" means.** The ledger settles where a cited fact came from; the match below
+decides whether the sentence says what that fact says. `check_citations` (and
+`camber.agent.verify.check`, which `camber explain`, `camber ask`, the
+RCx report's prose and every result's own summary go through) matches each sentence against
+the facts it cites (0.112, #294). It is precise rather than clever, and it fails closed: what it
+cannot match is not supported. **Supported means matched, not proven true.**
+
+- **Citations.** `[F1@x]`, or several in one bracket, `[F1@x, F2@y]` or `[F1@x; F2@y]`. Only
+  visible text counts: a citation in an HTML comment or tag cites nothing. With `per_sentence`
+  (the default) a sentence must cite a fact itself (`uncited` otherwise) and is matched against
+  the facts it cites; without it, its figures may match any fact the text cites, and only a
+  sentence that cites a fact itself has its claims checked.
+- **Figures** (`unsupported_number`). Every number, written in digits or in words ("forty-six",
+  "half"), must be one a cited fact states with the same sign (`-45%` is not `45%`), the same
+  unit when the sentence gives one (`%`, `°F`, `kWh`, `therms`, hours, days, percentage
+  points, `$`, ...), the same counted thing when the sentence names one (hours, samples, points,
+  rules, faults, ...; for a percentage, what it is "of"), and the same role: a figure the fact
+  gives as a threshold or limit (`valve > 5%`, `OAT < 60°F`, `above 20% min`, `target 57.1°F`)
+  is not a result, and a result is not a threshold. A fact's figures are those its text states,
+  outside the quoted names in it (a number in a name from the data is not a figure), and its
+  numeric `value` with its `unit` when it has one; never the other numbers of its data (a
+  finding's metrics, a rule's parameters). A date, time or year must be one a cited fact carries
+  in its text or in a date field ("in 2017" matches a `reporting_period` of 2017). A list marker
+  (`1.`, `2)`), a rank (`Ranked cause 1`, `step 2`, `#3`) and an ordinal (`2nd`) are labels,
+  not figures (so is the rank in "Issue 1 of 4"). A fact with `basis: "claimed"` (a claim's own
+  figure, from `mv_summary`'s `claim`) supports a figure only in a sentence that presents it as
+  a claim ("the claim states 15%"), never a measured statement. A **derived number** -- a
+  difference, sum, ratio or annualised figure of the facts' figures -- is not supported unless a
+  fact states it.
+- **Claims** (`unsupported_claim`), checked against the facts the sentence cites. An
+  **equipment, meter or facility** the sentence names -- an id with a digit or an underscore
+  (`AHU-1`, `meter_A`), a quoted name, or the `equip`, `facility_id` or `meter` of any fact in
+  play, or of its `subject`) -- must be named by a cited fact. A **verdict** word (fault, fail,
+  warn, suspect, ok, pass, healthy, accurate, correctly, meets, compliant, significant, trusted,
+  untrusted, info, explained, persists, worse, flat) must be one a cited fact states, in its text or as its `value`, `verdict` or
+  `severity`, with the same polarity: "meets G14" against "does not meet G14 acceptance" fails,
+  "fails G14" matches it. A **direction** word (rose, increased, fell, decreased, saved,
+  avoided, reduced, wastes, ...) must be one a cited fact uses (or its `direction`). A
+  **negation** ("did not", "never", "without") needs a cited fact that negates too; "no
+  <thing>" needs a fact that says "no <thing>" or "0 <thing>".
+- **Headings and notices.** A heading line (`# Title`, a short line ending in a colon, a bold-only
+  line) that states nothing -- no citation, figure, date, negation or direction -- is kept and
+  not judged. A `NOTICE:` line repeating the text of a `notice` fact among the facts (passed in
+  `facts`, or cited) is kept and not judged; a `NOTICE:` line that cites its notice fact is
+  matched like any sentence; any other `NOTICE:` line is judged like a sentence.
+- **`verified_text`** is the draft with only the failing sentences removed: its lines, list
+  markers, headings and blank lines stay, and a line whose sentences all failed goes.
+
+What it does not check: whether a claim is true beyond what the cited facts state, the meaning
+of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
+outside these lists is not read), an equipment name with no digit or underscore that no fact
+gives as a subject, and which cited fact a figure belongs to when a sentence cites several. A
+sentence a reader would take as fair can fail (an inference such as "so no check was declined",
+advice in the negative): say it the way a fact does, cite the fact that says it, or leave it out.
 
 **In-process, the timeout cannot stop a handler.** The handler runs in a worker thread; Python
 cannot kill a thread, so on a timeout the call returns `timeout` at once while the handler

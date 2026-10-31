@@ -8,9 +8,13 @@ passed must equal the issued fact with its id, or the call is refused (``invalid
 caller cannot add, alter or import a fact. With no ledger (direct Python use) ``facts`` is
 required and taken as given: the result says ``provenance: "unverified"``.
 
-:func:`camber.agent.verify.check` judges every sentence: it must cite at least one known fact id
-(``[F1@rule_run]``) when ``per_sentence`` is on, and every number it states must appear in a fact
-it cites. Reads no store and no facility.
+:func:`camber.agent.verify._judge` judges every sentence (#294): it must cite at least one known
+fact id (``[F1@rule_run]``, or several: ``[F1@a, F2@b]``) when ``per_sentence`` is on, every
+figure it states must be one a fact it cites states (sign, unit, counted thing and role
+included), and the names, verdicts, directions and negations it states must be ones those facts
+make. A ``NOTICE:`` line repeating the text of a ``notice`` fact among the facts is kept and not
+judged. ``verified_text`` keeps the draft's lines, headings and blank lines (#322). Reads no
+store and no facility.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ _VERDICTS = (
     "forgotten_citation",
     "uncited",
     "unsupported_number",
+    "unsupported_claim",
 )
 #: sentences (and cited ids) per page by default (#299)
 _PAGE = 50
@@ -61,9 +66,8 @@ INPUT_SCHEMA = {
         },
         "per_sentence": {
             "type": "boolean",
-            "description": "every sentence must cite a fact, and its numbers must trace to the "
-            "facts that sentence cites (default true); false: numbers may trace to any fact the "
-            "text cites, and an uncited sentence without numbers passes",
+            "description": "default true: each sentence must cite facts and match them; "
+            "false: figures may match any cited fact, uncited sentences pass",
         },
         "detail": {
             "type": "boolean",
@@ -86,6 +90,7 @@ _SENTENCE = {
         "cited": {"type": "array", "items": {"type": "string"}},
         "unknown": {"type": "array", "items": {"type": "string"}},
         "forgotten": {"type": "array", "items": {"type": "string"}},
+        "why": {"type": "string"},
     },
 }
 
@@ -225,9 +230,18 @@ def _issued(ledger, arguments: dict) -> tuple[list, set]:
     return list(facts.values()), forgotten
 
 
+#: a sentence's verdict, from :func:`camber.agent.verify._judge`'s reason
+_VERDICT_OF = {
+    "": "supported",
+    "uncited-sentence": "uncited",
+    "uncited-number": "unsupported_number",
+    "unsupported-claim": "unsupported_claim",
+}
+
+
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
-    from ..agent.verify import _sentences, check, extract_cites
+    from ..agent.verify import _judge, _rebuild, _visible, extract_cites
 
     ledger = getattr(ctx, "ledger", None)
     if ledger is not None:
@@ -245,43 +259,39 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     known = set(context.ids())
     per = arguments.get("per_sentence")
     per = True if per is None else bool(per)
-    whole = check(arguments["text"], context, strict=True, require_cite_each_sentence=per)
+    draft = arguments["text"]
+    # a NOTICE line that repeats a notice fact's text is the server's own words (#294)
+    notices = [f.text for f in context.facts if f.kind == "notice"]
+    judged = _judge(draft, context, per_sentence=per, notices=notices)
     sentences = []
-    for i, sent in enumerate(_sentences(arguments["text"])):
-        cites = extract_cites(sent)
-        unknown = [c for c in cites if c not in known and c not in forgotten]
-        lost = [c for c in cites if c in forgotten]
-        if per:
-            g = check(sent, context, strict=False, require_cite_each_sentence=True)
-        else:  # numbers may trace to any fact the whole text cites
-            own = [c for c in extract_cites(arguments["text"]) if c in known]
-            g = check(f"{sent} " + " ".join(f"[{c}]" for c in own), context, strict=False)
-        reasons = {f["reason"] for f in g.flagged}
+    for i, j in enumerate(judged):
+        unknown = [c for c in j.unknown if c not in forgotten]
+        lost = [c for c in j.unknown if c in forgotten]
         if unknown:
-            verdict = "unknown_citation"
+            verdict, why = (
+                "unknown_citation",
+                [f"{c} is not a fact of this session" for c in unknown],
+            )
         elif lost:
-            verdict = "forgotten_citation"
-        elif "uncited-sentence" in reasons:
-            verdict = "uncited"
-        elif "uncited-number" in reasons:
-            verdict = "unsupported_number"
+            verdict, why = "forgotten_citation", [f"{c} is no longer held" for c in lost]
         else:
-            verdict = "supported"
-        sentences.append(
-            {
-                "index": i,
-                "text": sent,
-                "verdict": verdict,
-                "cited": [c for c in cites if c in known],
-                "unknown": unknown,
-                "forgotten": lost,
-            }
-        )
+            verdict, why = _VERDICT_OF[j.reason], j.why
+        row = {
+            "index": i,
+            "text": j.text,
+            "verdict": verdict,
+            "cited": j.cited,
+            "unknown": unknown,
+            "forgotten": lost,
+        }
+        if verdict != "supported":
+            row["why"] = "; ".join(why)
+        sentences.append(row)
     n_ok = sum(1 for s in sentences if s["verdict"] == "supported")
     bad = {v: sum(1 for s in sentences if s["verdict"] == v) for v in _VERDICTS}
     detail = bool(arguments.get("detail"))
     listed = sentences if detail else [s for s in sentences if s["verdict"] != "supported"]
-    cited = list(dict.fromkeys(c for c in extract_cites(arguments["text"]) if c in known))
+    cited = list(dict.fromkeys(c for c in extract_cites(_visible(draft)) if c in known))
     data = {
         "grounded": n_ok == len(sentences),
         "n_sentences": len(sentences),
@@ -291,8 +301,10 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
         "provenance": provenance,
     }
-    if detail:
-        data["verified_text"] = whole.text
+    if detail:  # 0.112 (#322): the draft's lines, headings and blank lines kept
+        data["verified_text"] = _rebuild(
+            draft, [j for j, s in zip(judged, sentences) if s["verdict"] != "supported"]
+        )
     facts = [
         {
             "id": "F1@check_citations",
@@ -305,8 +317,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
                 if bad["forgotten_citation"]
                 else ""
             )
-            + f"{bad['uncited']} cite nothing and {bad['unsupported_number']} state a number "
-            "no cited fact carries",
+            + f"{bad['uncited']} cite nothing, {bad['unsupported_number']} state a figure no "
+            f"cited fact carries and {bad['unsupported_claim']} make a claim no cited fact makes",
         }
     ]
     text = cite(facts[0])
@@ -319,7 +331,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     if n_ok < len(sentences):
         banners.append(
             "Some sentences are not supported by the facts they cite: fix or remove them "
-            "before sharing the text (with detail, verified_text has them removed)."
+            "before sharing the text (each one's 'why' says what did not match; with detail, "
+            "verified_text has them removed)."
         )
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
 
@@ -330,10 +343,10 @@ CAPABILITIES = (
         title="Check citations",
         description=(
             "Check your draft before showing it: pass the text only; each [id] is looked up "
-            "among the facts this server gave you in this session. A sentence is supported, "
-            "unknown_citation (not given in this session), forgotten_citation (rerun that tool), "
-            "uncited or unsupported_number (a figure no cited fact carries); failing ones are "
-            "listed (detail: all, plus verified_text). Call it last. Cheap."
+            "in this session's facts. A sentence is supported, unknown_citation (not of "
+            "this session), forgotten_citation (rerun that tool), "
+            "uncited, unsupported_number (figure, sign or unit) or unsupported_claim (name, "
+            "verdict or direction); failures come with why. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

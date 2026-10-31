@@ -27,6 +27,28 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   bounded (about 8 MB of the most recent facts); a cited fact it has since dropped is the new
   verdict `forgotten_citation` -- run the tool again and cite the new id.
 
+### Fixed
+- **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
+  supported when it cited a known fact and its numbers appeared somewhere in that fact, so
+  `-45%` passed against 45 %, `47,980 MWh` against a figure with no unit, a 60 °F threshold as
+  "saves 60%", another air handler's or meter's name with this one's figures, "consumption
+  rose" against a saving, "meets G14" against a baseline that fails it, a citation hidden in an
+  HTML comment, and a number that was only part of a name from the data. Each figure must now
+  be one a cited fact states, with the same sign, unit, counted thing (hours, samples, points,
+  ...) and role (a threshold is not a result); each date or year one a cited fact carries; and
+  each equipment, meter or facility named, verdict, direction and negation one a cited fact
+  states; a claim's own figure (a `claimed_figure` fact) supports only a sentence that says it is
+  the claim's. Only visible citations count. Docs: CAPABILITY-REGISTRY.md, "Where a cited fact comes from".
+- **`check_citations` no longer rejects what a fact does support (#294).** A rank ("Ranked cause
+  1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
+  period is in 2017; a `NOTICE:` line repeating the text of a `notice` fact among the facts
+  is kept and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+- **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
+  and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
+  with only the failing sentences removed: paragraphs, list markers, headings and the trailing
+  line break stay. `camber.agent.verify.check` repairs a text the same way, so `camber explain`,
+  `camber ask` and the RCx report's prose keep their lines too.
+
 ### Changed
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
   every fact must be one the session was sent, unchanged, or the call is refused with
@@ -36,6 +58,16 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `forgotten_citation` in `verdicts` and a sentence's `forgotten` ids; code that compares
   `verdicts` with a fixed dict needs the new key. The built-in prompts no longer ask the model to
   pass facts back.
+- **`check_citations` has a new verdict, `unsupported_claim` (#294)**, for a sentence whose
+  figures match but whose equipment, verdict, direction or negation no cited fact states; the
+  `verdicts` counts gain the key, and each failing sentence gains `why`, which says what did not
+  match. A client that lists the verdicts should add it. Some drafts that passed before now
+  fail: a sentence that infers beyond its facts ("so no check was declined"), uses a verdict
+  word the cited fact does not ("the suspect sensor" citing the finding instead of the sensor's
+  fact), restates a metric the fact's text does not state (44.9 % for "45%"), or derives a
+  number (a sum, a difference, a ratio). Say it as a fact says it and cite that fact.
+  `camber.agent.verify.check` applies the same rules and flags such a sentence
+  `unsupported-claim`.
 - The built-in prompts point at the new facts: cite a span, gap, rank or notice by its own fact,
   number a ranked list with a marker at the start of the line, say a fault is explained by a
   sensor only when `finding_detail` says so, and never cite a claimed figure for a measured
