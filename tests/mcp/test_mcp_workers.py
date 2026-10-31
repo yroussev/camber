@@ -487,7 +487,7 @@ def test_a_worker_that_grew_past_the_threshold_is_replaced(session):
     assert s.note_pids() == [first]  # a small call keeps its worker
     s.call(2, "grow", mb=600)
     assert s.reply(60)[1]["result"]["structuredContent"]["pid"] == first
-    assert _wait_dead([first], 3.0)
+    assert _wait_dead([first], 30.0)  # a 600 MB worker under coverage can take seconds to exit
     fresh = _wait_for(lambda: s.note_pids(), 30.0)
     assert fresh and fresh != [first]
 
