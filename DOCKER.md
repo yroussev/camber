@@ -57,6 +57,20 @@ name the browser uses, since it arrives in `Origin`. Token auth became the defau
 loopback binds only, so the image (bound to `0.0.0.0`) keeps no authentication by default, with
 the warning; a container started with `CAMBER_API_HOST=127.0.0.1` gets token auth.
 
+## Run the MCP server
+
+The image runs any `camber` command; give it the store and `-i` for the server's stdin:
+
+```sh
+docker run --rm -i --entrypoint camber -v "$PWD/data/store:/data/store:ro" \
+  ghcr.io/yroussev/camber:latest mcp --store /data/store --allow north-campus
+```
+
+The image's `HEALTHCHECK` probes the read API only when the container runs it (the default
+command or `camber serve`); for `camber mcp` and any other command it passes while the container
+runs (0.112, #326). Images up to 0.111 probe the API whatever the command, so such a container
+turns `unhealthy` after about 100 s: start those with `--no-healthcheck`.
+
 ## Run any command / a shell
 
 ```sh

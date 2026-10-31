@@ -605,7 +605,10 @@ def test_a_dir_name_with_no_valid_pid_never_breaks_the_sweep(tmp_path, monkeypat
     path = _launch.isolate_matplotlib()
     assert path and os.path.isdir(path) and os.path.dirname(path) == str(tmp_path)
     assert os.environ["MPLCONFIGDIR"] == path
+    os.remove(os.path.join(path, _launch._MPL_OWNER))  # the server's lock file (#326)
     os.rmdir(path)
+    while _launch._MPL_LOCKS:
+        os.close(_launch._MPL_LOCKS.pop())
 
 
 def _die_dir(tmp_path, monkeypatch, tokens: int):

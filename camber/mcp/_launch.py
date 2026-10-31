@@ -269,6 +269,54 @@ _MPL_PREFIX = "camber-mcp-mpl-"
 _MPL_LEGACY_AGE = 86400.0
 #: the largest process id any POSIX system hands out (a C ``pid_t`` is 32 bits)
 _MAX_PID = (1 << 31) - 1
+#: a file in each server's matplotlib directory that the server holds locked while it runs
+#: (0.112, #326): the kernel drops the lock when the process ends, however it ends
+_MPL_OWNER = ".camber-owner"
+_MPL_LOCKS: list = []  # the open, locked owner files of this process's directories
+
+
+def _lock_owner(path: str) -> None:
+    """Hold ``path``'s owner file locked for the life of this process (POSIX only)."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - Windows: the process id rule alone
+        return
+    try:
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(os.path.join(path, _MPL_OWNER), flags, 0o600)
+    except OSError:
+        return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return
+    _MPL_LOCKS.append(fd)
+
+
+def _owner_gone(path: str):
+    """Whether the server that made directory ``path`` has ended, by its owner file: ``True``
+    when its lock can be taken, ``False`` when it is held, ``None`` when there is no such file
+    (a 0.111 server's directory) or it cannot be checked here. A lock is the kernel's, so this
+    holds across pid namespaces: a server that ran as pid 1 in a container sharing ``/tmp``
+    looks alive to the next pid 1 by its process id, but not by its lock."""
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - Windows
+        return None
+    try:
+        fd = os.open(os.path.join(path, _MPL_OWNER), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    return True
 
 
 def _pid_running(pid: int) -> bool:
@@ -314,7 +362,12 @@ def sweep_matplotlib_dirs(tmpdir: str | None = None) -> int:
             continue
         if not stat.S_ISDIR(st.st_mode) or (uid is not None and st.st_uid != uid):
             continue
-        if m.group(1) is not None:
+        gone = _owner_gone(path)
+        if gone is False:
+            continue
+        if gone is True:
+            pass  # its server ended, whatever its process id now names (#326)
+        elif m.group(1) is not None:
             if int(m.group(1)) == os.getpid() or _pid_running(int(m.group(1))):
                 continue
         elif time.time() - st.st_mtime < _MPL_LEGACY_AGE:
@@ -332,7 +385,9 @@ def isolate_matplotlib() -> str | None:
     0.111 (#304): rcx_report draws its charts with matplotlib, which otherwise writes its font
     cache under ``$HOME`` on first use: the only file a read-only server would leave behind.
     #309: the name carries this process's id, and the directories of servers that were killed
-    (``SIGKILL``, which no process can clean up after) are swept first."""
+    (``SIGKILL``, which no process can clean up after) are swept first. #326: the server holds
+    a lock on a file in it, which tells a later server that it ended also where its process id
+    cannot (every server pid 1 in containers sharing ``/tmp``)."""
     import tempfile
 
     if os.environ.get("MPLCONFIGDIR"):
@@ -345,6 +400,7 @@ def isolate_matplotlib() -> str | None:
         path = tempfile.mkdtemp(prefix=f"{_MPL_PREFIX}{os.getpid()}-")
     except OSError:
         return None
+    _lock_owner(path)  # at once: a server starting now tells this one from a dead one (#326)
     os.environ["MPLCONFIGDIR"] = path
     return path
 
@@ -453,7 +509,11 @@ def launch(
     except Terminated as exc:
         return _terminated(exc)
     finally:
-        _restore_signals(previous)
+        # after a signal ended the session the handler left all three ignored: they stay so,
+        # or a second signal arriving now would end the process by the signal, not with the
+        # exit status above (#326)
+        if not _SIGNALLED:
+            _restore_signals(previous)
         settle_stderr()
 
 
@@ -510,6 +570,8 @@ def _launch(
             import shutil
 
             shutil.rmtree(mpl_dir, ignore_errors=True)
+            while _MPL_LOCKS:  # the directory is gone: its lock is no longer needed
+                os.close(_MPL_LOCKS.pop())
 
 
 def settle_stderr() -> None:

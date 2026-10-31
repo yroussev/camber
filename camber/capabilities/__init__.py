@@ -714,10 +714,55 @@ def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:6]
 
 
+def _config_identity(config: dict, path) -> dict:
+    """``config`` as the token sees it (#326): each path it reads stands for what it resolves to
+    (relative ones against the config's directory), never for its spelling, so an absolute or a
+    relative path, one through a symlink or with a trailing slash, and the same store or file
+    mounted elsewhere give one token. ``source.store`` stands for its data, which the store
+    generation in :func:`_server_state` covers; a folder for the name, size and modification
+    time of its entries, a file for its size and modification time. Stat calls only."""
+    import copy
+
+    from ..store.parquet_store import _partition_signature
+
+    base = os.path.dirname(os.path.abspath(os.fspath(path)))
+
+    def where(p):
+        return os.path.realpath(os.path.join(base, os.path.expanduser(p)))
+
+    def folder(p):
+        return ["folder", list(_partition_signature(where(p)))] if isinstance(p, str) else p
+
+    def file(p):
+        if not isinstance(p, str):
+            return p
+        try:
+            st = os.stat(where(p))
+            return ["file", st.st_size, st.st_mtime_ns]
+        except OSError:
+            return ["file", None]
+
+    out = copy.deepcopy(config)
+    source = out.get("source")
+    if isinstance(source, dict):
+        if isinstance(source.get("store"), str):
+            source["store"] = ["store"]
+        if "folder" in source:
+            source["folder"] = folder(source["folder"])
+        if isinstance(source.get("folders"), list):
+            source["folders"] = [folder(f) for f in source["folders"]]
+    for key, sub in (("mapping", "path"), ("shared_oat", "file")):
+        spec = out.get(key)
+        if isinstance(spec, dict) and sub in spec:
+            spec[sub] = file(spec[sub])
+    return out
+
+
 def _server_state(arguments: dict, ctx: CallContext) -> list:
     """What decides a call's values besides its arguments and the allowlist (#295): a digest of
-    the loaded run config (its canonical JSON, not its path; the file's bytes when it does not
-    load), the trust floor, and a cheap store generation: the size and modification time of the
+    the loaded run config (its canonical JSON, not its path, with the paths it reads standing for
+    what they resolve to: :func:`_config_identity`; the file's bytes when it does not load), the
+    trust floor, and a cheap store generation: the size and modification time of the
     facility registry and the point catalog, and of every file of each touched facility
     partition, part files included, so an in-place rewrite counts (#312; the facilities the
     arguments name, else every allowed one, plus a store-backed config's own facility). Stat
@@ -731,7 +776,9 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
     for path in config_paths(ctx):
         try:
             loaded = read_config(ctx, path)
-            text = json.dumps(loaded, sort_keys=True, separators=(",", ":"), default=str)
+            text = json.dumps(
+                _config_identity(loaded, path), sort_keys=True, separators=(",", ":"), default=str
+            )
             configs.append(hashlib.sha256(text.encode("utf-8")).hexdigest())
             source = loaded.get("source") or {}
             if source.get("kind") == "store" and source.get("facility_id"):

@@ -50,7 +50,9 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   ingest) never give one id to different values (0.111, #295). The stored data counts by the
   size and modification time of each file the call reads and of the point catalog, so a part
   file rewritten in place gives new ids too (#312); a restart, or a config at another path,
-  does not.
+  does not, and neither does how the config spells a path it reads (absolute or relative,
+  through a symlink, with a trailing slash), nor the store or file mounted at another path, as on
+  a host and in a container (0.112, #326).
 - **Checking a draft.** `check_citations` judges each sentence of a draft against the facts it
   cites (0.112, #294): every figure must be one a cited fact states, with the same sign, unit,
   counted thing and role (a threshold is not a result; a derived number is not supported), every
@@ -153,9 +155,13 @@ Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary direct
 a call writes nothing under your home directory (0.111, #304). `SIGTERM` and `SIGHUP` stop the
 server like Ctrl-C: a log line, every call stopped, the directory removed, exit status 143 or 129
 (130 for Ctrl-C), also while the server is blocked writing to a client that stopped reading; a
-second signal does not interrupt that cleanup (#316). No process can clean up after `SIGKILL`; the
-next `camber mcp` to start removes the directories of servers that are no longer running (#309),
-and those named without a process id (0.111 development builds) once they are a day old. A name
+second signal does not interrupt that cleanup (#316), nor change that exit status (0.112, #326). No
+process can clean up after `SIGKILL`; the next `camber mcp` to start removes the directories of
+servers that are no longer running (#309). A server holds a lock on a file in its directory while
+it runs, so a later one tells a dead server from a live one also where the process id cannot, as
+for servers that each run as pid 1 in containers sharing a `/tmp` volume (0.112, #326); a 0.111
+server's directory is judged by its process id, and those named without a process id (0.111
+development builds) are removed once they are a day old. A name
 it cannot read as a process id is left alone, and nothing the sweep meets stops the start (#316).
 
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
@@ -231,6 +237,12 @@ environment's Python with `"args": ["-m", "camber.cli", "mcp", ...]`.
 
 **Other clients**: any MCP client that launches a stdio server takes the same command and
 arguments.
+
+**From the container image**: `docker run --rm -i --entrypoint camber -v <store>:/data/store:ro
+ghcr.io/yroussev/camber:<version> mcp --store /data/store --allow <id>` as the command. The image's
+health check probes the read API only when the container serves it (0.112); with a 0.111 or
+older image add `--no-healthcheck`, or the container turns `unhealthy` (#326). See
+[DOCKER.md](https://github.com/yroussev/camber/blob/main/DOCKER.md).
 
 ## Protocol
 

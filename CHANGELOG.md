@@ -55,8 +55,25 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - Ctrl-C early in `camber mcp` exits 130 quietly. An interrupted import inside numpy or pandas
   could turn the Ctrl-C into a misleading numpy `ImportError` traceback with exit status 1, or
   swallow it so that the server started anyway and ignored further Ctrl-C (#322).
+- `camber mcp` ended by a signal no longer dies by a second signal that arrives 20-100 ms
+  later, after its cleanup: it exits 143, 129 or 130 as documented, so a supervisor reading the
+  wait status sees the exit status, not "killed by signal" (#326).
+- The matplotlib directory of a `camber mcp` killed with `SIGKILL` is now removed by the next
+  server also when every server runs as pid 1 in containers sharing a `/tmp` volume: a server
+  holds a lock on a file in its directory while it runs, and the sweep goes by that lock
+  instead of the process id (#326).
+- The container image's `HEALTHCHECK` probes the read API only when the container runs it (the
+  default command or `camber serve`); a container running `camber mcp` or any other command no
+  longer turns `unhealthy`. With a 0.111 image, start such a container with `--no-healthcheck`;
+  DOCKER.md and MCP.md show how to run the MCP server from the image (#326).
 
 ### Changed
+- **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id
+  token covered the config's text, so an absolute or a relative `source.store`, one through a
+  symlink or with a trailing slash, and the same store mounted at another path (a host and a
+  container) gave different ids for the same data. A path now counts by what it resolves to: the
+  store by its data, a folder by its entries, the mapping and `shared_oat` files by their size and
+  modification time. The ids of a server started with a `--config` change once; cite the new ones.
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
   every fact must be one the session was sent, unchanged, or the call is refused with
   `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out

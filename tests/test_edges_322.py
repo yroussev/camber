@@ -239,7 +239,17 @@ def test_the_mcp_handler_notes_ctrl_c_for_the_cli_and_for_itself(monkeypatch):
         _launch._SIGNALLED.clear()
 
 
-def test_a_ctrl_c_swallowed_while_loading_starts_no_session(store, monkeypatch):
+@pytest.fixture
+def _keep_handlers():
+    """A session a signal ended leaves the signals ignored (#326): put this process's back."""
+    names = [n for n in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, n)]
+    saved = {n: signal.getsignal(getattr(signal, n)) for n in names}
+    yield
+    for n, h in saved.items():
+        signal.signal(getattr(signal, n), h)
+
+
+def test_a_ctrl_c_swallowed_while_loading_starts_no_session(store, monkeypatch, _keep_handlers):
     def swallowed_ctrl_c():
         _launch._SIGNALLED.append(signal.SIGINT)  # the handler ran; its exception was lost
         return None

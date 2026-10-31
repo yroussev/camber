@@ -999,7 +999,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   raises the new code `unknown_capability` for an unknown name instead of `not_found`. Fact ids
   carry a per-call token in their context (`F<n>@<capability>-<6 hex>`), added by
   `Registry.call`. **Changed in 0.111 (#295):** the token (`call_token`) also covers the run
-  config's content, the trust floor and the store generation, so ids change. **Changed in 0.111 (#301):** the error code `unavailable` (in `ERROR_CODES`
+  config's content, the trust floor and the store generation, so ids change. **Changed in 0.112
+  (#326):** a path the run config reads counts by what it resolves to, not by its spelling, so
+  the ids of a server started with a `--config` change once. **Changed in 0.111 (#301):** the error code `unavailable` (in `ERROR_CODES`
   and `camber.mcp.TOOL_ERROR_CODES`) for a store read that fails, which was `internal`; the
   `DATE` arguments (`start`, `end`, a drift `baseline` / `current`) accept only calendar-valid
   months, days, hours and minutes; the `facilities` row gains the optional `unavailable` field.

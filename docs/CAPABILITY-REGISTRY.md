@@ -57,7 +57,9 @@ a handler returns -- in `facts`, in the `[id]` citations of `text` and wherever 
 fact id (a row's `fact`, the RCx fact index). The token is six hex digits of SHA-256 over the
 capability name, the canonical JSON of the validated arguments, the sorted allowlist and what
 else decides the values (0.111, #295): a digest of the loaded run config (its content, not its
-path), the trust floor and a store generation (the size and modification time of the facility
+path; a path it reads stands for what it resolves to, not its spelling or mount point: the store by
+its store generation, a folder by its entries' names, sizes and modification times, the mapping
+and `shared_oat` files by their size and modification time, 0.112, #326), the trust floor and a store generation (the size and modification time of the facility
 registry, the point catalog and every file of each facility the call reads, part files included,
 so an in-place rewrite counts, #312: the facilities its arguments name, else every allowed one). So the same call on the same server and unchanged data gives the same ids, also after a
 restart, while two different calls, or the same call on two servers that differ in `--config`,
