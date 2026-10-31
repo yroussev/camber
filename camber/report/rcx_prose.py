@@ -439,6 +439,7 @@ def _why_failed(g) -> str:
     words = {
         "uncited-sentence": "sentence(s) without a fact citation",
         "uncited-number": "sentence(s) stating a figure no cited fact holds",
+        "unsupported-claim": "sentence(s) making a claim no cited fact makes",
         "unknown-citation": "citation(s) of an id not in the fact index",
     }
     bits = [f"{counts[r]} {words[r]}" for r in words if counts.get(r)]
@@ -492,7 +493,10 @@ def _apply_prose(rep, *, prose=None, client=None) -> None:
                 continue
         scope = _scope(rep, slot)
         g = check(raw, scope, strict=True, source=source, require_cite_each_sentence=True)
-        dropped = any(f["reason"] in ("uncited-sentence", "uncited-number") for f in g.flagged)
+        dropped = any(
+            f["reason"] in ("uncited-sentence", "uncited-number", "unsupported-claim")
+            for f in g.flagged
+        )
         if dropped or not g.text.strip():
             rep.prose[slot] = {
                 "status": "fallback",

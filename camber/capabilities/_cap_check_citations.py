@@ -1,9 +1,12 @@
 """The ``check_citations`` capability: verify a drafted text against fact ids (0.110, #278).
 
 The caller passes the text and the facts it may cite -- the ``facts`` of earlier results, passed
-back in. :func:`camber.agent.verify.check` judges every sentence: it must cite at least one
-known fact id (``[F1@rule_run]``) when ``per_sentence`` is on, and every number it states must
-appear in a fact it cites. Reads no store and no facility.
+back in. :func:`camber.agent.verify._judge` judges every sentence: it must cite at least one
+known fact id (``[F1@rule_run]``, or several: ``[F1@a, F2@b]``) when ``per_sentence`` is on, every
+figure it states must be one a fact it cites states (sign, unit, counted thing and role included),
+and the names, verdicts, directions and negations it states must be ones those facts make (0.112,
+#294). ``verified_text`` keeps the draft's lines, headings and blank lines (#322). Reads no store
+and no facility.
 """
 
 from __future__ import annotations
@@ -12,7 +15,13 @@ from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite
 from ._page import OFFSET, limit_arg, page
 
-_VERDICTS = ("supported", "unknown_citation", "uncited", "unsupported_number")
+_VERDICTS = (
+    "supported",
+    "unknown_citation",
+    "uncited",
+    "unsupported_number",
+    "unsupported_claim",
+)
 #: sentences (and cited ids) per page by default (#299)
 _PAGE = 50
 
@@ -72,6 +81,10 @@ _SENTENCE = {
         "verdict": {"type": "string", "enum": list(_VERDICTS)},
         "cited": {"type": "array", "items": {"type": "string"}},
         "unknown": {"type": "array", "items": {"type": "string"}},
+        "why": {
+            "type": "string",
+            "description": "for a sentence that is not supported: what did not match",
+        },
     },
 }
 
@@ -137,47 +150,56 @@ def _context(facts: list):
     )
 
 
+def _notices(ctx) -> tuple:
+    """The banners this server gave the caller's session, when its ledger keeps them: a
+    ``NOTICE:`` line repeating one is the server's own and is kept, not judged (#294)."""
+    got = getattr(getattr(ctx, "ledger", None), "notices", None)
+    try:
+        got = got() if callable(got) else got
+        return tuple(str(n) for n in got or ())
+    except Exception:  # noqa: BLE001 - no notices known: every NOTICE line is judged
+        return ()
+
+
+#: a sentence's verdict, from :func:`camber.agent.verify._judge`'s reason
+_VERDICT_OF = {
+    "": "supported",
+    "uncited-sentence": "uncited",
+    "uncited-number": "unsupported_number",
+    "unsupported-claim": "unsupported_claim",
+}
+
+
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
-    from ..agent.verify import _sentences, check, extract_cites
+    from ..agent.verify import _judge, _rebuild, _visible, extract_cites
 
     context = _context(arguments["facts"])
     known = set(context.ids())
     per = arguments.get("per_sentence")
     per = True if per is None else bool(per)
-    whole = check(arguments["text"], context, strict=True, require_cite_each_sentence=per)
+    draft = arguments["text"]
+    judged = _judge(draft, context, per_sentence=per, notices=_notices(ctx))
     sentences = []
-    for i, sent in enumerate(_sentences(arguments["text"])):
-        cites = extract_cites(sent)
-        unknown = [c for c in cites if c not in known]
-        if per:
-            g = check(sent, context, strict=False, require_cite_each_sentence=True)
-        else:  # numbers may trace to any fact the whole text cites
-            own = [c for c in extract_cites(arguments["text"]) if c in known]
-            g = check(f"{sent} " + " ".join(f"[{c}]" for c in own), context, strict=False)
-        reasons = {f["reason"] for f in g.flagged}
-        if unknown:
-            verdict = "unknown_citation"
-        elif "uncited-sentence" in reasons:
-            verdict = "uncited"
-        elif "uncited-number" in reasons:
-            verdict = "unsupported_number"
-        else:
-            verdict = "supported"
-        sentences.append(
-            {
-                "index": i,
-                "text": sent,
-                "verdict": verdict,
-                "cited": [c for c in cites if c in known],
-                "unknown": unknown,
-            }
-        )
+    for i, j in enumerate(judged):
+        verdict = "unknown_citation" if j.unknown else _VERDICT_OF[j.reason]
+        row = {
+            "index": i,
+            "text": j.text,
+            "verdict": verdict,
+            "cited": j.cited,
+            "unknown": j.unknown,
+        }
+        if verdict != "supported":
+            row["why"] = "; ".join(
+                j.why if not j.unknown else [f"{c!r} is not among the facts" for c in j.unknown]
+            )
+        sentences.append(row)
     n_ok = sum(1 for s in sentences if s["verdict"] == "supported")
     bad = {v: sum(1 for s in sentences if s["verdict"] == v) for v in _VERDICTS}
     detail = bool(arguments.get("detail"))
     listed = sentences if detail else [s for s in sentences if s["verdict"] != "supported"]
-    cited = list(dict.fromkeys(c for c in extract_cites(arguments["text"]) if c in known))
+    cited = list(dict.fromkeys(c for c in extract_cites(_visible(draft)) if c in known))
     data = {
         "grounded": n_ok == len(sentences),
         "n_sentences": len(sentences),
@@ -186,8 +208,10 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         "sentences": page(listed, arguments, default=_PAGE, what="sentences", order="in order"),
         "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
     }
-    if detail:
-        data["verified_text"] = whole.text
+    if detail:  # 0.112 (#322): the draft's lines, headings and blank lines kept
+        data["verified_text"] = _rebuild(
+            draft, [j for j, s in zip(judged, sentences) if s["verdict"] != "supported"]
+        )
     facts = [
         {
             "id": "F1@check_citations",
@@ -195,7 +219,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
             "value": n_ok,
             "text": f"{n_ok} of {len(sentences)} sentence(s) are supported by the facts they "
             f"cite; {bad['unknown_citation']} cite an unknown id, {bad['uncited']} cite "
-            f"nothing and {bad['unsupported_number']} state a number no cited fact carries",
+            f"nothing, {bad['unsupported_number']} state a figure no cited fact carries and "
+            f"{bad['unsupported_claim']} make a claim no cited fact makes",
         }
     ]
     text = cite(facts[0])
@@ -203,7 +228,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     if n_ok < len(sentences):
         banners.append(
             "Some sentences are not supported by the facts they cite: fix or remove them "
-            "before sharing the text (with detail, verified_text has them removed)."
+            "before sharing the text (each failing sentence's 'why' says what did not match; "
+            "with detail, verified_text has them removed)."
         )
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
 
@@ -213,11 +239,14 @@ CAPABILITIES = (
         name="check_citations",
         title="Check citations",
         description=(
-            "Check a drafted text against the facts of earlier results before showing it: pass "
-            "the text and those results' 'facts'. Each sentence is supported, unknown_citation "
-            "(an id not among the facts), uncited (no [id]) or unsupported_number (a figure no "
-            "cited fact carries); the failing ones are listed (detail: every sentence, plus "
-            "verified_text). Call it last, on your own draft. Cheap: reads no building data."
+            "Check a draft against the facts of earlier results before showing it: pass the "
+            "text and those results' 'facts'. Each sentence is supported, unknown_citation "
+            "(an id not among the facts), uncited (no [id]), unsupported_number (a figure, "
+            "date, sign, unit or counted thing no cited fact carries; a threshold is not a "
+            "result) or unsupported_claim (an equipment, verdict, direction or negation no "
+            "cited fact states); the failing ones are listed with why (detail: every sentence, "
+            "plus verified_text). Supported means matched, not proven true. Call it last, on "
+            "your draft. Cheap: reads no building data."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

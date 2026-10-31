@@ -14,6 +14,41 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Fixed
+- **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
+  supported when it cited a known fact and its numbers appeared somewhere in that fact, so
+  `-45%` passed against 45 %, `47,980 MWh` against a figure with no unit, a 60 °F threshold as
+  "saves 60%", another air handler's or meter's name with this one's figures, "consumption
+  rose" against a saving, "meets G14" against a baseline that fails it, a citation hidden in an
+  HTML comment, and a number that was only part of a name from the data. Each figure must now
+  be one a cited fact states, with the same sign, unit, counted thing (hours, samples, points,
+  ...) and role (a threshold is not a result); each date or year one a cited fact carries; and
+  each equipment, meter or facility named, verdict, direction and negation one a cited fact
+  states. Only visible citations count. Docs: CAPABILITY-REGISTRY.md, "What supported means".
+- **`check_citations` no longer rejects what a fact does support (#294).** A rank ("Ranked cause
+  1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
+  period is in 2017; a `NOTICE:` line repeating a notice the server gave the session is kept
+  and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+- **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
+  and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
+  with only the failing sentences removed: paragraphs, list markers, headings and the trailing
+  line break stay. `camber.agent.verify.check` repairs a text the same way, so `camber explain`,
+  `camber ask` and the RCx report's prose keep their lines too.
+
+### Changed
+- **`check_citations` has a fifth verdict, `unsupported_claim` (#294)**, for a sentence whose
+  figures match but whose equipment, verdict, direction or negation no cited fact states; the
+  `verdicts` counts gain the key, and each failing sentence gains `why`, which says what did not
+  match. A client that lists the verdicts should add it. Some drafts that passed before now
+  fail: a sentence that infers beyond its facts ("so no check was declined"), uses a verdict
+  word the cited fact does not ("the suspect sensor" citing the finding instead of the sensor's
+  fact), restates a metric the fact's text does not state (44.9 % for "45%"), or derives a
+  number (a sum, a difference, a ratio). Say it as a fact says it and cite that fact.
+  `camber.agent.verify.check` applies the same rules and flags such a sentence
+  `unsupported-claim`.
+
 ## [0.111.0] — 2026-10-31
 
 **0.111: the MCP server hardened by a five-round acceptance test (#282, #289–#293, #295–#318, #320, #321).** Testers who had not built `camber mcp` attacked 0.110.0 and then each fix candidate with protocol fuzzing, hostile data, load, concurrent re-ingests and removals, killed processes, real clients and a blind fault-triage test; every finding they reported for 0.111 is fixed, and in the last round both testers recommended release. Tool calls now run in worker processes that a timeout, a cancel or a closed client stops, at most `--max-concurrent` at a time (#292, #309, #316). A reader overlapping a forced re-ingest or a removal gets the retryable `unavailable`, never a partial answer (#306, #317, #321). Results come a page at a time and fit a model's context (#299). The trust floor no longer withholds healthy plant checks (#297, #311), and a sensor that its configured reference finds wrong now ranks above the faults it explains, so the `triage_ahu` prompt names a biased supply-air sensor before a healthy valve (#313). Fact ids depend on the config, trust floor and stored data (#295, #312); text from the data can no longer forge notices (#291); research-only data stays refused when the registry is damaged or a facility is renamed (#290, #312). **Behaviour changes:** a rule parameter outside its documented range is refused unless the rule entry's `basis` says where the value came from, and one of the wrong type (text for a number, a fraction for an hour) is refused (#308, #315); a run config that repeats a key is refused (#308); ingest refuses ids holding control, bidi or invisible characters (#291); `check_citations` returns a compact verdict, with `verified_text` under `detail: true` (#299); every `camber mcp` launch mistake exits 2 (#296).

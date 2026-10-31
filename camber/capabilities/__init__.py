@@ -797,7 +797,11 @@ def _grounded(text: str, facts: list) -> tuple[str, list]:
     from ..agent.verify import check
 
     g = check(str(text or ""), _Facts(list(facts or [])), strict=True, source="template")
-    dropped = sum(1 for f in g.flagged if f["reason"] in ("uncited-number", "uncited-sentence"))
+    dropped = sum(
+        1
+        for f in g.flagged
+        if f["reason"] in ("uncited-number", "uncited-sentence", "unsupported-claim")
+    )
     unknown = sum(1 for f in g.flagged if f["reason"] == "unknown-citation")
     banners = []
     if dropped:

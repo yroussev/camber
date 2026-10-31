@@ -51,6 +51,14 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   size and modification time of each file the call reads and of the point catalog, so a part
   file rewritten in place gives new ids too (#312); a restart, or a config at another path,
   does not.
+- **Checking a draft.** `check_citations` judges each sentence of a draft against the facts it
+  cites (0.112, #294): every figure must be one a cited fact states, with the same sign, unit,
+  counted thing and role (a threshold is not a result; a derived number is not supported), every
+  date or year one a cited fact carries, and every equipment, meter or facility named, verdict
+  ("meets", "ok", "fault"), direction ("rose", "saved") and negation one a cited fact states.
+  A failing sentence comes with `why`. Supported means matched, not proven true; the rules and
+  their limits are in CAPABILITY-REGISTRY.md, "What supported means". `verified_text` keeps the
+  draft's lines, headings and blank lines and removes only the failing sentences (#322).
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the

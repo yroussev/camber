@@ -614,6 +614,7 @@ def test_check_citations_judges_each_sentence(results, site):
         "unknown_citation": 1,
         "uncited": 1,
         "unsupported_number": 1,
+        "unsupported_claim": 0,  # 0.112 (#294)
     }
     loose = reg.call(
         "check_citations",
