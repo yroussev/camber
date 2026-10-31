@@ -63,8 +63,9 @@ so an in-place rewrite counts, #312: the facilities its arguments name, else eve
 restart, while two different calls, or the same call on two servers that differ in `--config`,
 `--min-trust` or stored data, or after an ingest, give different ones: a model cannot cite
 `F1@rule_run` from one call while meaning another, and the facts of several calls, from one
-server or several, can be merged for `check_citations` without a clash. The token is a
-collision-resistant name, not a signature: it does not prove a fact came from a server. A handler writes plain ids (`F1@rule_run`); the
+server or several, never clash. The token is a collision-resistant name, not a signature: it
+does not prove a fact came from a server; the session's fact ledger does (see **Where a cited fact
+comes from** below). A handler writes plain ids (`F1@rule_run`); the
 registry scopes them. A facility is named only by `facility_id`, so the allowlist and the
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.
@@ -102,7 +103,7 @@ capability cannot cut a list and leave the flag false.
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors (`run_with`: `rule_run` for a rule, `drift` for a detector, which `rule_run` refuses), the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
-| `check_citations` | `text`, `facts`; optional `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `uncited`, `unsupported_number`) of a drafted text's sentences against the facts of earlier results, and the sentences that fail; with `detail`, every sentence and the text with the unsupported sentences removed | cheap |
+| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and the text with the unsupported sentences removed | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
@@ -192,7 +193,8 @@ person.
 Each prompt renders one user message naming the capabilities to call and in what order, asks
 for every sentence to end with the fact ids it rests on, forbids a number no cited fact carries,
 says a declined check or a refused call is not a pass, and ends by calling `check_citations` on
-the draft with the facts the calls returned. Argument values are reduced to one short line.
+the draft (without facts: the server looks the cited ids up itself, 0.112). Argument values are
+reduced to one short line.
 
 | Name | Arguments | Calls |
 |---|---|---|
@@ -253,7 +255,8 @@ the draft with the facts the calls returned. Argument values are reduced to one 
 7. **Citations.** `text` is checked against `facts` with `camber.agent.verify.check` (strict): a
    sentence that states a figure no cited fact carries is removed, and a citation of an id the
    result has no fact for is removed (its sentence kept), each with a banner that says which
-   (0.111, #291).
+   (0.111, #291). With a `ctx.ledger`, the result's facts (as returned, after redaction) are
+   then recorded there (0.112, #294; see below).
 8. **Text from the data** (0.111, #291). Facility, equipment and point names, classes, units and
    metadata come from the data, so they can never pass for the tool's own words. A result's
    `text`, every fact's `text`, every banner and every error message are one line: newlines and
@@ -321,6 +324,47 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    #307): a Niagara ORD such as `"/Drivers/BacnetNetwork/AHU_1"` or `"slot:/Config/AHU-6"`
    reads as it is, as in the facts. A value the caller sent, echoed in an error, is redacted
    like the tool's own words, so an error never tells the caller which paths exist.
+
+## Where a cited fact comes from
+
+0.112 (#294). A **fact ledger** (`camber.capabilities.FactLedger`) holds the facts a server issued
+to one client session. Give a session's calls the same ledger in `CallContext(ledger=...)` and
+`Registry.call` records every fact of every result in it; `check_citations` then resolves each
+`[id]` the text cites from the ledger, never from the caller:
+
+- an id the ledger holds gives the fact exactly as the server issued it;
+- an id it never recorded -- from another server, another config or store, an earlier session
+  (a restart), or made up, a recomputed token included -- is `unknown_citation`, never support;
+- an id it issued but has since dropped (the ledger is bounded) is `forgotten_citation`: run the
+  tool that gave it again and cite the new id;
+- `facts` is optional; every fact passed must be one the session was issued and equal to it
+  (the same keys and values; `1` and `1.0` are equal). One that is not -- an altered value, an
+  invented fact, a fact about a facility this caller may not see (the ledger never holds one) --
+  refuses the whole call with `invalid_params` (`data`: the ids, under `not_issued`,
+  `forgotten` and `changed`), so a doctored fact can never be read as support;
+- the result's `provenance` is `"issued"`.
+
+With no ledger (`ctx.ledger` is `None`, the default for direct Python use) `check_citations`
+needs `facts` and takes them as given, as before 0.112: the result says `"provenance":
+"unverified"`. Such a verdict says only that the text agrees with the facts it was handed.
+
+The ledger is bounded: it keeps the most recently issued or cited facts up to 8 MB of their
+compact JSON (`FactLedger(max_bytes=...)`, some tens of thousands of facts) and forgets the oldest
+beyond that; it still knows the 100,000 most recently forgotten ids as forgotten
+(`max_forgotten`), and older ones read as never issued. A capability that reads the ledger
+names the ids a call needs (`Capability.cites`), and `Registry.ledger_view(name, arguments,
+ledger)` returns just those as a small ledger, which a transport that runs calls elsewhere puts
+in the call's context instead of the whole one (`camber mcp` sends it to the worker process with
+the call, and records the result's facts in the session's ledger, kept in the server process,
+itself). A server with several client sessions (the coming A2A server) keeps one ledger per
+session.
+
+**What "supported" means.** A sentence is `supported` when every id it cites is a fact this
+server issued to this session (with a ledger) and every figure it states appears in a fact it
+cites (with `per_sentence: false`, in any fact the text cites). The ledger settles where a cited
+fact came from; it does not make the sentence's wording true of that fact. How a sentence is
+compared with the facts it cites is the number match just described (each figure must appear
+in a cited fact); its tightening is described in the 0.112 notes on `camber.agent.verify`.
 
 **In-process, the timeout cannot stop a handler.** The handler runs in a worker thread; Python
 cannot kill a thread, so on a timeout the call returns `timeout` at once while the handler

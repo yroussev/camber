@@ -1,9 +1,16 @@
 """The ``check_citations`` capability: verify a drafted text against fact ids (0.110, #278).
 
-The caller passes the text and the facts it may cite -- the ``facts`` of earlier results, passed
-back in. :func:`camber.agent.verify.check` judges every sentence: it must cite at least one
-known fact id (``[F1@rule_run]``) when ``per_sentence`` is on, and every number it states must
-appear in a fact it cites. Reads no store and no facility.
+Where the cited facts come from (0.112, #294): with a session ledger (``ctx.ledger``, which
+``camber mcp`` always gives), each cited id resolves to the fact this server issued to this
+session; an id it never issued is ``unknown_citation`` and one it issued but has since forgotten
+(the ledger is bounded) is ``forgotten_citation``. ``facts`` is then optional, and every fact
+passed must equal the issued fact with its id, or the call is refused (``invalid_params``): a
+caller cannot add, alter or import a fact. With no ledger (direct Python use) ``facts`` is
+required and taken as given: the result says ``provenance: "unverified"``.
+
+:func:`camber.agent.verify.check` judges every sentence: it must cite at least one known fact id
+(``[F1@rule_run]``) when ``per_sentence`` is on, and every number it states must appear in a fact
+it cites. Reads no store and no facility.
 """
 
 from __future__ import annotations
@@ -12,14 +19,20 @@ from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite
 from ._page import OFFSET, limit_arg, page
 
-_VERDICTS = ("supported", "unknown_citation", "uncited", "unsupported_number")
+_VERDICTS = (
+    "supported",
+    "unknown_citation",
+    "forgotten_citation",
+    "uncited",
+    "unsupported_number",
+)
 #: sentences (and cited ids) per page by default (#299)
 _PAGE = 50
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["text", "facts"],
+    "required": ["text"],
     "additionalProperties": False,
     "properties": {
         "text": {
@@ -32,7 +45,7 @@ INPUT_SCHEMA = {
             "type": "array",
             "minItems": 1,
             "maxItems": 5000,
-            "description": "the facts it may cite: the 'facts' of earlier results, as returned",
+            "description": "not needed; if given, each must be a fact of this session, unchanged",
             "items": {
                 "type": "object",
                 "required": ["id", "text"],
@@ -64,7 +77,7 @@ INPUT_SCHEMA = {
 
 _SENTENCE = {
     "type": "object",
-    "required": ["index", "text", "verdict", "cited", "unknown"],
+    "required": ["index", "text", "verdict", "cited", "unknown", "forgotten"],
     "additionalProperties": False,
     "properties": {
         "index": {"type": "integer", "minimum": 0},
@@ -72,13 +85,22 @@ _SENTENCE = {
         "verdict": {"type": "string", "enum": list(_VERDICTS)},
         "cited": {"type": "array", "items": {"type": "string"}},
         "unknown": {"type": "array", "items": {"type": "string"}},
+        "forgotten": {"type": "array", "items": {"type": "string"}},
     },
 }
 
 OUTPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["grounded", "n_sentences", "n_supported", "verdicts", "sentences", "cited"],
+    "required": [
+        "grounded",
+        "n_sentences",
+        "n_supported",
+        "verdicts",
+        "sentences",
+        "cited",
+        "provenance",
+    ],
     "additionalProperties": False,
     "properties": {
         "grounded": {"type": "boolean", "description": "every sentence is supported"},
@@ -104,6 +126,12 @@ OUTPUT_SCHEMA = {
             "type": "array",
             "items": {"type": "string"},
             "description": "known fact ids the text cites, each once, in order; a page",
+        },
+        "provenance": {
+            "type": "string",
+            "enum": ["issued", "unverified"],
+            "description": "issued: every cited fact is one this server issued in this session; "
+            "unverified: no session, the caller's facts were taken as given",
         },
     },
 }
@@ -137,11 +165,83 @@ def _context(facts: list):
     )
 
 
+def _cited_ids(arguments) -> list:
+    """The fact ids a call reads from the session's ledger: those its text cites and those of the
+    facts it passes (``Capability.cites``; any argument shape)."""
+    from ..agent.verify import extract_cites
+
+    if not isinstance(arguments, dict):
+        return []
+    text = arguments.get("text")
+    ids = extract_cites(text) if isinstance(text, str) else []
+    facts = arguments.get("facts")
+    if isinstance(facts, list):
+        ids += [f.get("id") for f in facts if isinstance(f, dict) and isinstance(f.get("id"), str)]
+    return ids
+
+
+def _issued(ledger, arguments: dict) -> tuple[list, set]:
+    """``(facts, forgotten ids)``: the issued facts the text cites (and those passed, each
+    checked against the issued one), from the session's ledger. A passed fact the session was
+    not issued, or one that differs from the issued fact, refuses the call."""
+    from ..agent.verify import extract_cites
+    from ._ledger import FORGOTTEN, ISSUED, canonical
+
+    facts, forgotten = {}, set()
+    bad: dict = {"not_issued": [], "forgotten": [], "changed": []}
+    for f in arguments.get("facts") or []:
+        state, issued = ledger.lookup(f["id"])
+        if state == FORGOTTEN:  # issued, but no longer held to compare with
+            bad["forgotten"].append(f["id"])
+        elif state != ISSUED:
+            bad["not_issued"].append(f["id"])
+        elif canonical(f) != issued:
+            bad["changed"].append(f["id"])
+        else:
+            facts[f["id"]] = issued
+    if any(bad.values()):
+        parts = []
+        if bad["not_issued"]:
+            parts.append(f"{len(bad['not_issued'])} were not issued by this server in this session")
+        if bad["forgotten"]:
+            parts.append(f"{len(bad['forgotten'])} are no longer held by the server")
+        if bad["changed"]:
+            parts.append(f"{len(bad['changed'])} differ from the fact issued with that id")
+        raise CapabilityError(
+            "invalid_params",
+            f"of the facts passed, {' and '.join(parts)}; leave 'facts' out: the server looks "
+            "up every id it issued in this session (run the tools again for ids it no longer "
+            "holds or from another session)",
+            data={k: v[:50] for k, v in bad.items() if v},
+        )
+    for fid in extract_cites(arguments["text"]):
+        if fid in facts:
+            continue
+        state, issued = ledger.lookup(fid)
+        if state == ISSUED:
+            facts[fid] = issued
+        elif state == FORGOTTEN:
+            forgotten.add(fid)
+    return list(facts.values()), forgotten
+
+
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
     from ..agent.verify import _sentences, check, extract_cites
 
-    context = _context(arguments["facts"])
+    ledger = getattr(ctx, "ledger", None)
+    if ledger is not None:
+        facts_in, forgotten = _issued(ledger, arguments)
+        provenance = "issued"
+    elif arguments.get("facts"):
+        facts_in, forgotten, provenance = arguments["facts"], set(), "unverified"
+    else:
+        raise CapabilityError(
+            "invalid_params",
+            "this call has no session whose facts the server could look up: pass 'facts' (the "
+            "facts of earlier results, as returned)",
+        )
+    context = _context(facts_in)
     known = set(context.ids())
     per = arguments.get("per_sentence")
     per = True if per is None else bool(per)
@@ -149,7 +249,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     sentences = []
     for i, sent in enumerate(_sentences(arguments["text"])):
         cites = extract_cites(sent)
-        unknown = [c for c in cites if c not in known]
+        unknown = [c for c in cites if c not in known and c not in forgotten]
+        lost = [c for c in cites if c in forgotten]
         if per:
             g = check(sent, context, strict=False, require_cite_each_sentence=True)
         else:  # numbers may trace to any fact the whole text cites
@@ -158,6 +259,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         reasons = {f["reason"] for f in g.flagged}
         if unknown:
             verdict = "unknown_citation"
+        elif lost:
+            verdict = "forgotten_citation"
         elif "uncited-sentence" in reasons:
             verdict = "uncited"
         elif "uncited-number" in reasons:
@@ -171,6 +274,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
                 "verdict": verdict,
                 "cited": [c for c in cites if c in known],
                 "unknown": unknown,
+                "forgotten": lost,
             }
         )
     n_ok = sum(1 for s in sentences if s["verdict"] == "supported")
@@ -185,6 +289,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         "verdicts": bad,
         "sentences": page(listed, arguments, default=_PAGE, what="sentences", order="in order"),
         "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
+        "provenance": provenance,
     }
     if detail:
         data["verified_text"] = whole.text
@@ -194,12 +299,23 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
             "kind": "citation_check",
             "value": n_ok,
             "text": f"{n_ok} of {len(sentences)} sentence(s) are supported by the facts they "
-            f"cite; {bad['unknown_citation']} cite an unknown id, {bad['uncited']} cite "
-            f"nothing and {bad['unsupported_number']} state a number no cited fact carries",
+            f"cite; {bad['unknown_citation']} cite an unknown id, "
+            + (
+                f"{bad['forgotten_citation']} cite a fact the server has forgotten, "
+                if bad["forgotten_citation"]
+                else ""
+            )
+            + f"{bad['uncited']} cite nothing and {bad['unsupported_number']} state a number "
+            "no cited fact carries",
         }
     ]
     text = cite(facts[0])
     banners = []
+    if bad["forgotten_citation"]:
+        banners.append(
+            "Some cited facts are no longer held by the server (it keeps a bounded number per "
+            "session): run the tools that gave them again and cite the new ids."
+        )
     if n_ok < len(sentences):
         banners.append(
             "Some sentences are not supported by the facts they cite: fix or remove them "
@@ -213,15 +329,16 @@ CAPABILITIES = (
         name="check_citations",
         title="Check citations",
         description=(
-            "Check a drafted text against the facts of earlier results before showing it: pass "
-            "the text and those results' 'facts'. Each sentence is supported, unknown_citation "
-            "(an id not among the facts), uncited (no [id]) or unsupported_number (a figure no "
-            "cited fact carries); the failing ones are listed (detail: every sentence, plus "
-            "verified_text). Call it last, on your own draft. Cheap: reads no building data."
+            "Check your draft before showing it: pass the text only; each [id] is looked up "
+            "among the facts this server gave you in this session. A sentence is supported, "
+            "unknown_citation (not given in this session), forgotten_citation (rerun that tool), "
+            "uncited or unsupported_number (a figure no cited fact carries); failing ones are "
+            "listed (detail: all, plus verified_text). Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,
         handler=check_citations,
         own_output=("verified_text", "sentences"),  # the caller's own text, never cut (#320)
+        cites=_cited_ids,  # the session's facts it reads (#294)
     ),
 )

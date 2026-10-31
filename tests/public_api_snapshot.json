@@ -145,6 +145,7 @@
     "CapabilityResult",
     "Caps",
     "ERROR_CODES",
+    "FactLedger",
     "Prompt",
     "PromptArg",
     "Registry",

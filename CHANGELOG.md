@@ -14,6 +14,39 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Security
+- **A citation is supported only by a fact this server gave the session (#294).** `check_citations`
+  used to believe whatever facts the caller passed, so an invented fact, an altered value with a
+  recomputed id, or a fact about a facility the caller may not see could make a sentence
+  "supported". The server now records every fact it sends in a per-session ledger (`camber mcp`:
+  one per process, kept in the server process, so a killed or recycled worker loses nothing) and
+  looks each cited id up there: an id it never sent in this session (from another server,
+  config or store, from before a restart, or made up) is `unknown_citation`. The ledger is
+  bounded (about 8 MB of the most recent facts); a cited fact it has since dropped is the new
+  verdict `forgotten_citation` -- run the tool again and cite the new id.
+
+### Changed
+- **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
+  every fact must be one the session was sent, unchanged, or the call is refused with
+  `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out
+  instead. The output gains `provenance` (`issued`, or `unverified` when a direct Python caller
+  gives no `CallContext.ledger` and the facts are taken as given, as before), the verdict
+  `forgotten_citation` in `verdicts` and a sentence's `forgotten` ids; code that compares
+  `verdicts` with a fixed dict needs the new key. The built-in prompts no longer ask the model to
+  pass facts back.
+
+### Added
+- **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
+  block listing its facts, one `[id] text` line each, because hosts such as Claude Desktop show
+  the model `content` but not `_meta`; `_meta["camber/facts"]` stays for programmatic clients.
+  It adds 10 to 15 % to a reply and counts toward the 2 MB reply cap. In Python,
+  `camber.capabilities.FactLedger` holds one session's facts: give it in
+  `CallContext(ledger=...)` and `Registry.call` records into it and `check_citations` reads from
+  it (`Registry.ledger_view` picks out the facts one call needs, for a transport that runs calls
+  in another process).
+
 ## [0.111.0] — 2026-10-31
 
 **0.111: the MCP server hardened by a five-round acceptance test (#282, #289–#293, #295–#318, #320, #321).** Testers who had not built `camber mcp` attacked 0.110.0 and then each fix candidate with protocol fuzzing, hostile data, load, concurrent re-ingests and removals, killed processes, real clients and a blind fault-triage test; every finding they reported for 0.111 is fixed, and in the last round both testers recommended release. Tool calls now run in worker processes that a timeout, a cancel or a closed client stops, at most `--max-concurrent` at a time (#292, #309, #316). A reader overlapping a forced re-ingest or a removal gets the retryable `unavailable`, never a partial answer (#306, #317, #321). Results come a page at a time and fit a model's context (#299). The trust floor no longer withholds healthy plant checks (#297, #311), and a sensor that its configured reference finds wrong now ranks above the faults it explains, so the `triage_ahu` prompt names a biased supply-air sensor before a healthy valve (#313). Fact ids depend on the config, trust floor and stored data (#295, #312); text from the data can no longer forge notices (#291); research-only data stays refused when the registry is damaged or a facility is renamed (#290, #312). **Behaviour changes:** a rule parameter outside its documented range is refused unless the rule entry's `basis` says where the value came from, and one of the wrong type (text for a number, a fraction for an hour) is refused (#308, #315); a run config that repeats a key is refused (#308); ingest refuses ids holding control, bidi or invisible characters (#291); `check_citations` returns a compact verdict, with `verified_text` under `detail: true` (#299); every `camber mcp` launch mistake exits 2 (#296).
