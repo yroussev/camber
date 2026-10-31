@@ -8,6 +8,8 @@ fetches no weather.
 
 from __future__ import annotations
 
+import re
+
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import (
     COUNTS,
@@ -24,6 +26,7 @@ from ._common import (
     narrow,
     run,
     severity_counts,
+    subject,
 )
 from ._policy import open_store
 
@@ -32,7 +35,18 @@ INPUT_SCHEMA = {
     "type": "object",
     "required": ["facility_id"],
     "additionalProperties": False,
-    "properties": {"facility_id": FACILITY, "equips": EQUIPS},
+    "properties": {
+        "facility_id": FACILITY,
+        "equips": EQUIPS,
+        "claim": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "a savings claim to check, in a sentence (optional): each figure it "
+            "states becomes a fact of kind claimed_figure -- what the claim says, never a "
+            "measured result",
+        },
+    },
 }
 
 _KINDS = ("mv_baseline", "mv_savings", "mv_trigger", "mv_method_proposal", "other")
@@ -73,6 +87,65 @@ _METER_UNITS = (
     "the meter's own units (its trended rate summed over hours; the run config names no "
     "energy unit)"
 )
+
+
+#: a figure in a claim: a number with its unit, if one follows (or a leading $)
+_FIGURE = re.compile(
+    r"(?<![A-Za-z0-9\-.])(\$)?(\d[\d,]*(?:\.\d+)?)\s*"
+    r"(%|percent\b|kwh\b|mwh\b|gwh\b|kbtu\b|mmbtu\b|therms?\b|kw\b|mw\b|tons?\b)?",
+    re.IGNORECASE,
+)
+#: a claim's unit words as a fact writes them
+_UNITS = {
+    "%": "%",
+    "percent": "%",
+    "kwh": "kWh",
+    "mwh": "MWh",
+    "gwh": "GWh",
+    "kbtu": "kBtu",
+    "mmbtu": "MMBtu",
+    "therm": "therms",
+    "kw": "kW",
+    "mw": "MW",
+    "ton": "tons",
+}
+#: the figures of one claim given a fact
+_CLAIM_FIGURES = 10
+
+
+def _claim_facts(fid: str, claim: str) -> list:
+    """One fact per figure the caller's claim states (0.112, #294): kind ``claimed_figure``,
+    ``basis`` ``claimed``, so a sentence quoting the claim's own number can be cited, and a
+    citation check can tell it from a measured result (it must never support one). Only the
+    figure and its unit are written, never the claim's words."""
+    out: list = []
+    seen: set = set()
+    for m in _FIGURE.finditer(claim or ""):
+        dollar, raw, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+        unit = "$" if dollar else _UNITS.get(unit.rstrip("s") if unit != "%" else unit)
+        try:
+            value = float(raw.replace(",", ""))
+        except ValueError:
+            continue
+        if (value, unit) in seen:
+            continue
+        seen.add((value, unit))
+        shown = {"$": f"${raw}", "%": f"{raw}%", None: raw}.get(unit, f"{raw} {unit}")
+        out.append(
+            {
+                "id": f"A{len(out) + 1}@mv_summary",
+                "kind": "claimed_figure",
+                "basis": "claimed",
+                "value": value,
+                "unit": unit,
+                "subject": subject(fid),
+                "text": f"The claim under check states {shown}: the claim's own figure, not a "
+                "measured or computed result",
+            }
+        )
+        if len(out) >= _CLAIM_FIGURES:
+            break
+    return out
 
 
 def mv_summary(ctx, arguments: dict) -> CapabilityResult:
@@ -134,6 +207,7 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         facts.append(fact)
         if i - 1 <= _LISTED and r["rule"] in ("mv_baseline", "mv_savings", "mv_trigger"):
             text.append(cite(facts[-1]))
+    facts.extend(_claim_facts(fid, arguments.get("claim") or ""))
     data = {
         "facility_id": fid,
         "entries": len(config.get("mv") or []),

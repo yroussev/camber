@@ -418,7 +418,7 @@ class Registry:
                 # 0.111 (#318): a fact's text names data values, so it loses the known roots
                 # (with the rest of their path) only, as a quoted name in the text does
                 facts=[
-                    {**f, "text": redact_names(f["text"], *secrets)}
+                    {**f, "text": _fact_text(f, secrets)}
                     if isinstance(f, dict) and isinstance(f.get("text"), str)
                     else f
                     for f in res.facts or []
@@ -480,13 +480,16 @@ class Registry:
         text, cite_banners = _grounded(hidden, facts)
         text = lead(show_spans(text, spans))  # the marks stay for call()'s redact (#307)
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
+        from ._common import notice_facts
+
         own = [finish(b) for b in [*(res.banners or []), *banners]]
+        every = [*([notice] if notice else []), *own, *cite_banners]
         out = replace(
             res,
             data=data,
             text=text,
-            facts=facts,
-            banners=[*([notice] if notice else []), *own, *cite_banners],
+            facts=[*facts, *notice_facts(every, f"{cap.name}-{token}")],  # 0.112 (#294)
+            banners=every,
             truncated=bool(res.truncated or banners),
         )
         _too_large(_result_bytes(out), ctx.caps.max_bytes)
@@ -645,6 +648,14 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
         else "a retry will not help until the file is repaired or the facility is re-ingested"
     )
     return CapabilityError("unavailable", f"{where} cannot be read: {reason}; {hint}", data=data)
+
+
+def _fact_text(fact: dict, secrets: list) -> str:
+    """A fact's text as the result gives it: a notice fact's exactly as its banner reads
+    (0.112, #294), any other's with the known roots taken out of the data names it carries."""
+    if fact.get("kind") == "notice":
+        return unmark(redact(fact["text"], *secrets))
+    return redact_names(fact["text"], *secrets)
 
 
 def call_token(name: str, arguments: dict, ctx: CallContext) -> str:

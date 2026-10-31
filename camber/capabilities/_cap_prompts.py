@@ -19,7 +19,12 @@ _CITE_RULES = (
     "fact id(s) it rests on in square brackets, exactly as the results give them, token "
     "included (for example [F2@rule_run-1a2b3c]; each call's ids carry their own token). "
     "Copy every number exactly as a cited fact states it and state no number "
-    "that is not in a fact you cite. A declined check, a skipped rule or an unevaluated "
+    "that is not in a fact you cite. Each evidence span, data gap, point's coverage, point "
+    "that never moves, rank and notice has a fact of its own: cite that fact when you give "
+    "it (a notice you repeat cites its N id). Number a ranked list with a marker at the start "
+    "of the line ('1.') or cite the fact that states the rank. A claimed_figure fact says only "
+    "what the claim states: cite it for the claim, never for a measured result. A declined "
+    "check, a skipped rule or an unevaluated "
     "equipment is not a pass: say it was not judged. If a call is refused (not_allowed, "
     "refused_licence), say so and stop; do not work around it."
 )
@@ -81,11 +86,18 @@ def triage_ahu(args: dict) -> list:
             "in the trend. A passing reference comparison is evidence the sensor reads right.",
             f"Call rule_run with {_j(facility_id=fid, equips=[equip])}.",
             "For each fault or warn finding (at most five, worst first), call finding_detail "
-            "with its finding_id and the same facility_id and equips.",
+            "with its finding_id and the same facility_id and equips. Its facts give the "
+            "flagged spans, the inputs that never move over the window, and for a finding "
+            "conditional_on a sensor reference the finding re-judged with that sensor's bias "
+            "taken off and whether its flagged hours fall in the window the reference covers.",
             "Rank the causes. A fault resting on an untrusted input, or marked conditional_on a "
             "sensor whose reference disagrees, is a sensor problem first: rank that sensor "
-            "above the fault and say the fault may follow from it.",
-            "Write a short triage: the likely causes ranked, the evidence hours, which inputs "
+            "above the fault. Say the fault is explained by the sensor only when finding_detail "
+            "states that the finding is explained by the sensor offset; otherwise say it may "
+            "follow from it. An input that never moves (a valve that never opens, a setpoint "
+            "that never resets) can decide the diagnosis: say so.",
+            "Write a short triage: the likely causes ranked, the evidence hours and spans, which "
+            "inputs "
             "are suspect (and which a reference confirmed), and the first checks to make on "
             "site (the sensor before the equipment it may be misreporting).",
         ),
@@ -107,7 +119,7 @@ def rcx_executive_summary(args: dict) -> list:
             "with their equipment and cost (or why they are uncosted), what is conditional on a "
             "sensor fix, and how much of the data the verdicts rest on. Cite the report's own "
             "fact ids (K1@summary-<token>, C1@<issue key>-<token>, ...) or the F ids of the "
-            "result.",
+            "result; an issue's F fact states its rank ('Issue 1 of 6').",
         ),
         _CITE_RULES,
         _FINISH,
@@ -128,9 +140,12 @@ def explain_finding(args: dict) -> list:
             "equipment (for a '<fleet>' finding, the units its metrics name), to check the "
             "inputs it rests on.",
             "Explain in plain words what the rule checks, what it saw (the hours and the time "
-            "spans), the threshold it used, how far the inputs can be trusted, and which "
-            "evidence chart shows it. If the finding is conditional_on a sensor whose configured "
-            "reference disagrees, say first that it may be that sensor, not the equipment.",
+            "spans, each span a fact), the threshold it used, how far the inputs can be trusted "
+            "(and any input that never moves over the window), and which evidence chart shows "
+            "it. If the finding is conditional_on a sensor whose configured reference disagrees, "
+            "say first that it may be that sensor, not the equipment, and what finding_detail "
+            "says when the rule is re-judged with the sensor's bias taken off and whether the "
+            "flagged hours fall in the window the reference covers.",
         ),
         _CITE_RULES,
         _FINISH,
@@ -141,10 +156,13 @@ def check_savings_claim(args: dict) -> list:
     fid = _arg(args, "facility_id")
     claim = _arg(args, "claim", required=False, default="")
     about = f' The claim to check: "{claim}".' if claim else ""
+    # 0.112 (#294): the claim goes to mv_summary, which states each of its figures as a
+    # claimed_figure fact, so a sentence quoting the claim can be cited
+    call = _j(facility_id=fid, claim=claim) if claim else _j(facility_id=fid)
     return _message(
         f"Check a savings claim for the M&V project configured for facility {fid}.{about}",
         _steps(
-            f"Call mv_summary with {_j(facility_id=fid)}.",
+            f"Call mv_summary with {call}.",
             "Compare the claim with the mv_savings results: the avoided energy, the savings %, "
             "the uncertainty (fsu) and the baseline fit statistics. Note any declined result "
             "and its reason, any rebaseline trigger, and whether the reporting period lies "
@@ -168,7 +186,8 @@ def data_quality_review(args: dict) -> list:
             "own span (from its first sample) on the rule run's time grid; the coverage tool's "
             "is over the whole window, so one point can read differently in the two: say which "
             "one you quote. A point whose configured reference disagrees is suspect.",
-            "Write a review: overall coverage, the equipment and points with the worst gaps, "
+            "Write a review: overall coverage, the equipment and points with the worst gaps "
+            "(each point's coverage and each listed gap is a fact), any point that never moves, "
             "the untrusted or suspect sensors and their flags, and what to fix first (trend "
             "setup, sensor calibration or replacement).",
         ),
@@ -236,8 +255,8 @@ def plan_site_visit(args: dict) -> list:
             f"Call sensor_trust with {_j(facility_id=fid)} for the sensors to verify.",
             "For the top three issues, call finding_detail with the same facility_id and one of "
             "the issue's finding_ids (each rcx_report issue lists them) to get the time spans to "
-            "reproduce on site; an issue with no finding_ids rests on drift or report checks "
-            "only.",
+            "reproduce on site (each span is a fact); an issue with no finding_ids rests on "
+            "drift or report checks only.",
             "Write the plan: a walk order by equipment, for each stop what to check and what "
             "reading would confirm or rule out the issue, the sensors to spot-check with a "
             "reference instrument, and the trends to pull before leaving.",

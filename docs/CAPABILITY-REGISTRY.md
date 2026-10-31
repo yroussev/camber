@@ -69,6 +69,25 @@ registry scopes them. A facility is named only by `facility_id`, so the allowlis
 research-only refusal apply to every one that reads building data. Lists are top-level, worst
 first where that means something, so a row cap keeps the rows that matter.
 
+**What has a fact** (0.112, #294). Besides the summary facts, a result states as facts the
+figures a prompt asks a model to give, so a correct sentence can be cited. Each new fact carries
+its figure as fields too: `value` with its `unit`, the `subject` it is about (`facility_id`,
+`equip`, `role`, and where it applies `condition` or `finding`) and, where one applies, a
+`verdict` from a closed set of words, so a citation check can test the subject and the unit as
+well as the digits.
+
+| Prefix and kind | Capability | What it states |
+|---|---|---|
+| `S<n>` `evidence_span` | `finding_detail` | one flagged span: `start`, `end` (ISO), `value` its hours; the spans `violations` lists (the longest 20, in time order), then up to five of each named condition's own spans the union does not list. `F2` (`evidence_hours`) also states the longest span |
+| `L<n>` `flat_point` | `finding_detail`, `sensor_trust`, `rcx_report` | a point that never moves over the window (every valid sample the same, at least 24 of them): its constant `value` and `unit`, `verdict` `flat`. `finding_detail` states the rule's inputs, `sensor_trust` every point on its page, `rcx_report` the inputs of the issues it returns (at most 50). A constant has no outliers, so such a point can score trusted while it decides a diagnosis |
+| `R<n>` `reference_effect` | `finding_detail` | a finding `conditional_on` a disagreeing sensor reference, re-judged by its rule on the same frame with each such point corrected by its bias: `value` the severity it then gets, `verdict` `explained` (it no longer fires), `reduced`, `persists` or `worse`, with the corrected summary's figures in the text |
+| `R<n>` `reference_window` | `finding_detail` | for each configured reference on one of the finding's inputs (a passing one too): how many of its flagged hours fall in the window the comparison covers (`value`, hours), `verdict` `inside`, `partly` or `outside` |
+| `P<n>` `point_coverage`, `G<n>` `gap` | `coverage` | each point's coverage share (`%`) and each listed gap (`start`, `end`, `value` hours) of the page, at most 200 of each |
+| `F<n>` `issue` | `rcx_report` | now "Issue 1 of 6 on ...", with `rank` and `of` fields, so a numbered ranking can be cited |
+| `R<n>` `reference_comparison` | `sensor_trust` | now with `unit` (also in `data.references` and the summary): the unit CAMBER's rules read the point in, `°F` for a temperature and `%` for a valve, damper or speed (`null`: the point's own units), and the bias, RMSE, samples and overlap as fields |
+| `A<n>` `claimed_figure` | `mv_summary` with `claim` | each figure the caller's claim states, `basis` `claimed`: what the claim says, never a measured result (only the figure and its unit are written, never the claim's words) |
+| `N<n>` `notice` | every capability | each banner of the result, `basis` `notice`, its text exactly the banner's, so a draft that repeats a NOTICE can cite it |
+
 **Pages** (0.111, #299). A list-returning capability returns one model-sized page of each list
 by default, so a typical result stays under about 100 KB (25k tokens) on the wire, and takes
 `limit` (the page size, up to 1,000) and `offset` (rows to skip) to ask for others; the counts
@@ -97,7 +116,7 @@ capability cannot cut a list and leave the flag false.
 | `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics, and `conditional_on` when an input's configured sensor reference disagrees), worst first; counts per severity; the rules skipped for missing inputs | long-running |
 | `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default, overridden or the rule's built-in fallback), its flagged hours as contiguous time spans (and per named sub-condition; an event rule's events counted apart from the hours) or why there are none (`violations_note`), and which evidence chart applies; no image | the same run as `rule_run` |
 | `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n`, `offset`, `limit` | the RCx report as data: KPIs, the `top_n` ranked issues (cause, the rules and the `finding_ids` to pass to `finding_detail`, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
-| `mv_summary` | `facility_id`; optional `equips` | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty (in the meter's own units unless the config has a `units` block, and "for information only" when the baseline fails G14 acceptance; both said in the text), triggers, method proposals, and which declined | seconds |
+| `mv_summary` | `facility_id`; optional `equips`, `claim` (a claim to check: each figure it states becomes a `claimed_figure` fact) | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty (in the meter's own units unless the config has a `units` block, and "for information only" when the baseline fails G14 acceptance; both said in the text), triggers, method proposals, and which declined | seconds |
 | `drift` | `facility_id`; optional `baseline` `[start, end]`, `current`, `families`, `equips` | drift findings and per-equipment verdicts against a known-good baseline window (fitted for the call, never saved) or the run config's frozen baselines (read, never written), and the equipment not evaluated | long-running |
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
