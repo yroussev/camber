@@ -213,6 +213,10 @@ def _words(spec: str, value) -> dict:
     return dict.fromkeys(spec.split(), value)
 
 
+#: words that present a figure as someone's claim, not a measured result
+_CLAIM_WORDS = frozenset(
+    "claim claims claimed claiming promised promises projected projects proposed quoted".split()
+)
 _NEG = frozenset("not no never none nothing neither nor without cannot nobody".split())
 #: a verdict word -> its class
 _VERDICT = {
@@ -227,6 +231,10 @@ _VERDICT = {
     "info": "info",
     **_words("significant significantly", "significant"),
     "insignificant": "insignificant",
+    **_words("explained explains", "explained"),
+    **_words("persists persist persisted persisting", "persists"),
+    "worse": "worse",
+    "flat": "flat",
     "trusted": "trusted",
     "untrusted": "untrusted",
 }
@@ -241,6 +249,8 @@ _FLIP = {
     "insignificant": "significant",
     "trusted": "untrusted",
     "untrusted": "trusted",
+    "explained": "persists",
+    "persists": "explained",
 }
 #: a structured verdict (a fact's ``value``, ``verdict`` or ``severity``) -> its class
 _VALUE_VERDICT = {
@@ -251,6 +261,10 @@ _VALUE_VERDICT = {
     "suspect": "suspect",
     "trusted": "trusted",
     "untrusted": "untrusted",
+    "explained": "explained",
+    "persists": "persists",
+    "worse": "worse",
+    "flat": "flat",
 }
 #: a direction word -> its class
 _DIRECTION = {
@@ -270,7 +284,7 @@ _DIRECTION = {
 #: a structured direction (a fact's ``direction``) -> its class
 _VALUE_DIRECTION = {
     **_words("up increase increased rise rose", "up"),
-    **_words("down decrease decreased fall fell saving", "down"),
+    **_words("down decrease decreased fall fell saving reduced", "down"),
 }
 #: a unit word after a number -> its canonical name; None: never a unit
 _UNITS = {
@@ -369,7 +383,7 @@ _COMPARISONS = frozenset("above below under over beyond exceeds exceed exceeded 
 _LABELS = frozenset(
     (
         "rank ranked cause step item priority option number part section appendix table "
-        "figure fig chapter page phase stage tier round version"
+        "figure fig chapter page phase stage tier round version issue"
     ).split()
 )
 _ORDINAL = frozenset({"st", "nd", "rd", "th"})
@@ -451,6 +465,7 @@ class _Parsed:
     dirs: set = field(default_factory=set)  # direction classes
     negs: set = field(default_factory=set)  # "neg", "none", or ("no", thing)
     nothing: set = field(default_factory=set)  # things it says there are none of ("no x", "0 x")
+    claim: bool = False  # it says its figures are a claim's ("the claim states 15%")
 
 
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"|“([^”]*)”')
@@ -566,6 +581,8 @@ def _claim_words(p: _Parsed, seq: list) -> None:
         d = _DIRECTION.get(w)
         if d is not None:
             p.dirs.add(d)
+        if w in _CLAIM_WORDS:
+            p.claim = True
 
 
 def _noun(word: str) -> str:
@@ -728,7 +745,9 @@ _NAME_KEYS = frozenset((*_SUBJECT_KEYS, "id", "rule", "role", "finding_id", "fin
 class _FactClaims:
     """What one fact exposes to the matcher: the claims of its text plus its structured fields
     (``value`` and ``unit``; ``value`` / ``verdict`` / ``severity`` as a verdict; ``direction``;
-    every string field as a name it may carry; the dates of its non-name fields)."""
+    ``subject``; every string field as a name it may carry; the dates of its non-name fields).
+    A fact with ``basis: "claimed"`` (a claim's own figure) supports a figure only in a sentence
+    that presents it as a claim."""
 
     def __init__(self, fact, names):
         text = str(getattr(fact, "text", "") or "")
@@ -744,12 +763,18 @@ class _FactClaims:
         value = data.get("value")
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             unit = data.get("unit")
-            u = (_UNITS.get(str(unit).lower()) or str(unit)) if unit else ""
+            u = _unit_name(unit)
             try:
                 d = Decimal(str(value))
                 p.qty.append(_Qty(abs(d).normalize(), "-" if d < 0 else "", u, "", "result", False))
             except InvalidOperation:
                 pass
+        v = data.get("verdict")
+        if isinstance(v, str) and v.lower() in _VALUE_DIRECTION:  # "reduced": a decrease
+            p.dirs.add(_VALUE_DIRECTION[v.lower()])
+        # a claim's own figure (``basis: "claimed"``) supports only a sentence that says it is a
+        # claim, never a measured statement
+        self.claimed = data.get("basis") == "claimed" or data.get("kind") == "claimed_figure"
         for key in ("value", "verdict", "severity"):
             v = data.get(key)
             if isinstance(v, str) and v.lower() in _VALUE_VERDICT:
@@ -786,6 +811,14 @@ def _strings(data, out: list, p: _Parsed, key: str = "", depth: int = 0) -> None
             p.dates.update(_date(m) for m in _DATE.finditer(data))
 
 
+def _unit_name(unit) -> str:
+    """A fact's ``unit`` field as the matcher names units (``°F`` -> ``degF``, ``%``, ``kWh``)."""
+    if not isinstance(unit, str) or not unit.strip():
+        return ""
+    key = unit.strip().lower().replace("\u00b0", "").replace(" ", "")
+    return _UNITS.get(key) or unit.strip()
+
+
 def _known_names(context) -> list:
     """The subject names of every fact in ``context``: lower case, longest first."""
     names = set()
@@ -794,6 +827,9 @@ def _known_names(context) -> list:
         vals = [getattr(f, "equip", "")]
         if isinstance(data, dict):
             vals += [data.get(k) for k in _SUBJECT_KEYS]
+            subj = data.get("subject")
+            if isinstance(subj, dict):  # {"facility_id", "equip", "role", ...}
+                vals += [subj.get(k) for k in ("facility_id", "equip", "meter")]
         for v in vals:
             if isinstance(v, str):
                 n = " ".join(v.split()).lower()
@@ -805,8 +841,10 @@ def _known_names(context) -> list:
 # --------------------------------------------------------------------------- judging
 
 
-def _match(q: _Qty, facts: list) -> bool:
+def _match(q: _Qty, facts: list, claim: bool = False) -> bool:
     for fc in facts:
+        if fc.claimed and not claim:
+            continue  # a claim's own figure never supports a measured statement
         for f in fc.claims.qty:
             if f.value != q.value or f.role != q.role:
                 continue
@@ -823,7 +861,7 @@ def _match(q: _Qty, facts: list) -> bool:
 def _number_problems(p: _Parsed, facts: list) -> list:
     why = []
     for q in p.qty:
-        if _match(q, facts):
+        if _match(q, facts, p.claim):
             continue
         if any(f.value == q.value for fc in facts for f in fc.claims.qty):
             why.append(

@@ -16,6 +16,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 
 ## [Unreleased]
 
+### Security
+- **A citation is supported only by a fact this server gave the session (#294).** `check_citations`
+  used to believe whatever facts the caller passed, so an invented fact, an altered value with a
+  recomputed id, or a fact about a facility the caller may not see could make a sentence
+  "supported". The server now records every fact it sends in a per-session ledger (`camber mcp`:
+  one per process, kept in the server process, so a killed or recycled worker loses nothing) and
+  looks each cited id up there: an id it never sent in this session (from another server,
+  config or store, from before a restart, or made up) is `unknown_citation`. The ledger is
+  bounded (about 8 MB of the most recent facts); a cited fact it has since dropped is the new
+  verdict `forgotten_citation` -- run the tool again and cite the new id.
+
 ### Fixed
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
   supported when it cited a known fact and its numbers appeared somewhere in that fact, so
@@ -26,11 +37,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   be one a cited fact states, with the same sign, unit, counted thing (hours, samples, points,
   ...) and role (a threshold is not a result); each date or year one a cited fact carries; and
   each equipment, meter or facility named, verdict, direction and negation one a cited fact
-  states. Only visible citations count. Docs: CAPABILITY-REGISTRY.md, "What supported means".
+  states; a claim's own figure (a `claimed_figure` fact) supports only a sentence that says it is
+  the claim's. Only visible citations count. Docs: CAPABILITY-REGISTRY.md, "Where a cited fact comes from".
 - **`check_citations` no longer rejects what a fact does support (#294).** A rank ("Ranked cause
   1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
-  period is in 2017; a `NOTICE:` line repeating a notice the server gave the session is kept
-  and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+  period is in 2017; a `NOTICE:` line repeating the text of a `notice` fact among the facts
+  is kept and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
 - **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
   and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
   with only the failing sentences removed: paragraphs, list markers, headings and the trailing
@@ -38,7 +50,15 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `camber ask` and the RCx report's prose keep their lines too.
 
 ### Changed
-- **`check_citations` has a fifth verdict, `unsupported_claim` (#294)**, for a sentence whose
+- **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
+  every fact must be one the session was sent, unchanged, or the call is refused with
+  `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out
+  instead. The output gains `provenance` (`issued`, or `unverified` when a direct Python caller
+  gives no `CallContext.ledger` and the facts are taken as given, as before), the verdict
+  `forgotten_citation` in `verdicts` and a sentence's `forgotten` ids; code that compares
+  `verdicts` with a fixed dict needs the new key. The built-in prompts no longer ask the model to
+  pass facts back.
+- **`check_citations` has a new verdict, `unsupported_claim` (#294)**, for a sentence whose
   figures match but whose equipment, verdict, direction or negation no cited fact states; the
   `verdicts` counts gain the key, and each failing sentence gains `why`, which says what did not
   match. A client that lists the verdicts should add it. Some drafts that passed before now
@@ -48,6 +68,16 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   number (a sum, a difference, a ratio). Say it as a fact says it and cite that fact.
   `camber.agent.verify.check` applies the same rules and flags such a sentence
   `unsupported-claim`.
+
+### Added
+- **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
+  block listing its facts, one `[id] text` line each, because hosts such as Claude Desktop show
+  the model `content` but not `_meta`; `_meta["camber/facts"]` stays for programmatic clients.
+  It adds 10 to 15 % to a reply and counts toward the 2 MB reply cap. In Python,
+  `camber.capabilities.FactLedger` holds one session's facts: give it in
+  `CallContext(ledger=...)` and `Registry.call` records into it and `check_citations` reads from
+  it (`Registry.ledger_view` picks out the facts one call needs, for a transport that runs calls
+  in another process).
 
 ## [0.111.0] — 2026-10-31
 

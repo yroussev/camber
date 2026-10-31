@@ -57,7 +57,7 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   date or year one a cited fact carries, and every equipment, meter or facility named, verdict
   ("meets", "ok", "fault"), direction ("rose", "saved") and negation one a cited fact states.
   A failing sentence comes with `why`. Supported means matched, not proven true; the rules and
-  their limits are in CAPABILITY-REGISTRY.md, "What supported means". `verified_text` keeps the
+  their limits are in CAPABILITY-REGISTRY.md, "Where a cited fact comes from". `verified_text` keeps the
   draft's lines, headings and blank lines and removes only the failing sentences (#322).
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
@@ -285,13 +285,30 @@ malformed, ends the server: every message refused as a whole (-32700, -32600) is
 notification too, and logged on stderr. A message with a `method` member, even `null`, is a
 request, never taken for a client's response.
 
-**Results.** A tool result has two text blocks: the summary (with any notices first, as lines
-starting with `NOTICE:`) and the result as compact JSON; the same result is in
-`structuredContent`. Only a notice starts a line with `NOTICE:`: the summary is one line, and
-names from the data in it are quoted and stripped of control, bidi and invisible characters
-(0.111, #291; see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). The fact index is in
-`_meta["camber/facts"]`, the notices in `_meta["camber/banners"]` and the truncation flag in
-`_meta["camber/truncated"]`.
+**Results.** A tool result has up to three text blocks: the summary (with any notices first, as
+lines starting with `NOTICE:`), the result as compact JSON (the same result is in
+`structuredContent`) and, when the result has facts, the facts (0.112, #294): a header line, then
+one `[id] text` line per fact. Hosts such as Claude Desktop show the model `content` but not
+`_meta`, so the facts block is what lets a model cite and check facts. Only a notice starts a
+line with `NOTICE:`: the summary is one line, and names from the data in it are quoted and
+stripped of control, bidi and invisible characters (0.111, #291; see
+[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). For programmatic clients the fact index (every
+field of every fact) is also in `_meta["camber/facts"]`, the notices in `_meta["camber/banners"]`
+and the truncation flag in `_meta["camber/truncated"]`.
+
+**Citations are checked against what this server sent** (0.112, #294). The server records the
+facts of every tool result it answers, in both protocol revisions, in one ledger per process
+(stdio is one session). `check_citations` looks every cited id up there, so a model passes only
+its draft; an id this process never sent (from another server, config or store, from before a
+restart, or recomputed) is `unknown_citation`, one it sent but has since dropped (the ledger
+keeps about 8 MB of the most recent facts) is `forgotten_citation`, and a `facts` argument, still
+accepted, must repeat facts this session was sent, unchanged, or the call is refused
+(`invalid_params`). A worker process gets only the facts its call cites; the ledger stays in the
+server process, so a worker killed or recycled loses nothing. "Supported" means: every cited id
+is a fact this session was sent, and every figure the sentence states is in a fact it cites; it
+does not mean the wording is otherwise true of those facts (see
+[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md#where-a-cited-fact-comes-from), which also
+says how the comparison itself is being tightened).
 
 **Sizes** (0.111, #299). Both revisions say a tool that returns `structuredContent` SHOULD also
 return it serialized as JSON in a text block, for clients that pass only `content` to the model,
@@ -309,7 +326,7 @@ than leave one out, the server keeps results small:
   list, `_meta["camber/truncated"]` is `true` and a notice says which list, the rows shown, the
   total and the call that gets the rest.
 - **The cap counts the whole reply.** A reply larger than 2 MB, counted as sent (the summary,
-  the JSON text block, `structuredContent` and `_meta` together), is the tool error
+  the JSON text block, the facts block, `structuredContent` and `_meta` together), is the tool error
   `too_large`, with `{"bytes": ..., "max_bytes": ...}`; ask for a smaller page.
 - **A shorter tool list.** `tools/list` leaves out what a client does not need to pick or call a
   tool: the `$schema` of JSON Schema 2020-12 (the dialect both revisions assume), the
@@ -318,7 +335,7 @@ than leave one out, the server keeps results small:
   full schema.
 
 On a 650-point fleet, typical calls now return 50 to 100 KB (they were 0.3 to 1.2 MB), and
-`tools/list` is about 43 KB.
+`tools/list` is about 43 KB. The facts block (0.112) adds 10 to 15 % to a reply.
 
 ## From Python
 
@@ -336,4 +353,6 @@ in another transport. Used like this, `serve` and `serve_stdio` answer one messa
 the calling process, as before; pass `workers=WorkerPool("camber.capabilities:default_registry")`
 for what `camber mcp` does (tool calls in killable worker processes, built from that registry
 factory). `handle(message, defer=True)` returns a tool call as a `ToolCall` instead of running
-it, and `McpServer.finish(call, outcome)` turns the outcome into the reply.
+it, and `McpServer.finish(call, outcome)` turns the outcome into the reply. `McpServer.ledger`
+(0.112) is the session's `FactLedger`: the server makes one unless you pass `ledger=` (or a
+context with one); a transport serving several sessions gives each session its own.

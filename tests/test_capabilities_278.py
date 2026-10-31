@@ -612,6 +612,7 @@ def test_check_citations_judges_each_sentence(results, site):
     assert compact["verdicts"] == {
         "supported": 2,
         "unknown_citation": 1,
+        "forgotten_citation": 0,  # 0.112 (#294)
         "uncited": 1,
         "unsupported_number": 1,
         "unsupported_claim": 0,  # 0.112 (#294)

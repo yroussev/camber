@@ -17,6 +17,12 @@ a request carrying ``io.modelcontextprotocol/protocolVersion`` in ``_meta`` is s
 ``initialize`` selects legacy semantics for the process; a request with neither is malformed
 (-32602) unless a legacy session is open. Nothing here writes: tools are the registry's read-only
 capabilities, and resources, subscriptions, roots, sampling and logging are not offered.
+
+The facts of every tool result this server sends are recorded in :attr:`McpServer.ledger` (0.112,
+#294), whichever era the request came in: the process is one session. ``check_citations`` looks
+the ids it is given up there, so only a fact this process issued supports a sentence; a call runs
+with just the part of the ledger it reads (``Registry.ledger_view``), which is what a worker
+process receives, and the session's ledger stays here, in the parent, across worker restarts.
 """
 
 from __future__ import annotations
@@ -107,7 +113,9 @@ _INSTRUCTIONS = (
     "time-series store, and only the facilities this server was launched with; a facility "
     "outside that list is refused, and so is research-only (non-commercial / no-derivatives) "
     "data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote "
-    "them when you repeat a number. Long lists come a page at a time (limit and offset "
+    "them when you repeat a number; each result ends with the facts it issued, one [id] text "
+    "per line, and check_citations looks up any id this server issued in this session (no need "
+    "to pass facts back). Long lists come a page at a time (limit and offset "
     "arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut "
     "list says how to get the rest): always show them to the user."
 )
@@ -321,6 +329,22 @@ def _without_notes(schema: Any, depth: int = 0) -> Any:
 
 _DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
+#: the first line of a result's facts block (#294)
+FACTS_HEADER = (
+    "Facts (cite by [id]; check_citations looks these ids up itself, no need to pass them back):"
+)
+
+
+def _facts_block(facts: list) -> str:
+    """The model-visible list of a result's facts (0.112, #294): a header, then ``[id] text``
+    per fact (the text is one line already); empty when there are none."""
+    lines = [
+        f"[{f['id']}] {f.get('text', '')}".rstrip()
+        for f in facts
+        if isinstance(f, dict) and isinstance(f.get("id"), str) and f["id"]
+    ]
+    return "\n".join([FACTS_HEADER, *lines]) if lines else ""
+
 
 class McpServer:
     """Answer MCP JSON-RPC messages from a capability registry, under a fixed call context.
@@ -335,6 +359,9 @@ class McpServer:
     :func:`camber.mcp.serve` / :func:`camber.mcp.serve_stdio`. With ``defer=True`` a tool call is
     returned as a :class:`ToolCall` for the transport to run (:meth:`finish` answers it), and
     ``notifications/cancelled`` calls :attr:`on_cancel` with the request id.
+
+    :attr:`ledger` holds the facts this session was sent (``ledger``, else ``context.ledger``,
+    else a new ``FactLedger``; #294).
     """
 
     def __init__(
@@ -346,6 +373,7 @@ class McpServer:
         server_title: str = "CAMBER",
         server_version: str | None = None,
         instructions: str | None = None,
+        ledger: Any = None,
     ):
         if server_version is None:
             from .. import __version__ as server_version
@@ -366,6 +394,18 @@ class McpServer:
         #: ``on_cancel(request_id)`` for ``notifications/cancelled`` (set by the transport)
         self.on_cancel: Any = None
         self._defer = False
+        if ledger is None:
+            ledger = getattr(context, "ledger", None)
+        if ledger is None:
+            try:
+                from ..capabilities._ledger import FactLedger
+
+                ledger = FactLedger()
+            except ImportError:  # a stand-in registry package without one: nothing recorded
+                ledger = None
+        #: the facts this session was sent (0.112, #294): every successful tool result's, recorded
+        #: when its reply is ready; ``check_citations`` resolves cited ids from it
+        self.ledger = ledger
 
     # ------------------------------------------------------------------ entry points
 
@@ -658,9 +698,15 @@ class McpServer:
             ],
         }
 
-    def _context_for(self, caller: str) -> Any:
+    def _context_for(self, caller: str, name: str = "", arguments: Any = None) -> Any:
         if dataclasses.is_dataclass(self.context) and not isinstance(self.context, type):
             ctx = dataclasses.replace(self.context, caller=caller)
+            # 0.112 (#294): the call reads only the part of the session's facts it names, a
+            # copy small enough to go to a worker process; its own facts are recorded here
+            view = getattr(self.registry, "ledger_view", None)
+            fields = {f.name for f in dataclasses.fields(ctx)}
+            if view is not None and self.ledger is not None and "ledger" in fields:
+                ctx = dataclasses.replace(ctx, ledger=view(name, arguments, self.ledger))
             caps: Any = getattr(ctx, "caps", None)
             # the reply's size is checked on the wire (_call_outcome), where it is exact; the
             # registry's own check of the smaller result only guards memory here, so that the
@@ -683,7 +729,8 @@ class McpServer:
             raise _RpcError(INVALID_PARAMS, 'Invalid params: "arguments" must be an object')
         if name not in self._tool_names:
             raise _RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
-        call = ToolCall(None, name, arguments, self._context_for(caller), caller, modern)
+        context = self._context_for(caller, name, arguments)
+        call = ToolCall(None, name, arguments, context, caller, modern)
         if self._defer:
             raise _Deferred(call)
         t0 = time.monotonic()
@@ -728,6 +775,8 @@ class McpServer:
         if isinstance(cap, int) and size > cap:
             log.info("tool %s (%s): too_large (%d bytes) after %.2fs", name, caller, size, took)
             return self._tool_error("too_large", *_too_large_text(size, cap))
+        if self.ledger is not None:  # sent: issued (#294)
+            self.ledger.record(getattr(outcome, "facts", None) or ())
         log.info("tool %s (%s): ok in %.2fs", name, caller, took)
         return result
 
@@ -779,12 +828,16 @@ class McpServer:
                 "text": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
             }
         )
+        facts = json_safe(list(res.facts or []))
+        block = _facts_block(facts)
+        if block:  # 0.112 (#294): hosts show the model content, not _meta
+            content.append({"type": "text", "text": block})
         out: dict = {"content": content, "isError": False}
         # 2025-11-25 structuredContent is an object; 2026-07-28 takes any JSON value
         if modern or isinstance(data, dict):
             out["structuredContent"] = data
         out["_meta"] = {
-            "camber/facts": json_safe(list(res.facts or [])),
+            "camber/facts": facts,
             "camber/banners": banners,
             "camber/truncated": bool(res.truncated),
         }

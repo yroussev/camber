@@ -30,6 +30,12 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
   (strict: a sentence stating a figure no cited fact carries is removed, and so is an unknown
   ``[id]``, each with a banner that says which);
+- **the session's facts** (0.112, #294): with a ``ctx.ledger`` (a :class:`FactLedger`, one per
+  client session), every fact of every result is recorded there, and ``check_citations`` resolves
+  the ids it is given from it: only a fact this server issued to this session supports a
+  sentence. A capability that reads the ledger names the ids it needs (``Capability.cites``), so
+  a transport can send a worker only those (:meth:`Registry.ledger_view`). With no ledger (direct
+  Python use) ``check_citations`` takes the caller's facts as given: unverified provenance;
 - **text from the data** (0.111, #291): ``text``, every fact's ``text``, every banner and every
   error message are one line with no control, bidi or invisible character, only the handler's
   own fact ids are citations in ``text`` (any other ``[F1@x]`` reads ``(F1@x)``), a value quoted
@@ -73,10 +79,11 @@ import json
 import os
 import pkgutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from ._ledger import FactLedger
 from ._page import collect
 from ._policy import (
     known_roots,
@@ -103,6 +110,7 @@ __all__ = [
     "ERROR_CODES",
     "Caps",
     "CallContext",
+    "FactLedger",
     "CapabilityResult",
     "CapabilityError",
     "Capability",
@@ -151,6 +159,9 @@ class CallContext:
     # 0.111 (#308): ((path, loaded config), ...) as checked when the server started; the calls
     # read a config named here from this snapshot, never from the file again
     config_snapshot: tuple = field(default=(), compare=False, repr=False)
+    # 0.112 (#294): the facts issued to this caller's session (a FactLedger), recorded by every
+    # call and read by check_citations; None: no session, citations checked unverified
+    ledger: Any = field(default=None, compare=False, repr=False)
 
     def __post_init__(self):
         allowed = self.allowed_facilities
@@ -206,6 +217,9 @@ class Capability:
     # 0.111 (#320): top-level keys of ``data`` that hold the capability's own output (not values
     # from the data), never cut at :data:`~._sanitize.MAX_VALUE`
     own_output: tuple[str, ...] = ()
+    # 0.112 (#294): the fact ids a call reads from the session's ledger, from its arguments as
+    # given (not yet validated: tolerate any shape); None: it reads none
+    cites: Callable[[Any], Iterable[str]] | None = None
 
 
 @dataclass(frozen=True)
@@ -391,8 +405,24 @@ class Registry:
             raise CapabilityError("unknown_capability", f"no capability named {name!r}")
         return cap
 
+    def ledger_view(self, name: str, arguments: Any, ledger: FactLedger) -> FactLedger:
+        """The part of ``ledger`` a call of ``name`` with ``arguments`` reads (0.112, #294): the
+        facts its ``Capability.cites`` names, as a small :class:`FactLedger` a transport puts in
+        the call's context in place of the session's (``camber mcp`` sends it to the worker
+        process with the call, and records the result's facts into the session's ledger
+        itself). Empty for a capability that reads no facts or an unknown name."""
+        cap = self._caps.get(name) if isinstance(name, str) else None
+        ids: list = []
+        if cap is not None and cap.cites is not None:
+            try:
+                ids = [i for i in cap.cites(arguments) if isinstance(i, str)]
+            except Exception:  # noqa: BLE001 - malformed arguments: the call refuses them
+                ids = []
+        return ledger.view(ids)
+
     def call(self, name: str, arguments: dict, ctx: CallContext) -> CapabilityResult:
-        """Validate ``arguments``, run the handler under the policy, check the result.
+        """Validate ``arguments``, run the handler under the policy, check the result; with a
+        ``ctx.ledger``, record the result's facts there.
 
         Never raises anything but :class:`CapabilityError`; see the module docstring.
         """
@@ -411,7 +441,7 @@ class Registry:
             _fence_check(ctx, fence)
             # the quoted spans keep their marks until here, so a name from the data gets the
             # known roots only (#307), then the marks go
-            return replace(
+            out = replace(
                 res,
                 text=unmark(redact(res.text, *secrets)),
                 banners=[unmark(redact(b, *secrets)) for b in res.banners],
@@ -424,6 +454,10 @@ class Registry:
                     for f in res.facts or []
                 ],
             )
+            ledger = getattr(ctx, "ledger", None)
+            if ledger is not None:  # 0.112 (#294): what this session was given
+                ledger.record(out.facts)
+            return out
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:

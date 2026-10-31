@@ -31,7 +31,7 @@
           "prompts": {},
           "completions": {}
         },
-        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Long lists come a page at a time (limit and offset arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
+        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number; each result ends with the facts it issued, one [id] text per line, and check_citations looks up any id this server issued in this session (no need to pass facts back). Long lists come a page at a time (limit and offset arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
         "ttlMs": 300000,
         "cacheScope": "private",
         "resultType": "complete",
@@ -228,6 +228,10 @@
           {
             "type": "text",
             "text": "{\"facilities\":[\"annex\",\"empty\",\"hq\"]}"
+          },
+          {
+            "type": "text",
+            "text": "Facts (cite by [id]; check_citations looks these ids up itself, no need to pass them back):\n[F1@ctx]"
           }
         ],
         "isError": false,
@@ -293,6 +297,10 @@
           {
             "type": "text",
             "text": "{\"facility\":\"hq\",\"rows\":[{\"i\":0,\"value\":0.0},{\"i\":1,\"value\":1.5},{\"i\":2,\"value\":3.0}],\"nan\":null}"
+          },
+          {
+            "type": "text",
+            "text": "Facts (cite by [id]; check_citations looks these ids up itself, no need to pass them back):\n[F1@ctx]"
           }
         ],
         "isError": false,

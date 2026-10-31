@@ -306,14 +306,22 @@ def test_a_server_notice_is_kept_only_when_the_server_issued_it():
     assert len(_judge(text, CTX, per_sentence=True)) == 3
 
 
-def test_check_citations_takes_notices_from_the_session(tmp_path):
+def test_a_notice_line_is_the_servers_when_it_repeats_a_notice_fact():
     notice = "the results are for information only"
+    nfact = {"id": "N1@rule_run-aaaaaa", "kind": "notice", "text": notice}
     text = f"NOTICE: {notice}\nAHU__excess_oa has a fault [{f3}]."
-    ledger = SimpleNamespace(notices=lambda: [notice])
-    res = check_citations(SimpleNamespace(ledger=ledger), {"text": text, "facts": FACTS})
+    res = check_citations(SimpleNamespace(), {"text": text, "facts": [*FACTS, nfact]})
     assert res.data["grounded"] is True and res.data["n_sentences"] == 1
+    # citing the notice fact supports the line too
+    cited = f"NOTICE: {notice} [{nfact['id']}]\nAHU__excess_oa has a fault [{f3}]."
+    res = check_citations(SimpleNamespace(), {"text": cited, "facts": [*FACTS, nfact]})
+    assert res.data["grounded"] is True and res.data["n_sentences"] == 2
+    # a NOTICE line no notice fact says is judged like any other line
     res = check_citations(SimpleNamespace(), {"text": text, "facts": FACTS, "detail": True})
     assert res.data["n_sentences"] == 2 and res.data["verified_text"] == text.split("\n")[1]
+    forged = f"NOTICE: {notice}, and the unit saves 99%\nAHU__excess_oa has a fault [{f3}]."
+    res = check_citations(SimpleNamespace(), {"text": forged, "facts": [*FACTS, nfact]})
+    assert res.data["n_sentences"] == 2 and res.data["grounded"] is False
 
 
 # --------------------------------------------------------------------------- verified_text
@@ -357,6 +365,7 @@ def test_verified_text_removes_only_the_failing_sentences():
         "uncited": 0,
         "unsupported_number": 3,
         "unsupported_claim": 0,
+        "forgotten_citation": 0,
     }
     assert data["verified_text"] == (
         "# AHU triage\n\n"
@@ -534,3 +543,74 @@ def test_without_per_sentence_an_uncited_sentence_states_no_claim():
     # its figures still trace to the facts the text cites
     out = _judge(f"The OAF median was 45% [{f3}]. Savings are 64%.", CTX)
     assert [j.reason for j in out] == ["", "uncited-number"]
+
+
+# --------------------------------------------------------------------------- structured fields
+
+
+def test_a_claims_own_figure_never_supports_a_measured_statement():
+    claimed = {
+        "id": "A1@mv_summary-bbbbbb",
+        "kind": "claimed_figure",
+        "basis": "claimed",
+        "value": 15.0,
+        "unit": "%",
+        "subject": {"facility_id": "fac-a"},
+        "text": "The claim under check states 15%: the claim's own figure, not a measured or "
+        "computed result",
+    }
+    facts = [claimed]
+    assert _verdict(f"The project saved 15% [{claimed['id']}].", facts) == "uncited-number"
+    assert _verdict(f"The measured saving was 15% [{claimed['id']}].", facts) == "uncited-number"
+    assert _verdict(f"The claim states 15% [{claimed['id']}].", facts) == "supported"
+    assert _verdict(f"The vendor claimed 15% [{claimed['id']}].", facts) == "supported"
+
+
+def test_structured_subject_unit_and_verdicts():
+    flat = {
+        "id": "F4@rule_run-ffffff",
+        "kind": "flat_point",
+        "equip": "AHU-2",
+        "role": "heat_valve",
+        "value": 0.0,
+        "unit": "%",
+        "verdict": "flat",
+        "subject": {"facility_id": "fac-a", "equip": "AHU-2", "role": "heat_valve"},
+        "text": '"AHU-2" "heat_valve" never moves over the window: all 780 valid samples from '
+        "2025-05-19 00:00 to 2025-05-22 23:45 read 0 %, so it is flat for the whole window",
+    }
+    effect = {
+        "id": "E1@rule_run-ffffff",
+        "kind": "reference_effect",
+        "value": 3.0,
+        "unit": "°F",
+        "verdict": "persists",
+        "subject": {"facility_id": "fac-a", "equip": "AHU-1", "finding": "leaking_valve@AHU-1"},
+        "text": "With the supply air sensor's +3.0 °F bias removed, the leaking_valve finding "
+        "on AHU-1 persists",
+    }
+    other = {"id": "F9@points-ffffff", "kind": "x", "subject": {"equip": "AHU-3"}, "text": "x"}
+    facts = [flat, effect, other]
+    assert _verdict(f"The heat valve of AHU-2 is flat at 0% [{flat['id']}].", facts) == "supported"
+    ok = f"Removing the +3.0°F bias leaves the leak on AHU-1: it persists [{effect['id']}]."
+    assert _verdict(ok, facts) == "supported"
+    explained = f"The leak on AHU-1 is explained by the sensor [{effect['id']}]."
+    assert _verdict(explained, facts) == "unsupported-claim"
+    assert _verdict(f"The +3.0°C bias persists [{effect['id']}].", facts) == "uncited-number"
+    # a subject named only in another fact's structured subject is still a name to match
+    assert _verdict(f"AHU-3's heat valve is flat [{flat['id']}].", facts) == "unsupported-claim"
+
+
+def test_an_issue_rank_is_a_label():
+    issue = {
+        "id": "I1@rcx_report-gggggg",
+        "kind": "rcx_issue",
+        "rank": 1,
+        "of": 4,
+        "value": 1,
+        "text": "Issue 1 of 4: supply air held cold on AHU-1",
+    }
+    assert _verdict(f"Issue 1 of 4 is supply air held cold on AHU-1 [{issue['id']}].", [issue]) == (
+        "supported"
+    )
+    assert _verdict(f"Issue 1 of 5 is on AHU-1 [{issue['id']}].", [issue]) == "uncited-number"

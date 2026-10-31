@@ -25,9 +25,10 @@ _CITE_RULES = (
 )
 
 _FINISH = (
-    "Finally, call check_citations with your draft as text and, as facts, every 'facts' array "
-    "the calls above returned (combined). Fix or remove each sentence it does not mark "
-    "supported, then give the corrected text."
+    "Finally, call check_citations with your draft as text; you need not pass facts: the "
+    "server looks up every fact id it gave you in this session (the facts list at the end of "
+    "each result). Fix or remove each sentence it does not mark supported, then give the "
+    "corrected text."
 )
 
 
