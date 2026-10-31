@@ -445,8 +445,7 @@ CAPABILITIES = (
             "counts, annual cost, coverage), the top_n ranked issues (cause, equipment, severity,"
             " rules and the finding ids for finding_detail, cost or why uncosted, hours, "
             "confidence and its reasons), the section list "
-            "and the report's fact index (K1@summary-<token>, C1@<issue key>-<token>; also in "
-            "facts) for a cited executive summary. No file or charts. Uses the caller's run "
+            "and the report's fact index for a cited executive summary. No file or charts. Uses the caller's run "
             "config when there is one. Cost: a full rule run plus the analysis, the slowest tool;"
             " prefer rule_run for a quick look. Needs facility_id."
         ),

@@ -42,9 +42,8 @@ INPUT_SCHEMA = {
             "type": "string",
             "minLength": 1,
             "maxLength": 1000,
-            "description": "a savings claim to check, in a sentence (optional): each figure it "
-            "states becomes a fact of kind claimed_figure -- what the claim says, never a "
-            "measured result",
+            "description": "optional claim to check: its figures become claimed_figure facts, "
+            "never measured results",
         },
     },
 }

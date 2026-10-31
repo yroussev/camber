@@ -533,8 +533,8 @@ CAPABILITIES = (
             "Score each point of a facility for trust (0-1: trusted / suspect / untrusted) from "
             "coverage, flatlines, stuck runs, outliers, range and cross-point checks, with the "
             "flags behind it. Least trusted first; below_floor marks exactly the inputs rule_run "
-            "declines on. Also compares the run config's sensor references (bias, RMSE, samples, "
-            "verdict; passing ones too): a disagreeing one makes the point suspect. Use it before "
+            "declines on. Also compares the run config's sensor references "
+            "(passing ones too): a disagreeing one makes the point suspect. Use it before "
             "believing a fault. view='report' judges duct points with the fan on. Cost: reads "
             "every trend (narrow with equips, roles or a window). Needs facility_id."
         ),
