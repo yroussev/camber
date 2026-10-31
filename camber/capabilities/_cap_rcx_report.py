@@ -22,6 +22,8 @@ from ._common import (
     cite,
     facility_config,
     finding_ids,
+    flat_fact,
+    flat_roles,
     is_fleet_id,
     jsonable,
     narrow,
@@ -29,6 +31,7 @@ from ._common import (
     reference_notes_banner,
     rule_names,
     run,
+    subject,
     trust_banner,
     trust_declines,
     window,
@@ -171,6 +174,8 @@ OUTPUT_SCHEMA = {
 
 #: ranked issues named in the summary
 _LISTED = 5
+#: points that never move, relied on by the issues returned, given a fact (0.112, #294)
+_FLAT = 50
 
 
 def _options(config: dict, base_dir: str, top_n):
@@ -323,13 +328,18 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         if cond:
             money += f"; conditional on {', '.join(cond)}"
         own = any(is_fleet_id(r, row["equip"]) for r in row["rules"])  # 0.111 (#320)
+        # 0.112 (#294): "Issue 1 of 6", so a numbered ranking can be cited
         facts.append(
             {
                 "id": fact_id,
                 "kind": "issue",
                 "equip": row["equip"],
                 "value": row["rank"],
-                "text": f"Issue {row['rank']} on {name(row['equip'], own=own)}: "
+                "rank": row["rank"],
+                "of": len(d["issues"]),
+                "subject": subject(fid, row["equip"]),
+                "text": f"Issue {row['rank']} of {len(d['issues'])} on "
+                f"{name(row['equip'], own=own)}: "
                 f"{row['heading']} "
                 f"({row['severity']}, confidence {row['confidence']}, {money})",
                 "issue_key": row["key"],
@@ -338,6 +348,7 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         if i - 1 <= _LISTED:
             text.append(cite(facts[-1]))
     facts.insert(0, head)
+    facts.extend(_flat_facts(fid, res, issues, by_key))
     data = {
         "facility_id": fid,
         "title": str(d["title"]),
@@ -354,6 +365,55 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         "fact_index": index,
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
+
+
+def _flat_facts(fid: str, res, issues: list, by_key: dict) -> list:
+    """The points that never move over the window and that an issue returned here rests on --
+    an input of one of its findings' rules -- one fact each (0.112, #294): a valve command or a
+    setpoint that never moves can decide the diagnosis while its trust score reads high."""
+    from ..rules.triage import _rule_roles
+
+    registry = getattr(res, "registry", None)
+    rules: dict = {}
+    on: dict = {}  # (equip, role) -> ranks of the issues that read it
+    flat_of: dict = {}
+    for row in issues:
+        iss = by_key.get(row["key"])
+        found = [getattr(iss, "root", None), *(getattr(iss, "members", None) or ())]
+        for f in found:
+            if f is None or registry is None:
+                continue
+            rule, equip = str(getattr(f, "rule", "")), str(getattr(f, "equip", ""))
+            if is_fleet_id(rule, equip):
+                continue
+            if rule not in rules:
+                try:
+                    rules[rule] = registry.get(rule)
+                except KeyError:  # a report check (sensor_drift:<role>), not a rule
+                    rules[rule] = None
+            if rules[rule] is None:
+                continue
+            if equip not in flat_of:
+                frame = res.frame_for(equip) if hasattr(res, "frame_for") else None
+                flat_of[equip] = flat_roles(frame)
+            for role in sorted(_rule_roles(rules, rule) & set(flat_of[equip])):
+                ranks = on.setdefault((equip, role), [])
+                if row["rank"] not in ranks:
+                    ranks.append(row["rank"])
+    out: list = []
+    for (equip, role), ranks in sorted(on.items(), key=lambda kv: (min(kv[1]), kv[0]))[:_FLAT]:
+        which = ", ".join(str(r) for r in sorted(ranks))
+        out.append(
+            flat_fact(
+                f"L{len(out) + 1}@rcx_report",
+                fid,
+                equip,
+                role,
+                flat_of[equip][role],
+                why=f"issue(s) {which} rest on it",
+            )
+        )
+    return out
 
 
 def _names_pattern(res, facts):
@@ -385,8 +445,7 @@ CAPABILITIES = (
             "counts, annual cost, coverage), the top_n ranked issues (cause, equipment, severity,"
             " rules and the finding ids for finding_detail, cost or why uncosted, hours, "
             "confidence and its reasons), the section list "
-            "and the report's fact index (K1@summary-<token>, C1@<issue key>-<token>; also in "
-            "facts) for a cited executive summary. No file or charts. Uses the caller's run "
+            "and the report's fact index for a cited executive summary. No file or charts. Uses the caller's run "
             "config when there is one. Cost: a full rule run plus the analysis, the slowest tool;"
             " prefer rule_run for a quick look. Needs facility_id."
         ),
