@@ -237,6 +237,13 @@ the draft with the facts the calls returned. Argument values are reduced to one 
    While the registry is damaged, every result carries a banner saying so, and the `facilities`
    listing counts such facilities in `withheld_unverified`. A store of your own data with no
    registry is not damaged: its unregistered facilities are served as before.
+
+   The data carries its own mark too (0.112, #319): `camber datasets ingest` writes the dataset
+   id, licence and a research-only flag into every part file, and the handler runs in a serving
+   scope in which the store refuses a research-only part whatever facility, directory or store
+   it sits in. A facility holding one is `refused_licence` before the handler runs (the
+   `facilities` listing withholds it), and a read the handler makes refuses it again. See
+   [Provenance in the part files](DATASETS.md#provenance-in-the-part-files).
 4. **No-persist.** The handler runs inside the no-persist scope (#276): a config run folds no
    fault history, writes no report file or manifest entry, writes back no store cache and
    fetches no weather. See [Fault lifecycle](FAULT-LIFECYCLE.md#no-persist-runs).

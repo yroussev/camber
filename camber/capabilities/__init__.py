@@ -497,13 +497,14 @@ class Registry:
         """``(result, notices)``: the handler in a worker thread, no-persist, within
         ``ctx.caps.max_seconds``, and the notices of what its pages left out."""
         from .._nopersist import no_persist
+        from ..store._partprov import serving
 
         box: dict = {}
 
         def work():
             box["cuts"], _token = collect()
             try:
-                with no_persist():
+                with no_persist(), serving():  # #319: a research-only part file is refused
                     box["result"] = cap.handler(ctx, arguments)
             except BaseException as e:  # noqa: BLE001 - re-raised in the calling thread
                 box["error"] = e

@@ -36,6 +36,7 @@ import re
 import pandas as pd
 
 from ..model.roles import Role
+from ..store._partprov import value_for_entry
 from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
 from ._readers import read_point
@@ -96,7 +97,7 @@ def ingest_per_point(entry, subset, inputs, root, staging, progress, extract) ->
         {"file": ser["file"], "member": ser["member"].format(id=i)} for i in table[pts["id"]]
     ]
     paths = extract(members)
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     out: dict = {}
     warns: list = []
     groups = sorted(table[pts["group"]].unique())

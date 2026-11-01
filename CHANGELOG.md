@@ -14,6 +14,30 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Security
+- **Research-only data is refused wherever it is copied (#319).** A partial or altered copy of a
+  research-only facility -- one month copied into a test facility, a whole partition with one
+  part file deleted, renamed or merged, or a copy into another store -- was served in full by
+  `camber mcp` under its new id: the 0.111 checks compared whole partitions. `camber datasets
+  ingest` now writes the dataset id, its licence and a research-only flag into every Parquet
+  part file's metadata, every rewrite keeps it (append, `store normalize`, `store
+  migrate-partitions`, `retention apply`, a forced re-ingest, archive and restore), and the
+  capability registry refuses (`refused_licence`) any facility holding a part marked
+  research-only, in any facility, directory or store, before the call runs and again when a tool
+  reads it. The refusal names the facility and the dataset, never a path. `camber run`, `camber
+  report` and `camber lab` still read research-only data locally, with the licence banners.
+  **Re-ingest to get the marks:** a store ingested before 0.112 has none, keeps the 0.111
+  checks, and a partial copy of it is still served; `camber datasets ingest <id> --store DIR
+  --force` adds them.
+
+### Added
+- **`camber datasets provenance --store DIR [--missing] [--json]` (#319)** lists each facility
+  with how many of its part files carry their dataset's provenance, and names the catalog
+  facilities that lack it (ingested before 0.112). It reads the files' footers and writes
+  nothing.
+
 ## [0.111.0] — 2026-10-31
 
 **0.111: the MCP server hardened by a five-round acceptance test (#282, #289–#293, #295–#318, #320, #321).** Testers who had not built `camber mcp` attacked 0.110.0 and then each fix candidate with protocol fuzzing, hostile data, load, concurrent re-ingests and removals, killed processes, real clients and a blind fault-triage test; every finding they reported for 0.111 is fixed, and in the last round both testers recommended release. Tool calls now run in worker processes that a timeout, a cancel or a closed client stops, at most `--max-concurrent` at a time (#292, #309, #316). A reader overlapping a forced re-ingest or a removal gets the retryable `unavailable`, never a partial answer (#306, #317, #321). Results come a page at a time and fit a model's context (#299). The trust floor no longer withholds healthy plant checks (#297, #311), and a sensor that its configured reference finds wrong now ranks above the faults it explains, so the `triage_ahu` prompt names a biased supply-air sensor before a healthy valve (#313). Fact ids depend on the config, trust floor and stored data (#295, #312); text from the data can no longer forge notices (#291); research-only data stays refused when the registry is damaged or a facility is renamed (#290, #312). **Behaviour changes:** a rule parameter outside its documented range is refused unless the rule entry's `basis` says where the value came from, and one of the wrong type (text for a number, a fraction for an hour) is refused (#308, #315); a run config that repeats a key is refused (#308); ingest refuses ids holding control, bidi or invisible characters (#291); `check_citations` returns a compact verdict, with `verified_text` under `detail: true` (#299); every `camber mcp` launch mistake exits 2 (#296).
