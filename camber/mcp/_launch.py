@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -279,53 +280,137 @@ _MPL_LEGACY_AGE = 86400.0
 #: the largest process id any POSIX system hands out (a C ``pid_t`` is 32 bits)
 _MAX_PID = (1 << 31) - 1
 #: a file in each server's matplotlib directory that the server holds locked while it runs
-#: (0.112, #326): the kernel drops the lock when the process ends, however it ends
+#: (0.112, #326): the kernel drops the lock when the process ends, however it ends. Since #330
+#: it holds the server's identity (pid, kernel, pid namespace, start time) and its heartbeat:
+#: the server touches it every ``_MPL_BEAT`` seconds
 _MPL_OWNER = ".camber-owner"
 _MPL_LOCKS: list = []  # the open, locked owner files of this process's directories
+_MPL_BEAT = 10.0
+#: an owner file of another kernel or container not touched for this long, on a filesystem
+#: whose ``flock`` proves nothing (a Docker Desktop bind mount), is a dead server's (#330)
+_MPL_STALE = 120.0
+_MPL_BEATS: list = []  # (stop event, thread) of this process's heartbeat, while it runs
+_FLOCK_WORKS: dict = {}  # directory -> whether flock excludes there (probed once)
 
 
 def _lock_owner(path: str) -> None:
-    """Hold ``path``'s owner file locked for the life of this process (POSIX only)."""
+    """Write this process's identity to ``path``'s owner file and hold it locked for the life
+    of this process (the lock: POSIX only)."""
     try:
-        import fcntl
-    except ImportError:  # pragma: no cover - Windows: the process id rule alone
-        return
-    try:
+        from ..portfolio._lock import process_identity
+
         flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(os.path.join(path, _MPL_OWNER), flags, 0o600)
-    except OSError:
+    except (OSError, ImportError):
         return
     try:
+        os.ftruncate(fd, 0)
+        os.write(fd, json.dumps(process_identity(), sort_keys=True).encode("utf-8"))
+        import fcntl
+
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    except (OSError, ImportError):  # Windows: the record and the process id rule
         os.close(fd)
         return
     _MPL_LOCKS.append(fd)
 
 
+def _beat_owner(path: str, stop) -> None:
+    """Touch ``path``'s owner file every :data:`_MPL_BEAT` seconds while this server runs, so a
+    server that cannot tell from the process or the lock knows it is alive (#330). Put back if a
+    sweep removed it and matplotlib made the directory again; ends with the server, or once
+    ``MPLCONFIGDIR`` no longer names ``path``."""
+    owner = os.path.join(path, _MPL_OWNER)
+    while not stop.wait(_MPL_BEAT) and os.environ.get("MPLCONFIGDIR") == path:
+        try:
+            os.utime(owner)
+        except FileNotFoundError:
+            if os.path.isdir(path):
+                _lock_owner(path)
+        except OSError:
+            pass
+
+
+def _flock_works(tmpdir: str) -> bool:
+    """Whether ``flock`` excludes anything in ``tmpdir``: on a Docker Desktop bind mount it does
+    not, even between two descriptors of one process, so a lock nobody holds proves nothing
+    there (#330). Probed once per directory with a file of this process's own."""
+    if tmpdir in _FLOCK_WORKS:
+        return _FLOCK_WORKS[tmpdir]
+    works = False
+    try:
+        import fcntl
+
+        probe = os.path.join(tmpdir, f".camber-flock-probe-{os.getpid()}-{os.urandom(4).hex()}")
+        a = os.open(probe, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            b = os.open(probe, os.O_RDWR)
+            try:
+                fcntl.flock(a, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                try:
+                    fcntl.flock(b, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    works = True
+            finally:
+                os.close(b)
+        finally:
+            os.close(a)
+            os.remove(probe)
+    except (OSError, ImportError):
+        works = False
+    _FLOCK_WORKS[tmpdir] = works
+    return works
+
+
+def _owner_record(owner: str):
+    try:
+        with open(owner, encoding="utf-8") as fh:
+            rec = json.loads(fh.read(4096) or "null")
+    except (OSError, ValueError):
+        return None
+    return rec if isinstance(rec, dict) else None
+
+
 def _owner_gone(path: str):
-    """Whether the server that made directory ``path`` has ended, by its owner file: ``True``
-    when its lock can be taken, ``False`` when it is held, ``None`` when there is no such file
-    (a 0.111 server's directory) or it cannot be checked here. A lock is the kernel's, so this
-    holds across pid namespaces: a server that ran as pid 1 in a container sharing ``/tmp``
-    looks alive to the next pid 1 by its process id, but not by its lock."""
+    """Whether the server that made directory ``path`` has ended, by its owner file; ``None``
+    when there is no such file (a 0.111 server's directory) or it cannot tell.
+
+    - its identity, when it names this kernel and pid namespace: whether that process runs
+      (the pid, and its start time, which a new pid 1 does not share; #330);
+    - else its lock: held means alive, on any filesystem. A lock that can be taken means gone
+      only where ``flock`` works (#326): on a Docker Desktop bind mount it excludes nothing;
+    - else, for a record of another kernel or container, its heartbeat: gone once the file has
+      not been touched for :data:`_MPL_STALE` seconds (#330)."""
+    owner = os.path.join(path, _MPL_OWNER)
+    rec = _owner_record(owner)
+    if rec is not None:
+        from ..portfolio._lock import process_state
+
+        state = process_state(rec)
+        if state is not None:
+            return not state
     try:
         import fcntl
     except ImportError:  # pragma: no cover - Windows
         return None
     try:
-        fd = os.open(os.path.join(path, _MPL_OWNER), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(owner, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except OSError:
         return None
     try:
-        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return False
-    except OSError:
-        return None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        except OSError:
+            return None
+        if _flock_works(os.path.dirname(path)):
+            return True
+        if rec is None:
+            return None  # an older server's: its process id decides
+        return time.time() - os.fstat(fd).st_mtime > _MPL_STALE
     finally:
         os.close(fd)
-    return True
 
 
 def _pid_running(pid: int) -> bool:
@@ -396,7 +481,9 @@ def isolate_matplotlib() -> str | None:
     #309: the name carries this process's id, and the directories of servers that were killed
     (``SIGKILL``, which no process can clean up after) are swept first. #326: the server holds
     a lock on a file in it, which tells a later server that it ended also where its process id
-    cannot (every server pid 1 in containers sharing ``/tmp``)."""
+    cannot (every server pid 1 in containers sharing ``/tmp``). #330: that file also holds the
+    server's identity and a heartbeat, for where the lock proves nothing (see
+    :func:`_owner_gone`)."""
     import tempfile
 
     if os.environ.get("MPLCONFIGDIR"):
@@ -411,6 +498,14 @@ def isolate_matplotlib() -> str | None:
         return None
     _lock_owner(path)  # at once: a server starting now tells this one from a dead one (#326)
     os.environ["MPLCONFIGDIR"] = path
+    import threading
+
+    stop = threading.Event()
+    beat = threading.Thread(
+        target=_beat_owner, args=(path, stop), name="camber-mpl-beat", daemon=True
+    )
+    beat.start()
+    _MPL_BEATS.append((stop, beat))
     return path
 
 
@@ -578,6 +673,10 @@ def _launch(
         if mpl_dir is not None:
             import shutil
 
+            while _MPL_BEATS:  # the heartbeat never puts the owner file back after this
+                stop, beat = _MPL_BEATS.pop()
+                stop.set()
+                beat.join(5.0)
             shutil.rmtree(mpl_dir, ignore_errors=True)
             while _MPL_LOCKS:  # the directory is gone: its lock is no longer needed
                 os.close(_MPL_LOCKS.pop())

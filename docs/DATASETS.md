@@ -654,12 +654,34 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   (an exclusive create, which every system sharing the directory sees) and keeps a heartbeat in it
   while it writes. A writer on the other side waits for it as for the lock, then stops with
   `… is locked by <pid>@<host> since <time> on another system sharing this directory (kernel …)`.
-  A claim left by a writer that was killed is taken over at once on its own system, and after
-  10 seconds without a heartbeat from another one. CAMBER 0.111 and older make no claim, and a
+  A claim left by a writer that was killed is taken over at once when its process is seen to be
+  gone (same kernel and pid namespace, and its pid has exited or now names a process that started
+  at another time), else after 10 seconds without a heartbeat. Since #330 the `flock` alone no
+  longer counts as that proof: on a Docker Desktop bind mount it excludes nothing, so two
+  containers (or two processes of one container) could both write. A claim from another container
+  of the same VM is now waited for like one from the host. CAMBER 0.111 and older make no claim, and a
   directory shared by machines whose filesystem does not make an exclusive create atomic (some
   network filesystems) is not covered. So: **write a store or a cache from one side only** -- the
   host or containers, not both -- or give each its own copy; mounting it read-only (`:ro`) into
-  every container that only reads is always safe.
+  every container that only reads is always safe;
+- **a writer that was stopped loses its claim, and stops (0.112, #330).** A stopped process
+  cannot beat. A writer paused for more than 10 seconds (Ctrl-Z, a debugger, a sleeping laptop,
+  heavy swapping) has its claim taken over by a writer on the other side, as if it had been
+  killed. When it resumes it does not carry on. Immediately before each step that changes the
+  store, cache or workspace, it checks that the claim still carries its own token: a partition
+  swap or delete, a write fence, a registry, manifest or workspace file write, an append's
+  renames. If the token is gone, the command fails with
+  `… this writer lost its claim on <dir>/_lock.owner -- it was stopped or stalled for over 10 s
+  … and <pid>@<host> since <time> (kernel …) took it over; it stopped before changing anything
+  more, so the directory is as that writer left it; run the command again`. A writer whose last
+  heartbeat is more than 2 seconds old writes one before it checks, so a waiter about to take the
+  claim over sees it alive and starts its 10 seconds again. **What remains:** a writer that stops
+  for more than 10 seconds exactly between that check and the single rename that follows it (a
+  few microseconds of work) completes that one rename after the other side has taken over. When
+  that writer then lets go and finds its claim taken, it fails with `… a step it took after its
+  last check may have overlapped that writer's: check the directory (camber store verify for a
+  store) and run the command again`, so it never reports success. Writing from one side only
+  avoids all of this.
 
 Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
 `camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, `camber
@@ -677,7 +699,10 @@ folder on a shared drive that one person filled, now works:
 - **Ingest** reads the downloads where they are. Archive members already extracted in the cache
   are used as they are. Members it still needs are extracted into a scratch folder next to the
   ingest's staging area in the **store** (`<store>/_staging/`), which is deleted when the ingest
-  ends. So the store's disk needs room for them while the ingest runs, and each ingest extracts
+  ends. One left by a killed ingest is removed by the next ingest into that store. Since 0.112
+  (#330) each staging directory records its writer (pid, kernel, pid namespace, start time) in
+  `_owner.json`, because pid 1 is alive on every system: a killed pid-1 container ingest's
+  `ingest-1-*` used to stay forever. So the store's disk needs room for them while the ingest runs, and each ingest extracts
   them again. To avoid that, whoever fills the cache can ingest each dataset once, which leaves
   its members extracted there.
 - **Research-only acknowledgements are per user.** Against a read-only cache, your

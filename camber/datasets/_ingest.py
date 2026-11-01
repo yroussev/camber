@@ -590,7 +590,10 @@ def _equip_id(run: dict) -> str:
 
 
 def _staging_root(store: ParquetStore) -> str:
-    return os.path.join(store.root, _STAGING, f"ingest-{os.getpid()}-{id(store):x}")
+    """This ingest's staging directory, created with its owner's record (0.112, #330)."""
+    from ..store._leftovers import mark_owner
+
+    return mark_owner(os.path.join(store.root, _STAGING, f"ingest-{os.getpid()}-{id(store):x}"))
 
 
 def recover_staging(store: ParquetStore) -> list:

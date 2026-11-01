@@ -545,6 +545,9 @@ def _write_json(path: str, data: dict, *, root: str) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, sort_keys=True)
+    from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+    confirm_claims()  # 0.112 (#330): still the store's writer
     os.replace(tmp, path)
 
 

@@ -16,9 +16,25 @@ one share) both get it. So, once it holds the ``flock``, a writer also claims ``
 there who it is: pid, host, the kernel's boot id (:func:`kernel_id`), and a heartbeat counter it
 advances every :data:`CLAIM_BEAT` seconds until it lets go and removes the claim. A writer that
 finds a claim waits, like for the ``flock``, and is refused when its wait runs out, naming the
-holder and its system. A claim left by a writer that was killed is taken over: at once when it
-names this kernel (whose ``flock`` the new writer holds, so its writer is gone), else once its
-heartbeat has not moved for :data:`CLAIM_STALE` seconds. Writers older than 0.112 make no claim.
+holder and its system. A claim left by a writer that was killed is taken over: at once when its
+process is seen to be gone (:func:`process_state`: same kernel and pid namespace, and that pid has
+exited or names a process that started at another time), else once its heartbeat has not moved
+for :data:`CLAIM_STALE` seconds. Writers older than 0.112 make no claim.
+
+**A writer that lost its claim stops (0.112, #330).** The ``flock`` is not proof either: on a
+Docker Desktop bind mount it excludes nothing, not even two processes of one container, so a
+claim of this kernel is no longer taken over on the strength of the ``flock`` alone. And a writer
+stopped for longer than :data:`CLAIM_STALE` (Ctrl-Z, a debugger, a sleeping machine) cannot beat,
+so a writer on another system rightly takes its claim over; the stopped one must not carry on
+when it resumes. So, immediately before each step that changes a directory -- a partition swap
+or delete, a write fence, a registry or manifest write, an append's renames --
+:func:`confirm_claims` checks that every claim this process holds still carries its token, and
+raises the lock's own error (a :class:`ClaimLost`) when one does not: the writer stops, leaving
+the directory as the new holder has it. A writer whose last heartbeat is old beats first, so a
+waiter that was about to take a claim over sees it alive. What remains is a writer stopped for
+more than :data:`CLAIM_STALE` seconds between that check and the single rename that follows it;
+when such a writer lets go and finds its claim taken, it raises the same error, so its command
+fails rather than reports success.
 
 The lock is **re-entrant within a process**: a CLI command that holds it can call the registry,
 which takes it again, without deadlocking. Other threads of the same process wait on an in-process
@@ -107,18 +123,42 @@ class PortfolioLocked(LockHeld):
     """Another process holds the portfolio's single-writer lock."""
 
 
+class ClaimLost(LockHeld):
+    """This process's claim on a directory was taken over by a writer on another system while it
+    held the lock (0.112, #330): it was stopped or stalled for longer than :data:`CLAIM_STALE`.
+    Raised as a subclass of the lock's own error too (``StoreLocked``, ``PortfolioLocked``, ...),
+    so a caller that handles that error handles this one."""
+
+
+_LOST_TYPES: dict = {}
+
+
+def _lost_type(error: type) -> type:
+    if issubclass(error, ClaimLost):
+        return error
+    with _HELD_GUARD:
+        t = _LOST_TYPES.get(error)
+        if t is None:
+            t = _LOST_TYPES[error] = type(
+                error.__name__, (error, ClaimLost), {"__module__": error.__module__}
+            )
+        return t
+
+
 def _utc_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class _Held:
-    __slots__ = ("fh", "depth", "rlock", "claim")
+    __slots__ = ("fh", "depth", "rlock", "claim", "what", "error")
 
     def __init__(self):
         self.fh = None
         self.depth = 0
         self.rlock = threading.RLock()
         self.claim = None
+        self.what = "directory"
+        self.error = LockHeld
 
 
 _HELD: dict = {}
@@ -254,45 +294,131 @@ def kernel_id() -> str:
     return _KERNEL[0]
 
 
+_PIDNS: list = []
+
+
+def pid_namespace():
+    """This process's pid namespace (``"pid:[4026531836]"`` on Linux; ``""`` on a system with one
+    per kernel), or ``None`` when it cannot be read. Two containers on one Docker Desktop VM share
+    its kernel id but not their pid namespaces: a pid means nothing across them (0.112, #330)."""
+    if not _PIDNS:
+        if sys.platform.startswith("linux"):
+            try:
+                ns = os.readlink("/proc/self/ns/pid")
+            except OSError:
+                ns = None
+        else:
+            ns = ""
+        _PIDNS.append(ns)
+    return _PIDNS[0]
+
+
+def process_identity() -> dict:
+    """This process as a record another process can test with :func:`process_state`: its pid,
+    kernel id, pid namespace and start time (0.112, #330)."""
+    from ..store._fence import _started  # lazy: the store package imports the portfolio
+
+    pid = os.getpid()
+    return {
+        "pid": pid,
+        "kernel": kernel_id(),
+        "pidns": pid_namespace(),
+        "started": _started(pid),
+    }
+
+
+def process_state(rec):
+    """Whether the process a :func:`process_identity` record names is running: ``True`` or
+    ``False`` when this process can tell, ``None`` when it cannot -- the record is of another
+    kernel or pid namespace (another machine, the host of a container, another container), or
+    lacks those fields (0.112, #330). A pid of this namespace that started at another time than
+    the record says is another process: the recorded one is gone (pid 1 of a new container, a
+    reused pid). Unsure counts as running."""
+    if not isinstance(rec, dict) or os.name == "nt":
+        return None
+    ns = pid_namespace()
+    if ns is None or rec.get("kernel") != kernel_id() or rec.get("pidns") != ns:
+        return None
+    from ..store._fence import _started  # lazy: the store package imports the portfolio
+    from ..store._leftovers import _process_alive
+
+    pid = rec.get("pid")
+    if isinstance(pid, bool) or not isinstance(pid, int) or not 0 < pid <= 2**31 - 1:
+        return False  # names no process
+    if not _process_alive(pid):
+        return False
+    started = rec.get("started")
+    if isinstance(started, str) and started:
+        now = _started(pid)
+        return now is None or now == started
+    return pid != os.getpid()  # with no start time, this process is not the one recorded
+
+
 class _Claim:
     """This process's claim on ``<root>/_lock.owner`` and its heartbeat thread."""
 
     def __init__(self, path: str, fd: int):
         self.path, self.fd = path, fd
         self.info = {
-            "pid": os.getpid(),
+            **process_identity(),  # pid, kernel, pid namespace, start time (#330)
             "host": socket.gethostname(),
-            "kernel": kernel_id(),
             "since": _utc_now(),
             "token": os.urandom(8).hex(),
         }
+        self.n = 0
+        self.last = time.monotonic()  # when the last heartbeat was written
+        self.lost = None  # the record that replaced this claim, once it is found taken over
+        self.wlock = threading.Lock()
         self.stop = threading.Event()
-        self._write(0)
+        self._write()
         self.thread = threading.Thread(target=self._beat, name="camber-lock-claim", daemon=True)
         self.thread.start()
 
-    def _write(self, n: int) -> None:
+    def _write(self) -> None:
         # the same length every time, written over the old record: never empty to a reader
-        rec = json.dumps({**self.info, "beat": f"{n:012d}"}, sort_keys=True) + "\n"
+        rec = json.dumps({**self.info, "beat": f"{self.n:012d}"}, sort_keys=True) + "\n"
         os.lseek(self.fd, 0, os.SEEK_SET)
         os.write(self.fd, rec.encode("utf-8"))
         with contextlib.suppress(OSError):
             os.fsync(self.fd)
+        self.last = time.monotonic()
 
     def _beat(self) -> None:
-        n = 0
         while not self.stop.wait(CLAIM_BEAT):
-            n += 1
-            with contextlib.suppress(OSError):
-                self._write(n)
+            with self.wlock, contextlib.suppress(OSError):
+                self.n += 1
+                self._write()
 
-    def release(self) -> None:
+    def owned(self):
+        """``None`` while this claim is still the one in the file, else the record that replaced
+        it (``{}`` when there is none): see :func:`confirm_claims`."""
+        if self.lost is not None:
+            return self.lost
+        with self.wlock:
+            if time.monotonic() - self.last > 2 * CLAIM_BEAT:  # stopped or starved: beat now,
+                with contextlib.suppress(OSError):  # so a waiter about to take over sees it alive
+                    self.n += 1
+                    self._write()
+        for _ in range(4):  # a takeover that puts a live claim back leaves it absent briefly
+            raw, rec = _read_claim(self.path)
+            if raw and rec is not None:
+                break
+            time.sleep(0.05)
+        if rec is not None and rec.get("token") == self.info["token"]:
+            return None
+        self.lost = rec or {}
+        return self.lost
+
+    def release(self) -> bool:
+        """Stop the heartbeat and remove the claim if it is still this one; whether it was."""
+        lost = self.owned()
         self.stop.set()
         self.thread.join()
         os.close(self.fd)
-        if (_read_claim(self.path)[1] or {}).get("token") == self.info["token"]:
+        if lost is None:
             with contextlib.suppress(OSError):
                 os.remove(self.path)
+        return lost is None
 
 
 def _read_claim(path: str) -> tuple:
@@ -360,11 +486,25 @@ def _claim(root: str, deadline: float, poll: float, refuse):
         now = time.monotonic()
         if raw != seen:
             seen, since = raw, now  # its heartbeat moved: alive
-        mine = rec is not None and rec.get("kernel") == kernel_id()
-        if mine or now - since >= CLAIM_STALE:
+        # gone: its process is seen to have exited (this kernel and pid namespace, #330), or it
+        # is this process, which holds no claim here at this depth; on Windows, a claim of this
+        # machine, whose msvcrt lock the caller holds
+        state = process_state(rec)
+        gone = (
+            state is False
+            or (state is True and rec.get("pid") == os.getpid())
+            or (os.name == "nt" and rec is not None and rec.get("kernel") == kernel_id())
+        )
+        if gone or now - since >= CLAIM_STALE:
             _take_over(path, raw)  # a writer killed while it held the lock
             seen = None
             continue
+        if now >= deadline and state is True:  # #330: a flock that excluded nothing
+            refuse(
+                rec,
+                " on this system, whose lock this filesystem does not enforce (as on a Docker"
+                " Desktop bind mount); its claim stands while that process runs",
+            )
         if now >= deadline:
             refuse(
                 rec or {},
@@ -373,6 +513,45 @@ def _claim(root: str, deadline: float, poll: float, refuse):
                 f" taken over after {CLAIM_STALE:g} s without its heartbeat",
             )
         time.sleep(poll)
+
+
+def _lost_message(what: str, path: str, rec: dict, *, after: bool = False) -> str:
+    who = (
+        f"{describe_holder(rec)} (kernel {rec.get('kernel')})"
+        if rec
+        else "a writer that has since let go"
+    )
+    if after:
+        then = (
+            "a step it took after its last check may have overlapped that writer's: check the"
+            " directory (`camber store verify` for a store) and run the command again"
+        )
+    else:
+        then = (
+            "it stopped before changing anything more, so the directory is as that writer left"
+            " it; run the command again"
+        )
+    return (
+        f"{what}: this writer lost its claim on {path} -- it was stopped or stalled for over"
+        f" {CLAIM_STALE:g} s (Ctrl-Z, a debugger, a sleeping machine) and {who} took it over;"
+        f" {then}"
+    )
+
+
+def confirm_claims() -> None:
+    """Check, immediately before a step that changes a locked directory, that every claim this
+    process holds is still its own (0.112, #330); raise the lock's own error (also a
+    :class:`ClaimLost`) naming the new holder when one is not. A no-op for a process that holds
+    no lock. See the module docstring."""
+    with _HELD_GUARD:
+        slots = [s for s in _HELD.values() if s.claim is not None]
+    for slot in slots:
+        claim = slot.claim
+        if claim is None:
+            continue
+        lost = claim.owned()
+        if lost is not None:
+            raise _lost_type(slot.error)(_lost_message(slot.what, claim.path, lost))
 
 
 def portfolio_lock(root: str, *, timeout: float = 0.0, poll: float = 0.1):
@@ -433,18 +612,30 @@ def exclusive_lock(
                 fh.close()
                 raise
             _write_holder(fh)
-            slot.fh = fh
+            slot.fh, slot.what, slot.error = fh, what, error
         slot.depth += 1
+        failed = None
         try:
             yield
+        except BaseException as exc:
+            failed = exc
+            raise
         finally:
             slot.depth -= 1
             if slot.depth == 0 and slot.fh is not None:
                 fh, slot.fh = slot.fh, None
                 claim, slot.claim = slot.claim, None
                 try:
-                    if claim is not None:
-                        claim.release()
+                    if claim is not None and not claim.release():
+                        # #330: the claim was taken over while this writer held the lock
+                        lost = _lost_type(error)
+                        if failed is None:
+                            raise lost(_lost_message(what, claim.path, claim.lost, after=True))
+                        if not isinstance(
+                            failed, (ClaimLost, KeyboardInterrupt, SystemExit, GeneratorExit)
+                        ):
+                            # e.g. its staging removed by the new holder: say why, not ENOENT
+                            raise lost(_lost_message(what, claim.path, claim.lost)) from failed
                 finally:
                     _unlock(fh)
                     fh.close()

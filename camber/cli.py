@@ -2172,13 +2172,26 @@ def _cmd_store_verify(args) -> int:
             "scratch": "ingest staging directory",
         }[x["kind"]]
         who = f" of {x['facility_id']}" if x["facility_id"] else ""
-        state = " (its process is still running)" if x["alive"] else ""
+        state = ""
+        if x["alive"]:  # #330: one made on another system is alive while its writer holds the store
+            state = (
+                " (made on another system by the writer that holds the store's claim now)"
+                if x.get("elsewhere")
+                else " (its process is still running)"
+            )
         mark = "!" if x["stranded"] else "-"
         print(f"  {mark} leftover {x['path']}: {what}{who}{state}")
     if any(x["stranded"] for x in left):
         print("    ! a facility's data is outside its partition; the next ingest recovers it")
-    elif left:
+    elif any(not x["alive"] for x in left):
         print("    the next ingest into this store removes or recovers these")
+    elif any(x.get("elsewhere") for x in left):
+        print(
+            "    the next ingest removes these once that claim is let go, or taken over 10 s"
+            " after its writer stopped"
+        )
+    elif left:
+        print("    left alone while their writers run")
     for fe in empty:
         print(f"  - {fe['facility_id']} ({fe['state']}) is registered but has no part files")
     if c["noncanonical"]:

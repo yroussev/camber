@@ -133,6 +133,36 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   from the facility's registry entry, so a report built from research-only parts copied into
   another facility or store had neither. They now also come from the part files' provenance
   marks.
+- **A writer that was stopped no longer finishes without its claim and loses data (#330).** A
+  writer paused for more than 10 s (Ctrl-Z, `docker pause`, a debugger) had its #325 claim taken
+  over by a writer on the other side. That was right, since a stopped process cannot beat, but
+  when it resumed it finished its ingest anyway. Both exited 0, and a facility silently lost
+  points. A writer now checks that its claim is still its own immediately before every step that
+  changes a store, cache or workspace: a partition swap or delete, a write fence, a registry,
+  manifest or workspace file write, an append's renames. If the claim is gone it fails with
+  `… this writer lost its claim …`, naming the new holder, and leaves the directory as that
+  writer has it. A writer that loses its claim after its last change fails too, rather than
+  report success. DATASETS.md describes the one window that remains: a pause of over 10 s
+  between the check and the rename right after it.
+- **Two containers on one Docker Desktop bind mount no longer both get a store's lock (#330).**
+  `flock` excludes nothing there, and a claim of the same kernel was taken over at once as dead,
+  so both writers ran. Such a claim is now taken over at once only when its process is seen to be
+  gone: same pid namespace, and its pid has exited or started at another time. Otherwise the
+  writer waits for the claim's heartbeat to stop for 10 s, so a container killed while writing
+  is taken over after 10 s, not at once.
+- **A starting `camber mcp` no longer removes a live server's matplotlib directory on a
+  bind-mounted `/tmp` (#330, a regression in the 0.112 candidate).** The #326 sweep trusted a
+  lock that a Docker Desktop bind mount does not enforce. The directory now records its server
+  (pid, kernel, pid namespace, start time), and the server touches it every 10 s. A server of
+  the same kernel and pid namespace is judged by its pid and start time. Another container's
+  server is judged by its lock where locks work (probed once), and by its heartbeat (2 minutes)
+  where they do not. A killed pid-1 server's directory is still swept.
+- **A killed pid-1 container ingest's `_staging/ingest-1-*` is removed by the next ingest
+  (#330).** Pid 1 is alive on every system, so the directory was kept forever and `store verify`
+  said "its process is still running". Each staging directory now records its writer in
+  `_owner.json`. One made in another container or on another system counts as live only while
+  its writer holds the store's claim. `store verify` says so, and says when the next ingest
+  will remove it.
 
 ### Changed
 - **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id

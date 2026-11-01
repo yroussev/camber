@@ -25,7 +25,7 @@ import os
 from ..store import FacilityRegistry, ParquetStore, make_facility_id, require_facility_id
 from ..store.facilities import _WORKSPACE_MARKER, _workspace_of_store
 from ._audit import AUDIT_FILE, append_audit, audit_record, read_audit
-from ._lock import LOCK_FILE, describe_holder, portfolio_lock, probe, read_holder
+from ._lock import LOCK_FILE, confirm_claims, describe_holder, portfolio_lock, probe, read_holder
 from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
@@ -78,6 +78,7 @@ def _write_json(path: str, data: dict) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, sort_keys=True)
         fh.write("\n")
+    confirm_claims()  # 0.112 (#330): still the workspace's writer
     os.replace(tmp, path)
 
 

@@ -111,8 +111,15 @@ def test_a_dead_claim_of_another_system_is_taken_over_after_its_heartbeat_stops(
 
 
 def test_a_dead_claim_of_this_kernel_is_taken_over_at_once(tmp_path):
+    import subprocess
+    import sys
+
     root = str(tmp_path)
-    _Foreign(root, kernel=_lock.kernel_id())  # a writer here, killed: its flock is gone
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    other = _Foreign(root, kernel=_lock.kernel_id())  # a writer here, killed
+    other.rec.update(pid=dead.pid, pidns=_lock.pid_namespace())  # #330: seen to be gone
+    other._write()
     with store_lock(root, timeout=0):
         pass
 
