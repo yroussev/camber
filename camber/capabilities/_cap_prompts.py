@@ -25,15 +25,21 @@ _CITE_RULES = (
     "of the line ('1.') or cite the fact that states the rank. A claimed_figure fact says only "
     "what the claim states: cite it for the claim, never for a measured result. A declined "
     "check, a skipped rule or an unevaluated "
-    "equipment is not a pass: say it was not judged. If a call is refused (not_allowed, "
+    "equipment is not a pass: say it was not judged, citing the fact that reports it. Use a "
+    "verdict, negation or assurance word (passes, fails, not, never, none, all, verified, "
+    "clean, real, confident) only as a fact you cite does: check_citations compares them both "
+    "ways. Quote a name from the data in double quotes. If a call is refused (not_allowed, "
     "refused_licence), say so and stop; do not work around it."
 )
 
 _FINISH = (
     "Finally, call check_citations with your draft as text; you need not pass facts: the "
     "server looks up every fact id it gave you in this session (the facts list at the end of "
-    "each result). Fix or remove each sentence it does not mark supported, then give the "
-    "corrected text."
+    "each result). Your own judgment (a verdict on the whole, advice, how sure you are) rests "
+    "on facts but is not one, so it is not marked supported: give it after the checked text, "
+    "labelled as your judgment. A verified_text that opens with a NOTICE that sentences were "
+    "removed is not the answer. Fix or remove each sentence it does not mark supported, then "
+    "give the corrected text."
 )
 
 
@@ -77,8 +83,8 @@ def _steps(*steps: str) -> str:
 def triage_ahu(args: dict) -> list:
     fid, equip = _arg(args, "facility_id"), _arg(args, "equip")
     return _message(
-        f"Triage the air handler {equip} at facility {fid}: what is wrong, how sure we are, and "
-        "what to do first.",
+        f"Triage the air handler {equip} at facility {fid}: what is wrong, what each conclusion "
+        "rests on (and what is conditional on a sensor), and what to do first.",
         _steps(
             f"Call points with {_j(facility_id=fid, equip=equip)} to see what it trends.",
             f"Call sensor_trust with {_j(facility_id=fid, equips=[equip])}. Read its references "
@@ -168,8 +174,10 @@ def check_savings_claim(args: dict) -> list:
             "the uncertainty (fsu) and the baseline fit statistics. Note any declined result "
             "and its reason, any rebaseline trigger, and whether the reporting period lies "
             "outside the baseline's conditions.",
-            "Give a verdict: supported, partly supported, or not supported by the M&V results, "
-            "and what would be needed to support it.",
+            'Restate the claim citing its claimed_figure facts ("The claim states a 12% saving '
+            '[A1@mv_summary-...]"). Give a verdict: supported, partly supported, or not '
+            "supported by the M&V results, and what would be needed to support it (the verdict "
+            "is your judgment: see below).",
         ),
         _CITE_RULES,
         _FINISH,

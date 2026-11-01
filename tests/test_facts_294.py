@@ -161,7 +161,9 @@ def test_coverage_states_each_point_and_gap(bias):
     when = pd.Timestamp(g["start"]).strftime("%Y-%m-%d %H:%M")
     assert when in g["text"]
     assert _grounded(
-        f"The logger has no data from {when} on, a gap of {g['value']:g} hours [{g['id']}].", res
+        f"The logger has no valid sample from {when} on, a gap of {g['value']:g} hours "
+        f"[{g['id']}].",
+        res,
     )
 
 

@@ -260,13 +260,18 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
                 "id": f.id,
                 "kind": f.kind,
                 "equip": f.equip or "",
+                "facility_id": fid,  # 0.112 (#328): a sentence naming the facility can cite it
                 "text": f_text,
                 "data": jsonable(f.data),
             }
         )
     k = d["kpis"]
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
-    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
+    declined = (
+        f"; {len(declines)} check(s) declined on untrusted input(s): those checks were not judged"
+        if declines
+        else ""
+    )
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)

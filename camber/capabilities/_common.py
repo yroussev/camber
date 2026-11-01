@@ -332,7 +332,7 @@ def caller_config(ctx, facility_id: str) -> tuple:
     notice = (
         f"No run config names this facility, so this run uses the config template packaged for "
         f"catalog dataset {name(dataset_id)} (the one `camber datasets config` writes): its "
-        "equipment classes, rules and parameters, not ones tuned for your own use of the data."
+        "equipment classes, rules and parameters, not a config tuned for your own use of the data."
     )
     return config, os.path.dirname(os.path.abspath(ctx.store)), notice
 
@@ -626,8 +626,8 @@ def trust_banner(declines: list, floor) -> str | None:
     return (
         f"{len(declines)} check(s) declined because an input scored below the trust floor"
         f"{under} ({which}{inputs}). The fault and warn counts do not cover them: a declined "
-        "check is not a pass. sensor_trust over the same window reports these scores and the "
-        "flags behind them."
+        "check is not a pass, and those checks were not judged. sensor_trust over the same "
+        "window reports these scores and the flags behind them."
     )
 
 
@@ -673,16 +673,20 @@ def summary_text(equip: str, summary: str, *, own: bool = False) -> str:
     return prose(summary)
 
 
-def finding_fact(fact_id: str, row: dict) -> dict:
+def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dict:
     """The fact that cites one finding row; its text names the equipment as a quoted value
-    (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
+    (#291), also where the rule's summary starts with it (``AHU-1: ...``). A finding with
+    insufficient data says it was not judged, and the fact names its facility (0.112, #328), so
+    a sentence can say either."""
     equip = row["equip"]
     own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
     summary = summary_text(equip, row["summary"], own=own)
     text = f"{name(equip, own=own)} {row['rule']} ({row['severity']}): {summary}"
+    if str(row["summary"]).startswith("insufficient data"):
+        text = text.rstrip(" .;") + ": this check was not judged"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
-    return {
+    fact = {
         "id": fact_id,
         "kind": "finding",
         "value": row["severity"],
@@ -692,6 +696,9 @@ def finding_fact(fact_id: str, row: dict) -> dict:
         "text": text,
         "metrics": row["metrics"],
     }
+    if facility_id is not None:
+        fact["facility_id"] = facility_id
+    return fact
 
 
 # --------------------------------------------------------------------------- structured facts

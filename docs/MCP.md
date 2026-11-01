@@ -62,13 +62,23 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   through a symlink, with a trailing slash), nor the store or file mounted at another path, as on
   a host and in a container (0.112, #326).
 - **Checking a draft.** `check_citations` judges each sentence of a draft against the facts it
-  cites (0.112, #294): every figure must be one a cited fact states, with the same sign, unit,
-  counted thing and role (a threshold is not a result; a derived number is not supported), every
-  date or year one a cited fact carries, and every equipment, meter or facility named, verdict
-  ("meets", "ok", "fault"), direction ("rose", "saved") and negation one a cited fact states.
-  A failing sentence comes with `why`. Supported means matched, not proven true; the rules and
-  their limits are in CAPABILITY-REGISTRY.md, "Where a cited fact comes from". `verified_text` keeps the
-  draft's lines, headings and blank lines and removes only the failing sentences (#322).
+  cites (0.112, #294, #328): every figure must be one a cited fact states, with the same sign,
+  unit, counted thing and role (a threshold, target or setpoint is not a result, and a result
+  is not one; a derived number is not supported), every date or year one a cited fact carries,
+  and every equipment, meter, facility (the caller's facility ids and their registry names
+  included), point role, verdict ("passes", "meets", "ok", "fault"), assurance word
+  ("verified", "clean", "real", "confident"), direction ("rose", "saved", "high" / "low"),
+  negation ("not", "never", "no", "none", "0 points"), quantifier ("all", "every", "most") and
+  issue rank one a cited fact states. Negations are compared both ways: a sentence must not
+  drop what a cited fact negates ("the valve leaks" against "no valve leak"). Headings, bold
+  lines and lead-ins ending in a colon are judged when they state something. A failing sentence
+  comes with `why`. **Supported means matched, not proven true**: only the words above are read,
+  and an inference, a verdict of the model's own or advice is never supported. The rules and
+  their limits are in CAPABILITY-REGISTRY.md, "Where a cited fact comes from". `verified_text`
+  keeps the draft's lines, headings, list markers and blank lines and removes only the failing
+  sentences (#322); when one of those gave a verdict, a negation or a caveat, it opens with a
+  `NOTICE:` line saying the text says less than the draft, and a banner says the same (#328): do
+  not show such a `verified_text` as the answer.
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
@@ -327,10 +337,10 @@ keeps about 8 MB of the most recent facts) is `forgotten_citation`, and a `facts
 accepted, must repeat facts this session was sent, unchanged, or the call is refused
 (`invalid_params`). A worker process gets only the facts its call cites; the ledger stays in the
 server process, so a worker killed or recycled loses nothing. "Supported" means: every cited id
-is a fact this session was sent, and every figure the sentence states is in a fact it cites; it
-does not mean the wording is otherwise true of those facts (see
-[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md#where-a-cited-fact-comes-from), which also
-says how the comparison itself is being tightened).
+is a fact this session was sent, and every figure, name, point role, verdict, assurance word,
+direction, negation, quantifier and rank the sentence states matches a fact it cites (#328); it
+does not mean the wording is otherwise true of those facts, and a word outside those lists is
+not read (see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md#where-a-cited-fact-comes-from)).
 
 **Sizes** (0.111, #299). Both revisions say a tool that returns `structuredContent` SHOULD also
 return it serialized as JSON in a text block, for clients that pass only `content` to the model,

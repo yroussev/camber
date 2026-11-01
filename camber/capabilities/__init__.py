@@ -914,8 +914,8 @@ def _grounded(text: str, facts: list) -> tuple[str, list]:
     banners = []
     if dropped:
         banners.append(
-            f"{dropped} sentence(s) of the summary were removed: they state a figure that no "
-            "fact they cite carries"
+            f"{dropped} sentence(s) of the summary were removed: no fact they cite supports a "
+            "figure, name, verdict or negation they state"
         )
     if unknown:
         banners.append(

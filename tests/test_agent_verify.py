@@ -113,9 +113,10 @@ def test_equipment_and_standard_tokens_are_not_numbers():
     # "AHU-1", "Z-2", "G36" appear but must not be flagged as untraceable numeric claims...
     g = check("AHU-1 and Z-2 relate to ASHRAE G36 guidance [F1].", ctx, strict=False)
     assert not [f for f in g.flagged if f["reason"] == "uncited-number"]
-    # ... they are names (0.112, #294): F1 is about AHU-1 only, so Z-2 and G36 are not its claims
+    # ... Z-2 is a name (0.112, #294): F1 is about AHU-1 only, so Z-2 is not its claim; G36 names
+    # a standard, not an equipment (#328)
     assert [f["reason"] for f in g.flagged] == ["unsupported-claim"]
-    assert "'z-2'" in g.flagged[0]["why"] and "'g36'" in g.flagged[0]["why"]
+    assert "'z-2'" in g.flagged[0]["why"] and "g36" not in g.flagged[0]["why"]
     assert check("AHU-1 shows a coil conflict [F1].", ctx).grounded
 
 

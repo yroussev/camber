@@ -8,16 +8,25 @@ passed must equal the issued fact with its id, or the call is refused (``invalid
 caller cannot add, alter or import a fact. With no ledger (direct Python use) ``facts`` is
 required and taken as given: the result says ``provenance: "unverified"``.
 
-:func:`camber.agent.verify._judge` judges every sentence (#294): it must cite at least one known
-fact id (``[F1@rule_run]``, or several: ``[F1@a, F2@b]``) when ``per_sentence`` is on, every
-figure it states must be one a fact it cites states (sign, unit, counted thing and role
-included), and the names, verdicts, directions and negations it states must be ones those facts
-make. A ``NOTICE:`` line repeating the text of a ``notice`` fact among the facts is kept and not
-judged. ``verified_text`` keeps the draft's lines, headings and blank lines (#322). Reads no
-store and no facility.
+:func:`camber.agent.verify._judge` judges every sentence (#294, #328): it must cite at least
+one known fact id (``[F1@rule_run]``, or several: ``[F1@a, F2@b]``) when ``per_sentence`` is on,
+every figure it states must be one a fact it cites states (sign, unit, counted thing and role
+included), and the names, point roles, verdicts, directions, negations, quantifiers and ranks it
+states must be ones those facts make (that module's doc says exactly what is read). The caller's
+facility ids and their registry names are names too, so another facility named in a sentence
+must be one a cited fact names; rule, tool and field names are not equipment. A ``NOTICE:`` line
+repeating the text of a ``notice`` fact among the facts is kept and not judged.
+``verified_text`` keeps the draft's lines, headings, list markers and blank lines (#322); when
+it drops a sentence that gave a verdict, a negation or a caveat, it opens with :data:`REMOVED`
+and the result says so (#328), so a stripped answer never reads as more certain than the draft.
+Reads the store's facility registry for those names, and no facility data.
 """
 
 from __future__ import annotations
+
+import os
+import re
+from functools import lru_cache
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite
@@ -33,6 +42,12 @@ _VERDICTS = (
 )
 #: sentences (and cited ids) per page by default (#299)
 _PAGE = 50
+#: the line ``verified_text`` opens with when it dropped a verdict or caveat (#328); checking
+#: that text again keeps the line and does not judge it
+REMOVED = (
+    "NOTICE: check_citations removed sentences that gave a verdict, a negation or a caveat; "
+    "this text says less than the draft and is not the complete answer."
+)
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -239,9 +254,77 @@ _VERDICT_OF = {
 }
 
 
+@lru_cache(maxsize=1)
+def _terms() -> tuple:
+    """``(terms, rules)``: the rule, tool and field names a sentence may use that name no
+    equipment (#328) -- every built-in rule, every capability and every argument or result
+    field with an underscore -- and the rule names among them."""
+    import importlib
+    import pkgutil
+
+    from .. import capabilities as pkg
+    from ._common import rule_names
+
+    rules = set(rule_names())
+    terms = set(rules)
+
+    def fields(schema, depth=0):
+        if depth > 8 or not isinstance(schema, dict):
+            return
+        for key, sub in (schema.get("properties") or {}).items():
+            if "_" in key:
+                terms.add(key)
+            fields(sub, depth + 1)
+        fields(schema.get("items"), depth + 1)
+
+    for m in pkgutil.iter_modules(pkg.__path__):
+        if m.name.startswith("_cap_"):
+            mod = importlib.import_module(f"{pkg.__name__}.{m.name}")
+            for cap in getattr(mod, "CAPABILITIES", ()):
+                if "_" in cap.name:  # "points", "coverage": ordinary words too
+                    terms.add(cap.name)
+                fields(cap.input_schema)
+                fields(cap.output_schema)
+    return frozenset(terms), frozenset(rules)
+
+
+def _facility_names(ctx) -> dict:
+    """Every facility id of the caller's allowlist and of the store's registry, and each one's
+    registry name (and that name before a parenthesis), mapped to its id (#328): a sentence
+    naming one must cite a fact about that facility. A one-word id or a one-word name is left
+    out (it reads as an ordinary word), and the matcher reads a name only where it is a plain
+    name."""
+
+    def usable(fid: str) -> bool:
+        return not fid.isalpha() or len(fid) >= 6
+
+    out = {f: f for f in getattr(ctx, "allowed_facilities", None) or () if usable(f)}
+    store = getattr(ctx, "store", None)
+    if not isinstance(store, str) or not os.path.isdir(store):
+        return out
+    try:
+        from .._servable import read_registry
+
+        entries = read_registry(store)[0]
+    except Exception:  # noqa: BLE001 - names help the check, they are never a reason to fail it
+        return out
+    for fid, meta in entries.items():
+        if usable(fid):
+            out.setdefault(fid, fid)
+        for key in ("display_name", "name"):
+            name = (meta or {}).get(key)
+            if not isinstance(name, str):
+                continue
+            name = " ".join(name.split())
+            for n in (name, re.sub(r"\s*\(.*$", "", name).strip()):
+                if len(n.split()) >= 2 and len(n) >= 8:
+                    out.setdefault(n, fid)
+    return out
+
+
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
-    from ..agent.verify import _judge, _rebuild, _visible, extract_cites
+    from ..agent.verify import _judge, _rebuild, _states_verdict_or_caveat, _visible, extract_cites
 
     ledger = getattr(ctx, "ledger", None)
     if ledger is not None:
@@ -262,7 +345,17 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     draft = arguments["text"]
     # a NOTICE line that repeats a notice fact's text is the server's own words (#294)
     notices = [f.text for f in context.facts if f.kind == "notice"]
-    judged = _judge(draft, context, per_sentence=per, notices=notices)
+    notices.append(REMOVED[len("NOTICE: ") :])
+    terms, rules = _terms()
+    judged = _judge(
+        draft,
+        context,
+        per_sentence=per,
+        notices=notices,
+        aliases=_facility_names(ctx),
+        terms=terms,
+        rules=rules,
+    )
     sentences = []
     for i, j in enumerate(judged):
         unknown = [c for c in j.unknown if c not in forgotten]
@@ -301,10 +394,12 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
         "provenance": provenance,
     }
+    dropped = [j for j, s in zip(judged, sentences) if s["verdict"] != "supported"]
+    # 0.112 (#328): a removed verdict or caveat leaves an answer more certain than its draft
+    caveats = sum(1 for j in dropped if _states_verdict_or_caveat(j.text))
     if detail:  # 0.112 (#322): the draft's lines, headings and blank lines kept
-        data["verified_text"] = _rebuild(
-            draft, [j for j, s in zip(judged, sentences) if s["verdict"] != "supported"]
-        )
+        kept = _rebuild(draft, dropped)
+        data["verified_text"] = f"{REMOVED}\n\n{kept}" if caveats and kept.strip() else kept
     facts = [
         {
             "id": "F1@check_citations",
@@ -334,6 +429,12 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
             "before sharing the text (each one's 'why' says what did not match; with detail, "
             "verified_text has them removed)."
         )
+    if caveats:
+        banners.append(
+            f"{caveats} of the unsupported sentence(s) gave a verdict, a negation or a caveat: "
+            "verified_text without them says less than the draft and can read as more certain "
+            "than it is. Do not show it as the answer; fix those sentences and check again."
+        )
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
 
 
@@ -345,8 +446,9 @@ CAPABILITIES = (
             "Check your draft before showing it: pass the text only; each [id] is looked up "
             "in this session's facts. A sentence is supported, unknown_citation (not of "
             "this session), forgotten_citation (rerun that tool), "
-            "uncited, unsupported_number (figure, sign or unit) or unsupported_claim (name, "
-            "verdict or direction); failures come with why. Call it last. Cheap."
+            "uncited, unsupported_number (figure, sign, unit or role) or unsupported_claim "
+            "(name, verdict, negation or direction); failures come with why. Call it last. "
+            "Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

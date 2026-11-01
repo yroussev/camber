@@ -326,6 +326,8 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
     untrusted = f" ({len(declines)} on untrusted input(s))" if declines else ""
     if declines:
         facts[0]["text"] += f" ({len(declines)} declined on untrusted input(s))"
+    if declined or unevaluated:  # 0.112 (#328): what a sentence saying "not judged" cites
+        facts[0]["text"] += "; those were not judged"
     # #304: a declined detector is a check not made, so the count is always stated (a bare
     # "0 equipment were not evaluated" read as everything judged)
     text = [
@@ -337,7 +339,7 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
     for i, r in enumerate(rows[:_FACTS], start=2):
         fact_id = f"F{i}@drift"
         r["fact"] = fact_id
-        facts.append(finding_fact(fact_id, r))
+        facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
     banners = [config_notice] if config_notice else []
