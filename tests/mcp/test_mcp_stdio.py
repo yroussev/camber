@@ -125,7 +125,7 @@ def test_stdout_carries_only_messages_even_when_a_tool_prints(tmp_path):
     )
     assert rc == 0
     assert [r["id"] for r in out] == [1, 2]
-    assert out[0]["result"]["structuredContent"] == {"ok": True}
+    assert out[0]["result"]["structuredContent"]["ok"] is True
     assert b"stray print from a capability" in err  # printed in the worker process
     assert b"stray bytes on fd 1" in err
 
@@ -137,7 +137,7 @@ def test_allow_all_active_reads_the_store_at_startup(tmp_path):
         [json.dumps(_req(1, "tools/call", {"name": "facilities"})).encode() + b"\n"],
     )
     assert rc == 0, err.decode()
-    assert resp["result"]["structuredContent"] == {"facilities": ["north", "south"]}
+    assert resp["result"]["structuredContent"]["facilities"] == ["north", "south"]
     assert b"2 facilities allowed" in err
 
 

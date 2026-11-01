@@ -36,6 +36,7 @@ from ._server import (
     LEGACY_VERSIONS,
     LIST_TTL_MS,
     MODERN_VERSIONS,
+    RESULT_KEY,
     SUPPORTED_VERSIONS,
     TOOL_ERROR_CODES,
     McpServer,
@@ -60,4 +61,5 @@ __all__ = [
     "LIST_TTL_MS",
     "CACHE_SCOPE",
     "MAX_MESSAGE_BYTES",
+    "RESULT_KEY",
 ]

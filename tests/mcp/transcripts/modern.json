@@ -31,7 +31,7 @@
           "prompts": {},
           "completions": {}
         },
-        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number; each result ends with the facts it issued, one [id] text per line, and check_citations looks up any id this server issued in this session (no need to pass facts back). Long lists come a page at a time (limit and offset arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
+        "instructions": "CAMBER is a read-only building-automation analytics toolkit. These tools read one local time-series store, and only the facilities this server was launched with; a facility outside that list is refused, and so is research-only (non-commercial / no-derivatives) data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote them when you repeat a number. Every result gives the facts it issued and its notices twice: as text (a Facts list, one [id] text per line, and lines starting with NOTICE) and in its JSON under \"camber\" (\"facts\" maps each id to its text, \"notices\" holds the notices); check_citations looks up any id this server issued in this session (no need to pass facts back). Long lists come a page at a time (limit and offset arguments). Notices are licence, trust or truncation notices (a cut list says how to get the rest): always show them to the user.",
         "ttlMs": 300000,
         "cacheScope": "private",
         "resultType": "complete",
@@ -76,7 +76,33 @@
               "type": "object"
             },
             "outputSchema": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "camber": {
+                  "type": "object",
+                  "required": [
+                    "facts",
+                    "notices"
+                  ],
+                  "properties": {
+                    "facts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "notices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "camber"
+              ]
             },
             "annotations": {
               "readOnlyHint": true,
@@ -97,6 +123,27 @@
             "outputSchema": {
               "type": "object",
               "properties": {
+                "camber": {
+                  "type": "object",
+                  "required": [
+                    "facts",
+                    "notices"
+                  ],
+                  "properties": {
+                    "facts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "notices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
                 "facilities": {
                   "type": "array",
                   "items": {
@@ -105,6 +152,7 @@
                 }
               },
               "required": [
+                "camber",
                 "facilities"
               ]
             },
@@ -143,7 +191,33 @@
               "type": "object"
             },
             "outputSchema": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "camber": {
+                  "type": "object",
+                  "required": [
+                    "facts",
+                    "notices"
+                  ],
+                  "properties": {
+                    "facts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "notices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "camber"
+              ]
             },
             "annotations": {
               "readOnlyHint": true,
@@ -173,7 +247,33 @@
               "additionalProperties": false
             },
             "outputSchema": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "camber": {
+                  "type": "object",
+                  "required": [
+                    "facts",
+                    "notices"
+                  ],
+                  "properties": {
+                    "facts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "notices": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "camber"
+              ]
             },
             "annotations": {
               "readOnlyHint": true,
@@ -236,6 +336,12 @@
         ],
         "isError": false,
         "structuredContent": {
+          "camber": {
+            "facts": {
+              "F1@ctx": ""
+            },
+            "notices": []
+          },
           "facilities": [
             "annex",
             "empty",
@@ -305,6 +411,14 @@
         ],
         "isError": false,
         "structuredContent": {
+          "camber": {
+            "facts": {
+              "F1@ctx": ""
+            },
+            "notices": [
+              "truncated to 3 of 5 rows"
+            ]
+          },
           "facility": "hq",
           "rows": [
             {

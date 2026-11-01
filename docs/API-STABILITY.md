@@ -1029,12 +1029,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `WorkerPool`, the `workers=` argument of `serve` / `serve_stdio`, `McpServer.handle(...,
   defer=True)` with `ToolCall` and `McpServer.finish`, the tool error code `busy` (in `TOOL_ERROR_CODES`) and the
   options `--max-concurrent` and `--max-queued`. **Added in 0.112 (#294):** `McpServer.ledger`
-  and the `ledger=` argument of `McpServer`. **Behaviour change:** `camber mcp` answers
+  and the `ledger=` argument of `McpServer`. **Added in 0.112 (#331):** `RESULT_KEY` (`"camber"`),
+the first key of every tool's `structuredContent`, holding the result's facts (`{id: text}`) and
+notices, and declared in every `outputSchema`. **Behaviour change:** `camber mcp` answers
   messages concurrently (replies may come out of order), sends no reply to a cancelled call, and
   stops the calls still running when stdin closes instead of finishing them. The wire behaviour follows the MCP
   revisions it speaks (2026-07-28, 2025-11-25, 2025-06-18); the CAMBER-specific parts of a
-  result -- the text blocks (a third, the facts, since 0.112), the `NOTICE:` lines and the
-  `_meta` keys `camber/facts`,
+  result -- the text blocks (a third, the facts, since 0.112), the `NOTICE:` lines, the
+  `camber` key of `structuredContent` (0.112) and the `_meta` keys `camber/facts`,
   `camber/banners`, `camber/truncated` and `camber/error` -- are provisional too.
 
 ### The read API server: `camber.api.server`

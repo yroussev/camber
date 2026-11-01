@@ -14,9 +14,18 @@ import json
 from . import CapabilityError, Prompt, PromptArg
 from ._sanitize import defang, one_line
 
+#: where a result gives its fact ids and notices, in either form a host may show (#331)
+_WHERE = (
+    "Where the facts are: every tool result lists the facts it issued, each id with its text, "
+    "and its notices, in both of its forms; use whichever you see. As text: a list headed "
+    "'Facts (cite by [id] ...)', one '[id] text' per line, and lines starting with 'NOTICE:'. "
+    'As JSON: the "camber" object, whose "facts" maps each fact id to its text and whose '
+    '"notices" lists the notices. Cite only ids listed there, and show the user every notice.'
+)
+
 _CITE_RULES = (
     "Rules for the answer: state only what the tool results say. End every sentence with the "
-    "fact id(s) it rests on in square brackets, exactly as the results give them, token "
+    "fact id(s) it rests on in square brackets, exactly as the results list them, token "
     "included (for example [F2@rule_run-1a2b3c]; each call's ids carry their own token). "
     "Copy every number exactly as a cited fact states it and state no number "
     "that is not in a fact you cite. Each evidence span, data gap, point's coverage, point "
@@ -34,12 +43,13 @@ _CITE_RULES = (
 
 _FINISH = (
     "Finally, call check_citations with your draft as text; you need not pass facts: the "
-    "server looks up every fact id it gave you in this session (the facts list at the end of "
-    "each result). Your own judgment (a verdict on the whole, advice, how sure you are) rests "
-    "on facts but is not one, so it is not marked supported: give it after the checked text, "
-    "labelled as your judgment. A verified_text that opens with a NOTICE that sentences were "
-    "removed is not the answer. Fix or remove each sentence it does not mark supported, then "
-    "give the corrected text."
+    "server looks up every fact id it gave you in this session (the ids each result lists, as "
+    'text or under "camber" "facts"). Its result gives a verdict per failing sentence and '
+    "its notices the same two ways. Your own judgment (a verdict on the whole, advice, how "
+    "sure you are) rests on facts but is not one, so it is not marked supported: give it "
+    "after the checked text, labelled as your judgment. A verified_text that opens with a "
+    "NOTICE that sentences were removed is not the answer. Fix or remove each sentence it does "
+    "not mark supported, then give the corrected text."
 )
 
 
@@ -108,6 +118,7 @@ def triage_ahu(args: dict) -> list:
             "are suspect (and which a reference confirmed), and the first checks to make on "
             "site (the sensor before the equipment it may be misreporting).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -128,6 +139,7 @@ def rcx_executive_summary(args: dict) -> list:
             "fact ids (K1@summary-<token>, C1@<issue key>-<token>, ...) or the F ids of the "
             "result; an issue's F fact states its rank ('Issue 1 of 6').",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -154,6 +166,7 @@ def explain_finding(args: dict) -> list:
             "says when the rule is re-judged with the sensor's bias taken off and whether the "
             "flagged hours fall in the window the reference covers.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -179,6 +192,7 @@ def check_savings_claim(args: dict) -> list:
             "supported by the M&V results, and what would be needed to support it (the verdict "
             "is your judgment: see below).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -200,6 +214,7 @@ def data_quality_review(args: dict) -> list:
             "the untrusted or suspect sensors and their flags, and what to fix first (trend "
             "setup, sensor calibration or replacement).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -229,6 +244,7 @@ def compare_equipment(args: dict) -> list:
             "peers pass is the signal; a finding conditional_on a disagreeing reference is a "
             "sensor problem first). Name the unit to look at first and why.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -250,6 +266,7 @@ def sensor_trust_review(args: dict) -> list:
             "flags or reference comparison that explain it, and what it blocks. Order by "
             "impact.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -270,6 +287,7 @@ def plan_site_visit(args: dict) -> list:
             "reading would confirm or rule out the issue, the sensors to spot-check with a "
             "reference instrument, and the trends to pull before leaving.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )

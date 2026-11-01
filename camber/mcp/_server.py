@@ -23,6 +23,11 @@ The facts of every tool result this server sends are recorded in :attr:`McpServe
 the ids it is given up there, so only a fact this process issued supports a sentence; a call runs
 with just the part of the ledger it reads (``Registry.ledger_view``), which is what a worker
 process receives, and the session's ledger stays here, in the parent, across worker restarts.
+
+A tool result shows its facts and notices both ways a host may pass a result to the model (0.112,
+#331): as text blocks in ``content`` and, first in ``structuredContent``, under
+:data:`RESULT_KEY` (declared in every published ``outputSchema``), made from the result's own
+facts and banners, never from anything a caller sent.
 """
 
 from __future__ import annotations
@@ -113,11 +118,13 @@ _INSTRUCTIONS = (
     "time-series store, and only the facilities this server was launched with; a facility "
     "outside that list is refused, and so is research-only (non-commercial / no-derivatives) "
     "data. Nothing a tool does changes the store. Summaries cite fact ids such as [F1@ctx]; quote "
-    "them when you repeat a number; each result ends with the facts it issued, one [id] text "
-    "per line, and check_citations looks up any id this server issued in this session (no need "
-    "to pass facts back). Long lists come a page at a time (limit and offset "
-    "arguments). Lines starting with NOTICE are licence, trust or truncation notices (a cut "
-    "list says how to get the rest): always show them to the user."
+    "them when you repeat a number. Every result gives the facts it issued and its notices "
+    "twice: as text (a Facts list, one [id] text per line, and lines starting with NOTICE) and "
+    'in its JSON under "camber" ("facts" maps each id to its text, "notices" holds the '
+    "notices); check_citations looks up any id this server issued in this session (no need to "
+    "pass facts back). Long lists come a page at a time (limit and offset arguments). Notices "
+    "are licence, trust or truncation notices (a cut list says how to get the rest): always "
+    "show them to the user."
 )
 
 
@@ -333,6 +340,52 @@ _DIALECT = "https://json-schema.org/draft/2020-12/schema"
 FACTS_HEADER = (
     "Facts (cite by [id]; check_citations looks these ids up itself, no need to pass them back):"
 )
+
+
+#: the key of every tool's ``structuredContent`` that holds the result's facts and notices
+#: (0.112, #331): some hosts show the model only ``structuredContent`` when there is
+#: one, so the facts block and the NOTICE lines of ``content`` are repeated there
+RESULT_KEY = "camber"
+#: what :data:`RESULT_KEY` holds, declared in every published ``outputSchema``: ``facts`` maps
+#: each fact id to its text (the facts block, in order), ``notices`` are the NOTICE lines
+RESULT_SCHEMA: dict = {
+    "type": "object",
+    "required": ["facts", "notices"],
+    "properties": {
+        "facts": {"type": "object", "additionalProperties": {"type": "string"}},
+        "notices": {"type": "array", "items": {"type": "string"}},
+    },
+}
+
+
+def _with_result_key(schema: Any) -> Any:
+    """An object output schema with :data:`RESULT_KEY` declared (and required); any other
+    schema as it is."""
+    if not isinstance(schema, dict) or schema.get("type") != "object":
+        return schema
+    props = schema.get("properties")
+    props = dict(props) if isinstance(props, dict) else {}
+    required = schema.get("required")
+    required = list(required) if isinstance(required, list) else []
+    out = dict(schema)
+    out["properties"] = {RESULT_KEY: RESULT_SCHEMA, **props}
+    out["required"] = [RESULT_KEY, *(r for r in required if r != RESULT_KEY)]
+    return out
+
+
+def _structured(data: Any, facts: list, banners: list) -> Any:
+    """``structuredContent``: an object result with :data:`RESULT_KEY` first (so a host that cuts
+    a long result keeps it); any other value as it is (2026-07-28 allows one, with no place to
+    put the facts)."""
+    if not isinstance(data, dict):
+        return data
+    index = {
+        f["id"]: str(f.get("text", ""))
+        for f in facts
+        if isinstance(f, dict) and isinstance(f.get("id"), str) and f["id"]
+    }
+    rest = {k: v for k, v in data.items() if k != RESULT_KEY}
+    return {RESULT_KEY: {"facts": index, "notices": list(banners)}, **rest}
 
 
 def _facts_block(facts: list) -> str:
@@ -676,7 +729,7 @@ class McpServer:
         schema = cap.output_schema
         # 2025-11-25 requires an object-rooted outputSchema; 2026-07-28 allows any JSON Schema
         if schema and (modern or (isinstance(schema, dict) and schema.get("type") == "object")):
-            out["outputSchema"] = _published(schema, notes=False)
+            out["outputSchema"] = _with_result_key(_published(schema, notes=False))
         # the tool's own title is the display name, so annotations do not repeat it (#299)
         out["annotations"] = {
             "readOnlyHint": True,
@@ -833,9 +886,11 @@ class McpServer:
         if block:  # 0.112 (#294): hosts show the model content, not _meta
             content.append({"type": "text", "text": block})
         out: dict = {"content": content, "isError": False}
-        # 2025-11-25 structuredContent is an object; 2026-07-28 takes any JSON value
+        # 2025-11-25 structuredContent is an object; 2026-07-28 takes any JSON value. 0.112
+        # (#331): an object carries the facts and notices too, under RESULT_KEY, for hosts that
+        # show the model structuredContent and not content
         if modern or isinstance(data, dict):
-            out["structuredContent"] = data
+            out["structuredContent"] = _structured(data, facts, banners)
         out["_meta"] = {
             "camber/facts": facts,
             "camber/banners": banners,

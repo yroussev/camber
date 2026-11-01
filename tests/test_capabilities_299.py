@@ -34,7 +34,7 @@ from camber.capabilities import (  # noqa: E402
     default_registry,
 )
 from camber.capabilities._page import page  # noqa: E402
-from camber.mcp import McpServer  # noqa: E402
+from camber.mcp import RESULT_KEY, McpServer  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 
 FID = fx.FID
@@ -226,11 +226,14 @@ def test_mcp_counts_the_whole_reply(store, modern):
     res = _mcp(reg, _ctx(store, caps=Caps(max_bytes=10_000)), modern)
     assert res["isError"] is True and res["_meta"]["camber/error"]["code"] == "too_large"
     assert res["_meta"]["camber/error"]["data"]["bytes"] > 10_000
-    # under a larger cap: one compact JSON text block that matches structuredContent
+    # under a larger cap: one compact JSON text block that matches structuredContent, less the
+    # facts and notices it repeats (0.112, #331: they are the text blocks' own)
     res = _mcp(reg, _ctx(store, caps=Caps(max_bytes=100_000)), modern)
     summary, block = res["content"]
     assert summary["text"] == "Rows." and res["isError"] is False
-    assert block["text"] == json.dumps(res["structuredContent"], separators=(",", ":"))
+    rest = {k: v for k, v in res["structuredContent"].items() if k != RESULT_KEY}
+    assert block["text"] == json.dumps(rest, separators=(",", ":"))
+    assert res["structuredContent"][RESULT_KEY] == {"facts": {}, "notices": []}
 
 
 # --------------------------------------------------------------------------- compact defaults
@@ -275,8 +278,10 @@ def test_the_tool_list_is_shorter():
     )
     tools = out["result"]["tools"]
     size = len(json.dumps(tools, separators=(",", ":"), ensure_ascii=False))
-    # 48 KB in 0.110.0, 44.6 KB in 0.111.0; 0.112 adds the claim, unit and reason fields
-    assert size < 46_000, size
+    # 48 KB in 0.110.0, 44.6 KB in 0.111.0; 0.112 adds the claim, unit and reason fields (45.0
+    # KB) and declares the facts and notices of structuredContent in every output schema (#331:
+    # 127 bytes a tool; an outputSchema is a document of its own, so a $ref cannot share one)
+    assert size < 48_000, size
     for t in tools:
         assert "$schema" not in t["inputSchema"] and "$schema" not in t["outputSchema"]
         assert "title" not in t["annotations"] and t["title"]

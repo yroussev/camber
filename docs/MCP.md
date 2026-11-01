@@ -339,6 +339,30 @@ stripped of control, bidi and invisible characters (0.111, #291; see
 field of every fact) is also in `_meta["camber/facts"]`, the notices in `_meta["camber/banners"]`
 and the truncation flag in `_meta["camber/truncated"]`.
 
+**The facts and notices are in `structuredContent` too** (0.112, #331). Some hosts, command-line
+coding assistants among them, show the model a result's `structuredContent` when it has one and drop
+`content`, so every tool's `structuredContent` starts with a `camber` object
+(`camber.mcp.RESULT_KEY`):
+
+```json
+{"camber": {"facts": {"F1@rule_run-1a2b3c": "2 rules were run on ...",
+                      "N1@rule_run-1a2b3c": "1 finding is conditional on ..."},
+            "notices": ["1 finding is conditional on ..."]},
+ "facility_id": "hq", "findings": [...]}
+```
+
+`facts` maps each fact id to its text, in the order of the facts block (the same ids and text,
+notices' own `N` facts included); `notices` are the `NOTICE:` lines, in order: research-only and
+registry banners, sensor-reference conditions, declined checks, removed sentences, the
+stripped-caveat notice of `check_citations`, pages and cuts. Every `outputSchema` declares the key
+(and requires it), and the official MCP Python SDK (2.3.0) validates every result against it. The
+rest of `structuredContent` is the capability's own result, which is also the JSON text block of
+`content` (that block leaves `camber` out: its facts and notices are the other blocks). The copy
+is made from the facts the server records for the session, never from what a caller sends, so it
+cannot add a fact: `check_citations` still resolves every id from the session's ledger, and a
+`facts` argument built from the compact copy (id and text only) is not the issued fact and is
+refused. A `camber` key in a call's arguments is refused like any unknown argument.
+
 **Citations are checked against what this server sent** (0.112, #294). The server records the
 facts of every tool result it answers, in both protocol revisions, in one ledger per process
 (stdio is one session). `check_citations` looks every cited id up there, so a model passes only
@@ -378,7 +402,11 @@ than leave one out, the server keeps results small:
   full schema.
 
 On a 650-point fleet, typical calls now return 50 to 100 KB (they were 0.3 to 1.2 MB), and
-`tools/list` is about 43 KB. The facts block (0.112) adds 10 to 15 % to a reply.
+`tools/list` is about 48 KB (the `camber` declaration adds about 130 bytes a tool: each
+`outputSchema` is a document of its own, so a `$ref` cannot share one definition between tools).
+The facts block (0.112) adds 10 to 15 % to a reply, and the compact copy of the facts in
+`structuredContent` (#331) 5 to 17 % more: on a 56-point facility `coverage` is 120 KB,
+`rcx_report` 69 KB and `sensor_trust` 44 KB.
 
 ## From Python
 

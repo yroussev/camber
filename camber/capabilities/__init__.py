@@ -124,6 +124,10 @@ __all__ = [
     "run_config_for",
 ]
 
+#: the key of a structured result (MCP ``structuredContent``) where a transport repeats the
+#: result's facts and banners (0.112, #331); reserved: no capability's ``data`` holds it
+RESULT_KEY = "camber"
+
 #: every :attr:`CapabilityError.code`
 ERROR_CODES = (
     "invalid_params",
@@ -316,6 +320,10 @@ class Registry:
             # MCP (2025-11-25) takes only an object outputSchema / structuredContent
             if getattr(cap, which).get("type") != "object":
                 raise ValueError(f"{cap.name}.{which} must be an object schema")
+        # 0.112 (#331): a transport puts the result's facts and notices under this key of the
+        # structured result (MCP structuredContent), so no capability's data may hold it
+        if RESULT_KEY in (cap.output_schema.get("properties") or {}):
+            raise ValueError(f"{cap.name}.output_schema must not declare {RESULT_KEY!r}")
         self._caps[cap.name] = cap
 
     def register_prompt(self, prompt: Prompt) -> None:

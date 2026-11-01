@@ -17,6 +17,12 @@ keys. A call returns a `CapabilityResult`:
 | `banners` | licence, truncation and citation notices, always shown to the user |
 | `truncated` | `True` when any list in `data` is not the whole list: a page (see **Pages** below), or a list cut to the row cap |
 
+A transport shows `facts` and `banners` wherever it shows `data`: `camber mcp` puts them first in
+every tool's `structuredContent`, under the key `camber` (`{"facts": {id: text}, "notices":
+[...]}`, 0.112, #331), as well as in its text blocks, because some hosts show the model only
+`structuredContent`. The key is reserved: registering a capability whose output schema declares
+`camber` is a `ValueError`.
+
 A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
 `unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
 e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`,

@@ -196,8 +196,24 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `_owner.json`. One made in another container or on another system counts as live only while
   its writer holds the store's claim. `store verify` says so, and says when the next ingest
   will remove it.
+- **A host that shows the model only `structuredContent` now shows it the facts and notices
+  (#331).** Some MCP hosts, a command-line coding assistant among them, pass a tool result's
+  `structuredContent` to the model and drop the text blocks, so the model never saw the facts list
+  or the `NOTICE:` lines: it could cite almost nothing (`data_quality_review` could not be checked
+  at all), and research-only banners, sensor-reference conditions, paging notices and the
+  stripped-caveat notice of `check_citations` were never shown. Every tool's `structuredContent` now
+  starts with a `camber` object: `facts` maps each fact id to its text (the same ids and text as the
+  facts block, all of them resolved by `check_citations`) and `notices` lists the notices. The
+  prompts say where to find fact ids in either form.
 
 ### Changed
+- **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
+  "notices": [...]}` and is declared (and required) in every tool's `outputSchema`; the rest of
+  `structuredContent` is the result as before, and the JSON text block in `content` is that rest
+  (it no longer equals `structuredContent` byte for byte). A client that compares
+  `structuredContent` with a fixed object, or rejects unknown keys, should ignore `camber`
+  (`camber.mcp.RESULT_KEY`). No capability may declare that key. `tools/list` grows by about
+  1.7 KB (47.7 KB) and a reply by 5 to 17 %.
 - **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id
   token covered the config's text, so an absolute or a relative `source.store`, one through a
   symlink or with a trailing slash, and the same store mounted at another path (a host and a

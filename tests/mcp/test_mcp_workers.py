@@ -462,7 +462,7 @@ def test_a_second_call_with_an_id_in_progress_is_refused(session):
     at, msg = s.reply()
     assert at - t0 < 0.5 and msg["id"] == 7 and msg["error"]["code"] == -32600
     _, msg = s.reply()
-    assert msg["id"] == 7 and msg["result"]["structuredContent"] == {"slept": True}
+    assert msg["id"] == 7 and msg["result"]["structuredContent"]["slept"] is True
     s.call(7, "pid")  # free again once answered
     assert "pid" in s.reply()[1]["result"]["structuredContent"]
     with pytest.raises(queue.Empty):
