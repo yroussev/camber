@@ -42,6 +42,7 @@ import json
 import os
 
 from ..portfolio._lock import LockHeld, default_lock_timeout, exclusive_lock
+from ..portfolio._lock import confirm_claims as _confirm_claims
 
 MANIFEST = "manifest.json"
 ACKS = "acknowledgements.json"
@@ -164,6 +165,11 @@ def write_json_atomic(path: str, data) -> None:
         json.dump(data, fh, indent=2, sort_keys=True)
         fh.flush()
         os.fsync(fh.fileno())
+    try:
+        _confirm_claims()  # 0.112 (#330): still this cache's writer
+    except BaseException:
+        os.remove(tmp)
+        raise
     os.replace(tmp, path)
 
 

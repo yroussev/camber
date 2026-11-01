@@ -475,6 +475,9 @@ class ParquetStore:
         os.makedirs(stage)
         try:
             self._write_parts(table, stage, seq)
+            from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+            confirm_claims()  # 0.112 (#330): still the store's writer
             for dirpath, _dirs, files in os.walk(stage):
                 dst_dir = os.path.join(self.root, os.path.relpath(dirpath, stage))
                 for fname in sorted(files):

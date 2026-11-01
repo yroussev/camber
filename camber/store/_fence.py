@@ -142,6 +142,9 @@ def fence(root: str, fid: str):
         held[1] += 1
     try:
         if depth == 0:
+            from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+            confirm_claims()  # 0.112 (#330): a writer whose claim was taken over stops here
             pid = os.getpid()
             _write(root, fid, f"busy {pid} {_started(pid) or '-'} {os.urandom(8).hex()}\n")
         yield

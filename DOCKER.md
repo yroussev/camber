@@ -31,7 +31,13 @@ docker run --rm -p 8080:8080 -v "$PWD/data/store:/data/store:ro" ghcr.io/yrousse
 only reads it. If a container writes it (`camber datasets ingest`, `camber lab`), do not also
 write it from the host: the host and Docker Desktop's VM do not share `flock`. Since 0.112 a
 writer's claim (`<store>/_lock.owner`) makes the other side wait and then refuse, but CAMBER 0.111
-and older make no claim (#325). See
+and older make no claim (#325). A writer paused for more than 10 seconds (Ctrl-Z, `docker pause`, a
+debugger) has its claim taken over by the other side. When it resumes it fails with `… this writer
+lost its claim …` before its next change to the store, and the store stays as the other writer
+left it. Only a pause of over 10 seconds that falls exactly between that check and the rename
+after it lets one change through, and that writer still fails instead of reporting success (#330).
+On a Docker Desktop bind mount `flock` excludes nothing, even within one container, so the claim
+is the only exclusion there. See
 [docs/DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
 Config is via environment variables (already set in the image): `CAMBER_STORE` (default

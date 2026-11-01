@@ -193,7 +193,7 @@ def test_a_server_holds_its_own_directory(tmp_path, monkeypatch):
     finally:
         while _launch._MPL_LOCKS:
             os.close(_launch._MPL_LOCKS.pop())
-    assert _launch._owner_gone(path) is True
+    assert _launch._owner_gone(path) is False  # #330: its identity says it still runs
 
 
 # --------------------------------------------------------------------------- 3. healthcheck

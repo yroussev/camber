@@ -167,7 +167,14 @@ second signal does not interrupt that cleanup (#316), nor change that exit statu
 process can clean up after `SIGKILL`; the next `camber mcp` to start removes the directories of
 servers that are no longer running (#309). A server holds a lock on a file in its directory while
 it runs, so a later one tells a dead server from a live one also where the process id cannot, as
-for servers that each run as pid 1 in containers sharing a `/tmp` volume (0.112, #326); a 0.111
+for servers that each run as pid 1 in containers sharing a `/tmp` volume (0.112, #326). That file
+also records the server (pid, kernel, pid namespace, start time) and the server touches it every
+10 seconds (#330). A server of the same kernel and pid namespace is judged by its pid and start
+time. Another container's server is judged by its lock where `flock` works, as on a named volume.
+On a Docker Desktop bind mount `flock` excludes nothing, so there its heartbeat decides: its
+directory is removed once the file has not been touched for 2 minutes. A live server's
+directory is kept there. A killed server's directory is removed by the first server that starts
+2 minutes or more after the kill. A 0.111
 server's directory is judged by its process id, and those named without a process id (0.111
 development builds) are removed once they are a day old. A name
 it cannot read as a process id is left alone, and nothing the sweep meets stops the start (#316).

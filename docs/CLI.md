@@ -780,10 +780,13 @@ portfolio` and `retention apply` refuse at once unless given a wait (`retention 
 Docker Desktop container (or two machines on one share) do not share. Since 0.112 a writer also
 claims `<dir>/_lock.owner` and keeps a heartbeat in it, so a writer on the other side waits and
 then exits 1 with `… is locked by <pid>@<host> since <time> on another system sharing this
-directory (kernel …)`; a claim whose writer was killed is taken over (at once on its own system,
-after 10 seconds without a heartbeat from another). CAMBER 0.111 and older make no claim: write a
-store or cache from the host or from containers, not both, and mount it read-only (`:ro`) where it
-is only read.
+directory (kernel …)`; a claim whose writer was killed is taken over (at once when its process
+is seen to be gone, else after 10 seconds without a heartbeat). A writer stopped for longer than
+that (Ctrl-Z) has its claim taken over too, and when it resumes it exits 1 with `… this writer lost
+its claim …` before it changes anything more (0.112, #330; see
+[DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache) for the one remaining
+window). CAMBER 0.111 and older make no claim: write a store or cache from the host or from
+containers, not both, and mount it read-only (`:ro`) where it is only read.
 
 ## Portfolio and facility lifecycle
 
@@ -864,7 +867,11 @@ written before 0.103), `edge` (an edge forwarder's part) and `rollup`. A workspa
 its rollup stores. It reads every part, takes no lock and changes nothing. Since 0.107 (#213) it
 also lists what an interrupted ingest left behind (a partition swap, a moved-aside partition, a
 staging directory; the next ingest recovers them) and registered facilities with no part files
-in a state that should have some. Exit code 0 when every part is readable, canonical or not; 1
+in a state that should have some. A staging directory whose writer still runs is marked so:
+`(its process is still running)`, or, for one made in a container or on another system,
+`(made on another system by the writer that holds the store's claim now)`, which the next ingest
+removes once that claim is let go or taken over (0.112, #330). Exit code 0 when every part is
+readable, canonical or not; 1
 when a part fails to read or a facility's data is stranded outside its partition, or, with
 `--strict`, when a part is not canonical or anything is left over.
 
