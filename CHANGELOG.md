@@ -64,6 +64,39 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
   period is in 2017; a `NOTICE:` line repeating the text of a `notice` fact among the facts
   is kept and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+- **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
+  acceptance test found sentences that say the opposite of their cited fact marked
+  "supported": "the heating valve leaks" against "no valve leak", "the setpoint moves" against
+  "never moves", "reads low" against "reads high", a "did not leak" passing because the fact
+  said "drift not evaluated", "its baseline passes G14" against "does not meet", "one point is
+  below the trust floor" against 0, "every sample leaked" against 86 %, "the target is 55.0 °F"
+  for a measured 55.0 °F and a CV(RMSE) tier read as a result, another facility named without
+  a digit or underscore (`ds-lbnl-sdahu`, or its registry name), the wrong point ("the
+  return-air sensor" for a supply-air comparison), "Issue 3" cited to Issue 1, "verified",
+  "clean", "real" or "confident" where no fact says so, and a name from the data hiding the
+  claim around it ("AHU-25 saves 777 kWh", a data-text "NOTICE:"). A negation must now be one a
+  cited fact makes about the same thing, and a sentence must not state what a cited fact
+  negates; "passes", "one", "none", "no X", "0 X", "all", "every" and "most" are read; a result
+  stated as a threshold, target, setpoint, allowance or tier fails; every facility id and
+  registry name of the allowlist and the store is a name; a point role must be one a cited fact
+  is about; a rank must be one the cited facts give; assurance words pass only where a fact uses
+  them; and a name from the data shields its words only when quoted or plain. Bold lines, `#`
+  headings and lead-ins ending in a colon are judged when they state something, so a draft made
+  only of them is no longer `grounded`.
+- **`check_citations` supports what its facts say (#328).** A fact's own text copied word for
+  word ("None of the 8 flagged hours ... falls in the window ...") is supported, and so is
+  "none of the 11 points", "0 points are below the trust floor", "2 issues are conditional"
+  (the counted thing of a fact's list), "allows 2F of fan heat", "actual swing 10.05 degF", "12
+  rules were run on 2 units", "its setpoint is flat at ~55F", "check the high-limit lockout at
+  65°F", "the leaking_valve rule flagged 8 hours" (rule, tool and field names and `G36` are not
+  equipment), "the flagged spans fall on 2025-05-14", "until a baseline passes G14", "the claim
+  states a 12% saving" (a claimed figure now carries the claim's direction) and "it was not
+  judged" (the facts for a skipped rule, a declined check and insufficient data say so).
+  "in." in "in. w.c.", "vs." and a full stop inside a quoted name no longer end a sentence; a
+  pure heading ("## Savings claim check", "## Points that never move", "Stop 2:") or a short
+  list label ("1. Sensor offset.") is kept in place, and a removed first sentence leaves its
+  list marker. `finding_detail` no longer strips its own reference-window fact from its summary,
+  and the notice that a summary sentence was removed no longer says it was always a figure.
 - **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
   and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
   with only the failing sentences removed: paragraphs, list markers, headings and the trailing
@@ -171,6 +204,22 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   container) gave different ids for the same data. A path now counts by what it resolves to: the
   store by its data, a folder by its entries, the mapping and `shared_oat` files by their size and
   modification time. The ids of a server started with a `--config` change once; cite the new ones.
+- **`verified_text` says when it dropped a verdict or caveat (#328).** Removing an unsupported
+  verdict or caveat ("for information only", "conditional on the sensor") while keeping the
+  figures they qualified made a checked answer read as more certain than its draft. When a
+  removed sentence gave a verdict, a negation or a caveat, `verified_text` now opens with a
+  `NOTICE: check_citations removed sentences ...` line and the result carries a banner: show
+  such a text only after fixing those sentences. Checking that text again keeps the line.
+- **Stricter citation matching can mark sentences unsupported that passed in 0.111 (#328).**
+  Write negations, verdicts and quantifiers as a cited fact does ("no valid sample", not "no
+  data"; "fails G14", not "is not a pass"), quote a name from the data, and cite the fact about
+  the facility, point or issue rank a sentence names. A model's own verdict, advice or
+  confidence is never supported: the prompts now ask for it after the checked text, labelled as
+  judgment. `rule_run`, `drift`, `rcx_report`, finding facts and the trust-floor notice now
+  say "not judged" for skipped, declined and insufficient-data checks, the dataset-template
+  notice says "not a config tuned for your own use of the data", finding and RCx facts carry
+  their `facility_id`, and `finding_detail`'s evidence facts their `finding`; the wording of
+  what "supported" means is in MCP.md and CAPABILITY-REGISTRY.md.
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
   every fact must be one the session was sent, unchanged, or the call is refused with
   `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out

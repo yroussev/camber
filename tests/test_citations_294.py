@@ -15,7 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.agent.verify import _judge, check, extract_cites  # noqa: E402
 from camber.capabilities import CallContext, default_registry  # noqa: E402
-from camber.capabilities._cap_check_citations import _context, check_citations  # noqa: E402
+from camber.capabilities._cap_check_citations import (  # noqa: E402
+    REMOVED,
+    _context,
+    check_citations,
+)
 
 REG = default_registry()
 
@@ -318,9 +322,11 @@ def test_a_notice_line_is_the_servers_when_it_repeats_a_notice_fact():
     cited = f"NOTICE: {notice} [{nfact['id']}]\nAHU__excess_oa has a fault [{f3}]."
     res = check_citations(SimpleNamespace(), {"text": cited, "facts": [*FACTS, nfact]})
     assert res.data["grounded"] is True and res.data["n_sentences"] == 2
-    # a NOTICE line no notice fact says is judged like any other line
+    # a NOTICE line no notice fact says is judged like any other line; removing its caveat
+    # ("for information only") is said at the top of verified_text (#328)
     res = check_citations(SimpleNamespace(), {"text": text, "facts": FACTS, "detail": True})
-    assert res.data["n_sentences"] == 2 and res.data["verified_text"] == text.split("\n")[1]
+    assert res.data["n_sentences"] == 2
+    assert res.data["verified_text"] == f"{REMOVED}\n\n{text.split(chr(10))[1]}"
     forged = f"NOTICE: {notice}, and the unit saves 99%\nAHU__excess_oa has a fault [{f3}]."
     res = check_citations(SimpleNamespace(), {"text": forged, "facts": [*FACTS, nfact]})
     assert res.data["n_sentences"] == 2 and res.data["grounded"] is False
@@ -369,7 +375,9 @@ def test_verified_text_removes_only_the_failing_sentences():
         "unsupported_claim": 0,
         "forgotten_citation": 0,
     }
+    # the list item with an unknown id stated a verdict ("has a fault"): its removal is said
     assert data["verified_text"] == (
+        f"{REMOVED}\n\n"
         "# AHU triage\n\n"
         f"AHU__excess_oa has a fault [{f3}]. It ran 46% of 64 hours [{f2}].\n"
         "\n"
@@ -484,8 +492,8 @@ Triage of air handler "AHU-1" at site-north [F1@points-4d3762]. The unit was jud
 which gave 1 fault, 1 warn, 0 info and 1 ok, and 0 rules were skipped for missing inputs \
 [F1@rule_run-7de39b].
 
-Ranked cause one, the supply air temperature sensor of "AHU-1" (confidence high that it is \
-suspect) [R1@sensor_trust-a182b5]. Its configured reference, a handheld reference logger, \
+Ranked cause one, the supply air temperature sensor of "AHU-1" [R1@sensor_trust-a182b5]. Its \
+configured reference, a handheld reference logger, \
 disagrees with it at warn level, so the point is suspect although its trust score is 1.00 \
 [F3@sensor_trust-a182b5] [R1@sensor_trust-a182b5]. The comparison reads bias +3.0, RMSE 3.0 and \
 r=1.00 over 384 paired samples in 4 days, from 2025-05-19 00:00:00 to 2025-05-22 23:45:00, and \
@@ -518,6 +526,9 @@ BLIND_FLAGGED = [
     "[F1@sensor_trust-a182b5].",
     # a 4-hour figure where the fact has 8
     "The rule flagged 4 hours in 3 contiguous spans [F2@finding_detail-358e19].",
+    # a confidence no cited fact gives (#328: an assurance word passes only where a fact uses it)
+    'Ranked cause one, the supply air temperature sensor of "AHU-1" (confidence high that it is '
+    "suspect) [R1@sensor_trust-a182b5].",
 ]
 
 

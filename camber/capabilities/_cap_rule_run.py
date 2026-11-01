@@ -253,8 +253,14 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         f"{len(every_skip)} rule-equipment pair(s) ({n_skip_rules} rule(s)) skipped for missing "
         "inputs"
     )
+    if every_skip:  # 0.112 (#328): what a sentence saying "not judged" can cite
+        skips += ": those pairs were not judged"
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
-    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
+    declined = (
+        f"; {len(declines)} check(s) declined on untrusted input(s): those checks were not judged"
+        if declines
+        else ""
+    )
     facts = [
         {
             "id": "F1@rule_run",
@@ -276,7 +282,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     for i, r in enumerate(shown[:_FACTS], start=2):
         fact_id = f"F{i}@rule_run"
         r["fact"] = fact_id
-        facts.append(finding_fact(fact_id, r))
+        facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
     banners = [config_notice] if config_notice else []
@@ -810,7 +816,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     params = _parameters(rule, dict(entry.get("params") or {}), rule_obj)
 
     row["fact"] = "F1@finding_detail"
-    facts = [finding_fact("F1@finding_detail", row)]
+    facts = [finding_fact("F1@finding_detail", row, fid)]
     text = [cite(facts[0])]
     if viol is not None:
         events = ""
@@ -825,7 +831,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "evidence_hours",
                 "value": viol["hours"],
                 "unit": "h",
-                "subject": subject(fid, row["equip"]),
+                "subject": subject(fid, row["equip"], finding=row["finding_id"]),
                 "text": f"The rule flagged {viol['hours']:g} hours{events} ({viol['samples']} "
                 f"of {viol['judged_samples']} judged {viol['judged_basis']}, "
                 f"{viol['share']:.1%}) in {viol['n_spans']} contiguous span(s){tail}",
@@ -848,7 +854,9 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                     "kind": "condition_hours",
                     "value": c["hours"],
                     "unit": "h",
-                    "subject": subject(fid, row["equip"], condition=c["name"]),
+                    "subject": subject(
+                        fid, row["equip"], condition=c["name"], finding=row["finding_id"]
+                    ),
                     "text": f"{c['name']}: the rule flagged {c['hours']:g} hours ({c['samples']} "
                     f"of {c['judged_samples']} judged {c['judged_basis']}, {c['share']:.1%})",
                     "share": c["share"],
@@ -868,6 +876,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "id": f"F{n}@finding_detail",
                 "kind": "parameters",
                 "value": len(params),
+                "subject": subject(fid, row["equip"], finding=row["finding_id"]),
                 "text": f"{rule} ran with {listed}",
             }
         )

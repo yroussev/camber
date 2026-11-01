@@ -124,7 +124,7 @@ capability cannot cut a list and leave the flag false.
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors (`run_with`: `rule_run` for a rule, `drift` for a detector, which `rule_run` refuses), the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
-| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings and blank lines kept. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
+| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings, list markers and blank lines kept, opening with a `NOTICE:` line when a removed sentence gave a verdict, a negation or a caveat. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
@@ -413,47 +413,96 @@ cannot match is not supported. **Supported means matched, not proven true.**
   the facts it cites; without it, its figures may match any fact the text cites, and only a
   sentence that cites a fact itself has its claims checked.
 - **Figures** (`unsupported_number`). Every number, written in digits or in words ("forty-six",
-  "half"), must be one a cited fact states with the same sign (`-45%` is not `45%`), the same
-  unit when the sentence gives one (`%`, `°F`, `kWh`, `therms`, hours, days, percentage
-  points, `$`, ...), the same counted thing when the sentence names one (hours, samples, points,
-  rules, faults, ...; for a percentage, what it is "of"), and the same role: a figure the fact
-  gives as a threshold or limit (`valve > 5%`, `OAT < 60°F`, `above 20% min`, `target 57.1°F`)
-  is not a result, and a result is not a threshold. A fact's figures are those its text states,
-  outside the quoted names in it (a number in a name from the data is not a figure), and its
-  numeric `value` with its `unit` when it has one; never the other numbers of its data (a
-  finding's metrics, a rule's parameters). A date, time or year must be one a cited fact carries
-  in its text or in a date field ("in 2017" matches a `reporting_period` of 2017). A list marker
-  (`1.`, `2)`), a rank (`Ranked cause 1`, `step 2`, `#3`) and an ordinal (`2nd`) are labels,
-  not figures (so is the rank in "Issue 1 of 4"). A fact with `basis: "claimed"` (a claim's own
-  figure, from `mv_summary`'s `claim`) supports a figure only in a sentence that presents it as
-  a claim ("the claim states 15%"), never a measured statement. A **derived number** -- a
-  difference, sum, ratio or annualised figure of the facts' figures -- is not supported unless a
-  fact states it.
-- **Claims** (`unsupported_claim`), checked against the facts the sentence cites. An
-  **equipment, meter or facility** the sentence names -- an id with a digit or an underscore
-  (`AHU-1`, `meter_A`), a quoted name, or the `equip`, `facility_id` or `meter` of any fact in
-  play, or of its `subject`) -- must be named by a cited fact. A **verdict** word (fault, fail,
-  warn, suspect, ok, pass, healthy, accurate, correctly, meets, compliant, significant, trusted,
-  untrusted, info, explained, persists, worse, flat) must be one a cited fact states, in its text or as its `value`, `verdict` or
-  `severity`, with the same polarity: "meets G14" against "does not meet G14 acceptance" fails,
-  "fails G14" matches it. A **direction** word (rose, increased, fell, decreased, saved,
-  avoided, reduced, wastes, ...) must be one a cited fact uses (or its `direction`). A
-  **negation** ("did not", "never", "without") needs a cited fact that negates too; "no
-  <thing>" needs a fact that says "no <thing>" or "0 <thing>".
-- **Headings and notices.** A heading line (`# Title`, a short line ending in a colon, a bold-only
-  line) that states nothing -- no citation, figure, date, negation or direction -- is kept and
-  not judged. A `NOTICE:` line repeating the text of a `notice` fact among the facts (passed in
-  `facts`, or cited) is kept and not judged; a `NOTICE:` line that cites its notice fact is
-  matched like any sentence; any other `NOTICE:` line is judged like a sentence.
+  "half", "one" as a count), must be one a cited fact states with the same sign (`-45%` is not
+  `45%`), the same unit when the sentence gives one (`%`, `°F`, `kWh`, `therms`, hours, days,
+  percentage points, `$`, ...), the same counted thing when the sentence names one (hours,
+  samples, points, rules, faults, ...; "units" are equipment; for a percentage, what it is
+  "of"), and the same role: a figure the fact gives as a threshold, limit, target, setpoint,
+  allowance or tier (`valve > 5%`, `OAT < 60°F`, `above 20% min`, `target 57.1°F`, `the 30%
+  daily CV(RMSE) tier`, `fault_pct = 20.0`) is not a result, and a result is not one: "the
+  target is 55.0°F", "the rule allows 3.4F" or "a CV(RMSE) of 30%" against a measured figure
+  fails (0.112, #328). A fact's figures are those its text states, outside the quoted names in
+  it (a number in a name from the data is not a figure), and its numeric `value` with its `unit`
+  when it has one; never the other numbers of its data (a finding's metrics, a rule's
+  parameters). In a fact that lists figures, a bare figure takes the unit, share or counted thing
+  of its neighbour (`0.83 vs expected 0.35 in. w.c.`, `HW-leak 86% / CHW-leak 0% of samples`,
+  `11 points: 9 trusted, 2 suspect`). A date, time or year must be one a cited fact carries in
+  its text or in a date field ("in 2017" matches a `reporting_period` of 2017). A list marker
+  (`1.`, `2)`), a step (`Ranked cause 1`, `step 2`, `Stop 1`, `#3`) and an ordinal (`2nd`) are
+  labels, not figures. A fact with `basis: "claimed"` (a claim's own figure, from
+  `mv_summary`'s `claim`) supports a figure only in a clause that presents it as a claim ("the
+  claim states 15%"), never a measured statement; its `direction` (a saving is `down`) lets "the
+  claim states a 15% saving" be cited. A **derived number** -- a difference, sum, ratio or
+  annualised figure of the facts' figures -- is not supported unless a fact states it.
+- **Claims** (`unsupported_claim`), checked against the facts the sentence cites:
+  - **Names.** An equipment, meter or facility the sentence names -- an id with a digit or an
+    underscore (`AHU-1`, `meter_A`), a quoted name, the `equip`, `facility_id` or `meter` of a
+    cited fact or of its `subject`, or a facility id or registry name of the caller's allowlist
+    or the store's registry (`ds-lbnl-sdahu` and its name, with no digit or underscore) -- must
+    be named by a cited fact. A name from the data shields its own words only when the sentence
+    quotes it or it reads as a plain name: one that itself states a figure, verdict, direction or
+    negation (an equipment named `AHU-25 saves 777 kWh`) is read like any other words unless
+    quoted. A rule name must be one a cited fact is about whenever the cited facts name a rule
+    or finding; a tool or field name (`sensor_trust`, `finding_ids`) and a standard (`G36`,
+    `G14`) name nothing.
+  - **Point roles.** A point the sentence names (supply, return, mixed or outdoor air, the
+    heating or cooling valve, a setpoint) must be one a cited fact is about or mentions, when
+    the cited facts are about a point at all: "the return-air sensor reads high" against a
+    supply-air comparison fails.
+  - **Verdicts.** A verdict word (fault, fail, warn, suspect, ok, pass, passes, healthy,
+    accurate, correctly, meets, compliant, significant, trusted, untrusted, info, explained,
+    persists, worse, flat) must be one a cited fact states, in its text or as its `value`,
+    `verdict` or `severity`, with the same polarity: "passes G14" or "meets G14" against "does
+    not meet G14 acceptance" fails, "fails G14" matches it. An **assurance** word (verified,
+    confirmed, clean, real, genuine, confident, certain, sure, proven, guaranteed, reliable,
+    within tolerance) is never inferred: it passes only where a cited fact uses it ("confidence
+    H" in an RCx issue). A verdict word after "if", "until", "unless", "could", "may" or "to"
+    ("until a baseline passes G14", "needs to pass") states nothing; "fault threshold" and
+    "passes flow when closed" are not verdicts.
+  - **Directions.** A direction word (rose, increased, fell, decreased, saved, avoided, reduced,
+    wastes, ...) must be one a cited fact uses (or its `direction`), except after "would",
+    "could" and the like; "fall on 2025-05-14" is not one. "High" / "low" and "above" / "below"
+    must not be the opposite of what the cited facts say.
+  - **Negations, both ways.** A negation the sentence states ("did not leak", "never moves",
+    "without", "no <thing>", "none of <them>", "0 <things>") needs a cited fact that negates the
+    same thing, about the same words: a fact's "no valve leak" supports "the valve did not
+    leak", while "drift not evaluated" supports no other negation, and "CHW-leak 0%" says nothing
+    of the heating valve. And a sentence must not state what a cited fact negates: "the valve
+    leaks" against "no valve leak", "the setpoint moves" against "never moves". A fact that a
+    check was skipped, declined or had insufficient data says it "was not judged", so that
+    sentence can be cited; "not a pass" cannot.
+  - **Quantifiers and ranks.** "All" or "every" needs a fact that says all, every or 100%;
+    "most" one that says most or a share above half; "none" is a zero (above). "Issue 3" or "the
+    1st issue" must be a rank a cited fact gives, when a cited fact gives ranks.
+- **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
+  line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
+  label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
+  verdict verb such as "passed" included) outside a relative clause, or advice -- such as `# AHU-1 triage`, `Findings:`, `## Points
+  that never move`, `## Savings claim check` or `1. Sensor offset.` is kept and not judged. A
+  `NOTICE:` line repeating the text of a `notice` fact among the facts (passed in `facts`, or
+  cited) is kept and not judged; a `NOTICE:` line that cites its notice fact is matched like
+  any sentence; any other `NOTICE:` line is judged like a sentence. "in." after a figure or
+  before "w.c.", "vs." and "e.g." do not end a sentence, nor does a full stop inside a quoted
+  name.
 - **`verified_text`** is the draft with only the failing sentences removed: its lines, list
-  markers, headings and blank lines stay, and a line whose sentences all failed goes.
+  markers (a removed first sentence leaves its marker to the next), headings and blank lines
+  stay, and a line whose sentences all failed goes. When a removed sentence gave a verdict, a
+  negation or a caveat ("only", "conditional", "until", ...), `verified_text` opens with
+  "NOTICE: check_citations removed sentences that gave a verdict, a negation or a caveat; this
+  text says less than the draft and is not the complete answer." and a banner says so: without
+  them the text can read as more certain than the draft. Checking that text again keeps the line
+  and does not judge it.
 
 What it does not check: whether a claim is true beyond what the cited facts state, the meaning
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
-gives as a subject, and which cited fact a figure belongs to when a sentence cites several. A
-sentence a reader would take as fair can fail (an inference such as "so no check was declined",
-advice in the negative): say it the way a fact does, cite the fact that says it, or leave it out.
+gives as a subject, a point role outside the families above, and which cited fact a figure
+belongs to when a sentence cites several. A model's own judgment -- a verdict on a savings
+claim, advice, a ranking, how sure it is -- rests on facts but is not one, so it is never
+supported: the prompts ask for it after the checked text, labelled as judgment. A sentence a
+reader would take as fair can fail (an inference such as "so no check was declined", a
+paraphrase such as "no data" for a fact's "no valid sample", advice in the negative): say it the
+way a fact does, cite the fact that says it, or leave it out.
 
 **In-process, the timeout cannot stop a handler.** The handler runs in a worker thread; Python
 cannot kill a thread, so on a timeout the call returns `timeout` at once while the handler

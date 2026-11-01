@@ -112,15 +112,34 @@ _UNITS = {
 _CLAIM_FIGURES = 10
 
 
+#: where a claim's clause ends: a comma, semicolon or colon, or a full stop before a space
+_CLAUSE_END = re.compile(r"[,;:]|\.(?=\s|$)")
+
+
+def _claim_direction(claim: str, start: int, end: int):
+    """``"down"`` or ``"up"``: the direction the claim's words give the figure at
+    ``claim[start:end]`` (a saving, a reduction; an increase), when its clause says one and only
+    one (0.112, #328); else None."""
+    from ..agent.verify import _DIRECTION
+
+    cuts = [m.start() for m in _CLAUSE_END.finditer(claim)]
+    a = max((c + 1 for c in cuts if c < start), default=0)
+    b = min((c for c in cuts if c >= end), default=len(claim))
+    clause = claim[a:b]
+    found = {_DIRECTION.get(w) for w in re.findall(r"[a-z]+", clause.lower())} - {None, "waste"}
+    return found.pop() if len(found) == 1 else None
+
+
 def _claim_facts(fid: str, claim: str) -> list:
     """One fact per figure the caller's claim states (0.112, #294): kind ``claimed_figure``,
     ``basis`` ``claimed``, so a sentence quoting the claim's own number can be cited, and a
     citation check can tell it from a measured result (it must never support one). Only the
-    figure and its unit are written, never the claim's words."""
+    figure and its unit are written, never the claim's words; the direction the claim gives it
+    (a saving: ``down``) is a field (#328), so "the claim states a 12% saving" can be cited."""
     out: list = []
     seen: set = set()
     for m in _FIGURE.finditer(claim or ""):
-        dollar, raw, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
+        dollar, raw, unit = m.group(1), m.group(2).rstrip(","), (m.group(3) or "").lower()
         unit = "$" if dollar else _UNITS.get(unit.rstrip("s") if unit != "%" else unit)
         try:
             value = float(raw.replace(",", ""))
@@ -142,6 +161,9 @@ def _claim_facts(fid: str, claim: str) -> list:
                 "measured or computed result",
             }
         )
+        direction = _claim_direction(claim, m.start(), m.end()) if unit else None
+        if direction:
+            out[-1]["direction"] = direction
         if len(out) >= _CLAIM_FIGURES:
             break
     return out
@@ -191,7 +213,7 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
     for i, r in enumerate(rows, start=2):
         fact_id = f"F{i}@mv_summary"
         r["fact"] = fact_id
-        fact = finding_fact(fact_id, r)
+        fact = finding_fact(fact_id, r, fid)
         # 0.111 (#304): a saving says what unit it is in and whether it may be relied on
         if r["rule"] == "mv_savings" and not r["metrics"].get("declined"):
             if not r["metrics"].get("energy_unit"):
