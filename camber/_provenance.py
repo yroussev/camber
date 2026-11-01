@@ -8,6 +8,10 @@ the frame it returns (``frame.attrs[PROVENANCE_ATTR]``), so a report built strai
 frames (:func:`camber.report.dashboard.build_dashboard`,
 :func:`camber.report.site.build_site_report`) carries the banner even when the caller passes no
 ``data_sources``.
+
+0.112 (#329): :func:`store_sources` adds a research-only source for every research-only dataset
+the facility's part files are marked with (:mod:`camber.store._partprov`), so a report built from
+research-only data copied into another facility or store keeps the banner too.
 """
 
 from __future__ import annotations
@@ -33,7 +37,13 @@ _KEYS = (
     "known_issues",
 )
 
-__all__ = ["PROVENANCE_ATTR", "facility_provenance", "facility_timezone", "frame_sources"]
+__all__ = [
+    "PROVENANCE_ATTR",
+    "facility_provenance",
+    "facility_timezone",
+    "frame_sources",
+    "store_sources",
+]
 
 
 def facility_provenance(meta: dict, facility_id: str) -> dict:
@@ -45,6 +55,62 @@ def facility_provenance(meta: dict, facility_id: str) -> dict:
     if not src:
         return {}
     src.setdefault("facility_id", facility_id)
+    return src
+
+
+def store_sources(root: str, facility_id: str, meta: dict) -> list:
+    """The report-facing provenance of a store facility: its registry entry's
+    (:func:`facility_provenance`), plus one research-only source per research-only dataset its
+    part files are marked with (0.112, #329), taken from the catalog's entry for the dataset when
+    there is one, else from the mark. A source the entry already gives for that dataset is made
+    research-only instead. Footers only, memoized per partition."""
+    from .store import _partprov
+
+    out = []
+    prov = facility_provenance(meta, facility_id)
+    if prov:
+        out.append(prov)
+    if _partprov.is_serving():  # a served read refuses research-only parts before this
+        return out
+    try:
+        marks = _partprov.facility_marks(root, facility_id)
+    except Exception:  # noqa: BLE001 - a partition that cannot be listed adds nothing
+        marks = {}
+    for value in marks:
+        if value is None or not _partprov.research_only(value):
+            continue
+        did = _partprov.dataset_of(value)
+        mine = next((s for s in out if did and s.get("dataset_id") == did), None)
+        if mine is None:
+            mine = _marked_source(value, did, facility_id)
+            out.append(mine)
+        mine["access"] = "research_only"
+        mine["redistribution"] = "prohibited"
+    return out
+
+
+def _marked_source(value: bytes, did: str, facility_id: str) -> dict:
+    """A provenance dict for a research-only part-file mark naming dataset ``did``."""
+    from .store import _partprov
+
+    if did:
+        try:
+            from .datasets import get
+
+            src = {k: v for k, v in get(did).provenance().items() if k in _KEYS}
+            src["facility_id"] = facility_id
+            return src
+        except Exception:  # noqa: BLE001 - an unknown / retired id: what the mark records
+            pass
+    doc = _partprov.decode(value) or {}
+    licence = doc.get("licence")
+    src = {"facility_id": facility_id}
+    if did:
+        src["dataset_id"] = did
+    else:
+        src["title"] = "data whose part files carry an unreadable provenance mark"
+    if isinstance(licence, str) and licence:
+        src["licence"] = licence
     return src
 
 

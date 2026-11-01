@@ -587,10 +587,16 @@ research-only, whatever facility id, directory or store it sits in: a facility h
 when no check named its facility. A facility that mixes marked and unmarked parts is refused as
 a whole. A mark is research-only when its flag says so, when its licence is non-commercial or
 no-derivatives, or when the catalog now holds that dataset research-only; a mark that cannot be
-read counts as research-only. The refusal names the facility and the dataset, never a path.
-The local commands are unchanged: `camber run`, `camber report` and `camber lab` read
-research-only data you have accepted the licence for, with the non-commercial banner on every
-report.
+read (damaged, longer than 4 KB or nested too deep to parse) counts as research-only. The refusal
+names the facility and the dataset, never a path. The check looks at every file a store read
+opens, whatever its name (#329): the store reads every file in a facility directory whose name
+does not start with `_` or `.`, so a part copied in as `x.parq`, `x.PARQUET`, `x` or
+`x.parquet.tmp` is checked like `x.parquet`, and a facility directory nested more than six levels
+deep is refused because not all of it was checked.
+The local commands still read research-only data you have accepted the licence for: `camber
+run`, `camber report` and `camber lab`, with the non-commercial banner on every report. Since
+0.112 (#329) that banner and the licence block come from the part files' marks too, so a report
+built from research-only parts copied into another facility or store carries them.
 
 **Stores ingested before 0.112** have no mark in their part files. The registry checks of 0.111
 still apply to them (#290, #312: a facility named for a research-only dataset, a renamed or

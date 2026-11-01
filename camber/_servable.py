@@ -8,14 +8,16 @@ dataset block and every facility would count as active. This module reads it the
 
 - :func:`read_registry` reports a registry it cannot trust (unreadable, not a JSON object, an
   entry that is not an object, missing where one must exist, or -- #312 -- a research-only entry
-  whose facility directory is missing, the mark of a renamed or moved partition) as a *problem*
-  instead of an empty registry. A missing registry is a problem in a store holding a ``ds-``
-  facility (``camber datasets ingest`` always registers one); a store of the user's own data may
-  have none, and its unregistered facilities count as active, as everywhere else in CAMBER.
-  A read that fails is tried again for a moment; one that keeps failing while the file changes
-  (a writer replacing it), or with an I/O error, raises the retryable :class:`RegistryUnavailable`
-  instead (0.112, #324). Within :func:`call_snapshot` (each capability call) the registry is read
-  once, and the store's own registry reads see that read too.
+  whose facility directory is missing although it is not archived or purged, the mark of a
+  renamed or moved partition) as a *problem* instead of an empty registry. A missing registry is
+  a problem in a store holding a ``ds-`` facility (``camber datasets ingest`` always registers
+  one); a store of the user's own data may have none, and its unregistered facilities count as
+  active, as everywhere else in CAMBER.
+  A read that fails is tried again for a moment; one that keeps failing while the file or its
+  directory changes (a writer replacing it), or with an I/O error, raises the retryable
+  :class:`RegistryUnavailable` instead (0.112, #324, #329); a registry that stays a directory,
+  unreadable or a symlink loop is a problem. Within :func:`call_snapshot` (each capability call)
+  the registry is read once, and the store's own registry reads see that read too.
 - :func:`catalog_entries_for` maps a facility id to the in-package catalog entries it was ingested
   from by name alone (``ds-<base>`` or ``ds-<base>-<group>``, where ``ingest.facility`` is the
   base), independent of the registry.
@@ -42,6 +44,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import errno
 import json
 import os
 import time
@@ -142,10 +145,20 @@ _SEEN: set = set()
 _CALL: contextvars.ContextVar = contextvars.ContextVar("camber_registry_call", default=None)
 
 
+#: errors that say what the registry path *is* (a directory, a file this user may not read, a
+#: symlink loop), not that a read failed just now: one that does not change is a damaged
+#: registry, not a retryable one (#329)
+_LASTING = frozenset(
+    getattr(errno, n)
+    for n in ("EISDIR", "EACCES", "EPERM", "ELOOP", "ENOTDIR", "ENAMETOOLONG")
+    if hasattr(errno, n)
+)
+
+
 def _read_once(path: str) -> tuple:
     """One read of the registry file: ``("ok", parsed JSON)``, ``("missing", None)``,
-    ``("damaged", what)`` (not a regular file, or bytes that are not UTF-8 JSON) or
-    ``("error", errno)`` (any other ``OSError``)."""
+    ``("damaged", what)`` (not a regular file, a :data:`_LASTING` error, or bytes that are not
+    UTF-8 JSON, or nest too deep to parse) or ``("error", errno)`` (any other ``OSError``)."""
     if not os.path.lexists(path):
         return "missing", None
     try:
@@ -155,18 +168,36 @@ def _read_once(path: str) -> tuple:
     except _NotRegular:
         return "damaged", "not a regular file"
     except OSError as e:
-        return "error", e.errno
+        return ("damaged", f"errno {e.errno}") if e.errno in _LASTING else ("error", e.errno)
     try:
         return "ok", json.loads(data.decode("utf-8"))
-    except ValueError:  # empty, truncated, not UTF-8, not JSON
+    except (ValueError, RecursionError):  # empty, truncated, not UTF-8, not JSON, too deep
         return "damaged", data
+
+
+def _witness(path: str) -> tuple:
+    """What changes when the registry is replaced, renamed, rewritten or re-permissioned: its
+    directory's mtime and the path's own ``lstat`` (#329: a writer that breaks it again before
+    the retries end leaves every read failing alike, but not these)."""
+    out: list = []
+    for p, fn in ((os.path.dirname(path) or ".", os.stat), (path, os.lstat)):
+        try:
+            st = fn(p)
+        except OSError:
+            out.append(None)
+            continue
+        if p == path:
+            out.append((st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns, st.st_ctime_ns))
+        else:
+            out.append(st.st_mtime_ns)
+    return tuple(out)
 
 
 def _read_settled(store_root: str) -> tuple:
     """``(raw, problem)``: the registry's parsed JSON (``{}`` when there is none) and ``None``,
     or ``{}`` and the problem of a registry that stays missing or damaged while it is read again
-    (#290). ``RegistryUnavailable`` when the reads fail and do not agree, or fail with an I/O
-    error (#324)."""
+    (#290). ``RegistryUnavailable`` when the reads fail and do not agree, the registry or its
+    directory changed between them (#329), or they fail with an I/O error (#324)."""
     from .store.facilities import _FACILITIES
 
     path = os.path.join(store_root, _FACILITIES)
@@ -176,6 +207,7 @@ def _read_settled(store_root: str) -> tuple:
     for wait in _RETRY_WAITS:
         if wait:
             time.sleep(wait)
+        before = _witness(path)
         kind, value = _read_once(path)
         if kind == "ok":
             _SEEN.add(root)
@@ -184,9 +216,10 @@ def _read_settled(store_root: str) -> tuple:
             expected = any(_is_dataset_name(f) for f in _partitions(store_root))
             if not expected and root not in _SEEN:
                 return {}, None  # a store of one's own data that never had a registry
-        seen.append((kind, value))
-    kind, value = seen[0]
-    if kind == "error" or any(o != seen[0] for o in seen):
+        seen.append((kind, value, before, _witness(path)))
+    kind, value = seen[0][:2]
+    changed = any(o[:2] != (kind, value) or o[2:] != (seen[0][2],) * 2 for o in seen)
+    if kind == "error" or changed:
         raise RegistryUnavailable(OSError(value, os.strerror(value)) if kind == "error" else None)
     if kind == "missing":
         if expected:
@@ -245,12 +278,20 @@ def read_registry(store_root: str) -> tuple:
     if not isinstance(raw, dict) or not all(isinstance(e, dict) for e in raw.values()):
         return {}, "is not a valid facility registry"
     entries = {str(fid): _normalize(str(fid), e) for fid, e in raw.items()}
-    if any(_is_research_only(f, m) and not _present(store_root, f) for f, m in entries.items()):
+    if any(
+        _is_research_only(f, m) and m.get("state") not in _GONE and not _present(store_root, f)
+        for f, m in entries.items()
+    ):
         return {}, (
             "records research-only data for a facility whose directory is missing (renamed or "
             "moved?)"
         )
     return entries, None
+
+
+#: lifecycle states in which a facility's partition directory is gone by design: ``facility
+#: archive`` moves it into a bundle, ``facility purge`` deletes it (#329: not a moved partition)
+_GONE = ("archived", "purged")
 
 
 def _is_research_only(facility_id: str, meta) -> bool:
@@ -269,17 +310,22 @@ def _present(store_root: str, facility_id: str) -> bool:
 
 
 def _part_files(store_root: str, facility_id: str) -> list:
-    """The relative paths of a facility partition's files (to the month level), sorted; names
-    only, no stat call."""
+    """The relative paths of a facility partition's part files (to the month level, whatever
+    their suffix: :func:`camber.store._partprov.is_part_name`), sorted; names only, no stat
+    call."""
+    from .store._partprov import is_part_name
+
     fdir = os.path.join(store_root, f"facility_id={facility_id}")
     out: list = []
 
     def walk(path: str, rel: str, depth: int) -> None:
         with os.scandir(path) as it:
             for e in it:
+                if not is_part_name(e.name):
+                    continue
                 if depth and e.is_dir():
                     walk(e.path, f"{rel}{e.name}/", depth - 1)
-                elif e.name.endswith(".parquet"):
+                elif not e.is_dir():
                     out.append(f"{rel}{e.name}")
 
     try:

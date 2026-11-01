@@ -69,11 +69,20 @@ def value_for_entry(entry) -> bytes:
     return encode(entry.id, licence, bool(entry.research_only) or is_research_only_licence(licence))
 
 
+#: the longest :data:`KEY` value read (bytes): a real one is about a hundred; anything longer
+#: is not parsed and counts as unreadable (#329: a deeply nested value would exhaust the stack)
+_MAX_VALUE = 4096
+
+
 def decode(value) -> dict | None:
-    """The :data:`KEY` value as a dict, ``None`` when it is not a JSON object."""
+    """The :data:`KEY` value as a dict, ``None`` when it is not a JSON object (or is too long or
+    too deeply nested to parse, #329)."""
     try:
-        doc = json.loads(bytes(value).decode("utf-8"))
-    except (TypeError, ValueError):
+        raw = bytes(value)
+        if len(raw) > _MAX_VALUE:
+            return None
+        doc = json.loads(raw.decode("utf-8"))
+    except (TypeError, ValueError, RecursionError):
         return None
     return doc if isinstance(doc, dict) else None
 
@@ -190,23 +199,37 @@ _MARKS: OrderedDict = OrderedDict()
 _MARKS_MAX = 256
 _MARKS_LOCK = threading.Lock()
 _MAX_DEPTH = 6  # facility_id=/year=/month=/part, with room for a stray directory level
+#: what :func:`facility_marks` records for a facility holding files deeper than it looks: not a
+#: JSON object, so it counts as research-only (fail closed, #329)
+UNCHECKED = b"unchecked: part files nested too deep"
 
 
-def _part_files(fdir: str) -> list:
-    """``(path, size, mtime_ns)`` of every Parquet file a dataset read of ``fdir`` could open:
-    any depth (a directory link followed, to a bounded depth), names starting with ``_`` or
-    ``.`` skipped, as pyarrow's discovery skips them."""
+def is_part_name(name: str) -> bool:
+    """Whether a store read opens a file (or enters a directory) of this name: pyarrow's dataset
+    discovery opens every file whose name does not start with ``_`` or ``.``, whatever its suffix
+    (``x.parq``, ``x.PARQUET``, ``x``, ``x.parquet.tmp``). The one definition of a part file that
+    the provenance check and the store readers share (#329)."""
+    return not name.startswith(("_", "."))
+
+
+def _part_files(fdir: str) -> tuple:
+    """``([(path, size, mtime_ns)], complete)``: every file a dataset read of ``fdir`` could
+    open (:func:`is_part_name`, any suffix; a directory link followed), to a bounded depth;
+    ``complete`` is false when a directory lies deeper than that, so not every file was seen."""
     out: list = []
+    complete = [True]
 
     def walk(path: str, depth: int) -> None:
         with os.scandir(path) as it:
             for e in it:
-                if e.name.startswith(("_", ".")):
+                if not is_part_name(e.name):
                     continue
                 if e.is_dir():
                     if depth:
                         walk(e.path, depth - 1)
-                elif e.name.endswith(".parquet"):
+                    else:
+                        complete[0] = False
+                else:
                     st = e.stat()
                     if stat.S_ISREG(st.st_mode):  # a FIFO would block its footer read (#314)
                         out.append((e.path, st.st_size, st.st_mtime_ns))
@@ -215,14 +238,16 @@ def _part_files(fdir: str) -> list:
         walk(fdir, _MAX_DEPTH)
     except OSError:
         pass
-    return sorted(out)
+    return sorted(out), complete[0]
 
 
 def facility_marks(root: str, facility_id: str) -> dict:
     """``{value or None: part files}`` of a facility's partition in the store at ``root``, read
     from the footers (key-value metadata only) and memoized until the partition changes (its
-    stat signature); then only the files that changed are read again. A file whose footer cannot
-    be read is left out: its read fails on its own."""
+    stat signature); then only the files that changed are read again. Every file a store read
+    could open counts, whatever its name (:func:`is_part_name`, #329). A file whose footer cannot
+    be read is left out: its read fails on its own. A partition nested deeper than the walk goes
+    counts one :data:`UNCHECKED` value (research-only)."""
     from .parquet_store import _partition_signature
 
     fdir = os.path.join(os.path.abspath(root), f"facility_id={facility_id}")
@@ -238,7 +263,10 @@ def facility_marks(root: str, facility_id: str) -> dict:
     known = hit[2] if hit is not None else {}
     counts: dict = {}
     files: dict = {}
-    for path, size, mtime in _part_files(fdir):
+    found, complete = _part_files(fdir)
+    if not complete:
+        counts[UNCHECKED] = 1
+    for path, size, mtime in found:
         prev = known.get(path)
         if prev is not None and prev[:2] == (size, mtime):
             v = prev[2]

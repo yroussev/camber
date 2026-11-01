@@ -574,7 +574,7 @@ class ParquetStore:
         try:
             with open(p, encoding="utf-8") as fh:
                 data = json.load(fh)
-        except (json.JSONDecodeError, OSError):
+        except (ValueError, OSError, RecursionError):  # not UTF-8 / JSON, or too deep (#329)
             return None
         if not isinstance(data, dict):
             return None
@@ -1006,11 +1006,12 @@ class ParquetStore:
         wide.index.name = None
         # dataset provenance travels with the frame, so a report built from it shows the licence
         # (and the research-only banner) even when the caller passes no data_sources
-        from .._provenance import PROVENANCE_ATTR, facility_provenance
+        # (and, #329, a research-only mark its part files carry)
+        from .._provenance import PROVENANCE_ATTR, store_sources
 
-        prov = facility_provenance(self.facilities_meta().get(facility_id, {}), facility_id)
+        prov = store_sources(self.root, facility_id, self.facilities_meta().get(facility_id, {}))
         if prov:
-            wide.attrs[PROVENANCE_ATTR] = [prov]
+            wide.attrs[PROVENANCE_ATTR] = prov
         return wide
 
     # --------------------------------------------------------------- catalog

@@ -331,10 +331,12 @@ reduced to one short line.
    path and no facility outside the allowlist. The store's facility registry is read once per
    call, and a read that fails is tried again for a moment (0.112, #324): a registry that keeps
    failing while it changes (a writer replacing it; on a Docker Desktop bind mount a rename shows
-   the file as briefly missing), or fails with an I/O error, is `unavailable` with
+   the file as briefly missing; or broken again before the retries end, #329: the file or its
+   directory changed between the reads), or fails with an I/O error, is `unavailable` with
    `{"retryable": true, "reason": "registry_unreadable"}` -- never a run without the facility's
    config template and never `refused_licence`. One that stays missing or damaged is still
-   refused (#290). One facility's damaged file does not affect
+   refused (#290), and so is one that stays a directory, unreadable (no read permission), a
+   symlink loop or JSON nested too deep to parse (#329). One facility's damaged file does not affect
    another facility's calls, and the `facilities` listing still lists it, with
    `"unavailable": {"retryable": ..., "reason": "unreadable"}`, a null `start` / `end` and zero
    counts. `facilities` checks each facility's fence on its own (0.112, #322): a facility a writer

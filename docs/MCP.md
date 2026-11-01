@@ -26,14 +26,16 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   the store's facility registry says, and while that registry (`_facilities.json`) is missing,
   unreadable or malformed no facility is served at all, with a notice on every result. A
   facility directory that was renamed, moved or copied is caught too (0.111, #312): while the
-  registry records a research-only facility whose directory is missing, no facility is served,
+  registry records a research-only facility whose directory is missing (and that is not archived
+  or purged, which removes the directory by design, #329), no facility is served,
   and a facility whose part files are those of a research-only facility in the same store is
   refused as research-only. Since 0.112 (#319) the provenance travels in the data: `camber
   datasets ingest` writes the dataset id, its licence and a research-only flag into every part
   file, and a part marked research-only is refused wherever it sits -- in a test facility it was
   copied into (one month or the whole partition, renamed, merged or mixed with your own data), or
   in another store. **What is enforced:** every part file ingested since 0.112 that is marked
-  research-only, or whose mark cannot be read, is refused, before the call and again when a tool
+  research-only, or whose mark cannot be read, is refused, whatever it is named (any file in a
+  facility directory that the store reads, `x.parq` or no suffix included, #329), before the call and again when a tool
   reads it. **What is not:** a store ingested before 0.112 has no marks, so only the registry
   checks above apply to it and a partial copy of it is still served (`camber datasets provenance
   --store DIR --missing` lists such facilities; `camber datasets ingest --force` adds the marks);
@@ -287,7 +289,9 @@ whether a retry will likely work (`"retryable": true`, e.g. a part file a concur
 `camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
 call never answers from a half-swapped facility) or not (a damaged or unreadable file), and names the facility.
 A store facility registry that cannot be read just now (a writer is replacing it) is `unavailable` with
-`"retryable": true, "reason": "registry_unreadable"` (0.112, #324).
+`"retryable": true, "reason": "registry_unreadable"` (0.112, #324), also when it is broken again
+before the retries end (#329). One that stays a directory, a file you may not read or a symlink
+loop is the registry problem (`refused_licence`, not retryable) until it is repaired.
 It is also the answer when the worker running the call ended under it (`"retryable": true`).
 A date the calendar does not have (`2025-02-30`) is `invalid_params`. A window outside the
 stored data is `not_found` for every tool that runs rules or reports and for `sensor_trust`;

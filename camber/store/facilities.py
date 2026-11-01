@@ -535,7 +535,7 @@ def _read_json(path: str) -> dict:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, OSError):
+    except (ValueError, OSError, RecursionError):  # not UTF-8 / JSON, or too deep (#329)
         return {}
 
 

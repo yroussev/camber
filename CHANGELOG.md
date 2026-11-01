@@ -40,6 +40,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   **Re-ingest to get the marks:** a store ingested before 0.112 has none, keeps the 0.111
   checks, and a partial copy of it is still served; `camber datasets ingest <id> --store DIR
   --force` adds them.
+- **A research-only part file is checked whatever it is named (#329).** The store reads every
+  file in a facility directory whose name does not start with `_` or `.`, but the research-only
+  check looked only at files named `*.parquet`, so a research-only part copied in as `x.parq`,
+  `x.PARQUET`, `x` or `x.parquet.tmp` let `facilities` and `points` list its equipment, classes
+  and roles (the data-reading tools still refused it). The check, `camber datasets provenance`
+  and the store readers now share one definition of a part file, and a facility directory
+  nested too deep to check in full is refused.
 
 ### Fixed
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
@@ -104,6 +111,28 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - `ParquetStore.partitions()` and `camber store normalize`'s part check no longer open a FIFO
   named like a part file (which waited for a writer for ever); the retention roll-up's partition
   read skips one too (#319).
+- **Archiving a research-only facility no longer stops `camber mcp` serving the rest of the store
+  (#329).** After `facility offboard` and `facility archive`, the registry's research-only entry
+  had no directory, which read as a renamed or moved partition, so every facility was refused
+  with "directory is missing (renamed or moved?)". An archived or purged entry no longer counts;
+  the archived facility itself is still refused as research-only.
+- **Deeply nested JSON no longer crashes the provenance checks (#329).** A part file's
+  provenance mark or a `_facilities.json` nested tens of thousands of levels deep made every
+  call fail with an internal error, `camber mcp` exit with a traceback at startup, and `camber
+  datasets provenance` crash. Such a mark (or one longer than 4 KB) now counts as research-only,
+  and such a registry is the usual "cannot be read" registry problem.
+- **A registry broken again and again is `unavailable`, never a licence refusal (#329).** When
+  `_facilities.json` was renamed, truncated or half-written again before the read retries ended,
+  every retry failed alike and 1-4 % of calls were refused with `licence_unverified`. A registry
+  whose file or directory changed between the retries is now `unavailable` with `"reason":
+  "registry_unreadable"`. A registry that stays a directory, unreadable (no read permission) or a
+  symlink loop was reported as retryable for ever; it is now the registry problem that a retry
+  does not fix (`refused_licence`, with the notice to repair it).
+- **A local `camber report` or `camber run` on research-only parts copied elsewhere carries the
+  banner (#329).** The non-commercial banner and the "Data source & licence" block came only
+  from the facility's registry entry, so a report built from research-only parts copied into
+  another facility or store had neither. They now also come from the part files' provenance
+  marks.
 
 ### Changed
 - **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id
