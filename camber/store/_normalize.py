@@ -8,7 +8,8 @@ which parts are canonical (read-only, no lock); :func:`normalize` rewrites the o
 
 **What normalize rewrites.** A non-canonical, readable part in a ``year=/month=`` partition of a
 facility that accepts data. Each part is rewritten **in place under its own name**, with the same
-rows (a retention rollup keeps its ``camber.rollup.covers`` key). Names stay because other records
+rows (a retention rollup keeps its ``camber.rollup.covers`` key, and a catalog dataset's part its
+``camber.provenance`` key: 0.112, #319). Names stay because other records
 point at them: a rollup's ``covers`` lists the raw part names it was built from (renaming a raw
 part would make the next rollup of that month count its rows twice), and a part's ``<seq>`` feeds
 ``_next_seq``. Left alone, each with a reason in the report:
@@ -48,7 +49,7 @@ import re
 import shutil
 import uuid
 
-from . import _swap
+from . import _partprov, _swap
 from .facilities import FacilityRegistry, _workspace_of_store, require_facility_id
 from .parquet_store import (
     _COLUMNS,
@@ -144,7 +145,9 @@ def check_part(path: str) -> dict:
         problems.append(f"camber.layout is {meta[_LAYOUT_KEY]!r}, not {_LAYOUT!r}")
     if _PANDAS_KEY in meta:
         problems.append("pandas metadata")
-    extra = sorted(k for k in meta if k not in (_LAYOUT_KEY, _PANDAS_KEY, _COVERS_KEY))
+    extra = sorted(
+        k for k in meta if k not in (_LAYOUT_KEY, _PANDAS_KEY, _COVERS_KEY, _partprov.KEY)
+    )
     if extra:
         problems.append(
             "other schema metadata: " + ", ".join(k.decode("utf-8", "replace") for k in extra)
@@ -464,7 +467,7 @@ def _same(back, canon) -> bool:
     got = back.schema.metadata or {}
     if got.get(_LAYOUT_KEY) != _LAYOUT or _PANDAS_KEY in got:
         return False
-    if got.get(_COVERS_KEY) != want.get(_COVERS_KEY):
+    if any(got.get(k) != want.get(k) for k in (_COVERS_KEY, _partprov.KEY)):
         return False
     return back.replace_schema_metadata(None).equals(canon.replace_schema_metadata(None))
 

@@ -373,7 +373,7 @@ def _covers_of(path: str):
 
 
 def _write_rollup(
-    root: str, fid: str, year: int, month: int, frame: pd.DataFrame, *, covers=None
+    root: str, fid: str, year: int, month: int, frame: pd.DataFrame, *, covers=None, sources=()
 ) -> dict:
     """Write one rollup month partition (crash-safe) and verify the new part by reading it back.
 
@@ -383,12 +383,14 @@ def _write_rollup(
     after an earlier rollup -- so a late upload into an already rolled-up month adds to its
     rollup instead of replacing it, and re-running over the same raw files replaces its own part
     (idempotent). ``covers=None`` replaces the whole partition (a rollup derived from a complete
-    source, such as daily from hourly).
+    source, such as daily from hourly). ``sources`` are the part files the frame was built from:
+    the new part keeps their dataset provenance (:mod:`camber.store._partprov`, 0.112 #319).
     """
     import hashlib
 
     import pyarrow as pa
 
+    from ..store import _partprov
     from ..store.parquet_store import _canonicalize, _read_part_file, _write_part
 
     target = _part_path(root, fid, year, month)
@@ -396,6 +398,10 @@ def _write_rollup(
     stage = _swap.staging(target)
     name = "part-0-0.parquet"
     table = pa.Table.from_pandas(frame, preserve_index=False)
+    prov = _partprov.merge(_partprov.of_files(sources))
+    if prov is not None:
+        meta = {**(table.schema.metadata or {}), _partprov.KEY: prov}
+        table = table.replace_schema_metadata(meta)
     if covers is not None:
         cset = sorted(set(covers))
         name = f"part-{hashlib.sha256(chr(10).join(cset).encode()).hexdigest()[:16]}.parquet"
@@ -646,6 +652,7 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
     snap = _snapshot(src, legacy=p["legacy"])
     rel = f"year={p['year']}" if p["legacy"] else f"year={p['year']}/month={p['month']}"
     covers = [f"{rel}/{name}" for name, _size, _mtime in snap]
+    sources = [os.path.join(src, name) for name, _size, _mtime in snap]
     if p["legacy"]:
         raw = _read_legacy(fdir) if os.path.isdir(fdir) else pd.DataFrame()
     else:
@@ -664,7 +671,9 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
             if c is not None and _month_end(y, m) <= c:
                 continue  # this rollup would be expired at once: skip it
             root = os.path.join(pf.root, ROLLUPS_DIR, freq)
-            got = _write_rollup(root, fid, y, m, _rollup(chunk, freq), covers=covers)
+            got = _write_rollup(
+                root, fid, y, m, _rollup(chunk, freq), covers=covers, sources=sources
+            )
             if got["n"] != want:
                 problems.append(
                     f"{fid} {y}-{m:02d}: {freq} rollup holds {got['n']} of {want} raw rows; "
@@ -692,6 +701,13 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
         store._drop_partition(fid, p["year"], p["month"])  # retention checked holds
 
 
+def _parts_in(path: str) -> list:
+    """The part files directly in a partition directory (none when it is missing)."""
+    if not os.path.isdir(path):
+        return []
+    return [os.path.join(path, n) for n in sorted(os.listdir(path)) if n.endswith(".parquet")]
+
+
 def _snapshot(path: str, *, legacy: bool) -> tuple:
     """(name, size, mtime) of the part files directly in a partition directory (for a legacy
     year: its own files, not its month subdirectories)."""
@@ -710,14 +726,20 @@ def _apply_hourly(pf, fid: str, p: dict, daily_cut, problems: list) -> None:
     """Make sure the daily rollup covers an expired hourly partition, then prune it."""
     hroot = os.path.join(pf.root, ROLLUPS_DIR, "hourly")
     droot = os.path.join(pf.root, ROLLUPS_DIR, "daily")
-    hourly = _read_dir(_part_path(hroot, fid, p["year"], p["month"]))
+    hdir = _part_path(hroot, fid, p["year"], p["month"])
+    hourly = _read_dir(hdir)
     want = int(hourly["n"].sum()) if len(hourly) else 0
     if daily_cut is None or _month_end(p["year"], p["month"]) > daily_cut:
         daily = _read_dir(_part_path(droot, fid, p["year"], p["month"]))
         have = int(daily["n"].sum()) if len(daily) else 0
         if have != want:
             got = _write_rollup(
-                droot, fid, p["year"], p["month"], _rollup(hourly, "daily", weighted=True)
+                droot,
+                fid,
+                p["year"],
+                p["month"],
+                _rollup(hourly, "daily", weighted=True),
+                sources=_parts_in(hdir),
             )
             if got["n"] != want:
                 problems.append(

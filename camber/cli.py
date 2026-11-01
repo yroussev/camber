@@ -14,7 +14,7 @@ Subcommands:
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth A]  # read API + /ui
-    camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+    camber datasets list|info|fetch|ingest|status|provenance|remove|config|score # dataset catalog
     camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
@@ -1257,6 +1257,39 @@ def _cmd_datasets_status(args) -> int:
         print(
             f"{r['id']:14s} fetched: {fetched:14s} on disk: {_mb(r['bytes_on_disk']):>9s}  "
             f"ingested: {ing}"
+        )
+    return 0
+
+
+_PROV_STATES = {
+    "marked": "provenance in every part",
+    "missing": "no provenance (ingested before 0.112; `camber datasets ingest --force` adds it)",
+    "mixed": "provenance in some parts only",
+    "own": "own data (no catalog dataset)",
+    "empty": "no part files",
+}
+
+
+@_ds_errors
+def _cmd_datasets_provenance(args) -> int:
+    """0.112 (#319): which facilities' part files carry the catalog dataset provenance."""
+    from .datasets._ops import store_provenance
+
+    rows = store_provenance(args.store)
+    if args.missing:
+        rows = [r for r in rows if r["state"] in ("missing", "mixed")]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("every facility's part files carry provenance" if args.missing else "no facility")
+        return 0
+    for r in rows:
+        tag = " research-only" if r["research_only"] else ""
+        ids = f" [{', '.join(r['datasets'])}{tag}]" if r["datasets"] else ""
+        print(
+            f"{r['facility_id']:32s} {r['marked']:>6d}/{r['parts']:<6d} "
+            f"{_PROV_STATES[r['state']]}{ids}"
         )
     return 0
 
@@ -3764,6 +3797,20 @@ def _build_parser() -> argparse.ArgumentParser:
     dss.add_argument("--store")
     dss.add_argument("--json", action="store_true")
     dss.set_defaults(func=_cmd_datasets_status)
+
+    dsp = dssub.add_parser(
+        "provenance",
+        help="which facilities' part files carry their dataset's provenance (licence, "
+        "research-only flag) and which lack it",
+    )
+    dsp.add_argument("--store", required=True, help="ParquetStore directory")
+    dsp.add_argument(
+        "--missing",
+        action="store_true",
+        help="only the facilities whose parts lack provenance (re-ingest adds it)",
+    )
+    dsp.add_argument("--json", action="store_true")
+    dsp.set_defaults(func=_cmd_datasets_provenance)
 
     dsr = dssub.add_parser("remove", help="delete a dataset's downloads (and store facilities)")
     dsr.add_argument("id")

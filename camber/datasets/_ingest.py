@@ -78,6 +78,7 @@ from ..store import FacilityRegistry, ParquetStore
 from ..store._fence import fence
 from ..store._leftovers import STAGING_DIR
 from ..store._lock import store_lock
+from ..store._partprov import value_for_entry
 from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
 from . import _licence, _paths
@@ -782,7 +783,7 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
     sources = {r["id"]: _run_sources(r, paths, inputs) for r in runs}
     reader = _plan_reads(runs, spec, sources)
     fid = spec["facility"]
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
     labels, onsets, excluded, context, notes, warns = {}, {}, {}, {}, [], []
@@ -955,7 +956,7 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
     roles = spec.get("meter_roles") or {}
     default_role = Role(spec.get("default_meter_role", "energy_rate"))
     rule = spec.get("resample", "1h")
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     out: dict = {}
     series: dict = {}
     for m, path in files.items():

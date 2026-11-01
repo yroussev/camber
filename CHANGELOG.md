@@ -26,6 +26,20 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   config or store, from before a restart, or made up) is `unknown_citation`. The ledger is
   bounded (about 8 MB of the most recent facts); a cited fact it has since dropped is the new
   verdict `forgotten_citation` -- run the tool again and cite the new id.
+- **Research-only data is refused wherever it is copied (#319).** A partial or altered copy of a
+  research-only facility -- one month copied into a test facility, a whole partition with one
+  part file deleted, renamed or merged, or a copy into another store -- was served in full by
+  `camber mcp` under its new id: the 0.111 checks compared whole partitions. `camber datasets
+  ingest` now writes the dataset id, its licence and a research-only flag into every Parquet
+  part file's metadata, every rewrite keeps it (append, `store normalize`, `store
+  migrate-partitions`, `retention apply`, a forced re-ingest, archive and restore), and the
+  capability registry refuses (`refused_licence`) any facility holding a part marked
+  research-only, in any facility, directory or store, before the call runs and again when a tool
+  reads it. The refusal names the facility and the dataset, never a path. `camber run`, `camber
+  report` and `camber lab` still read research-only data locally, with the licence banners.
+  **Re-ingest to get the marks:** a store ingested before 0.112 has none, keeps the 0.111
+  checks, and a partial copy of it is still served; `camber datasets ingest <id> --store DIR
+  --force` adds them.
 
 ### Fixed
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
@@ -146,7 +160,10 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   valve, damper or speed) in the summary, the reference's fact and a new `unit` field of
   `data.references`.
 - `camber --version` prints the installed version, and `python -m camber` runs the CLI (#322).
-
+- **`camber datasets provenance --store DIR [--missing] [--json]` (#319)** lists each facility
+  with how many of its part files carry their dataset's provenance, and names the catalog
+  facilities that lack it (ingested before 0.112). It reads the files' footers and writes
+  nothing.
 
 ## [0.111.0] — 2026-10-31
 

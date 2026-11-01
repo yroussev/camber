@@ -562,6 +562,7 @@ camber datasets ingest <id>... | --all --store DIR [--subset S] [--dir D] [--for
                         [--from-dir DIR] [--accept-noncommercial] [--reason R]
                         [--quiet] [--lock-timeout SECONDS]
 camber datasets status [--dir D] [--store DIR] [--json]
+camber datasets provenance --store DIR [--missing] [--json]   # which parts carry their dataset's licence
 camber datasets remove <id> [--dir D] [--store DIR --purge-store [--reason R --yes|--confirm ID]]
                         [--lock-timeout SECONDS]
 camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
@@ -580,6 +581,13 @@ changed) re-ingest that would replace the data of a facility under a legal hold.
 deleted, while a facility of the dataset is under a legal hold or not `provisioning` /
 `active`. Both are audited (`datasets.ingest`, `datasets.remove`, `datasets.purge`). A plain store
 needs neither flag.
+
+`provenance` (0.112, #319) lists each facility of `--store` with how many of its part files carry
+their dataset's provenance (dataset id, licence, research-only flag, written by `ingest` since
+0.112): `provenance in every part`, `no provenance` (a catalog facility ingested before 0.112;
+`ingest --force` re-ingests it with provenance), `provenance in some parts only`, or `own data`.
+`--missing` lists only the facilities that lack it. It reads the part files' footers and writes
+nothing. See [DATASETS.md](DATASETS.md#provenance-in-the-part-files).
 
 `config --out` (0.107, #218) writes a config only for a dataset ingested in `--store`; without
 `--out` it prints the template with a warning.

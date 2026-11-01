@@ -28,11 +28,19 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   facility directory that was renamed, moved or copied is caught too (0.111, #312): while the
   registry records a research-only facility whose directory is missing, no facility is served,
   and a facility whose part files are those of a research-only facility in the same store is
-  refused as research-only. These checks guard against accidents and casual relabelling, not
-  against someone who edits the registry or the stored data on purpose: the store's integrity
-  is the operator's responsibility. Keep the store writable only by the people who ingest into
-  it, and change it with CAMBER's own commands (`camber datasets remove`, `camber facility ...`)
-  rather than by hand.
+  refused as research-only. Since 0.112 (#319) the provenance travels in the data: `camber
+  datasets ingest` writes the dataset id, its licence and a research-only flag into every part
+  file, and a part marked research-only is refused wherever it sits -- in a test facility it was
+  copied into (one month or the whole partition, renamed, merged or mixed with your own data), or
+  in another store. **What is enforced:** every part file ingested since 0.112 that is marked
+  research-only, or whose mark cannot be read, is refused, before the call and again when a tool
+  reads it. **What is not:** a store ingested before 0.112 has no marks, so only the registry
+  checks above apply to it and a partial copy of it is still served (`camber datasets provenance
+  --store DIR --missing` lists such facilities; `camber datasets ingest --force` adds the marks);
+  and nothing stops someone with write access to the store from rewriting the files to strip the
+  mark, or from exporting the data out of Parquet and ingesting it as their own. Keep the store
+  writable only by the people who ingest into it, and change it with CAMBER's own commands
+  (`camber datasets remove`, `camber facility ...`) rather than by hand.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because a required input scores below it is announced in a NOTICE line, with
   the count, the rules and every input below it with its score; `sensor_trust` reports the same

@@ -65,6 +65,7 @@ import numpy as np
 import pandas as pd
 
 from ..model.roles import Role
+from ..store._partprov import value_for_entry
 from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
 from ._perpoint import facility_id, hold_resample
@@ -338,7 +339,7 @@ def ingest_brick_streams(entry, subset, inputs, root, staging, progress, correct
     wanted_sites = entry.subset(subset).get("groups", "all")
     keys = sorted(sites) if wanted_sites == "all" else list(wanted_sites)
     units = spec.get("units") or {}
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     out: dict = {}
     warns: list = []
     for si, key in enumerate(keys, 1):

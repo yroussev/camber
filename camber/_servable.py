@@ -16,14 +16,19 @@ dataset block and every facility would count as active. This module reads it the
   from by name alone (``ds-<base>`` or ``ds-<base>-<group>``, where ``ingest.facility`` is the
   base), independent of the registry.
 - :func:`refusal` says why a facility may not be served: research-only by the catalog (by name)
-  or by its registry entry; a copy of a research-only facility's part files under another id
-  (#312); a registry problem; a ``ds-`` facility with no registry entry, or one that neither the
-  catalog nor a recorded dataset block establishes as open. There is no override.
+  or by its registry entry; a part file marked research-only in its own metadata (0.112, #319:
+  :mod:`camber.store._partprov`), whatever facility, directory or store it was copied to; a copy
+  of a research-only facility's part files under another id (#312, for parts ingested before
+  0.112 carried the mark); a registry problem; a ``ds-`` facility with no registry entry, or one
+  that neither the catalog nor a recorded dataset block establishes as open. There is no
+  override.
 - :func:`active_facilities` is the lifecycle filter: no facility is active when the registry has
   a problem, and a ``ds-`` facility with no entry is not active either.
 
-These checks catch a facility directory that was renamed, moved or copied, not a deliberate edit
-of the registry or of the data: the store's integrity is its operator's responsibility.
+The registry checks catch a facility directory that was renamed, moved or copied; the part-file
+mark (#319) catches research-only data copied in part or whole into any facility or store. Neither
+catches a deliberate edit that strips the mark from the files (or data exported out of Parquet and
+re-ingested as the user's own): the store's integrity is its operator's responsibility.
 
 Shared by every adapter (MCP, and the A2A server after it); it imports neither. Private module --
 not public API.
@@ -198,6 +203,22 @@ def _copies_research_only(store_root: str, facility_id: str, entries: dict) -> b
     return False
 
 
+def _marked_research_only(store_root: str, facility_id: str) -> str | None:
+    """The refusal message when one of the facility's part files carries a research-only
+    provenance mark (0.112, #319): data ingested from such a dataset, wherever it was copied
+    since. Footers only, memoized until the partition changes; ``None`` when there is none."""
+    from .store import _partprov
+
+    value = _partprov.research_only_value(_partprov.facility_marks(store_root, facility_id))
+    if value is None:
+        return None
+    did = _partprov.dataset_of(value)
+    return (
+        f"facility {facility_id!r} holds part files marked as research-only (non-commercial / "
+        "no-derivatives) data" + (f" of dataset {did!r}" if did else "")
+    )
+
+
 def _partitions(store_root: str) -> list:
     try:
         names = os.listdir(store_root)
@@ -239,6 +260,9 @@ def refusal(facility_id: str, store_root: str | None, registry: tuple | None = N
     meta = entries.get(fid)
     if meta is not None and research_only_block(meta):
         return "research_only", research
+    marked = _marked_research_only(store_root, fid)
+    if marked is not None:
+        return "research_only", marked
     if _copies_research_only(store_root, fid, entries):
         return "research_only", (
             f"facility {fid!r} holds the same part files as a research-only (non-commercial / "

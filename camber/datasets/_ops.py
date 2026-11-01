@@ -395,6 +395,54 @@ def dataset_status(entries, *, data_dir=None, store=None) -> list:
     return out
 
 
+def store_provenance(store) -> list:
+    """Per facility of ``store``: the dataset provenance its part files carry (0.112, #319).
+
+    ``{"facility_id", "parts", "marked", "unmarked", "datasets", "research_only", "catalog",
+    "state"}``, sorted by id. ``catalog`` is whether the facility came from a catalog dataset (its
+    registry entry records one, or it is named ``ds-...``). ``state`` is ``"marked"`` (every part
+    carries provenance), ``"missing"`` (a catalog facility none of whose parts does: ingested
+    before 0.112; a forced re-ingest adds it), ``"mixed"`` (some parts do), ``"own"`` (the user's
+    own data, no provenance needed) or ``"empty"``. Footers only; nothing is written.
+    """
+    from .._servable import _is_dataset_name
+    from ..store import _partprov
+    from ..store.facilities import _require_store_dir
+
+    st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
+    _require_store_dir(st.root)  # a typo'd path is an error, not an empty store
+    meta = st.facilities_meta()
+    out = []
+    for fid in st.facilities():
+        marks = _partprov.facility_marks(st.root, fid)
+        parts = sum(marks.values())
+        unmarked = marks.get(None, 0)
+        values = [v for v in marks if v is not None]
+        block = dataset_meta(meta.get(fid) or {})
+        catalog = bool(block.get("dataset_id")) or _is_dataset_name(fid)
+        if not parts:
+            state = "empty"
+        elif not unmarked:
+            state = "marked"
+        elif values:
+            state = "mixed"
+        else:
+            state = "missing" if catalog else "own"
+        out.append(
+            {
+                "facility_id": fid,
+                "parts": parts,
+                "marked": parts - unmarked,
+                "unmarked": unmarked,
+                "datasets": sorted({_partprov.dataset_of(v) for v in values} - {""}),
+                "research_only": any(_partprov.research_only(v) for v in values),
+                "catalog": catalog,
+                "state": state,
+            }
+        )
+    return out
+
+
 def remove_dataset(
     entry: DatasetEntry,
     *,

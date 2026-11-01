@@ -549,7 +549,9 @@ rejects their earlier spellings and names the key to use:
 - **Provenance.** The facility's registry entry records, under its `"dataset"` key, the licence,
   citation, DOIs, file checksums, the ingest's content hash, the fault label of every scenario,
   the runs excluded from scoring, the quirks applied, the data issues and whether corrections were
-  applied. Reports read it to print a **Data source & licence** block.
+  applied. Reports read it to print a **Data source & licence** block. Since 0.112 every part file
+  also carries the dataset id, its licence and a research-only flag in its own metadata (see
+  [Provenance in the part files](#provenance-in-the-part-files)).
 - **Idempotent.** Re-running `ingest` with the same inputs is skipped; `--force`, a different
   subset or a different corrections mode (the content hash covers it) replaces the dataset's
   facilities atomically (staged, then swapped in).
@@ -563,6 +565,42 @@ rejects their earlier spellings and names the key to use:
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).
+
+### Provenance in the part files
+
+Since 0.112 (#319), `ingest` writes the dataset's provenance into the key-value metadata of every
+Parquet part file it creates, under the key `camber.provenance`: a small JSON object with the
+`dataset_id`, the `licence` and a `research_only` flag. Your own data (`camber ingest`, `camber
+store` writes, the edge landing) gets no such key, and costs nothing extra.
+
+The key stays with the data. Every CAMBER rewrite keeps it: an append leaves the existing parts as
+they are, `camber store normalize` and `camber store migrate-partitions` rewrite a part with its
+key, a retention rollup (`camber retention apply`) carries the key of the raw parts it summarizes,
+a forced re-ingest writes the new parts with it before the swap, and an archive bundle and its
+restore copy the files byte for byte. A part file copied elsewhere by hand -- one month into a
+test facility, a whole partition under another id, part files merged or renamed, or into
+another store -- carries it too.
+
+The capability registry (`camber mcp`, and the A2A server after it) refuses any part file marked
+research-only, whatever facility id, directory or store it sits in: a facility holding one is
+`refused_licence` before the call runs, and a read inside a tool call refuses such a part even
+when no check named its facility. A facility that mixes marked and unmarked parts is refused as
+a whole. A mark is research-only when its flag says so, when its licence is non-commercial or
+no-derivatives, or when the catalog now holds that dataset research-only; a mark that cannot be
+read counts as research-only. The refusal names the facility and the dataset, never a path.
+The local commands are unchanged: `camber run`, `camber report` and `camber lab` read
+research-only data you have accepted the licence for, with the non-commercial banner on every
+report.
+
+**Stores ingested before 0.112** have no mark in their part files. The registry checks of 0.111
+still apply to them (#290, #312: a facility named for a research-only dataset, a renamed or
+exactly copied partition), but a partial copy of an unmarked partition is not recognised.
+`camber datasets provenance --store DIR` lists every facility with how many of its parts carry
+provenance, and `--missing` lists those that lack it; `camber datasets ingest <id> --store DIR
+--force` re-ingests a dataset with provenance in every part.
+
+Reading the key costs one footer read per part file, which the store's reads mostly do anyway;
+the result is kept in memory per facility until a file of its partition changes.
 
 ## Caches, locks and a read-only shared cache
 
