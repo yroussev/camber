@@ -47,7 +47,9 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it); so
   is a call that a writer replacing or removing files of a facility it reads overlapped (a forced
   re-ingest, a prune: the facility's write fence, :mod:`camber.store._fence`, moved), retryable,
-  whatever the handler answered (#306);
+  whatever the handler answered (#306); and so is a facility registry that cannot be read just
+  now (``"reason": "registry_unreadable"``, :class:`camber._servable.RegistryUnavailable`), which
+  each call reads once (0.112, #324);
 - **no leaks**: any other exception becomes ``CapabilityError("internal")`` whose message holds
   no absolute local path.
 
@@ -477,6 +479,12 @@ class Registry:
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
+        from .._servable import call_snapshot
+
+        with call_snapshot():  # one read of the facility registry per call (0.112, #324)
+            return self._checked_call(name, arguments, ctx)
+
+    def _checked_call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
         from ._policy import check_arguments, outside_allowlist, registry_notice
         from ._schema import as_integers, validate
 
@@ -678,6 +686,9 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
         return None
     named = fid if fid in getattr(ctx, "allowed_facilities", frozenset()) else None
     data: dict = {"retryable": retryable}
+    code = getattr(exc, "code", None)
+    if code:  # the facility registry (0.112, #324)
+        data["reason"] = code
     if named is not None:
         data["facility_id"] = named
     where = f"the stored data of facility {named!r}" if named else "the stored data"

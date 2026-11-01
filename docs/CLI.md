@@ -776,6 +776,15 @@ portfolio` and `retention apply` refuse at once unless given a wait (`retention 
 `--lock-timeout` is given. The lab never waits on a workspace's lock. See
 [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
+**One writer side per store (0.112, #325).** The lock is the kernel's `flock`, which a host and a
+Docker Desktop container (or two machines on one share) do not share. Since 0.112 a writer also
+claims `<dir>/_lock.owner` and keeps a heartbeat in it, so a writer on the other side waits and
+then exits 1 with `… is locked by <pid>@<host> since <time> on another system sharing this
+directory (kernel …)`; a claim whose writer was killed is taken over (at once on its own system,
+after 10 seconds without a heartbeat from another). CAMBER 0.111 and older make no claim: write a
+store or cache from the host or from containers, not both, and mount it read-only (`:ro`) where it
+is only read.
+
 ## Portfolio and facility lifecycle
 
 `camber portfolio` manages a **workspace**: one directory holding a portfolio's store, retention

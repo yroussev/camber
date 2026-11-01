@@ -141,7 +141,11 @@ class FacilityRegistry:
     # ----------------------------------------------------------------- reads
 
     def _raw(self) -> dict:
-        return _read_json(self._path())
+        from .._servable import snapshot_raw  # lazy: it imports the store
+
+        # within a capability call: the registry the call read once (0.112, #324)
+        snap = snapshot_raw(self.root)
+        return _read_json(self._path()) if snap is None else snap
 
     def all(self) -> dict:
         """The whole registry ``{facility_id: {...}}`` (empty if absent/corrupt).

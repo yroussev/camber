@@ -9,6 +9,17 @@ Caveat: advisory file locks are unreliable on some network filesystems (older NF
 oplocks disabled). Keep the portfolio root on a local disk or a filesystem with working
 ``flock`` semantics; see docs/PORTFOLIO.md.
 
+**A writer on another system (0.112, #325).** ``flock`` excludes only processes of one kernel: a
+macOS host and a Docker Desktop container writing one bind-mounted directory (or two machines on
+one share) both get it. So, once it holds the ``flock``, a writer also claims ``<root>/_lock.owner``
+(an exclusive create, which the filesystem decides for every system that shares it) and writes
+there who it is: pid, host, the kernel's boot id (:func:`kernel_id`), and a heartbeat counter it
+advances every :data:`CLAIM_BEAT` seconds until it lets go and removes the claim. A writer that
+finds a claim waits, like for the ``flock``, and is refused when its wait runs out, naming the
+holder and its system. A claim left by a writer that was killed is taken over: at once when it
+names this kernel (whose ``flock`` the new writer holds, so its writer is gone), else once its
+heartbeat has not moved for :data:`CLAIM_STALE` seconds. Writers older than 0.112 make no claim.
+
 The lock is **re-entrant within a process**: a CLI command that holds it can call the registry,
 which takes it again, without deadlocking. Other threads of the same process wait on an in-process
 lock; other processes are refused (or wait, with ``timeout``).
@@ -37,6 +48,9 @@ import threading
 import time
 
 LOCK_FILE = "_lock"
+CLAIM_FILE = "_lock.owner"  # 0.112 (#325): the holder's claim, seen by every system sharing it
+CLAIM_BEAT = 1.0  # seconds between a holder's heartbeats
+CLAIM_STALE = 10.0  # seconds without a heartbeat before a claim of another kernel is stale
 LOCK_TIMEOUT_ENV = "CAMBER_LOCK_TIMEOUT"
 DEFAULT_LOCK_TIMEOUT = 30.0  # seconds a second store or cache writer waits before it is refused
 
@@ -98,12 +112,13 @@ def _utc_now() -> str:
 
 
 class _Held:
-    __slots__ = ("fh", "depth", "rlock")
+    __slots__ = ("fh", "depth", "rlock", "claim")
 
     def __init__(self):
         self.fh = None
         self.depth = 0
         self.rlock = threading.RLock()
+        self.claim = None
 
 
 _HELD: dict = {}
@@ -210,6 +225,156 @@ def _open(path: str):
     return os.fdopen(fd, "r+b")
 
 
+_KERNEL: list = []
+
+
+def kernel_id() -> str:
+    """This kernel's identity for a lock claim (0.112, #325): its boot id on Linux (a Docker
+    Desktop container has the VM's, shared by every container), the boot session on macOS, else
+    the host name. Two processes with one id share ``flock``; two with different ids may not."""
+    if not _KERNEL:
+        kid = None
+        try:
+            if sys.platform.startswith("linux"):
+                with open("/proc/sys/kernel/random/boot_id", encoding="ascii") as fh:
+                    kid = "linux:" + fh.read().strip()
+            elif sys.platform == "darwin":
+                import ctypes
+
+                buf = ctypes.create_string_buffer(64)
+                size = ctypes.c_size_t(len(buf))
+                libc = ctypes.CDLL(None, use_errno=True)
+                if not libc.sysctlbyname(
+                    b"kern.bootsessionuuid", buf, ctypes.byref(size), None, ctypes.c_size_t(0)
+                ):
+                    kid = "darwin:" + buf.value.decode("ascii", "replace")
+        except (OSError, AttributeError, ValueError):
+            kid = None
+        _KERNEL.append(kid if kid and kid.split(":", 1)[1] else "host:" + socket.gethostname())
+    return _KERNEL[0]
+
+
+class _Claim:
+    """This process's claim on ``<root>/_lock.owner`` and its heartbeat thread."""
+
+    def __init__(self, path: str, fd: int):
+        self.path, self.fd = path, fd
+        self.info = {
+            "pid": os.getpid(),
+            "host": socket.gethostname(),
+            "kernel": kernel_id(),
+            "since": _utc_now(),
+            "token": os.urandom(8).hex(),
+        }
+        self.stop = threading.Event()
+        self._write(0)
+        self.thread = threading.Thread(target=self._beat, name="camber-lock-claim", daemon=True)
+        self.thread.start()
+
+    def _write(self, n: int) -> None:
+        # the same length every time, written over the old record: never empty to a reader
+        rec = json.dumps({**self.info, "beat": f"{n:012d}"}, sort_keys=True) + "\n"
+        os.lseek(self.fd, 0, os.SEEK_SET)
+        os.write(self.fd, rec.encode("utf-8"))
+        with contextlib.suppress(OSError):
+            os.fsync(self.fd)
+
+    def _beat(self) -> None:
+        n = 0
+        while not self.stop.wait(CLAIM_BEAT):
+            n += 1
+            with contextlib.suppress(OSError):
+                self._write(n)
+
+    def release(self) -> None:
+        self.stop.set()
+        self.thread.join()
+        os.close(self.fd)
+        if (_read_claim(self.path)[1] or {}).get("token") == self.info["token"]:
+            with contextlib.suppress(OSError):
+                os.remove(self.path)
+
+
+def _read_claim(path: str) -> tuple:
+    """``(raw bytes, record)`` of a claim file; ``(None, None)`` when there is none, and the
+    record ``None`` when it does not parse (``b""`` when it cannot be read)."""
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read(4096)
+    except FileNotFoundError:
+        return None, None
+    except OSError:
+        return b"", None
+    try:
+        rec = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return raw, None
+    return raw, rec if isinstance(rec, dict) else None
+
+
+def _try_claim(root: str):
+    """A new :class:`_Claim` on ``<root>/_lock.owner``, or ``None`` when one exists."""
+    path = os.path.join(root, CLAIM_FILE)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        return None
+    try:
+        return _Claim(path, fd)
+    except BaseException:
+        os.close(fd)
+        with contextlib.suppress(OSError):
+            os.remove(path)
+        raise
+
+
+def _take_over(path: str, raw: bytes) -> None:
+    """Remove the stale claim ``raw`` at ``path``; a claim made meanwhile is put back."""
+    aside = f"{path}.stale-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        os.rename(path, aside)
+    except OSError:
+        return
+    try:
+        if _read_claim(aside)[0] != raw:  # a new holder claimed it just now: its claim stays
+            with contextlib.suppress(OSError):
+                os.link(aside, path)  # never over a claim made since
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(aside)
+
+
+def _claim(root: str, deadline: float, poll: float, refuse):
+    """Claim ``<root>/_lock.owner`` (the caller holds the ``flock``), waiting for a live holder
+    on another system until ``deadline``; ``refuse(holder, note)`` raises when the wait runs
+    out. See the module docstring."""
+    path = os.path.join(root, CLAIM_FILE)
+    seen, since = None, time.monotonic()
+    while True:
+        claim = _try_claim(root)
+        if claim is not None:
+            return claim
+        raw, rec = _read_claim(path)
+        if raw is None:
+            continue  # released just now
+        now = time.monotonic()
+        if raw != seen:
+            seen, since = raw, now  # its heartbeat moved: alive
+        mine = rec is not None and rec.get("kernel") == kernel_id()
+        if mine or now - since >= CLAIM_STALE:
+            _take_over(path, raw)  # a writer killed while it held the lock
+            seen = None
+            continue
+        if now >= deadline:
+            refuse(
+                rec or {},
+                f" on another system sharing this directory (kernel {(rec or {}).get('kernel')}:"
+                " a container, a VM or another machine); a claim whose writer was killed there is"
+                f" taken over after {CLAIM_STALE:g} s without its heartbeat",
+            )
+        time.sleep(poll)
+
+
 def portfolio_lock(root: str, *, timeout: float = 0.0, poll: float = 0.1):
     """Hold ``<root>/_lock`` for the ``with`` block; raise :class:`PortfolioLocked` if taken.
 
@@ -257,6 +422,16 @@ def exclusive_lock(
                             note = " (that pid has exited; retry -- the lock is released)"
                     raise error(f"{what} is locked by {describe_holder(holder)}{note}{hint}")
                 time.sleep(poll)
+
+            def refuse(holder, note):
+                raise error(f"{what} is locked by {describe_holder(holder)}{note}{hint}")
+
+            try:
+                slot.claim = _claim(os.path.dirname(path), deadline, poll, refuse)  # #325
+            except BaseException:
+                _unlock(fh)
+                fh.close()
+                raise
             _write_holder(fh)
             slot.fh = fh
         slot.depth += 1
@@ -266,7 +441,12 @@ def exclusive_lock(
             slot.depth -= 1
             if slot.depth == 0 and slot.fh is not None:
                 fh, slot.fh = slot.fh, None
-                _unlock(fh)
-                fh.close()
+                claim, slot.claim = slot.claim, None
+                try:
+                    if claim is not None:
+                        claim.release()
+                finally:
+                    _unlock(fh)
+                    fh.close()
     finally:
         slot.rlock.release()

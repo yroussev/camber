@@ -316,11 +316,25 @@ def _part_path(root: str, fid: str, year: int, month: int) -> str:
 
 
 def _read_dir(path: str) -> pd.DataFrame:
+    """The parts under a month directory; a FIFO or device named like a part is never opened
+    (it would block), nor a ``_`` / ``.`` entry (as dataset discovery skips them)."""
     import pyarrow.dataset as ds
+
+    from ..store._partprov import regular
 
     if not os.path.isdir(path):
         return pd.DataFrame()
-    return ds.dataset(path, format="parquet").to_table().to_pandas()
+    files = []
+    for dirpath, dirs, names in os.walk(path):
+        dirs[:] = sorted(d for d in dirs if not d.startswith(("_", ".")))
+        files += [
+            os.path.join(dirpath, n)
+            for n in sorted(names)
+            if not n.startswith(("_", ".")) and regular(os.path.join(dirpath, n))
+        ]
+    if not files:
+        return pd.DataFrame()
+    return ds.dataset(files, format="parquet").to_table().to_pandas()
 
 
 def _read_legacy(path: str) -> pd.DataFrame:

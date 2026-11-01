@@ -80,6 +80,30 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   default command or `camber serve`); a container running `camber mcp` or any other command no
   longer turns `unhealthy`. With a 0.111 image, start such a container with `--no-healthcheck`;
   DOCKER.md and MCP.md show how to run the MCP server from the image (#326).
+- **A momentary failure to read the facility registry no longer changes an answer (#324).** A
+  writer replaces `_facilities.json` with a rename, which some filesystems (a Docker Desktop
+  bind mount) show a reader as briefly missing. A `camber mcp` call that read it at that moment
+  ran a catalog-dataset facility with every built-in rule at its defaults instead of its packaged
+  template (different `rule_run` findings and `sensor_trust` scores, with no notice), or refused
+  it as `refused_licence`, or answered under a notice saying nothing was served. A failed read is
+  now tried again for a moment; one that keeps failing while the file changes, or fails with an
+  I/O error, is `unavailable` with `"retryable": true, "reason": "registry_unreadable"`, and
+  `camber mcp` refuses to start rather than guess. A call reads the registry once, so its licence
+  check, config template, timezone and notices agree. A registry that stays missing or damaged
+  is still refused (#290).
+- **A host and a container no longer write one store at once (#325).** The store and cache lock is
+  the kernel's `flock`, which a macOS host and a Docker Desktop container on one bind mount (or two
+  machines on one share) do not share: both wrote, ingests failed (`ENOENT`, `Directory not
+  empty`) and left `_trash-ingest-*` directories, and readers got wrong answers. A writer now
+  also claims `<dir>/_lock.owner` and keeps a heartbeat in it; a writer on another system waits
+  for it and is then refused with `… locked by <pid>@<host> … on another system sharing this
+  directory`, and a claim whose writer was killed is taken over (at once on its own system,
+  after 10 s without a heartbeat from another). CAMBER 0.111 and older make no claim, so write a
+  store from the host or from containers, not both (DATASETS.md, CLI.md, PORTFOLIO.md,
+  DOCKER.md).
+- `ParquetStore.partitions()` and `camber store normalize`'s part check no longer open a FIFO
+  named like a part file (which waited for a writer for ever); the retention roll-up's partition
+  read skips one too (#319).
 
 ### Changed
 - **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id

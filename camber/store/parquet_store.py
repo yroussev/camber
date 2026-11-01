@@ -1218,6 +1218,8 @@ class ParquetStore:
         def _rows(files):
             n = 0
             for f in files:
+                if not _partprov.regular(f):  # a FIFO named like a part is never opened
+                    continue
                 try:
                     n += int(pq.ParquetFile(f).metadata.num_rows)
                 except Exception:  # noqa: BLE001 - an unreadable file counts no rows

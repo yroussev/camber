@@ -12,6 +12,10 @@ dataset block and every facility would count as active. This module reads it the
   instead of an empty registry. A missing registry is a problem in a store holding a ``ds-``
   facility (``camber datasets ingest`` always registers one); a store of the user's own data may
   have none, and its unregistered facilities count as active, as everywhere else in CAMBER.
+  A read that fails is tried again for a moment; one that keeps failing while the file changes
+  (a writer replacing it), or with an I/O error, raises the retryable :class:`RegistryUnavailable`
+  instead (0.112, #324). Within :func:`call_snapshot` (each capability call) the registry is read
+  once, and the store's own registry reads see that read too.
 - :func:`catalog_entries_for` maps a facility id to the in-package catalog entries it was ingested
   from by name alone (``ds-<base>`` or ``ds-<base>-<group>``, where ``ingest.facility`` is the
   base), independent of the registry.
@@ -36,8 +40,13 @@ not public API.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import os
+import time
+
+from .store.parquet_store import StoreReadError
 
 #: the prefix ``camber datasets ingest`` gives every facility it writes (``ingest.facility``)
 DATASET_PREFIX = "ds-"
@@ -90,16 +99,133 @@ def research_only_block(meta: dict) -> bool:
     return False
 
 
-def _read_regular(path: str) -> str:
-    """The text of the regular file at ``path``; ``OSError`` for anything else (a FIFO, whose
+class _NotRegular(OSError):
+    """The registry path is not a regular file."""
+
+
+def _read_regular(path: str) -> bytes:
+    """The bytes of the regular file at ``path``; ``OSError`` for anything else (a FIFO, whose
     open would wait for a writer, or a device), without blocking (#314)."""
     import stat
 
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     with os.fdopen(fd, "rb") as fh:
         if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
-            raise OSError(f"{path} is not a regular file")
-        return fh.read().decode("utf-8")
+            raise _NotRegular(f"{path} is not a regular file")
+        return fh.read()
+
+
+class RegistryUnavailable(StoreReadError):
+    """The facility registry could not be read just now (0.112, #324): it kept changing while it
+    was read (a writer replacing it), or reading it failed with an I/O error. Retryable: a
+    capability call answers ``unavailable`` with ``"retryable": true`` and ``"reason":
+    "registry_unreadable"``."""
+
+    code = "registry_unreadable"
+
+    def __init__(self, cause=None):
+        super().__init__(
+            "the store's facility registry cannot be read just now (a write may be replacing it)",
+            retryable=True,
+            cause=cause,
+        )
+
+
+#: seconds to wait before each read of the registry (#324): a writer replaces it with
+#: ``os.replace``, which some filesystems (a Docker Desktop bind mount) show a reader as briefly
+#: missing, so a read that fails is tried again, about 0.4 s in all
+_RETRY_WAITS = (0.0, 0.01, 0.02, 0.05, 0.1, 0.2)
+#: store roots whose registry this process has read: it is replaced, never deleted, so it going
+#: missing there is retried even in a store with no catalog-dataset facility
+_SEEN: set = set()
+#: within :func:`call_snapshot`: ``{store root: (raw registry, problem)}``, one read per call
+_CALL: contextvars.ContextVar = contextvars.ContextVar("camber_registry_call", default=None)
+
+
+def _read_once(path: str) -> tuple:
+    """One read of the registry file: ``("ok", parsed JSON)``, ``("missing", None)``,
+    ``("damaged", what)`` (not a regular file, or bytes that are not UTF-8 JSON) or
+    ``("error", errno)`` (any other ``OSError``)."""
+    if not os.path.lexists(path):
+        return "missing", None
+    try:
+        data = _read_regular(path)
+    except FileNotFoundError:
+        return "missing", None
+    except _NotRegular:
+        return "damaged", "not a regular file"
+    except OSError as e:
+        return "error", e.errno
+    try:
+        return "ok", json.loads(data.decode("utf-8"))
+    except ValueError:  # empty, truncated, not UTF-8, not JSON
+        return "damaged", data
+
+
+def _read_settled(store_root: str) -> tuple:
+    """``(raw, problem)``: the registry's parsed JSON (``{}`` when there is none) and ``None``,
+    or ``{}`` and the problem of a registry that stays missing or damaged while it is read again
+    (#290). ``RegistryUnavailable`` when the reads fail and do not agree, or fail with an I/O
+    error (#324)."""
+    from .store.facilities import _FACILITIES
+
+    path = os.path.join(store_root, _FACILITIES)
+    root = os.path.abspath(store_root)
+    seen: list = []
+    expected = None
+    for wait in _RETRY_WAITS:
+        if wait:
+            time.sleep(wait)
+        kind, value = _read_once(path)
+        if kind == "ok":
+            _SEEN.add(root)
+            return value, None
+        if kind == "missing" and not seen:
+            expected = any(_is_dataset_name(f) for f in _partitions(store_root))
+            if not expected and root not in _SEEN:
+                return {}, None  # a store of one's own data that never had a registry
+        seen.append((kind, value))
+    kind, value = seen[0]
+    if kind == "error" or any(o != seen[0] for o in seen):
+        raise RegistryUnavailable(OSError(value, os.strerror(value)) if kind == "error" else None)
+    if kind == "missing":
+        if expected:
+            return {}, "is missing although the store holds catalog-dataset facilities"
+        return {}, None  # removed for good: read as none, as the store does
+    return {}, "cannot be read"
+
+
+@contextlib.contextmanager
+def call_snapshot():
+    """Within it, every read of a store's facility registry -- :func:`read_registry` and the
+    store's own :class:`~camber.store.facilities.FacilityRegistry` -- sees the one read the first
+    of them made (0.112, #324): a capability call checks the licence, picks the config template,
+    reads the facility's timezone and says the notice from the same registry."""
+    token = _CALL.set({})
+    try:
+        yield
+    finally:
+        _CALL.reset(token)
+
+
+def _raw_registry(store_root: str) -> tuple:
+    """:func:`_read_settled`, once per store root within a :func:`call_snapshot`."""
+    snap = _CALL.get()
+    if snap is None:
+        return _read_settled(store_root)
+    root = os.path.abspath(store_root)
+    if root not in snap:
+        snap[root] = _read_settled(store_root)
+    return snap[root]
+
+
+def snapshot_raw(store_root: str):
+    """The raw registry of the call in progress (a fresh dict; ``{}`` for a registry with a
+    problem, as the store reads one), or ``None`` outside a :func:`call_snapshot`."""
+    if _CALL.get() is None:
+        return None
+    raw, problem = _raw_registry(store_root)
+    return dict(raw) if problem is None and isinstance(raw, dict) else {}
 
 
 def read_registry(store_root: str) -> tuple:
@@ -107,19 +233,15 @@ def read_registry(store_root: str) -> tuple:
 
     ``entries`` is ``{facility_id: entry}`` in the registry's v2 shape; ``problem`` is ``None``
     when the registry can be trusted, else a short phrase (``"cannot be read"``, ...) completing
-    "the store's facility registry ...", and ``entries`` is then empty.
+    "the store's facility registry ...", and ``entries`` is then empty. A read that fails is
+    tried again for a moment; :class:`RegistryUnavailable` when it still fails and the file was
+    changing meanwhile, or failed with an I/O error (0.112, #324).
     """
-    from .store.facilities import _FACILITIES, _normalize
+    from .store.facilities import _normalize
 
-    path = os.path.join(store_root, _FACILITIES)
-    if not os.path.lexists(path):
-        if any(_is_dataset_name(f) for f in _partitions(store_root)):
-            return {}, "is missing although the store holds catalog-dataset facilities"
-        return {}, None
-    try:
-        raw = json.loads(_read_regular(path))
-    except (OSError, ValueError):  # unreadable, empty, truncated, not UTF-8, not JSON, no file
-        return {}, "cannot be read"
+    raw, problem = _raw_registry(store_root)
+    if problem is not None:
+        return {}, problem
     if not isinstance(raw, dict) or not all(isinstance(e, dict) for e in raw.values()):
         return {}, "is not a valid facility registry"
     entries = {str(fid): _normalize(str(fid), e) for fid, e in raw.items()}

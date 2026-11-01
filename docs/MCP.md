@@ -286,6 +286,8 @@ as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
 `camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
 call never answers from a half-swapped facility) or not (a damaged or unreadable file), and names the facility.
+A store facility registry that cannot be read just now (a writer is replacing it) is `unavailable` with
+`"retryable": true, "reason": "registry_unreadable"` (0.112, #324).
 It is also the answer when the worker running the call ended under it (`"retryable": true`).
 A date the calendar does not have (`2025-02-30`) is `invalid_params`. A window outside the
 stored data is `not_found` for every tool that runs rules or reports and for `sensor_trust`;

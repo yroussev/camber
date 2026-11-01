@@ -640,7 +640,20 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   is released when its process exits, even after a crash or `kill -9`. A `_lock` file left behind
   is not a stale lock, only stale text, and the next writer takes it over;
 - advisory locks are unreliable on some network filesystems (older NFS, SMB without byte-range
-  locks). Keep a cache that several machines write on a local disk, or give each machine its own.
+  locks). Keep a cache that several machines write on a local disk, or give each machine its own;
+- **a host and a container count as two machines (0.112, #325).** `flock` reaches only the
+  processes of one kernel: a macOS or Windows host and a Docker Desktop container (which runs in a
+  VM) writing one bind-mounted store or cache both got it, and their ingests broke each other's
+  partitions while readers got wrong answers. Since 0.112 a writer also claims `<dir>/_lock.owner`
+  (an exclusive create, which every system sharing the directory sees) and keeps a heartbeat in it
+  while it writes. A writer on the other side waits for it as for the lock, then stops with
+  `… is locked by <pid>@<host> since <time> on another system sharing this directory (kernel …)`.
+  A claim left by a writer that was killed is taken over at once on its own system, and after
+  10 seconds without a heartbeat from another one. CAMBER 0.111 and older make no claim, and a
+  directory shared by machines whose filesystem does not make an exclusive create atomic (some
+  network filesystems) is not covered. So: **write a store or a cache from one side only** -- the
+  host or containers, not both -- or give each its own copy; mounting it read-only (`:ro`) into
+  every container that only reads is always safe.
 
 Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
 `camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, `camber

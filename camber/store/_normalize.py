@@ -126,6 +126,9 @@ def check_part(path: str) -> dict:
         "meta": {},
         "error": None,
     }
+    if not _partprov.regular(path):  # a FIFO named like a part would block its open
+        out["error"] = "not a regular file"
+        return out
     try:
         out["bytes"] = os.path.getsize(path)
         with pq.ParquetFile(path) as f:
@@ -453,7 +456,7 @@ def _dir_rows(d: str) -> int:
 
     n = 0
     for name in os.listdir(d):
-        if _is_part(d, name):
+        if _is_part(d, name):  # a regular file only: a FIFO named like a part is never opened
             try:
                 n += int(pq.ParquetFile(os.path.join(d, name)).metadata.num_rows)
             except Exception:  # noqa: BLE001 - unreadable: not ours to count or rewrite

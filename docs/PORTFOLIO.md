@@ -489,6 +489,12 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
   host that no longer exists, retry: the error says so.
 - **Filesystems.** Advisory locks are unreliable on some network filesystems (older NFS, some SMB
   configurations). Keep the workspace on a local disk, or on a filesystem with working `flock`.
+- **A host and a container (0.112, #325).** `flock` does not reach from a host into a Docker
+  Desktop container on a bind mount (they run different kernels), so a writer also claims
+  `_lock.owner` with a heartbeat: a writer on the other side waits for it and is then refused,
+  naming the holder's system, and a claim whose writer was killed is taken over (at once on its
+  own system, after 10 seconds without a heartbeat from another). Still, write a workspace from
+  one side only; see [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
 Read paths (`camber serve`, `ReadAPI`, a `camber run` that writes no per-facility state) never
 take the lock.

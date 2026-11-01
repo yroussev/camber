@@ -42,6 +42,15 @@ def resolve_allowlist(store: str, allow: list | None, allow_all_active: bool) ->
     and the server starts with nothing to serve); with ``--allow``, a warning names each facility
     that will be refused: research-only data, or a licence that cannot be established.
     """
+    from .._servable import RegistryUnavailable
+
+    try:
+        return _resolve_allowlist(store, allow, allow_all_active)
+    except RegistryUnavailable as e:  # 0.112 (#324): a writer is replacing it; never a guess
+        raise LaunchError(f"{e.reason}; start the server again in a moment") from None
+
+
+def _resolve_allowlist(store: str, allow: list | None, allow_all_active: bool) -> frozenset:
     from .._servable import active_facilities, read_registry, refusal, registry_banner
     from ..store import ParquetStore
 

@@ -350,13 +350,15 @@ def dataset_template(ctx, facility_id: str) -> tuple:
 
     if not ctx.store or not _is_dataset_name(facility_id):
         return None, None
+    # outside the try: a registry that cannot be read just now is unavailable, never a run
+    # without the template (0.112, #324)
+    entries, problem = read_registry(ctx.store)
+    if problem is not None:
+        return None, None
     try:
         from ..datasets import get
         from ..datasets._ops import build_config
 
-        entries, problem = read_registry(ctx.store)
-        if problem is not None:
-            return None, None
         block = (entries.get(facility_id) or {}).get("dataset")
         did = block.get("dataset_id") if isinstance(block, dict) else None
         if did:
