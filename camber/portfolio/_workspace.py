@@ -74,12 +74,18 @@ def _default_doc(store_rel: str) -> dict:
 
 
 def _write_json(path: str, data: dict) -> None:
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
-        fh.write("\n")
-    confirm_claims()  # 0.112 (#330): still the workspace's writer
-    os.replace(tmp, path)
+    confirm_claims()  # 0.112 (#330, #335): still the workspace's writer, before anything is written
+    tmp = f"{path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        with open(tmp, "x", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        confirm_claims()  # and still it, just before the rename
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def is_workspace(path) -> bool:

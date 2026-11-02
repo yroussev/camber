@@ -666,17 +666,20 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   A claim left by a writer that was killed is taken over at once when its process is seen to be
   gone (same kernel and pid namespace, and its pid has exited or now names a process that started
   at another time), else after 10 seconds without a heartbeat. Since #330 the `flock` alone no
-  longer counts as that proof: on a Docker Desktop bind mount it excludes nothing, so two
-  containers (or two processes of one container) could both write. A claim from another container
-  of the same VM is now waited for like one from the host. CAMBER 0.111 and older make no claim, and a
+  longer counts as that proof: on a Docker Desktop bind mount the `flock` of the process whose
+  open created the lock file excludes nothing, so two containers (or two processes of one
+  container) could both write. A claim from another container of the same VM is now waited for
+  like one from the host. Since #335 a writer never locks through the open that created the lock
+  file, so there the `flock` excludes every container of the VM (they share its kernel), and the
+  claim stays as the second guard. CAMBER 0.111 and older make no claim, and a
   directory shared by machines whose filesystem does not make an exclusive create atomic (some
   network filesystems) is not covered. So: **write a store or a cache from one side only** -- the
   host or containers, not both -- or give each its own copy; mounting it read-only (`:ro`) into
   every container that only reads is always safe;
-- **a writer that was stopped loses its claim, and stops (0.112, #330).** A stopped process
-  cannot beat. A writer paused for more than 10 seconds (Ctrl-Z, a debugger, a sleeping laptop,
-  heavy swapping) has its claim taken over by a writer on the other side, as if it had been
-  killed. When it resumes it does not carry on. Immediately before each step that changes the
+- **a writer that was stopped loses its claim to the other side, and stops (0.112, #330).** A
+  stopped process cannot beat. A writer paused for more than 10 seconds (Ctrl-Z, `docker pause`,
+  a debugger, a sleeping laptop, heavy swapping) has its claim taken over by a writer on the
+  other side, as if it had been killed. When it resumes it does not carry on. Immediately before each step that changes the
   store, cache or workspace, it checks that the claim still carries its own token: a partition
   swap or delete, a write fence, a registry, manifest or workspace file write, an append's
   renames. If the token is gone, the command fails with
@@ -690,7 +693,25 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   that writer then lets go and finds its claim taken, it fails with `… a step it took after its
   last check may have overlapped that writer's: check the directory (camber store verify for a
   store) and run the command again`, so it never reports success. Writing from one side only
-  avoids all of this.
+  avoids all of this;
+- **when a claim is taken over, and when it is not (0.112, #335).** "The same system" is one
+  kernel: the host's processes; all the containers of one Docker Desktop VM, which share its
+  kernel; on Linux, the host and its containers.
+
+  | The holder | A writer of the same system | A writer on another system |
+  |---|---|---|
+  | runs | waits; refused when its wait runs out | waits; refused when its wait runs out |
+  | was killed or exited | takes over: at once when it sees the process is gone (same pid namespace: two host processes, or two of one container), else after 10 s without a heartbeat (another container) | takes over after 10 s without a heartbeat |
+  | is stopped (Ctrl-Z, `docker pause`, a debugger) | **waits**, as for a running holder; refused when its wait runs out | takes over after 10 s without a heartbeat |
+
+  A stopped process still holds its kernel's lock, so every writer of that system honours it: a
+  stopped writer is never taken over there, two writers of one system never overlap, and the
+  stopped one carries on correctly when it resumes. The waiter is refused with `… is locked by
+  <pid>@<host> since <time> -- a writer that is alive but stopped (Ctrl-Z, docker pause, a
+  debugger): its heartbeat has not moved for N s …` once the heartbeat has stood still for 10
+  seconds of its wait (a shorter `--lock-timeout` cannot tell and gives the plain refusal).
+  Resume the stopped writer (`fg`, `docker unpause`) or end it, then run the command again. A
+  writer on another system does not share that lock, so it goes by the heartbeat alone.
 
 Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
 `camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, `camber

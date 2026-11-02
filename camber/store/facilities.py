@@ -16,6 +16,7 @@ raw name causes as a partition directory.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import hashlib
 import json
@@ -540,15 +541,25 @@ def _read_json(path: str) -> dict:
 
 
 def _write_json(path: str, data: dict, *, root: str) -> None:
-    """Atomic write: temp file + ``os.replace`` (readers never see a half-written file)."""
-    os.makedirs(root, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, sort_keys=True)
+    """Atomic write: temp file + ``os.replace`` (readers never see a half-written file).
+
+    0.112 (#335): the claim is confirmed before the temp file is made, not only before the
+    rename, so a writer that lost it leaves nothing behind; the temp file's name is this write's
+    own (``<name>.tmp-<pid>-<token>``), and it is removed on any failure."""
     from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
 
-    confirm_claims()  # 0.112 (#330): still the store's writer
-    os.replace(tmp, path)
+    os.makedirs(root, exist_ok=True)
+    confirm_claims()  # 0.112 (#330, #335): still the store's writer, before anything is written
+    tmp = f"{path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        with open(tmp, "x", encoding="utf-8") as fh:
+            json.dump(data, fh, sort_keys=True)
+        confirm_claims()  # and still it, just before the rename
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def _partition_ids(root: str) -> list:

@@ -2176,6 +2176,7 @@ def _cmd_store_verify(args) -> int:
             "trash": "interrupted partition delete",
             "aside": "partition moved aside by an interrupted ingest",
             "scratch": "ingest staging directory",
+            "tmp": "temporary file of an interrupted registry or other write",  # #335
         }[x["kind"]]
         who = f" of {x['facility_id']}" if x["facility_id"] else ""
         state = ""
@@ -2183,6 +2184,8 @@ def _cmd_store_verify(args) -> int:
             state = (
                 " (made on another system by the writer that holds the store's claim now)"
                 if x.get("elsewhere")
+                else " (a writer holds the store now: it may be that write in progress)"
+                if x["kind"] == "tmp"
                 else " (its process is still running)"
             )
         mark = "!" if x["stranded"] else "-"

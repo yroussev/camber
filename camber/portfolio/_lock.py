@@ -22,8 +22,9 @@ exited or names a process that started at another time), else once its heartbeat
 for :data:`CLAIM_STALE` seconds. Writers older than 0.112 make no claim.
 
 **A writer that lost its claim stops (0.112, #330).** The ``flock`` is not proof either: on a
-Docker Desktop bind mount it excludes nothing, not even two processes of one container, so a
-claim of this kernel is no longer taken over on the strength of the ``flock`` alone. And a writer
+Docker Desktop bind mount the ``flock`` of a descriptor that created the file excludes nothing,
+not even two processes of one container (see #335 below), so a claim of this kernel is no longer
+taken over on the strength of the ``flock`` alone. And a writer
 stopped for longer than :data:`CLAIM_STALE` (Ctrl-Z, a debugger, a sleeping machine) cannot beat,
 so a writer on another system rightly takes its claim over; the stopped one must not carry on
 when it resumes. So, immediately before each step that changes a directory -- a partition swap
@@ -35,6 +36,21 @@ waiter that was about to take a claim over sees it alive. What remains is a writ
 more than :data:`CLAIM_STALE` seconds between that check and the single rename that follows it;
 when such a writer lets go and finds its claim taken, it raises the same error, so its command
 fails rather than reports success.
+
+**Who takes a stopped writer's claim over (0.112, #335).** On a Docker Desktop bind mount the
+``flock`` of the descriptor whose open created the lock file excludes nothing, while that of any
+other descriptor excludes every process of the VM (all its containers share its kernel); so
+:func:`_open` never locks the creating descriptor. A writer stopped while it holds the lock keeps
+it: every writer of the same kernel (another process of the host, or any container of the same
+VM) waits for it, as for any live holder, and is refused when its wait runs out, told the holder
+is stopped (its heartbeat stood still for :data:`CLAIM_STALE` seconds of the wait). Only a writer
+on another system, which the ``flock`` does not reach, takes such a claim over.
+
+A claim is never read empty or partial (#335): it is written whole under a temporary name and
+hard-linked into place (the link is the exclusive create), and a heartbeat writes a record of the
+same length over it. A reader that still finds one mid-write (a writer before #335) names the
+holder by the last whole record it read, and takes the claim over only once it has stayed
+unchanged for :data:`CLAIM_STALE` seconds.
 
 The lock is **re-entrant within a process**: a CLI command that holds it can call the registry,
 which takes it again, without deadlocking. Other threads of the same process wait on an in-process
@@ -261,7 +277,17 @@ def _write_holder(fh) -> None:
 
 
 def _open(path: str):
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    """``path`` opened for its ``flock``, never by the call that created it (0.112, #335): on a
+    Docker Desktop bind mount the ``flock`` of a descriptor whose open created the file excludes
+    nothing, not even within one container, while that of any other descriptor excludes every
+    process of the VM."""
+    while True:
+        try:
+            fd = os.open(path, os.O_RDWR)
+            break
+        except FileNotFoundError:
+            with contextlib.suppress(FileExistsError):
+                os.close(os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o644))
     return os.fdopen(fd, "r+b")
 
 
@@ -355,10 +381,11 @@ def process_state(rec):
 
 
 class _Claim:
-    """This process's claim on ``<root>/_lock.owner`` and its heartbeat thread."""
+    """This process's claim on ``<root>/_lock.owner`` and its heartbeat thread. Made by
+    :meth:`place`, which a reader never sees empty or partial (0.112, #335)."""
 
-    def __init__(self, path: str, fd: int):
-        self.path, self.fd = path, fd
+    def __init__(self, path: str):
+        self.path, self.fd = path, -1  # the claim's descriptor once placed
         self.info = {
             **process_identity(),  # pid, kernel, pid namespace, start time (#330)
             "host": socket.gethostname(),
@@ -370,9 +397,56 @@ class _Claim:
         self.lost = None  # the record that replaced this claim, once it is found taken over
         self.wlock = threading.Lock()
         self.stop = threading.Event()
-        self._write()
+        self.thread: threading.Thread | None = None
+
+    def place(self) -> bool:
+        """Put the claim in place, whole, unless one exists; whether it did (0.112, #335).
+
+        The record is written to a temporary file first and hard-linked to the claim's name:
+        the link is the exclusive create (it fails when a claim exists), and the claim appears
+        with its record in it, so a reader never finds it empty. Where the filesystem has no hard
+        links, an exclusive create followed by the write."""
+        tmp = f"{self.path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+        self.fd = os.open(tmp, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o644)
+        try:
+            self._write()
+            try:
+                os.link(tmp, self.path)
+            except FileExistsError:
+                return self._discard()
+            except OSError:  # no hard links here: the claim is briefly empty to a reader
+                self._discard()
+                self._create()
+        except BaseException:
+            if self.fd >= 0:
+                self._discard()
+            raise
+        finally:
+            with contextlib.suppress(OSError):
+                os.remove(tmp)
+        if self.fd < 0:
+            return False
         self.thread = threading.Thread(target=self._beat, name="camber-lock-claim", daemon=True)
         self.thread.start()
+        return True
+
+    def _discard(self) -> bool:
+        os.close(self.fd)
+        self.fd = -1
+        return False
+
+    def _create(self) -> None:
+        try:
+            self.fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            return
+        try:
+            self._write()
+        except BaseException:
+            self._discard()
+            with contextlib.suppress(OSError):
+                os.remove(self.path)
+            raise
 
     def _write(self) -> None:
         # the same length every time, written over the old record: never empty to a reader
@@ -413,7 +487,8 @@ class _Claim:
         """Stop the heartbeat and remove the claim if it is still this one; whether it was."""
         lost = self.owned()
         self.stop.set()
-        self.thread.join()
+        if self.thread is not None:
+            self.thread.join()
         os.close(self.fd)
         if lost is None:
             with contextlib.suppress(OSError):
@@ -440,18 +515,8 @@ def _read_claim(path: str) -> tuple:
 
 def _try_claim(root: str):
     """A new :class:`_Claim` on ``<root>/_lock.owner``, or ``None`` when one exists."""
-    path = os.path.join(root, CLAIM_FILE)
-    try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-    except FileExistsError:
-        return None
-    try:
-        return _Claim(path, fd)
-    except BaseException:
-        os.close(fd)
-        with contextlib.suppress(OSError):
-            os.remove(path)
-        raise
+    claim = _Claim(os.path.join(root, CLAIM_FILE))
+    return claim if claim.place() else None
 
 
 def _take_over(path: str, raw: bytes) -> None:
@@ -476,16 +541,22 @@ def _claim(root: str, deadline: float, poll: float, refuse):
     out. See the module docstring."""
     path = os.path.join(root, CLAIM_FILE)
     seen, since = None, time.monotonic()
+    last = None  # the last whole record read: a claim read mid-write still names its holder
     while True:
         claim = _try_claim(root)
         if claim is not None:
             return claim
         raw, rec = _read_claim(path)
         if raw is None:
+            last = None
             continue  # released just now
+        if rec is not None:
+            last = rec
         now = time.monotonic()
         if raw != seen:
             seen, since = raw, now  # its heartbeat moved: alive
+        # an empty or partial claim (one of a writer before #335, read mid-write) is live and
+        # being written: never gone, and stale only once it has not changed for CLAIM_STALE
         # gone: its process is seen to have exited (this kernel and pid namespace, #330), or it
         # is this process, which holds no claim here at this depth; on Windows, a claim of this
         # machine, whose msvcrt lock the caller holds
@@ -499,20 +570,56 @@ def _claim(root: str, deadline: float, poll: float, refuse):
             _take_over(path, raw)  # a writer killed while it held the lock
             seen = None
             continue
+        if now >= deadline and rec is None and last is not None:
+            state = process_state(last)  # what to name it by: the last whole record
         if now >= deadline and state is True:  # #330: a flock that excluded nothing
             refuse(
-                rec,
+                last,
                 " on this system, whose lock this filesystem does not enforce (as on a Docker"
                 " Desktop bind mount); its claim stands while that process runs",
             )
+        if now >= deadline and last is None:  # #335: never a whole record to name it by
+            refuse(
+                {},
+                " whose claim was being written (its record was empty or partial when read); a"
+                f" claim that stays so is taken over after {CLAIM_STALE:g} s",
+            )
         if now >= deadline:
             refuse(
-                rec or {},
-                f" on another system sharing this directory (kernel {(rec or {}).get('kernel')}:"
+                last or {},
+                f" on another system sharing this directory (kernel {(last or {}).get('kernel')}:"
                 " a container, a VM or another machine); a claim whose writer was killed there is"
                 f" taken over after {CLAIM_STALE:g} s without its heartbeat",
             )
         time.sleep(poll)
+
+
+class _Watch:
+    """How long the claim at ``path`` has gone unchanged while this process watched it (0.112,
+    #335): a holder of this kernel's ``flock`` whose heartbeat stands still is stopped."""
+
+    def __init__(self, path: str):
+        self.path, self.raw, self.since = path, None, time.monotonic()
+
+    def frozen(self) -> float:
+        """Seconds the claim has stood still (``0`` with no claim of this kernel: one of 0.111
+        or older, or another system's, which holds no lock here)."""
+        raw, rec = _read_claim(self.path)
+        now = time.monotonic()
+        if not raw or rec is None or rec.get("kernel") != kernel_id() or raw != self.raw:
+            self.raw, self.since = raw, now
+            return 0.0
+        return now - self.since
+
+
+def _stopped_note(frozen: float) -> str:
+    return (
+        f" -- a writer that is alive but stopped (Ctrl-Z, `docker pause`, a debugger): its"
+        f" heartbeat has not moved for {frozen:.0f} s. It keeps its system's lock until it"
+        " resumes or exits, so every other writer of that system (the same host, or any"
+        " container of the same Docker VM) waits for it; only a writer on another system takes"
+        " its claim over. Resume it (`fg`, `docker unpause`) or end it"
+    )
 
 
 def _lost_message(what: str, path: str, rec: dict, *, after: bool = False) -> str:
@@ -591,7 +698,9 @@ def exclusive_lock(
     try:
         if slot.depth == 0:
             fh = _open(path)
+            beat = _Watch(os.path.join(os.path.dirname(path), CLAIM_FILE))
             while not _try_lock(fh):
+                frozen = beat.frozen()
                 if time.monotonic() >= deadline:
                     fh.close()
                     holder = read_holder(root)
@@ -599,6 +708,8 @@ def exclusive_lock(
                     if holder and holder.get("host") == socket.gethostname():
                         if not _pid_alive(holder.get("pid")):  # pragma: no cover - racy
                             note = " (that pid has exited; retry -- the lock is released)"
+                    if not note and frozen >= CLAIM_STALE:  # #335
+                        note = _stopped_note(frozen)
                     raise error(f"{what} is locked by {describe_holder(holder)}{note}{hint}")
                 time.sleep(poll)
 

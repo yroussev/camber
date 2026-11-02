@@ -604,7 +604,9 @@ def recover_staging(store: ParquetStore) -> list:
       and an interrupted partition delete finished (:func:`camber.store._swap.recover_tree`);
     - a partition a pre-0.107 swap moved to ``_staging/<fid>.old-<pid>`` (its process gone) is
       put back when the facility has no partition, else deleted (the new one is in place);
-    - the ``_staging/ingest-<pid>-*`` directories of processes that are gone are deleted.
+    - the ``_staging/ingest-<pid>-*`` directories of processes that are gone are deleted;
+    - the temp files of interrupted registry and other atomic writes at the store root are
+      deleted (0.112, #335).
 
     Leftovers of a process that may still be running are left alone.
     """
@@ -630,7 +632,8 @@ def recover_staging(store: ParquetStore) -> list:
             _forget_cached(store, fid)
         elif os.path.lexists(path):
             _swap.discard(path)
-            done.append({"path": path, "action": "staging_removed"})
+            action = "tmp_removed" if item["kind"] == "tmp" else "staging_removed"  # #335
+            done.append({"path": path, "action": action})
     return done
 
 

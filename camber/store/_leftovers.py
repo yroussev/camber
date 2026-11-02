@@ -30,6 +30,9 @@ STAGING_DIR = "_staging"
 _INGEST_SCRATCH = re.compile(r"^(?:ingest|append)-(\d+)-[0-9a-f]+(\.extract)?$")
 _LEGACY_ASIDE = re.compile(r"^(?P<fid>.+)\.old-(?P<pid>\d+)$")
 OWNER_FILE = "_owner.json"  # 0.112 (#330): who made an ingest's staging directory
+# 0.112 (#335): the temp file of an atomic write at the store root (the registry's
+# ``_facilities.json.tmp[-<pid>-<token>]``, ``_catalog.gen.<random>.tmp``, ...)
+_TEMP_FILE = re.compile(r"^_.*\.tmp(?:-\d+(?:-[0-9a-f]+)?)?$")
 
 
 def _process_alive(pid: int) -> bool:
@@ -95,6 +98,18 @@ def _scratch_owner(root: str, path: str, pid: int) -> tuple:
     return same, rec.get("kernel") != kernel_id() or rec.get("pidns") != pid_namespace()
 
 
+def _store_held_elsewhere(root: str) -> bool:
+    """Whether another process holds the store's claim now: a temp file may then be its write in
+    progress. This process's own claim does not count (its caller is not mid-write)."""
+    from ..portfolio._lock import kernel_id, pid_namespace  # lazy: the portfolio imports the store
+
+    held = _claim_of(root)
+    if not held:
+        return False
+    mine = {"pid": os.getpid(), "kernel": kernel_id(), "pidns": pid_namespace()}
+    return any(held.get(k) != v for k, v in mine.items())
+
+
 def staging_leftovers(root: str) -> list:
     """What interrupted ingests left in the store at ``root`` (read-only; 0.107, #213).
 
@@ -102,7 +117,9 @@ def staging_leftovers(root: str) -> list:
     interrupted ``_swap-facility_id=*`` replace), ``"trash"`` (an interrupted partition delete,
     ``_trash-facility_id=*``), ``"aside"`` (a partition a pre-0.107 swap
     moved to ``_staging/<fid>.old-<pid>``) or ``"scratch"`` (an ingest's ``_staging/ingest-*``
-    working directory, or an append's ``_staging/append-*`` one). ``alive`` says whether the
+    working directory, or an append's ``_staging/append-*`` one) or ``"tmp"`` (0.112, #335: the
+    temp file of an interrupted registry or other atomic write at the store root, ``alive`` while
+    another process holds the store's claim). ``alive`` says whether the
     process that made it may still be running; ``elsewhere`` (0.112, #330) that it was made on
     another system or in another container, whose writer is alive only while it holds the store.
     """
@@ -124,6 +141,22 @@ def staging_leftovers(root: str) -> list:
                         "elsewhere": False,
                     }
                 )
+    held = None
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name)
+        if _TEMP_FILE.match(name) and os.path.isfile(path) and not os.path.islink(path):
+            if held is None:
+                held = _store_held_elsewhere(root)
+            out.append(
+                {
+                    "path": path,
+                    "kind": "tmp",
+                    "facility_id": None,
+                    "pid": None,
+                    "alive": held,
+                    "elsewhere": False,
+                }
+            )
     sdir = os.path.join(root, STAGING_DIR)
     if not os.path.isdir(sdir):
         return out
