@@ -23,11 +23,11 @@ dataset block and every facility would count as active. This module reads it the
   base), independent of the registry.
 - :func:`refusal` says why a facility may not be served: research-only by the catalog (by name)
   or by its registry entry; a part file marked research-only in its own metadata (0.112, #319:
-  :mod:`camber.store._partprov`), whatever facility, directory or store it was copied to; a copy
-  of a research-only facility's part files under another id (#312, for parts ingested before
-  0.112 carried the mark); a registry problem; a ``ds-`` facility with no registry entry, or one
-  that neither the catalog nor a recorded dataset block establishes as open. There is no
-  override.
+  :mod:`camber.store._partprov`), whatever facility, directory or store it was copied to, or a
+  partition not all of whose files could be checked for that mark (#334); a copy of a
+  research-only facility's part files under another id (#312, for parts ingested before 0.112
+  carried the mark); a registry problem; a ``ds-`` facility with no registry entry, or one that
+  neither the catalog nor a recorded dataset block establishes as open. There is no override.
 - :func:`active_facilities` is the lifecycle filter: no facility is active when the registry has
   a problem, and a ``ds-`` facility with no entry is not active either.
 
@@ -371,20 +371,27 @@ def _copies_research_only(store_root: str, facility_id: str, entries: dict) -> b
     return False
 
 
-def _marked_research_only(store_root: str, facility_id: str) -> str | None:
-    """The refusal message when one of the facility's part files carries a research-only
-    provenance mark (0.112, #319): data ingested from such a dataset, wherever it was copied
-    since. Footers only, memoized until the partition changes; ``None`` when there is none."""
+def _marked_research_only(store_root: str, facility_id: str) -> tuple | None:
+    """``(kind, message)`` when one of the facility's part files carries a research-only
+    provenance mark (0.112, #319: data ingested from such a dataset, wherever it was copied
+    since), or -- ``"unverified"`` -- when not every file a read could open could be checked for
+    one (#334: a dangling symlink, an unreadable directory, files nested too deep). Footers only,
+    memoized until the partition changes; ``None`` when there is neither."""
     from .store import _partprov
 
-    value = _partprov.research_only_value(_partprov.facility_marks(store_root, facility_id))
-    if value is None:
-        return None
-    did = _partprov.dataset_of(value)
-    return (
-        f"facility {facility_id!r} holds part files marked as research-only (non-commercial / "
-        "no-derivatives) data" + (f" of dataset {did!r}" if did else "")
-    )
+    marks = _partprov.facility_marks(store_root, facility_id)
+    value = _partprov.research_only_value(marks)
+    if value is not None:
+        did = _partprov.dataset_of(value)
+        return "research_only", (
+            f"facility {facility_id!r} holds part files marked as research-only (non-commercial "
+            "/ no-derivatives) data" + (f" of dataset {did!r}" if did else "")
+        )
+    if _partprov.UNCHECKED in marks:
+        return "unverified", (
+            f"facility {facility_id!r} cannot be served: {_partprov.UNCHECKED_REASON}"
+        )
+    return None
 
 
 def _partitions(store_root: str) -> list:
@@ -430,7 +437,7 @@ def refusal(facility_id: str, store_root: str | None, registry: tuple | None = N
         return "research_only", research
     marked = _marked_research_only(store_root, fid)
     if marked is not None:
-        return "research_only", marked
+        return marked
     if _copies_research_only(store_root, fid, entries):
         return "research_only", (
             f"facility {fid!r} holds the same part files as a research-only (non-commercial / "

@@ -42,6 +42,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import unicodedata
@@ -250,24 +251,38 @@ def _read_part_file(path: str) -> pa.Table:
 
 
 def _partition_signature(fdir: str) -> tuple:
-    """Name, size and mtime of every entry of a facility partition, its year dirs and their
-    month dirs (part files included), plus the partition dir's own mtime: changes on any write,
-    prune or drop, whichever layout the partition uses, and (#312) when a part file is rewritten
-    in place. Stat calls only; ``()`` when the partition cannot be listed."""
+    """Name, size and mtime of every entry of a facility partition, down to the depth the
+    provenance check walks (:data:`camber.store._partprov._MAX_DEPTH`: year and month dirs, part
+    files, and any directory nested below them, #334), plus the partition dir's own mtime:
+    changes on any write, prune or drop, whichever layout the partition uses, and (#312) when a
+    part file is rewritten in place. An entry that cannot be ``stat``-ed or listed (a dangling
+    link, an unreadable directory) is recorded as such and the walk goes on, so the signature
+    changes when it is repaired (#334). Stat calls only; ``()`` when the partition itself cannot
+    be listed."""
 
     def walk(path: str, rel: str, depth: int, out: list) -> None:
-        with os.scandir(path) as it:
-            entries = sorted(it, key=lambda e: e.name)
+        try:
+            with os.scandir(path) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError:
+            if not rel:
+                raise
+            out.append((rel, None, None))  # a directory that cannot be listed
+            return
         for e in entries:
-            st = e.stat()
             name = f"{rel}{e.name}"
+            try:
+                st = e.stat()
+            except OSError:
+                out.append((name, None, None))
+                continue
             out.append((name, st.st_size, st.st_mtime_ns))
-            if depth and e.is_dir():
+            if depth and stat.S_ISDIR(st.st_mode):
                 walk(e.path, name + "/", depth - 1, out)
 
     try:
         sig: list = [os.stat(fdir).st_mtime_ns]
-        walk(fdir, "", 2, sig)
+        walk(fdir, "", _partprov._MAX_DEPTH, sig)
         return tuple(sig)
     except OSError:
         return ()
@@ -778,12 +793,9 @@ class ParquetStore:
                 ]
             except Exception:  # noqa: BLE001 - the full-dataset read reports its own error
                 return None
+            # (not recorded as the facility's marks: the discovery skips entries it cannot
+            # resolve, which the up-front check must count, #334)
             entry = (full.schema, full.format, full.filesystem, frags)
-            if sig:  # the same footers give the facility's provenance marks (#319)
-                marks: dict = {}
-                for _f, _e, v in frags:
-                    marks[v] = marks.get(v, 0) + 1
-                _partprov.remember(root, facility_id, sig, marks)
             with _FRAG_LOCK:
                 _FRAG_INDEX[key] = (sig, entry)
                 _FRAG_INDEX.move_to_end(key)

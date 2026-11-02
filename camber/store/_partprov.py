@@ -167,9 +167,17 @@ def of_files(paths) -> list:
 def _refuse(facility_id, value: bytes):
     """The refusal of a read that met a research-only part: ``refused_licence`` naming the
     facility the read was scoped to (``None``: a store-wide read, which names none) and the
-    dataset, never a path."""
+    dataset, never a path. For :data:`UNCHECKED` it says that not every file could be checked
+    (#334), with ``"reason": "licence_unverified"``."""
     from ..capabilities import CapabilityError
 
+    if value == UNCHECKED:
+        who = f"facility {facility_id!r}" if facility_id is not None else "the store"
+        return CapabilityError(
+            "refused_licence",
+            f"{who} cannot be served: {UNCHECKED_REASON}; it is not served until that is repaired",
+            data={"facility_id": facility_id, "reason": "licence_unverified"},
+        )
     did = dataset_of(value)
     of = f" of dataset {did!r}" if did else ""
     where = f"facility {facility_id!r} holds" if facility_id is not None else "the store holds"
@@ -199,9 +207,18 @@ _MARKS: OrderedDict = OrderedDict()
 _MARKS_MAX = 256
 _MARKS_LOCK = threading.Lock()
 _MAX_DEPTH = 6  # facility_id=/year=/month=/part, with room for a stray directory level
-#: what :func:`facility_marks` records for a facility holding files deeper than it looks: not a
-#: JSON object, so it counts as research-only (fail closed, #329)
-UNCHECKED = b"unchecked: part files nested too deep"
+#: what :func:`facility_marks` records (with the number of such entries) for a facility whose
+#: walk could not check every file a read could open: a directory nested deeper than
+#: :data:`_MAX_DEPTH`, a symlink loop, or an entry it cannot read or resolve -- a dangling
+#: symlink, an unreadable directory, a failed ``stat`` (#329, #334). Not a JSON object, so it
+#: counts as research-only wherever a mark is weighed (fail closed); the refusal says why
+UNCHECKED = b"unchecked: not every file of the facility could be checked"
+#: the refusal's reason for :data:`UNCHECKED` (#334: never "marked as research-only")
+UNCHECKED_REASON = (
+    "not all of its files could be checked for a research-only provenance mark (a dangling "
+    "symlink, an unreadable directory, a symlink loop or files nested too deep); `camber store "
+    "verify` lists what could not be checked"
+)
 
 
 def is_part_name(name: str) -> bool:
@@ -212,33 +229,54 @@ def is_part_name(name: str) -> bool:
     return not name.startswith(("_", "."))
 
 
-def _part_files(fdir: str) -> tuple:
-    """``([(path, size, mtime_ns)], complete)``: every file a dataset read of ``fdir`` could
-    open (:func:`is_part_name`, any suffix; a directory link followed), to a bounded depth;
-    ``complete`` is false when a directory lies deeper than that, so not every file was seen."""
+def scan(fdir: str) -> tuple:
+    """``([(path, size, mtime_ns)], [(path, why)])``: every regular file a dataset read of
+    ``fdir`` could open (:func:`is_part_name`, any suffix, any level, a link followed) down to
+    :data:`_MAX_DEPTH`, and every entry the walk could not check (a directory deeper than that,
+    or one it cannot list; a dangling link, a symlink loop or any entry it cannot ``stat``). The
+    walk never stops early: it skips what it cannot use and goes on (#334). Shared by the
+    provenance check and ``camber store verify``; a FIFO or device is neither read nor listed
+    (#314). ``OSError`` when ``fdir`` itself cannot be listed: then every read of the facility
+    fails (``unavailable``, #301), so there is nothing to check."""
     out: list = []
-    complete = [True]
+    bad: list = []
 
-    def walk(path: str, depth: int) -> None:
-        with os.scandir(path) as it:
-            for e in it:
+    def walk(path: str, depth: int, up: frozenset) -> None:
+        try:
+            it = os.scandir(path)
+        except OSError:
+            bad.append((path, "the directory cannot be listed"))
+            return
+        with it:
+            while True:
+                try:
+                    e = next(it)
+                except StopIteration:
+                    break
+                except OSError:
+                    bad.append((path, "the directory cannot be listed"))
+                    break
                 if not is_part_name(e.name):
                     continue
-                if e.is_dir():
-                    if depth:
-                        walk(e.path, depth - 1)
+                try:
+                    st = os.stat(e.path)  # follows a link: a dangling one or a loop fails
+                except (OSError, ValueError):
+                    bad.append((e.path, "cannot be resolved (a dangling symlink or a loop?)"))
+                    continue
+                if stat.S_ISDIR(st.st_mode):
+                    if (st.st_dev, st.st_ino) in up:  # a link back to a directory above it
+                        bad.append((e.path, "a symlink loop"))
+                    elif depth:
+                        walk(e.path, depth - 1, up | {(st.st_dev, st.st_ino)})
                     else:
-                        complete[0] = False
-                else:
-                    st = e.stat()
-                    if stat.S_ISREG(st.st_mode):  # a FIFO would block its footer read (#314)
-                        out.append((e.path, st.st_size, st.st_mtime_ns))
+                        bad.append((e.path, "nested too deep"))
+                elif stat.S_ISREG(st.st_mode):  # a FIFO would block its footer read (#314)
+                    out.append((e.path, st.st_size, st.st_mtime_ns))
 
-    try:
-        walk(fdir, _MAX_DEPTH)
-    except OSError:
-        pass
-    return sorted(out), complete[0]
+    top = os.stat(fdir)
+    os.scandir(fdir).close()  # a facility directory that cannot be listed at all: OSError
+    walk(fdir, _MAX_DEPTH, frozenset({(top.st_dev, top.st_ino)}))
+    return sorted(out), sorted(bad)
 
 
 def facility_marks(root: str, facility_id: str) -> dict:
@@ -246,8 +284,9 @@ def facility_marks(root: str, facility_id: str) -> dict:
     from the footers (key-value metadata only) and memoized until the partition changes (its
     stat signature); then only the files that changed are read again. Every file a store read
     could open counts, whatever its name (:func:`is_part_name`, #329). A file whose footer cannot
-    be read is left out: its read fails on its own. A partition nested deeper than the walk goes
-    counts one :data:`UNCHECKED` value (research-only)."""
+    be read is left out: its read fails on its own. Every entry the walk could not check
+    (:func:`scan`: nested too deep, unreadable, unresolvable) counts as one :data:`UNCHECKED`
+    value (refused, #334)."""
     from .parquet_store import _partition_signature
 
     fdir = os.path.join(os.path.abspath(root), f"facility_id={facility_id}")
@@ -263,9 +302,12 @@ def facility_marks(root: str, facility_id: str) -> dict:
     known = hit[2] if hit is not None else {}
     counts: dict = {}
     files: dict = {}
-    found, complete = _part_files(fdir)
-    if not complete:
-        counts[UNCHECKED] = 1
+    try:
+        found, unchecked = scan(fdir)
+    except OSError:  # the facility directory cannot be listed: its reads fail on their own
+        found, unchecked = [], []
+    if unchecked:
+        counts[UNCHECKED] = len(unchecked)
     for path, size, mtime in found:
         prev = known.get(path)
         if prev is not None and prev[:2] == (size, mtime):
@@ -277,14 +319,14 @@ def facility_marks(root: str, facility_id: str) -> dict:
                 continue
         files[path] = (size, mtime, v)
         counts[v] = counts.get(v, 0) + 1
-    if sig:
-        remember(root, facility_id, sig, counts, files)
+    # with no signature (a partition that changed mid-walk) the entry never matches, but the
+    # next walk still reuses its per-file footers
+    remember(root, facility_id, sig, counts, files)
     return dict(counts)
 
 
 def remember(root: str, facility_id: str, sig, counts: dict, files=None) -> None:
-    """Record a facility's marks (from :func:`facility_marks`, or read elsewhere from the same
-    footers: a fragment index)."""
+    """Record a facility's marks (from :func:`facility_marks`)."""
     key = (os.path.abspath(root), str(facility_id))
     with _MARKS_LOCK:
         if files is None:  # keep what is known per file for the next change
@@ -297,5 +339,6 @@ def remember(root: str, facility_id: str, sig, counts: dict, files=None) -> None
 
 
 def research_only_value(counts: dict):
-    """The first research-only value among ``counts`` (``None`` when there is none)."""
-    return next((v for v in counts if v is not None and research_only(v)), None)
+    """The first research-only value among ``counts`` other than :data:`UNCHECKED` (``None``
+    when there is none)."""
+    return next((v for v in counts if v is not None and v != UNCHECKED and research_only(v)), None)

@@ -47,6 +47,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   and roles (the data-reading tools still refused it). The check, `camber datasets provenance`
   and the store readers now share one definition of a part file, and a facility directory
   nested too deep to check in full is refused.
+- **A dangling symlink or an unreadable directory no longer hides research-only parts (#334).**
+  The research-only check walked a facility directory and stopped at the first entry it could
+  not resolve, so research-only parts copied in by hand after a dangling symlink (or a directory
+  it may not list) went unchecked: `facilities` listed the facility, `points` served its
+  equipment ids, classes, roles and data span, `camber datasets provenance` showed nothing
+  marked and a local report had no non-commercial banner (the data-reading tools still refused
+  it). The check now goes on past every entry it skips, and a facility it cannot check in full
+  -- a dangling symlink, a directory it may not list, a symlink loop or files nested too deep --
+  is refused with the reason that not all of its files could be checked (`refused_licence`,
+  `licence_unverified`). A change below the month level (a copied-in subdirectory) is now seen
+  by the cached check too.
 
 ### Fixed
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
@@ -239,6 +250,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **docs/MCP.md says how to pass a multi-word prompt argument (#333).** A host's slash command
   can split `check_savings_claim`'s `claim` on spaces, quoted or not; give the claim in the
   conversation instead.
+- **A facility nested too deep or holding a symlink loop is no longer called research-only
+  (#334).** It was refused as holding "part files marked as research-only" even when it held
+  only open data, and `camber datasets provenance` showed a marked part that did not exist. The
+  refusal now says that not all of its files could be checked, and the provenance counts only
+  real parts.
+- **`camber datasets provenance` says when a facility counts as research-only (#334).** A
+  facility whose marks cannot be read (damaged, longer than 4 KB) or not all of whose files
+  could be checked had no tag in the table, though `--json` said `research_only: true` and the
+  server refused it. The table now adds `[mark unreadable: counts as research-only]` or `[not all
+  files could be checked: counts as research-only]`, and `--json` adds `unreadable_marks`,
+  `unchecked` and `research_only_datasets`.
 
 ### Changed
 - **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
@@ -320,6 +342,15 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `metrics`. A paging notice says "call again with offset=N for the next page" and no longer
   suggests a larger limit. A caller that read a whole list from one default call should page
   with `offset`, or pass `limit` / `top_n` (a larger page can pass a host's limit).
+- **`camber store verify` checks every file the store reads (#334).** It looked only at
+  `*.parquet` files in `year=/month=` directories, so a stray `notes.txt`, `README`, `.csv` or
+  Finder `Icon` file that makes a facility's reads fail (`unavailable ... damaged`) was not
+  reported, and it exited 0. It now uses the store readers' definition of a part file: such a
+  file is unreadable, a `x.parquet~` backup or a part at the facility root or below the month is
+  listed as not canonical, and an entry that keeps the research-only check from seeing all of a
+  facility (a dangling symlink, an unreadable directory, a symlink loop, files nested too deep)
+  is unreadable. **A script that runs `store verify` may now see exit code 1** on a store that
+  passed before: remove or move the files it lists out of the facility directory.
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
