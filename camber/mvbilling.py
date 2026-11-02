@@ -978,6 +978,8 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
         "estimated_dropped": len(dropped_est),
         "mean_bill_days": round(float(np.mean(days_b)), 2),
         "short_baseline": bool(short),
+        # 0.112 (#333): the baseline window, as the daily finding gives it
+        "window": period or [str(base["start"].min().date()), str(window[1].date())],
     }
     base_notes: list = []
     if auto:  # 0.94 (#72): the selected bases, the profile and the model comparison

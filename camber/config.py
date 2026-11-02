@@ -1427,7 +1427,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     from .mandv import _mvform
     from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.stats import cv_rmse_max_for, fit_stats
-    from .mvrun import baseline_window_check
+    from .mvrun import _ds, baseline_window_check
     from .rules.base import Finding
 
     if entry.get("interval", "daily") != "daily":
@@ -1544,6 +1544,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     "oat_fit_max": sup["fit_max"],
                     "oat_support_lo": sup["support_lo"],
                     "oat_support_hi": sup["support_hi"],
+                    # 0.112 (#333): the baseline window, as the versioned finding gives it
+                    "window": [_ds(w) for w in win],
                     **_mvform.metrics(model),
                 },
                 summary=(

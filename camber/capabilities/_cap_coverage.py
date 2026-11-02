@@ -25,7 +25,7 @@ _COVERAGE = (
 )
 
 #: rows per list and page by default (#299)
-_PAGE = 50
+_PAGE = 20  # 50 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

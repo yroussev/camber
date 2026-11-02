@@ -45,7 +45,7 @@ _ROW = {
 }
 
 #: facilities per page by default (#299)
-_PAGE = 100
+_PAGE = 40  # 100 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -73,6 +73,14 @@ OUTPUT_SCHEMA = {
 
 #: per-facility sentences in the summary; the rest are in ``data``
 _LISTED = 10
+#: withheld facility ids a notice names (0.112, #333); the rest are counted
+_NAMED = 20
+
+
+def _ids(fids: list) -> str:
+    """``a, b and 2 more``: the first :data:`_NAMED` of ``fids``."""
+    more = len(fids) - _NAMED
+    return ", ".join(fids[:_NAMED]) + (f" and {more} more" if more > 0 else "")
 
 
 def _state(state: str) -> str:
@@ -127,15 +135,15 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
         for f in ctx.allowed_facilities
         if f not in known and _fence._safe(f) and _fence._mid_swap(store.root, f)
     }
-    rows, withheld, unverified = [], 0, 0
+    rows, withheld, unverified = [], [], []
     for fid in sorted(f for f in ctx.allowed_facilities if f in known):
         m = meta.get(fid) or {}
         why = refusal(fid, store.root, registry)
         if why is not None:
             if why[0] == "research_only":
-                withheld += 1
+                withheld.append(fid)
             else:
-                unverified += 1
+                unverified.append(fid)
             continue
         # this facility's catalog entry and file statistics only, never its rows (#293); one
         # facility's damaged file must not hide the others (#301)
@@ -215,22 +223,26 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
             f"The stored data of {', '.join(unreadable)} cannot be read right now (a damaged "
             "file or a concurrent ingest); calls on it return the error code unavailable."
         )
+    # 0.112 (#333): the withheld ids are named (an allowed id is no secret to its caller), so
+    # a model does not tell a user that a right id may be wrong
     if withheld:
         banners.append(
-            f"{withheld} allowed facility(ies) hold research-only (non-commercial / "
-            "no-derivatives) data and are not listed: such data is never served here."
+            f"{len(withheld)} allowed facility(ies) hold research-only (non-commercial / "
+            f"no-derivatives) data and are not listed: {_ids(withheld)}. The id is right, but "
+            "its data's licence forbids this use, so it is never served here: a call naming it "
+            "is refused_licence."
         )
     if unverified:
         banners.append(
-            f"{unverified} allowed facility(ies) are not listed because their licence or "
-            "lifecycle cannot be established from the store's facility registry; they are not "
-            "served until it is repaired."
+            f"{len(unverified)} allowed facility(ies) are not listed because their licence or "
+            "lifecycle cannot be established from the store's facility registry: "
+            f"{_ids(unverified)}. They are not served until it is repaired."
         )
     data = {
         "facilities": shown,
         "count": len(rows),
-        "withheld_research_only": withheld,
-        "withheld_unverified": unverified,
+        "withheld_research_only": len(withheld),
+        "withheld_unverified": len(unverified),
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 

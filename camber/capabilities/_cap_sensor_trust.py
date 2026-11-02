@@ -40,7 +40,7 @@ from ._policy import open_store
 from ._sanitize import name, plain, prose
 
 #: points per page by default (#299)
-_PAGE = 100
+_PAGE = 40  # 100 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

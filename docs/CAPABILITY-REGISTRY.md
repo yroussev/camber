@@ -97,20 +97,28 @@ well as the digits.
 | `A<n>` `claimed_figure` | `mv_summary` with `claim` | each figure the caller's claim states, `basis` `claimed`: what the claim says, never a measured result (only the figure and its unit are written, never the claim's words) |
 | `N<n>` `notice` | every capability | each banner of the result, `basis` `notice`, its text exactly the banner's, so a draft that repeats a NOTICE can cite it |
 
-**Pages** (0.111, #299). A list-returning capability returns one model-sized page of each list
-by default, so a typical result stays under about 100 KB (25k tokens) on the wire, and takes
-`limit` (the page size, up to 1,000) and `offset` (rows to skip) to ask for others; the counts
-in `data` (`count`, `n_points`, the KPIs ...) are always of the whole list. A page that is not
-the whole list sets `truncated` and adds a banner such as
-`'findings' shows rows 1-25 of 159 (worst first): call again with offset=25 for the next page,
-or a larger limit (up to 1000)`. The default pages: `facilities` 100, `points` 250, `coverage`
-50 per list (equipment, points, gaps), `sensor_trust` 100 points, `rule_run` 25 findings and 25
-skipped rules, `drift` 25 per list, `rule_params` 25 rules (10 with `detail`), `check_citations`
-50 sentences; `rcx_report` returns `top_n` ranked issues (default the config's, else 8; `offset`
-for the next ones) with only their facts and sections, and the first 20 entries of the fact
-index's appendix A (declines and data gaps; `limit` for more). One `offset` pages every list of
-a result: a short list whose rows are all on the first page is empty on a later one, with a
-banner that says so (`'cited' is empty on this page: all its 1 row(s) are on the first page`).
+**Pages** (0.111, #299; sizes 0.112, #333). A list-returning capability returns one page of
+each list by default, sized so that the default result fits a host that gives the model only
+`structuredContent` and caps a tool result at 25,000 tokens: at most 25,000 characters of
+`structuredContent` (the data and the `camber` facts and notices) on the largest facilities
+tested (two VAV fleets of about 650 points, an 8-meter M&V project, the catalog), where the
+defaults run up to about 21,000 characters. Each takes `limit` (the page size, up to 1,000) and `offset` (rows
+to skip) to ask for others; the counts in `data` (`count`, `n_points`, the KPIs ...) are always
+of the whole list. A page that is not the whole list sets `truncated` and adds a banner such as
+`'findings' shows rows 1-12 of 159 (worst first): call again with offset=12 for the next page`:
+the next page, not a larger one, which a host may refuse. The default pages: `facilities` 40,
+`points` 200, `coverage` 20 per list (equipment, points, gaps), `sensor_trust` 40 points,
+`rule_run` 12 findings and 12 skipped rules, `drift` 10 per list, `rule_params` 15 rules (7 with
+`detail`), `check_citations` 50 sentences, `dataset_search` 20 datasets, `mv_summary` 5 meters
+(each with all its findings); `rcx_report` returns as many of the best-ranked issues as fit
+about 22,000 characters, at most 8 (`top_n` sets the page size, `offset` gives the next ones),
+with only their facts and sections, and the first 5 entries of the fact index's appendix A
+(declines and data gaps; `limit` for more). `rcx_report`'s `fact_index` names each fact (`id`,
+`kind`) without repeating its text, which is in the result's facts; `drift` says a long metric
+note that several findings of a page share once, in a notice, instead of in each finding. One
+`offset` pages every list of a result: a short list whose rows are all on the first page is
+empty on a later one, with a banner that says so (`'cited' is empty on this page: all its 1
+row(s) are on the first page`).
 
 A capability cuts a list only with `camber.capabilities._page.page`, which records the notice in
 the call; `Registry.call` turns every recorded notice into a banner and sets `truncated`, so a
@@ -125,9 +133,9 @@ capability cannot cut a list and leave the flag false.
 | `rule_run` | `facility_id`; optional `rules`, `params` (`{rule: {param: value}}`), `equips`, `start`, `end`, `min_severity` | the findings (`finding_id`, rule, equipment, severity, summary, caveats, scalar metrics, and `conditional_on` when an input's configured sensor reference disagrees), worst first; counts per severity; the rules skipped for missing inputs | long-running |
 | `finding_detail` | `facility_id`, `finding_id`; the same optional arguments as the `rule_run` call | one finding's full metrics, the parameters it ran with (default, overridden or the rule's built-in fallback), its flagged hours as contiguous time spans (and per named sub-condition; an event rule's events counted apart from the hours) or why there are none (`violations_note`), and which evidence chart applies; no image | the same run as `rule_run` |
 | `rcx_report` | `facility_id`; optional `equips`, `start`, `end`, `top_n`, `offset`, `limit` | the RCx report as data: KPIs, the `top_n` ranked issues (cause, the rules and the `finding_ids` to pass to `finding_detail`, cost or why uncosted, hours, confidence and its reasons), the section list and the report's fact index; no file | long-running |
-| `mv_summary` | `facility_id`; optional `equips`, `claim` (a claim to check: each figure it states becomes a `claimed_figure` fact) | the M&V findings of the project the caller's run config declares for the facility: baseline fits, savings with uncertainty (in the meter's own units unless the config has a `units` block, and "for information only" when the baseline fails G14 acceptance; both said in the text), triggers, method proposals, and which declined | seconds |
+| `mv_summary` | `facility_id`; optional `equips`, `claim` (a claim to check: each figure it states becomes a `claimed_figure` fact), `limit`, `offset` (meters) | the M&V findings of the project the caller's run config declares for the facility, a page of meters at a time: each meter's baseline and reporting dates (`baseline_start` / `baseline_end`, `reporting_start` / `reporting_end` in a finding's metrics, and in its fact: `baseline_period`, `reporting_period` and its text, 0.112), baseline fits, savings with uncertainty (in the meter's own units unless the config has a `units` block, and "for information only" when the baseline fails G14 acceptance; both said in the text), triggers, method proposals, and which declined | seconds |
 | `drift` | `facility_id`; optional `baseline` `[start, end]`, `current`, `families`, `equips` | drift findings and per-equipment verdicts against a known-good baseline window (fitted for the call, never saved) or the run config's frozen baselines (read, never written), and the equipment not evaluated | long-running |
-| `dataset_search` | optional `query`, `kind`, `labeled`, `licence` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
+| `dataset_search` | optional `query`, `kind`, `labeled`, `licence`, `limit`, `offset` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors (`run_with`: `rule_run` for a rule, `drift` for a detector, which `rule_run` refuses), the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
 | `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings, list markers and blank lines kept, opening with a `NOTICE:` line when a removed sentence gave a verdict, a negation or a caveat. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
@@ -253,7 +261,8 @@ reduced to one short line.
    in any adapter: `--accept-noncommercial` is for the person running `camber datasets`, not for
    an assistant. The check reads the facility's recorded dataset block (`access`,
    `redistribution`, `licence`) and, by its `dataset_id`, the catalog's current terms. A listing
-   leaves such facilities out and says how many it withheld.
+   leaves such facilities out and says how many it withheld; since 0.112 (#333) its notice names
+   them (ids only) and says the id is right but the data's licence forbids this use.
 
    The check fails closed (0.111, #290). A facility named for a catalog dataset (`ds-<base>` or
    `ds-<base>-<group>`, the names `camber datasets ingest` gives) is checked against the
