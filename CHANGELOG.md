@@ -218,6 +218,21 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   starts with a `camber` object: `facts` maps each fact id to its text (the same ids and text as the
   facts block, all of them resolved by `check_citations`) and `notices` lists the notices. The
   prompts say where to find fact ids in either form.
+- **Default results fit a host's tool-output limit (#333).** On a 648-point facility the default
+  `rcx_report` was about 54,000 characters of `structuredContent`; a command-line host that caps
+  a tool result at 25,000 tokens set it aside in a file the model could not read, so a site-visit
+  plan covered 3 of 32 issues. The JSON runs at about two characters a token, so the "100 KB (25k
+  tokens)" the docs gave was wrong. Every default result now stays within 25,000 characters of
+  `structuredContent` (facts and notices included; up to about 21,000 on the largest facilities
+  tested), a test holds every tool to it, and docs/MCP.md gives the real figures. Paging notices
+  give the exact `offset` of the next page.
+- **The `facilities` notice names the research-only facilities it withholds (#333).** It gave
+  only a count, so a model told a user that a correct facility id might be wrong. It now lists
+  the withheld ids (never a path) and says the id is right but the data's licence forbids this
+  use; the notice for facilities whose licence cannot be established names them too.
+- **docs/MCP.md says how to pass a multi-word prompt argument (#333).** A host's slash command
+  can split `check_savings_claim`'s `claim` on spaces, quoted or not; give the claim in the
+  conversation instead.
 
 ### Changed
 - **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
@@ -286,6 +301,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - The `camber` console script now starts from `camber.__main__:main` (`camber.cli:main` still
   works), so a Ctrl-C while the CLI loads exits 130 quietly. Packagers that list the entry point
   themselves should change it (#322).
+- **Smaller default pages, and `rcx_report` pages its issues by size (#333).** The defaults are
+  now `rule_run` 12 findings (was 25), `sensor_trust` 40 points (100), `coverage` 20 rows per list
+  (50), `points` 200 (250), `facilities` 40 (100), `drift` 10 per list (25) and `rule_params`
+  15 rules (25; 7 with `detail`, was 10). `rcx_report` without `top_n` returns as many of the best-ranked issues as
+  fit (at most 8; it was the config's `top_n`, else 8) and 5 appendix A entries (20); its
+  `fact_index` entries are `{id, kind}`, no longer repeating each fact's `text` and `equip` (read
+  them from the result's facts). `dataset_search` and `mv_summary` are paged (`limit`, `offset`:
+  20 datasets, 5 meters with all their findings; their counts still cover everything). `drift`'s
+  `diagnoses[].detail` no longer repeats `equip`, `severity` and `summary`, and a long metric note
+  that several findings of a page share is said once, in a notice, not in each finding's
+  `metrics`. A paging notice says "call again with offset=N for the next page" and no longer
+  suggests a larger limit. A caller that read a whole list from one default call should page
+  with `offset`, or pass `limit` / `top_n` (a larger page can pass a host's limit).
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
@@ -325,6 +353,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   with how many of its part files carry their dataset's provenance, and names the catalog
   facilities that lack it (ingested before 0.112). It reads the files' footers and writes
   nothing.
+- **`mv_summary` states each meter's baseline and reporting dates (#333).** A claim's periods
+  ("against the 2016 baseline") could not be checked: no result gave a date. Each finding's
+  `metrics` now carry `baseline_start` / `baseline_end` (and on a saving `reporting_start` /
+  `reporting_end`), and its fact gives them as `baseline_period` / `reporting_period` and in its
+  text ("baseline period 2016-01-01 to 2016-12-31 (the year 2016)"), so a sentence can cite them.
+  An `mv_baseline` finding's metrics gain the `window` the versioned one already had.
 
 ## [0.111.0] — 2026-10-31
 

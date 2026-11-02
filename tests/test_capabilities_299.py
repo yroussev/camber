@@ -118,12 +118,12 @@ def test_rcx_report_pages_appendix_a(store):
 def test_coverage_cut_gaps_set_truncated(store):
     ctx = _ctx(store)
     res = REG.call("coverage", {"facility_id": "holey"}, ctx)
-    assert len(res.data["gaps"]) == 50 and res.truncated
-    assert any("'gaps' shows rows 1-50 of" in b and "offset=50" in b for b in res.banners)
+    assert len(res.data["gaps"]) == 20 and res.truncated  # 50 before 0.112 (#333)
+    assert any("'gaps' shows rows 1-20 of" in b and "offset=20" in b for b in res.banners)
     every = REG.call("coverage", {"facility_id": "holey", "limit": 1000}, ctx)
-    assert len(every.data["gaps"]) > 50 and not every.truncated
-    nxt = REG.call("coverage", {"facility_id": "holey", "offset": 50}, ctx)
-    assert nxt.data["gaps"][0] == every.data["gaps"][50]
+    assert len(every.data["gaps"]) > 20 and not every.truncated
+    nxt = REG.call("coverage", {"facility_id": "holey", "offset": 20}, ctx)
+    assert nxt.data["gaps"][0] == every.data["gaps"][20]
 
 
 def test_a_page_sets_truncated_even_when_the_handler_does_not(store):
@@ -149,8 +149,7 @@ def test_a_page_sets_truncated_even_when_the_handler_does_not(store):
     res = reg.call("paged", {}, ctx)
     assert res.data["rows"] == list(range(10)) and res.truncated
     assert res.banners == [
-        "'rows' shows rows 1-10 of 30: call again with offset=10 for the next page, or a larger "
-        "limit (up to 1000)"
+        "'rows' shows rows 1-10 of 30: call again with offset=10 for the next page"
     ]
     assert not reg.call("paged", {"limit": 30}, ctx).truncated
     past = reg.call("paged", {"offset": 99}, ctx)
@@ -261,9 +260,10 @@ def test_check_citations_is_compact_by_default(store):
 def test_rule_params_default_page_and_slim_facts(store):
     ctx = _ctx(store)
     res = REG.call("rule_params", {}, ctx)
-    assert len(res.data["rules"]) == 25 < res.data["count"] and res.truncated
+    # 25 and 10 before 0.112 (#333)
+    assert len(res.data["rules"]) == 15 < res.data["count"] and res.truncated
     detail = REG.call("rule_params", {"detail": True}, ctx)
-    assert len(detail.data["rules"]) == 10 and detail.truncated
+    assert len(detail.data["rules"]) == 7 and detail.truncated
     for f in detail.facts[1:]:  # a fact keeps the figures, not the prose
         if f["kind"] == "notice":  # 0.112 (#294): a banner's own fact
             continue

@@ -28,6 +28,7 @@ from ._common import (
     severity_counts,
     subject,
 )
+from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 
 INPUT_SCHEMA = {
@@ -45,6 +46,8 @@ INPUT_SCHEMA = {
             "description": "optional claim to check: its figures become claimed_figure facts, "
             "never measured results",
         },
+        "limit": limit_arg(5, "meters"),
+        "offset": OFFSET,
     },
 }
 
@@ -71,7 +74,9 @@ OUTPUT_SCHEMA = {
             "type": "array",
             "items": FINDING_ROW,
             "description": "mv_baseline (model fit and G14 statistics), mv_savings (avoided "
-            "energy, savings %, uncertainty), mv_trigger and mv_method_proposal findings",
+            "energy, savings %, uncertainty), mv_trigger and mv_method_proposal findings, of "
+            "the meters on this page; each finding's metrics give its meter's baseline_start / "
+            "baseline_end and reporting_start / reporting_end dates when known",
         },
     },
 }
@@ -79,6 +84,8 @@ OUTPUT_SCHEMA = {
 #: config sections an M&V run does not need
 _DROP = ("rules", "drift", "report", "faults", "soo", "ventilation", "topology")
 _LISTED = 10
+#: meters on a page by default, each with all its findings (0.112, #333: every meter before)
+_PAGE = 5
 #: the caveat an mv_savings finding carries when its baseline fails acceptance
 _INFO_ONLY = "this saving is for information only"
 #: the unit of a saving when the run config has no ``units`` block
@@ -169,6 +176,59 @@ def _claim_facts(fid: str, claim: str) -> list:
     return out
 
 
+def _day(x) -> str | None:
+    """``x`` (a date, a date-time or its text) as ``YYYY-MM-DD``; None when it is not one."""
+    import pandas as pd
+
+    try:
+        t = pd.Timestamp(x)
+    except (TypeError, ValueError):
+        return None
+    return None if pd.isna(t) else str(t.date())
+
+
+def _periods(findings) -> dict:
+    """``{meter: {"baseline": [start, end], "reporting": [start, end]}}``: the windows each
+    meter's baseline was fitted on and its saving measured over, as dates (0.112, #333), from
+    its ``mv_baseline`` and ``mv_savings`` findings; a window that is not known is left out."""
+    out: dict = {}
+    for f in findings or ():
+        m = getattr(f, "metrics", None) or {}
+        key = {"mv_baseline": "window", "mv_savings": "reporting_period"}.get(f.rule)
+        win = m.get(key) if key else None
+        if not (isinstance(win, (list, tuple)) and len(win) == 2):
+            continue
+        days = [_day(w) for w in win]
+        if None not in days:
+            what = "baseline" if f.rule == "mv_baseline" else "reporting"
+            out.setdefault(str(f.equip), {})[what] = days
+    return out
+
+
+def _span(days: list) -> str:
+    """``2016-01-01 to 2016-12-31``, with ``(the year 2016)`` when it is one calendar year."""
+    a, b = days
+    year = a[:4] if a[5:] == "01-01" and b[5:] == "12-31" and a[:4] == b[:4] else ""
+    return f"{a} to {b}" + (f" (the year {year})" if year else "")
+
+
+def _with_periods(row: dict, fact: dict, periods: dict) -> None:
+    """Give a finding of a meter its meter's baseline and reporting windows: dates in the row's
+    metrics, and in its fact's fields and text (0.112, #333), so a claim's periods can be
+    checked and cited."""
+    p = periods.get(row["equip"]) or {}
+    said = []
+    for what in ("baseline", "reporting"):
+        days = p.get(what)
+        if not days or (what == "reporting" and row["rule"] == "mv_baseline"):
+            continue
+        row["metrics"][f"{what}_start"], row["metrics"][f"{what}_end"] = days
+        fact[f"{what}_period"] = list(days)
+        said.append(f"{what} period {_span(days)}")
+    if said:
+        fact["text"] += "; " + ", ".join(said)
+
+
 def mv_summary(ctx, arguments: dict) -> CapabilityResult:
     """The M&V findings of the caller's configured project for one allowed facility."""
     fid = arguments["facility_id"]
@@ -194,12 +254,30 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         kinds[r["rule"] if r["rule"] in kinds else "other"] += 1
     declined = sum(1 for r in rows if r["metrics"].get("declined") is True)
     meters = sorted({r["equip"] for r in rows})
+    periods = _periods(res.findings)
+    # 0.111 (#304) / 0.112 (#333): the notices count every meter, the page shows some
+    saved = [r for r in rows if r["rule"] == "mv_savings" and not r["metrics"].get("declined")]
+    unitless = sum(1 for r in saved if not r["metrics"].get("energy_unit"))
+    info_only = sum(1 for r in saved if any(_INFO_ONLY in c for c in r["caveats"]))
+    # 0.112 (#333): a page of meters, worst first, each with all its findings
+    shown = set(
+        page(
+            list(dict.fromkeys(r["equip"] for r in rows)),
+            arguments,
+            default=_PAGE,
+            what="meters",
+            order="worst first",
+            more="or name meters in equips",
+        )
+    )
+    counts, n_rows = severity_counts(rows), len(rows)
+    rows = [r for r in rows if r["equip"] in shown]
     facts = [
         {
             "id": "F1@mv_summary",
             "kind": "mv_summary",
             "facility_id": fid,
-            "value": len(rows),
+            "value": n_rows,
             "text": f"M&V for {fid}: {len(meters)} meter(s), {kinds['mv_baseline']} baseline "
             f"fit(s), {kinds['mv_savings']} savings result(s), {kinds['mv_trigger']} "
             f"trigger(s); {declined} result(s) declined",
@@ -209,7 +287,6 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         f"M&V for {fid} covers {len(meters)} meter(s) with {kinds['mv_savings']} savings "
         f"result(s), {declined} declined [F1@mv_summary]."
     ]
-    unitless = info_only = 0
     for i, r in enumerate(rows, start=2):
         fact_id = f"F{i}@mv_summary"
         r["fact"] = fact_id
@@ -217,14 +294,13 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         # 0.111 (#304): a saving says what unit it is in and whether it may be relied on
         if r["rule"] == "mv_savings" and not r["metrics"].get("declined"):
             if not r["metrics"].get("energy_unit"):
-                unitless += 1
                 fact["text"] += f"; energy in {_METER_UNITS}"
             if any(_INFO_ONLY in c for c in r["caveats"]):
-                info_only += 1
                 fact["text"] += (
                     "; the baseline does not meet G14 acceptance, so this saving is for "
                     "information only"
                 )
+        _with_periods(r, fact, periods)
         facts.append(fact)
         if i - 1 <= _LISTED and r["rule"] in ("mv_baseline", "mv_savings", "mv_trigger"):
             text.append(cite(facts[-1]))
@@ -234,7 +310,7 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         "entries": len(config.get("mv") or []),
         "meters": meters,
         "kinds": kinds,
-        "counts": severity_counts(rows),
+        "counts": counts,
         "declined": declined,
         "findings": rows,
     }

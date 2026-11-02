@@ -14,7 +14,7 @@ from ._page import OFFSET, page
 from ._sanitize import plain
 
 #: rules per page by default (#299): without and with detail
-_PAGE, _PAGE_DETAIL = 25, 10
+_PAGE, _PAGE_DETAIL = 15, 7  # 25, 10 before 0.112 (#333): a page fits a host's limit
 #: the parameter fields a rule's fact carries (the figures a sentence may cite)
 _FACT_FIELDS = ("name", "default", "unit", "range")
 
