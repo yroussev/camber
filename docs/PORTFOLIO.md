@@ -494,8 +494,9 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
   `_lock.owner` with a heartbeat: a writer on the other side waits for it and is then refused,
   naming the holder's system, and a claim whose writer was killed is taken over (at once when its
   process is seen to be gone, else after 10 seconds without a heartbeat). A writer stopped for
-  longer than that loses its claim and fails before its next change when it resumes (0.112,
-  #330). Still, write a workspace from one side only; see
+  longer than that loses its claim to a writer on the other side and fails before its next change
+  when it resumes (0.112, #330); a writer of its own system (the same host, or a container of the
+  same Docker VM) waits for it instead, and is told it is stopped (#335). Still, write a workspace from one side only; see
   [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
 Read paths (`camber serve`, `ReadAPI`, a `camber run` that writes no per-facility state) never

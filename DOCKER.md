@@ -36,8 +36,12 @@ debugger) has its claim taken over by the other side. When it resumes it fails w
 lost its claim …` before its next change to the store, and the store stays as the other writer
 left it. Only a pause of over 10 seconds that falls exactly between that check and the rename
 after it lets one change through, and that writer still fails instead of reporting success (#330).
-On a Docker Desktop bind mount `flock` excludes nothing, even within one container, so the claim
-is the only exclusion there. See
+Containers of one Docker Desktop VM share its kernel, and so its `flock` on a bind-mounted store
+(since #335 CAMBER never locks through the open that created the lock file, whose `flock`
+excludes nothing there). So a paused container writer is **not** taken over by another container:
+that one waits, as for a running writer, and after its `--lock-timeout` exits 1 with `… -- a
+writer that is alive but stopped …`. Unpause or stop the paused container. A container writer
+that was killed is taken over by another container after 10 seconds. See
 [docs/DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
 Config is via environment variables (already set in the image): `CAMBER_STORE` (default

@@ -207,6 +207,29 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   gone: same pid namespace, and its pid has exited or started at another time. Otherwise the
   writer waits for the claim's heartbeat to stop for 10 s, so a container killed while writing
   is taken over after 10 s, not at once.
+- **A stopped writer is now waited for by every writer of its own system, and the refusal says
+  it is stopped (#335).** On a Docker Desktop bind mount the `flock` of the open that created
+  the lock file excludes nothing, while any other open's `flock` excludes every container of the
+  VM. So a container paused while it wrote a store was taken over by another container after
+  10 s when it had created the store's `_lock`, and blocked it for good when the file already
+  existed; the docs said it was always taken over. The lock file is now never locked through the
+  open that created it, so a stopped writer keeps its kernel's lock: another host process, or
+  another container of the same VM, waits for it as for a running one, and is refused with
+  `… -- a writer that is alive but stopped (Ctrl-Z, docker pause, a debugger) …`. Resume or end
+  the stopped writer. Only a writer on another system (the host against a container, another
+  machine) takes a stopped writer's claim over after 10 s. DATASETS.md, CLI.md, PORTFOLIO.md and
+  DOCKER.md now say exactly when a claim is taken over.
+- **A writer that lost its claim no longer leaves `_facilities.json.tmp` in the store (#335).**
+  The registry, cache manifest and workspace file writes made their temporary file before they
+  checked the claim, and left it when the check failed. They now check the claim before making
+  the file and again before the rename, give it a name of their own
+  (`<file>.tmp-<pid>-<token>`, so writers in two containers never share one), and remove it on
+  any failure. `camber store verify` lists such a file at the store root as a leftover
+  (`--strict` exits 1), and the next ingest removes it.
+- **A waiting writer no longer reads another writer's claim while it is empty (#335).** A claim
+  was created empty and then written, so a writer reading it at that moment named no holder
+  ("locked by an unknown process"). A claim is now written whole under a temporary name and
+  hard-linked into place, and a waiting writer names the holder by the last whole record it read.
 - **A starting `camber mcp` no longer removes a live server's matplotlib directory on a
   bind-mounted `/tmp` (#330, a regression in the 0.112 candidate).** The #326 sweep trusted a
   lock that a Docker Desktop bind mount does not enforce. The directory now records its server
