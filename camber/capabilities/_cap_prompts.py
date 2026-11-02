@@ -49,7 +49,9 @@ _FINISH = (
     "sure you are) rests on facts but is not one, so it is not marked supported: give it "
     "after the checked text, labelled as your judgment. A verified_text that opens with a "
     "NOTICE that sentences were removed is not the answer. Fix or remove each sentence it does "
-    "not mark supported, then give the corrected text."
+    "not mark supported and call check_citations again on the revised draft, until it marks "
+    "every sentence supported: never give text it has not checked. Then give that last "
+    "verified_text, and after it your labelled judgment, as the corrected text."
 )
 
 
@@ -132,7 +134,8 @@ def rcx_executive_summary(args: dict) -> list:
             f"Call rcx_report with {_j(facility_id=fid)}.",
             "It returns the first issues by rank; when a notice says more are ranked, call it "
             "again with the offset the notice names until you have them all, so that no issue "
-            "conditional on a sensor fix is missed.",
+            "conditional on a sensor fix is missed. Keep the default top_n and limit: a larger "
+            "page can exceed what your host accepts as one result.",
             "Write one or two paragraphs for a building owner: how many issues, the top issues "
             "with their equipment and cost (or why they are uncosted), what is conditional on a "
             "sensor fix, and how much of the data the verdicts rest on. Cite the report's own "
@@ -175,7 +178,13 @@ def explain_finding(args: dict) -> list:
 def check_savings_claim(args: dict) -> list:
     fid = _arg(args, "facility_id")
     claim = _arg(args, "claim", required=False, default="")
-    about = f' The claim to check: "{claim}".' if claim else ""
+    # 0.112 (#332): a host's slash command may pass only the first word of a quoted claim
+    about = (
+        f' The claim to check: "{claim}". If that looks cut short, use the whole claim as the '
+        "user wrote it in the conversation (ask for it if it is not there) in its place."
+        if claim
+        else " If the user states the claim in the conversation, pass it whole as claim."
+    )
     # 0.112 (#294): the claim goes to mv_summary, which states each of its figures as a
     # claimed_figure fact, so a sentence quoting the claim can be cited
     call = _j(facility_id=fid, claim=claim) if claim else _j(facility_id=fid)
@@ -279,7 +288,10 @@ def plan_site_visit(args: dict) -> list:
     return _message(
         f"Plan a site visit to facility {fid}: what to look at, in what order, and what to bring.",
         _steps(
-            f"Call rcx_report with {_j(facility_id=fid)} for the ranked issues.",
+            f"Call rcx_report with {_j(facility_id=fid)} for the ranked issues. When a notice "
+            "says more are ranked, call it again with the offset the notice names until you "
+            "have every issue you plan for; keep the default top_n and limit (a larger page can "
+            "exceed what your host accepts as one result).",
             f"Call sensor_trust with {_j(facility_id=fid)} for the sensors to verify.",
             "For the top three issues, call finding_detail with the same facility_id and one of "
             "the issue's finding_ids (each rcx_report issue lists them) to get the time spans to "

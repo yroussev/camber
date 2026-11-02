@@ -74,11 +74,18 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   included), point role, verdict ("passes", "meets", "ok", "fault"), assurance word
   ("verified", "clean", "real", "confident"), direction ("rose", "saved", "high" / "low"),
   negation ("not", "never", "no", "none", "0 points"), quantifier ("all", "every", "most") and
-  issue rank one a cited fact states. Negations are compared both ways: a sentence must not
-  drop what a cited fact negates ("the valve leaks" against "no valve leak"). Headings, bold
+  issue rank one a cited fact states. Each figure, zero and verdict is read with its own clause,
+  in the sentence and in the fact (#332): "All 11 points are trusted" against `9 trusted, 2
+  suspect`, "no faults were found" against another clause's `0 rule(s) skipped`, "the cooling
+  valve leaked on 86%" against `HW-leak 86% / CHW-leak 0%` and "still a fault" against a
+  finding re-judged ok all fail. Negations are compared both ways: a sentence must not drop
+  what a cited fact negates ("the valve leaks" against "no valve leak"); "it is false that ..."
+  and a cause or effect ("accounts for", "will clear") need a fact that says so. Headings, bold
   lines and lead-ins ending in a colon are judged when they state something. A failing sentence
-  comes with `why`. **Supported means matched, not proven true**: only the words above are read,
-  and an inference, a verdict of the model's own or advice is never supported. The rules and
+  comes with `why`. **Supported means matched, not proven true**: only the words listed there
+  are read; an inference worded otherwise, a verdict of the model's own or advice is not
+  recognised, and passes when its figures and names match, so give it after the checked text,
+  labelled as judgment. The rules and
   their limits are in CAPABILITY-REGISTRY.md, "Where a cited fact comes from". `verified_text`
   keeps the draft's lines, headings, list markers and blank lines and removes only the failing
   sentences (#322); when one of those gave a verdict, a negation or a caveat, it opens with a

@@ -75,6 +75,25 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
   period is in 2017; a `NOTICE:` line repeating the text of a `notice` fact among the facts
   is kept and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+- **`check_citations` reads each figure, zero and verdict with its own clause (#332).** Four
+  kinds of wrong sentence were still marked supported because a word matched somewhere in the
+  cited fact. A whole count ("All 11 points are trusted", "106 of the 106", "0 of the 11 points
+  are suspect") now needs a fact that says all, or none, of that many; a zero or "no" ("No
+  faults were found", "0 rules returned a fault") needs the fact's zero of the same thing in its
+  own list item, not the `0 rule(s) skipped` of another; a share keeps its label, so "the
+  cooling valve leaked on 86%" fails against `HW-leak 86% / CHW-leak 0%`; and a finding re-judged
+  with the sensor's bias taken off supports only its new verdict, not "is still a fault". Also
+  read now: "it is false that", "is incorrect", "but that is wrong" and a closing "-- not";
+  "the same days" against "other days"; rank words ("the top issue", "the second issue", "#1",
+  "the worst", "most severe") only where a cited fact ranks; a cause or effect ("accounts for",
+  "due to", "about the same size as", "will clear this warn") only where a cited fact states
+  the explanation. True sentences that were stripped now pass: "bias +0.0 and RMSE 0.1", "the
+  CHW-leak share is 0%", "HW-leak 0% / CHW-leak 0%" without what it is a share of, "0
+  facilities are visible" (a server's own summary was stripped), "None of the baselines meets
+  G14" when each cited fact says its baseline does not, a paging notice restated with what it
+  counts ("only the first 25 of 223 findings"), and whole sentences of a fact or notice quoted
+  word for word. `4P` and `3P` are model names, not counts, and a `why` gives the words as
+  written (no internal placeholders or stems) and says when a claim spans several facts.
 - **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
   acceptance test found sentences that say the opposite of their cited fact marked
   "supported": "the heating valve leaks" against "no valve leak", "the setpoint moves" against
@@ -292,6 +311,16 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   notice says "not a config tuned for your own use of the data", finding and RCx facts carry
   their `facility_id`, and `finding_detail`'s evidence facts their `finding`; the wording of
   what "supported" means is in MCP.md and CAPABILITY-REGISTRY.md.
+- **More sentences need a fact that says them (#332).** A whole count, a rank word, a denial
+  ("false", "wrong") and a cause or effect are now read, so a draft that relied on them can
+  lose sentences that passed before: say "9 of the 11 points are trusted" rather than "all",
+  cite the issue fact for a rank, and give an inference after the checked text, labelled as
+  judgment. The prompts now ask the model to run `check_citations` again on its revised draft
+  until every sentence is supported, and to give only that text and its labelled judgment.
+  `plan_site_visit` and `rcx_executive_summary` ask it to page `rcx_report` with the `offset`
+  a notice names rather than ask for a larger `top_n`, and `check_savings_claim` to use the
+  whole claim from the conversation when the argument looks cut short (a host's slash command
+  can pass only its first word).
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
   every fact must be one the session was sent, unchanged, or the call is refused with
   `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out

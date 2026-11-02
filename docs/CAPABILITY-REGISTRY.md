@@ -444,7 +444,13 @@ cannot match is not supported. **Supported means matched, not proven true.**
   when it has one; never the other numbers of its data (a finding's metrics, a rule's
   parameters). In a fact that lists figures, a bare figure takes the unit, share or counted thing
   of its neighbour (`0.83 vs expected 0.35 in. w.c.`, `HW-leak 86% / CHW-leak 0% of samples`,
-  `11 points: 9 trusted, 2 suspect`). A date, time or year must be one a cited fact carries in
+  `11 points: 9 trusted, 2 suspect`), and each keeps the words next to it (0.112, #332): a
+  sentence whose words before a figure (else after it) name only what another figure of the
+  same list is ("the cooling valve leaked on 86%", "CHW-leak was 86%", "0% ... showed a heating
+  leak" against `HW-leak 86% / CHW-leak 0%`; "2 points are trusted" against `9 trusted, 2
+  suspect`) fails. A paging notice's rows count what its list holds ("only the first 25 of 223
+  findings" against `'findings' shows rows 1-25 of 223`). A figure glued to one capital letter
+  (`4P`, `3P`) is a model's name, not a count. A date, time or year must be one a cited fact carries in
   its text or in a date field ("in 2017" matches a `reporting_period` of 2017). A list marker
   (`1.`, `2)`), a step (`Ranked cause 1`, `step 2`, `Stop 1`, `#3`) and an ordinal (`2nd`) are
   labels, not figures. A fact with `basis: "claimed"` (a claim's own figure, from
@@ -477,22 +483,53 @@ cannot match is not supported. **Supported means matched, not proven true.**
     within tolerance) is never inferred: it passes only where a cited fact uses it ("confidence
     H" in an RCx issue). A verdict word after "if", "until", "unless", "could", "may" or "to"
     ("until a baseline passes G14", "needs to pass") states nothing; "fault threshold" and
-    "passes flow when closed" are not verdicts.
+    "passes flow when closed" are not verdicts, and a verdict word that a figure counts ("1
+    fault", "0 info") is matched with that figure. A finding **re-judged** with a sensor's bias
+    taken off (`finding_detail`'s `R1`) supports only its new verdict: its first one ("`(fault)
+    re-judged ...: ok`") names the finding ("the leaking_valve fault on AHU-1 is explained") and
+    supports no "is still a fault" (0.112, #332). A word that **denies** what it frames (false,
+    untrue, incorrect, wrong, mistaken, inaccurate, "not true"), like an assurance word, passes
+    only where a cited fact uses it: "it is false that ..." and "..., but that is wrong" fail.
+    A **cause or an effect** ("accounts for", "due to", "because of", "caused by", "responsible
+    for", "about the same size as", "consistent with", "will clear", "will fix", "would
+    resolve", ...) is the verdict "explained" (its negation "persists"), even when hedged: it
+    needs a cited fact that states the explanation (`R1`'s "explained by the sensor offset").
   - **Directions.** A direction word (rose, increased, fell, decreased, saved, avoided, reduced,
     wastes, ...) must be one a cited fact uses (or its `direction`), except after "would",
     "could" and the like; "fall on 2025-05-14" is not one. "High" / "low" and "above" / "below"
     must not be the opposite of what the cited facts say.
   - **Negations, both ways.** A negation the sentence states ("did not leak", "never moves",
-    "without", "no <thing>", "none of <them>", "0 <things>") needs a cited fact that negates the
-    same thing, about the same words: a fact's "no valve leak" supports "the valve did not
-    leak", while "drift not evaluated" supports no other negation, and "CHW-leak 0%" says nothing
-    of the heating valve. And a sentence must not state what a cited fact negates: "the valve
-    leaks" against "no valve leak", "the setpoint moves" against "never moves". A fact that a
-    check was skipped, declined or had insufficient data says it "was not judged", so that
-    sentence can be cited; "not a pass" cannot.
+    "without", "no <thing>") needs a cited fact that negates the same thing: a fact's "no valve
+    leak" supports "the valve did not leak", while "drift not evaluated" supports no other
+    negation, and "CHW-leak 0%" says nothing of the heating valve. And a sentence must not
+    state what a cited fact negates: "the valve leaks" against "no valve leak", "the setpoint
+    moves" against "never moves", "on the same days" against "on other days". A closing "not"
+    ("<a fact's words> -- not") denies the sentence and is never supported. A fact that a check
+    was skipped, declined or had insufficient data says it "was not judged", so that sentence
+    can be cited; "not a pass" cannot.
+  - **Zeros, each with its own clause** (0.112, #332). A zero ("0 <things>", "no <things>",
+    "none of <them>", "0 of the 11 <things>") counts a thing and says something of it; a fact's
+    zero does too, within its own list item ("`0 rule(s)) skipped for missing inputs`"). The
+    sentence's zero needs a cited fact's zero of the same thing whose words before that thing
+    and whose first verb are in the sentence ("0 rules were skipped"), whose list item holds the
+    sentence's first verb, and whose counted things the sentence does not deny ("none of the 8
+    hours was flagged" against "none of the 8 flagged hours falls in the window"). So "no
+    faults were found" against `1 fault, ..., 0 rule(s) skipped` and "0 rules returned a fault"
+    against `14 fault, 0 warn` fail, and "0 rules returned a warn" passes. "No fault" also
+    passes against a finding whose `value` is ok. "None of the baselines meets G14", a zero
+    across several facts, needs each cited fact to negate it ("does not meet"). A reading of
+    zero ("bias +0.0") is no zero count.
   - **Quantifiers and ranks.** "All" or "every" needs a fact that says all, every or 100%;
-    "most" one that says most or a share above half; "none" is a zero (above). "Issue 3" or "the
-    1st issue" must be a rank a cited fact gives, when a cited fact gives ranks.
+    "most" one that says most or a share above half; "none" is a zero (above). A **whole count**
+    ("all 11 points", "106 of the 106", "every one of the 37") needs a fact that says all of that
+    many ("all 2,016 valid samples"), or gives the count again with what the sentence says of
+    them ("14 points ...; 14 point(s) are below 90%"): a fact that gives a part of them (`9
+    trusted, 2 suspect`, `20 of the 106`) or none of them does not (0.112, #332). "Issue 3"
+    must be a rank a cited fact gives, when a cited fact gives ranks; a rank said as one (the
+    second issue, issue #1, ranked first, rank 2) needs a cited fact that gives a rank, and a
+    rank word (worst, top, best, biggest, largest, most severe) needs a cited fact that is rank
+    1 or uses that word of the same thing ("worst: HW (heating) coil" supports "the worst coil
+    is the heating coil", not "the worst issue").
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -506,7 +543,8 @@ cannot match is not supported. **Supported means matched, not proven true.**
 - **A fact's own words.** A fact's whole text quoted word for word and cited with its own id is
   one supported sentence, however many sentences, verdicts, negations or caveats it holds
   ("`"AHU-1" leaking_valve (ok): ... no valve leak ...`", an RCx "Recommended action, ..."), and
-  so is a `NOTICE:` line that repeats a notice and cites its `N` id. The quote must open a line
+  so is a `NOTICE:` line that repeats a notice and cites its `N` id. So are whole sentences of it
+  in a row, quoted word for word (the first two of a notice's three, 0.112, #332). The quote must open a line
   (after a list marker or a `NOTICE:` label) or a sentence and run whole up to its citation,
   with nothing after it but a full stop, a space or the line's end. A quote with a word added,
   changed or left out, or citing another fact, is judged like any other sentence, and words
@@ -523,10 +561,13 @@ cannot match is not supported. **Supported means matched, not proven true.**
 What it does not check: whether a claim is true beyond what the cited facts state, the meaning
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
-gives as a subject, a point role outside the families above, and which cited fact a figure
-belongs to when a sentence cites several. A model's own judgment -- a verdict on a savings
-claim, advice, a ranking, how sure it is -- rests on facts but is not one, so it is never
-supported: the prompts ask for it after the checked text, labelled as judgment. A sentence a
+gives as a subject, a point role outside the families above, which cited fact a figure belongs
+to when a sentence cites several, and the predicate of a whole count beyond the words above. A
+model's own judgment -- a verdict on a savings claim, advice, a ranking, how sure it is, an
+inference worded without the cause and effect words above -- rests on facts but is not one: it
+is not recognised as judgment, so it passes when its figures, names and listed words match,
+and it means nothing that it does. The prompts ask for it after the checked text, labelled as
+judgment. A sentence a
 reader would take as fair can fail (an inference such as "so no check was declined", a
 paraphrase such as "no data" for a fact's "no valid sample", advice in the negative): say it the
 way a fact does, cite the fact that says it, or leave it out.

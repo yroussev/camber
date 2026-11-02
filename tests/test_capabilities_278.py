@@ -673,7 +673,8 @@ def test_prompt_renders(name):
     assert "check_citations" in text and "fact id" in text
     named = set(re.findall(r"\b[Cc]all ([a-z_]+) (?:with|for|on)\b", text))
     assert named and named <= caps, named - caps
-    assert text.rstrip().endswith("give the corrected text.")
+    assert text.rstrip().endswith("as the corrected text.")
+    assert "check_citations again on the revised draft" in text  # #332: re-check before giving it
     assert prompt.title and prompt.description
     required = [a.name for a in prompt.arguments if a.required]
     assert required[0] == "facility_id"

@@ -20,7 +20,9 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
   states (outside quoted names: a number in a name from the data is not a figure) and its
   numeric ``value`` (with its ``unit``, when it has one), never the other numbers of its data;
   in a fact that lists several figures, a bare figure takes the unit or counted thing of its
-  neighbour (``9 trusted, 2 suspect`` of ``11 points``; ``0.83 vs 0.35 in. w.c.``). A date,
+  neighbour (``9 trusted, 2 suspect`` of ``11 points``; ``0.83 vs 0.35 in. w.c.``), and keeps
+  the words next to it: a sentence giving it with the words of another figure of that list ("the
+  cooling valve leaked on 86%" against ``HW-leak 86% / CHW-leak 0%``) fails (#332). A date,
   time or year must be one a cited fact carries (in its text or in a date field); a list
   marker, a step and an ordinal are labels, not figures. A number written in words
   (``forty-six``, ``half``, ``one``) is a figure too. A derived number (a difference, sum or
@@ -40,18 +42,27 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
     significant, suspect, trusted, explained, persists, flat, ...) must be one a cited fact
     states, with the same polarity ("passes G14" against "does not meet G14" fails); so must an
     assurance word (verified, confirmed, clean, real, genuine, confident, certain, proven,
-    guaranteed, reliable, within tolerance): those pass only where a cited fact uses them. A
-    verdict word under "if", "until", "unless", "could" or "to" is not a claim;
+    guaranteed, reliable, within tolerance) or a denial (false, untrue, incorrect, wrong): those
+    pass only where a cited fact uses them. A verdict word under "if", "until", "unless",
+    "could" or "to" is not a claim; a cause or effect ("accounts for", "due to", "will clear")
+    is the verdict "explained", hedged or not. A re-judged finding's first verdict only names
+    the finding ("the leaking_valve fault"): it supports no "is still a fault" (#332);
   - **directions**: a direction word (rose, fell, increased, saved, avoided, wastes, ...) must
     be one a cited fact uses, and "high" / "low" or "above" / "below" must not be the opposite
     of the cited facts';
   - **negations, both ways**: a negation ("did not leak", "never moves", "without", "no
-    <thing>", "none of", "0 <thing>") must be one a cited fact makes about the same thing (a fact
-    that negates something else does not count), and a sentence must not state what a cited
-    fact negates ("the valve leaks" against "no valve leak", "moves" against "never moves");
+    <thing>") must be one a cited fact makes about the same thing (a fact that negates something
+    else does not count), and a sentence must not state what a cited fact negates ("the valve
+    leaks" against "no valve leak", "moves" against "never moves"); a closing "not" is never
+    supported. A zero ("0 <things>", "no <things>", "none of them") is read with its own clause
+    and the fact's with its own list item: the fact's zero must count the same thing, with its
+    words and first verb in the sentence, and the sentence must not deny what its counted
+    things are (#332);
   - **quantifiers and ranks**: "all" / "every" needs a fact that says all, every or 100%, "most"
-    one that says most or a share above half; "Issue 3" must be a rank a cited fact gives,
-    when a cited fact gives ranks.
+    one that says most or a share above half; a whole count ("all 11", "8 of the 8") a fact
+    that says all of that many or gives the count again; "Issue 3" must be a rank a cited fact
+    gives, when a cited fact gives ranks; a rank said as one ("the second issue", "#1") or a
+    rank word ("worst", "top") one a cited fact gives (#332).
 
 Citations count only in the visible text: one inside an HTML comment or tag does not. ``[A, B]``
 and ``[A; B]`` cite both ids (0.112).
@@ -217,11 +228,20 @@ def _split_sentences(text: str) -> list:
 
 def _quoted_rx(fact_text: str):
     """A pattern for ``fact_text`` at the end of a string, any run of whitespace standing for
-    any other (None for an empty text)."""
-    words = str(fact_text or "").split()
-    if not words:
+    any other (None for an empty text). Whole sentences of it in a row match too ("A. B." of
+    "A. B. C"), longest first (#332): each is the server's words."""
+    sents = [s.split() for s in _split_sentences(str(fact_text or ""))][:40]
+    sents = [s for s in sents if s]
+    if not sents:
         return None
-    return re.compile(r"\s+".join(map(re.escape, words)) + r"\s*\Z")
+    runs = []
+    for i in range(len(sents)):
+        for j in range(i, len(sents)):
+            words = [w for s in sents[i : j + 1] for w in s]
+            last = re.escape(words[-1].rstrip(".")) + r"\.?"
+            runs.append((len(words), r"\s+".join([*map(re.escape, words[:-1]), last])))
+    alts = [r for _n, r in sorted(runs, key=lambda x: -x[0])]
+    return re.compile("(?:" + "|".join(alts) + r")\s*\Z")
 
 
 def _quotes(text: str, masked: str, s0: int, e0: int, quotes: dict) -> list:
@@ -481,9 +501,58 @@ _VERDICT = {
     **_words("guaranteed guarantee guarantees", "guaranteed"),
     **_words("reliable reliably", "reliable"),
     "tolerance": "tolerance",
+    # a frame that denies what it frames (#332): "it is false that ...", "... is wrong"
+    **_words(
+        "false falsely untrue incorrect incorrectly wrong wrongly mistaken inaccurate erroneous",
+        "false",
+    ),
+    "true": "true",
 }
 _ASSURANCE = frozenset(
-    "verified confirmed clean real confidence certain proven guaranteed reliable tolerance".split()
+    "verified confirmed clean real confidence certain proven guaranteed reliable tolerance false "
+    "true".split()
+)
+#: a cause or an effect claimed (#332): "accounts for the gap", "will clear this warn", "about the
+#: same size as the gap" read as the verdict "explained", which only a cited fact can give
+_CAUSAL = (
+    ("accounts", "for"),
+    ("account", "for"),
+    ("accounted", "for"),
+    ("due", "to"),
+    ("caused", "by"),
+    ("because", "of"),
+    ("attributable", "to"),
+    ("responsible", "for"),
+    ("results", "from"),
+    ("same", "size"),
+    ("same", "magnitude"),
+    ("comparable", "to"),
+    ("consistent", "with"),
+    ("will", "clear"),
+    ("will", "fix"),
+    ("will", "resolve"),
+    ("will", "remove"),
+    ("will", "eliminate"),
+    ("would", "clear"),
+    ("would", "fix"),
+    ("would", "resolve"),
+    ("would", "remove"),
+    ("would", "eliminate"),
+)
+#: a rank stated as a word (#332): "the worst finding", "the top issue"; what it is said of
+#: must be what a cited fact says it of ("worst: HW (heating) coil"), or a cited fact's rank 1
+_SUPERLATIVE = frozenset("worst best top biggest largest severest".split())
+_SEVERE = frozenset("severe serious significant important critical urgent".split())
+#: words of a zero's sentence that say nothing of what is counted ("No faults were found")
+_GENERIC = frozenset(
+    "find return report list show give record see observ detect run result there total overall "
+    "also only rais produc generat".split()
+)
+#: words naming a share itself, not what it is a share of ("the CHW-leak share is 0%")
+_SHARE_WORDS = frozenset("shar fraction proportion percentag percent portion rat".split())
+#: a time noun after "same" / "other": "on other days than", "on the same days as" (#332)
+_WHEN_NOUNS = frozenset(
+    "day days date dates hour hours period periods time times week weeks".split()
 )
 #: a negated verdict reads as this one ("does not meet" = fails, "not trusted" = untrusted)
 _FLIP = {
@@ -540,7 +609,14 @@ _POLAR = {
     "above": "above",
     "below": "below",
 }
-_OPPOSITE = {"high": "low", "low": "high", "above": "below", "below": "above"}
+_OPPOSITE = {
+    "high": "low",
+    "low": "high",
+    "above": "below",
+    "below": "above",
+    "same": "other",
+    "other": "same",
+}
 #: what follows "all" when it counts ("all of", "all the", "all its")
 _ALL_BEFORE = frozenset("of the its their these those".split())
 #: quantifiers: "every sample leaked" is a claim about all of them (#328)
@@ -746,7 +822,14 @@ _NEG_SKIP = frozenset(
 _ARTICLES = frozenset("a an the any single".split())
 #: spellings read as the same word
 _SYNONYM = {"chw": "cool", "hw": "heat", "chilled": "cool", "shut": "clos", "closed": "clos"}
-_IRREGULAR = {"met": "meet", "ran": "run", "fell": "fall", "rose": "rise", "found": "find"}
+_IRREGULAR = {
+    "met": "meet",
+    "ran": "run",
+    "fell": "fall",
+    "rose": "rise",
+    "found": "find",
+    "gave": "give",
+}
 
 
 def _word_number(word: str):
@@ -785,6 +868,11 @@ def _stem(word: str) -> str:
     return _SYNONYM.get(w, w)
 
 
+#: the counted things, as stems; those that are verdicts too ("1 fault")
+_NOUN_STEMS = frozenset(_stem(w + s) for w in _NOUNS for s in ("", "s"))
+_VERDICT_NOUNS = frozenset(_stem(w + s) for w in ("fault", "warn", "info", "ok") for s in ("", "s"))
+
+
 # --------------------------------------------------------------------------- parsing
 
 
@@ -798,6 +886,15 @@ class _Qty:
     year: bool  # a bare 1900-2100 integer: may be a year
     at: int = field(default=-1, compare=False)  # its token, in the text it was read from
     claim: bool = field(default=False, compare=False)  # its clause presents it as a claim's
+    # what it is of (#332): the words of its clause before it (since the figure before) and
+    # after it (to the next figure); a fact's figure keeps the words that tell it from the
+    # figures listed with it (``label``: "heat" of "HW-leak 86%") and theirs (``sib``: "cool")
+    pre: frozenset = field(default=frozenset(), compare=False)
+    post: frozenset = field(default=frozenset(), compare=False)
+    label: frozenset = field(default=frozenset(), compare=False)
+    sib: frozenset = field(default=frozenset(), compare=False)
+    total: bool = field(default=False, compare=False)  # "of the 11": what another figure is of
+    grp: int = field(default=-1, compare=False)  # the list of figures it is read with
 
     def show(self) -> str:
         sign = "-" if self.sign == "-" else ("±" if self.sign == "±" else "")
@@ -820,6 +917,13 @@ class _Neg:
     named: bool = False  # ``subject`` is a name from the text, not a word
     after: frozenset = frozenset()  # (a sentence's) the words from the negation on
     clause: frozenset = frozenset()  # (a sentence's) every word of its clause
+    # a zero's parts (#332): the words of what it counts (``mods``: "flagged" of "none of the 8
+    # flagged hours"), what it says of them (``pred``, ``lead`` its first verb) and every word
+    # of its list item (``ctx``, a fact's: "0 rule(s) skipped for missing inputs")
+    mods: frozenset = frozenset()
+    pred: frozenset = frozenset()
+    lead: str = ""
+    ctx: frozenset = frozenset()
 
 
 @dataclass
@@ -836,9 +940,18 @@ class _Parsed:
     polar: set = field(default_factory=set)  # high / low / above / below
     quant: set = field(default_factory=set)  # "all" / "most"
     ranks: set = field(default_factory=set)  # issue ranks it names
+    said_ranks: set = field(default_factory=set)  # those said as a rank ("the second issue")
     rules: set = field(default_factory=set)  # rule names it names
     marks: dict = field(default_factory=dict)  # name placeholder -> the name it stands for
     claim: bool = False  # it says its figures are a claim's ("the claim states 15%")
+    wholes: set = field(default_factory=set)  # "all 11", "8 of the 8": counts said whole (#332)
+    # (a sentence's) the words said of a whole count; (a fact's) a count given again, with the
+    # words of each later mention: "14 points ...; 14 point(s) are below 90%" (all 14 are)
+    whole_words: dict = field(default_factory=dict)
+    sups: list = field(default_factory=list)  # (word, what it is said of): "worst: HW coil"
+    stated: set = field(default_factory=set)  # verdicts stated, not only naming a finding
+    vraw: dict = field(default_factory=dict)  # verdict class -> the words that said it
+    segs: dict = field(default_factory=dict)  # a figure's token -> its words' span (#332)
 
 
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"|“([^”]*)”')
@@ -911,15 +1024,15 @@ def _parse(text: str, names, *, fact: bool = False) -> _Parsed:
     for rx, rep in _PRE:
         s = rx.sub(rep, s)
 
-    def mark(name: str) -> str:
+    def mark(name: str, kind: str = _NAME) -> str:
         i, tag = len(p.marks), ""
         while True:
             tag += chr(97 + i % 26)
             i //= 26
             if not i:
                 break
-        p.marks[_NAME + tag] = name
-        return f" {_NAME}{tag} "
+        p.marks[kind + tag] = name
+        return f" {kind}{tag} "
 
     def quoted(m):
         inner = m.group(1) if m.group(1) is not None else m.group(2)
@@ -927,7 +1040,7 @@ def _parse(text: str, names, *, fact: bool = False) -> _Parsed:
         if n in vocab.terms:
             if n in vocab.rules:
                 p.rules.add(n)
-            return f" {_TERM} "
+            return mark(n, _TERM)
         p.ids.add(vocab.aliases.get(n, n))
         return mark(n)
 
@@ -945,7 +1058,7 @@ def _parse(text: str, names, *, fact: bool = False) -> _Parsed:
         if low in vocab.terms:
             if low in vocab.rules:
                 p.rules.add(low)
-            return f" {_TERM} "
+            return mark(tok, _TERM)
         if (
             low in _NOT_IDS
             or _FC.fullmatch(low)
@@ -962,7 +1075,7 @@ def _parse(text: str, names, *, fact: bool = False) -> _Parsed:
 
         def spelled(m):
             p.rules.add(re.sub(r"[\s-]+", "_", m.group(0).lower()))
-            return f" {_TERM} "
+            return mark(m.group(0), _TERM)
 
         s = vocab.rule_rx.sub(spelled, s)
     low = s.lower()
@@ -1072,12 +1185,12 @@ def _fill(qty: list, toks: list) -> None:
 _LINKS = frozenset("vs versus expected and or to from".split())
 
 
-def _clauses(toks: list) -> list:
+def _clauses(toks: list, boundary=_BOUNDARY) -> list:
     """The clause of each token (-1: a boundary): punctuation and dashes end a clause."""
     out, c = [], 0
     for i, (kind, raw, _a, b) in enumerate(toks):
         if kind == "sym" and (
-            raw in _BOUNDARY
+            raw in boundary
             or (raw == "-" and not (i + 1 < len(toks) and toks[i + 1][2] == b))
             or (raw == "-" and i + 1 < len(toks) and toks[i + 1][1] == "-")
         ):
@@ -1086,6 +1199,11 @@ def _clauses(toks: list) -> list:
             continue
         out.append(c)
     return out
+
+
+#: what ends a fact's list item: a zero's words reach past a parenthesis or a slash ("0
+#: rule(s)) skipped for missing inputs"), not past a comma, colon or semicolon (#332)
+_ITEM_BOUNDARY = frozenset(",;:!?.|—–")
 
 
 #: G36 fault conditions ("FC1"), named like equipment
@@ -1104,10 +1222,121 @@ def _content(raw: str) -> tuple:
     return tuple(_stem(x) for x in parts)
 
 
+def _raw(toks: list, a: int, b: int, marks: dict) -> str:
+    """Tokens ``a`` to ``b`` (inclusive) as written: a name or term placeholder as its name."""
+    out = []
+    for x in range(max(0, a), min(b, len(toks) - 1) + 1):
+        tok = toks[x][1]
+        out.append(marks.get(tok, tok) if tok.startswith("QQ") else tok)
+    s = " ".join(out)
+    return re.sub(r"\s+([%°,;:)])|([(])\s+", lambda m: m.group(1) or m.group(2), s)
+
+
+def _figure_words(
+    p: _Parsed, toks: list, cont: list, words: list, clause: list, fact: bool = False
+) -> None:
+    """Each figure's words (#332): those of its clause since the figure before it (``pre``) and
+    up to the figure after it (``post``), without counted things and units; and whether it is
+    the total another figure is "of" (``total``: the 11 of "2 of the 11 points")."""
+    n = len(toks)
+    ats = sorted({q.at for q in p.qty if 0 <= q.at < n})
+
+    def stems(a, b, near=0):
+        """the words of tokens a..b-1; a fact's figure: the ``near`` nearest (-: before it)"""
+        xs = [
+            x
+            for x in range(a, b)
+            if toks[x][0] == "word" and cont[x] and not (_counted(words[x]) or words[x] in _UNITS)
+        ]
+        if fact and near:
+            xs = xs[near:] if near < 0 else xs[:near]
+        return frozenset(s for x in xs for s in cont[x] if s not in _SHARE_WORDS)
+
+    groups = _clauses(toks, _LIST_BOUNDARY)
+    seg = {}
+    for i, at in enumerate(ats):
+        c = clause[at]
+        lo = ats[i - 1] + 1 if i else 0
+        hi = ats[i + 1] if i + 1 < len(ats) else n
+        a = at
+        while a > lo and clause[a - 1] == c and words[a - 1] not in _CONJ:
+            a -= 1
+        b = at + 1
+        while b < hi and clause[b] == c and not (words[b] in _CONJ and hi < n and clause[hi] == c):
+            b += 1
+        p.segs[at] = (a, b)
+        x = at - 1
+        while x >= 0 and words[x] in ("the", "its", "their", "these", "those", "all"):
+            x -= 1
+        total = (
+            x >= 1
+            and words[x] == "of"
+            and (
+                toks[x - 1][0] == "num"
+                or words[x - 1] in _OF_TOTAL
+                or bool(_word_number(words[x - 1]))
+            )
+        )
+        seg[at] = (stems(a, at, -2), stems(at + 1, b, 2), total, groups[at])
+    p.qty[:] = [
+        replace(q, pre=seg[q.at][0], post=seg[q.at][1], total=seg[q.at][2], grp=seg[q.at][3])
+        if q.at in seg
+        else q
+        for q in p.qty
+    ]
+
+
+#: what ends a list of figures read together ("9 trusted, 2 suspect, 0 untrusted"), and the
+#: words that hand a clause from one figure to the next ("86% and the cooling valve 0%")
+_LIST_BOUNDARY = frozenset(";:!?.|—–")
+_CONJ = frozenset("and or but while whereas vs versus against".split())
+
+
+#: words that take a part of a total: "none of the 11", "all of the 8", "one of the 24"
+_OF_TOTAL = frozenset("none all each every one some any most many few several both".split())
+
+
+def _number_at(toks: list, words: list, j: int):
+    """The figure at token ``j`` (digits or a number in words), or None."""
+    if j >= len(toks):
+        return None
+    if toks[j][0] == "num":
+        return _decimal(toks[j][1])
+    return _word_number(words[j]) if toks[j][0] == "word" else None
+
+
+def _verbish(word: str) -> bool:
+    return word in _STATING or (word.endswith("ed") and len(word) > 4)
+
+
+def _zero_parts(toks, cont, words, scope: list, end: int, k: int, bound: list):
+    """``(noun index, mods, pred, lead)`` of a zero whose counted words are ``scope``: the words
+    before its counted noun, those after it to the end of its clause, and its first verb (or
+    word) there."""
+    noun_at = next((j for j in scope if _counted(words[j])), -1)
+    mods: frozenset
+    if noun_at < 0:
+        mods, start = frozenset(), (scope[0] if scope else end)
+    else:
+        mods = frozenset(s for j in scope if j < noun_at for s in cont[j])
+        start = noun_at + 1
+    pred_at = []
+    j = start
+    while j < len(toks) and bound[j] == bound[k] and toks[j][0] != "num":
+        if toks[j][0] == "word" and cont[j]:
+            pred_at.append(j)
+        j += 1
+    pred = frozenset(s for j in pred_at for s in cont[j])
+    lead_at = next((j for j in pred_at if _verbish(words[j])), pred_at[0] if pred_at else -1)
+    lead = cont[lead_at][-1] if lead_at >= 0 else ""
+    return noun_at, mods, pred, lead
+
+
 def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
     """The verdicts (with their polarity), directions, negations, zeros, quantifiers, ranks and
     opposites of a text's words (see the module doc)."""
     clause = _clauses(toks)
+    item = _clauses(toks, _ITEM_BOUNDARY)
     words = [t[1].lower() if t[0] == "word" else "" for t in toks]
     cont = [_content(t[1]) if t[0] == "word" else () for t in toks]
     n = len(toks)
@@ -1130,6 +1359,14 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             x -= 1
         return False
 
+    def said_of(k) -> frozenset:  # what a whole count says of them, without what it counts
+        words = frozenset(clause_words(k)) - _GENERIC - {"all", "every", "each"}
+        return words - (_NOUN_STEMS - _VERDICT_NOUNS)
+
+    def negated_before(k) -> int:
+        back = [x for x in range(max(0, k - 3), k) if in_clause(x, k + 1)]
+        return next((x for x in reversed(back) if _negates(words[x])), -1)
+
     for s in cont:
         p.words.update(s)
     # a figure is a claim's only where its own clause says so ("the claim states 15%, and the
@@ -1138,7 +1375,9 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
     p.qty[:] = [
         replace(q, claim=True) if 0 <= q.at < n and clause[q.at] in claimed else q for q in p.qty
     ]
+    _figure_words(p, toks, cont, words, clause, fact)
     negated: set = set()  # token indices inside a negation
+    zeroed: set = set()  # clauses with a zero in them: a verdict after it is what it counts
     last_noun = ""
     q_at: dict = {}
     for q in p.qty:  # a figure as the text writes it (not the counted thing _fill gave it)
@@ -1154,6 +1393,7 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
                 sum(1 for t in between if t[0] == "word") <= 2
             ):
                 share_of[a.at] = b.base
+    last_word = max((x for x in range(n) if toks[x][0] in ("word", "num")), default=-1)
     for k in range(n):
         kind = toks[k][0]
         w = words[k]
@@ -1163,11 +1403,43 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
                 last_noun = q.unit
             if q is not None and not q.base and k in share_of:
                 q = replace(q, base=share_of[k])
-            if q is not None and q.value == 0 and (q.unit in _COUNT_UNITS or not q.unit or q.base):
-                neg = _zero(toks, k, q, cont, clause, words, last_noun, fact, clause_words)
+            reading = q is not None and not q.unit and (q.sign or "." in toks[k][1])
+            if q is not None and q.value == 0 and q.unit == "%" and not q.base:
+                # "CHW-leak 0%": what it is a share of left out; its label is not affirmed
+                x = k - 1
+                while x >= 0 and clause[x] == clause[k] and k - x <= 3:
+                    negated.add(x)
+                    x -= 1
+            elif (
+                q is not None
+                and q.value == 0
+                and not reading  # "bias +0.0": a reading, not a count of none (#332)
+                and (q.unit in _COUNT_UNITS or not q.unit or q.base)
+            ):
+                seg = p.segs.get(k) if not fact else None
+                near = clause_words
+                if seg:  # a sentence's zero is read with its own figure's words (#332)
+
+                    def near(_i, a=seg[0], b=seg[1]):
+                        return {s for x in range(a, b) for s in cont[x]}
+
+                neg = _zero(toks, k, q, cont, item, words, last_noun, fact, near, p.marks)
                 if neg is not None:
                     p.negs.append(neg)
                     negated.update(_neg_span(k, neg, clause))
+                    if neg.kind == "zero":
+                        zeroed.add(clause[k])
+            # "8 of the 8 flagged hours": the whole of them (#332)
+            if q is not None and k + 1 < n and words[k + 1] == "of":
+                j = k + 2
+                while j < n and words[j] in ("the", "its", "their", "these", "those"):
+                    j += 1
+                if _number_at(toks, words, j) == q.value and q.value:
+                    p.wholes.add(q.value)
+                    p.whole_words.setdefault(q.value, said_of(k))
+            if kind == "num" and k and toks[k - 1][1] == "#" and toks[k][1].isdigit():
+                p.ranks.add(int(toks[k][1]))  # "is #1"
+                p.said_ranks.add(int(toks[k][1]))
             continue
         if kind != "word":
             continue
@@ -1184,11 +1456,30 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             cls = None  # "at 90% confidence": a statistical level
         if cls == "certain" and k and words[k - 1] == "make":
             cls = None  # "make sure": advice
+        if cls is not None and k and _number_at(toks, words, k - 1) is not None:
+            # "1 fault, 0 info": what a sentence's figure counts, matched with it (#332)
+            cls = cls if fact else None
+        if cls is not None and clause[k] in zeroed and not fact:
+            cls = None  # "0 rules returned a fault", "no faults": the zero says it (#332)
         if cls is not None and not hypothetical(k):
-            back = [x for x in range(max(0, k - 3), k) if in_clause(x, k + 1)]
-            if any(_negates(words[x]) for x in back):
+            x = negated_before(k)
+            if x >= 0:
                 cls = _FLIP.get(cls, f"not {cls}")
             p.verdicts.add(cls)
+            p.vraw.setdefault(cls, f"{toks[x][1]} {toks[k][1]}" if x >= 0 else toks[k][1])
+            # "the leaking_valve fault", "leaking_valve (fault)": the finding's name (#332)
+            prev = toks[k - 1][1] if k else ""
+            if prev == "(" and k > 1:
+                prev = toks[k - 2][1]
+            if not prev.startswith("QQ"):
+                p.stated.add(cls)
+        # a cause or an effect (#332): a claim even where hedged ("would clear")
+        if (w, nxt) in _CAUSAL_PAIRS:
+            x = negated_before(k)
+            c = "persists" if x >= 0 else "explained"
+            p.verdicts.add(c)
+            p.stated.add(c)
+            p.vraw.setdefault(c, f"{toks[x][1] + ' ' if x >= 0 else ''}{toks[k][1]} {nxt}")
         d = _DIRECTION.get(w)
         if d is not None and w.startswith(("fall", "fell")) and nxt in _PLACE:
             d = None  # "the spans fall on 2025-05-14", "fall outside the window"
@@ -1197,16 +1488,28 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
         if w in _CLAIM_WORDS:
             p.claim = True
         pol = _POLAR.get(w)
+        if w == "same" and nxt in _WHEN_NOUNS:
+            pol = "same"  # "on the same days as" against "on other days than" (#332)
+        elif w in ("other", "different") and nxt in _WHEN_NOUNS:
+            pol = "other"
         if pol is not None:
             p.polar.add(pol)
         qc = _QUANT.get(w)
+        if w in ("all", "every", "each") and not (k and words[k - 1] in ("at", "after", "in")):
+            j = k + 1  # "all 11 points", "each of the 8", "every one of the 37" (#332)
+            while j < n and words[j] in ("of", "the", "its", "their", "these", "those", "one"):
+                j += 1
+            v = _number_at(toks, words, j)
+            if v and (w == "all" or nxt in ("of", "one")):
+                p.wholes.add(v)
+                p.whole_words.setdefault(v, said_of(k))
         if qc == "all" and not (k and words[k - 1] in ("at", "after", "in", "of", "above")):
             # "all of the samples", "all 4 issues", "every check": not "all good"
             after = words[k + 2] if k + 2 < n else ""
             if nxt == "of" and after in ("it", "them", "this", "that"):
                 pass  # "all of it": a share of one whole, not a count of things
             elif k + 1 < n and toks[k + 1][0] == "num":
-                pass  # "all 14 are untrusted": the figure is checked
+                pass  # "all 14 are untrusted": the figure is checked, as a whole one
             elif w == "every" or nxt in _ALL_BEFORE:
                 p.quant.add("all")
             elif _counted(nxt) or nxt.endswith("s"):
@@ -1214,21 +1517,75 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
         elif qc == "most" and (nxt == "of" or _noun(nxt) or w == "majority"):
             if not (k and words[k - 1] in ("the", "at")):
                 p.quant.add("most")
-        rank = _rank(toks, words, k)
-        if rank:
-            p.ranks.update(rank)
+        rank, stated = _rank(toks, words, k)
+        p.ranks.update(rank)
+        if stated:
+            p.said_ranks.update(rank)
+        sup = _superlative(toks, words, cont, k)
+        if sup is not None:
+            p.sups.append(sup)
         if _negates(w) and not (
             nxt in ("only", "just")
             or (nxt in ("more", "less", "fewer") and k + 2 < n and words[k + 2] == "than")
             or hypothetical(k)  # "whether they are not stuck", "should not be replaced"
         ):
-            neg = _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, p.marks)
+            if w in ("none", "nothing", "nobody"):  # a fact's reaches past a parenthesis
+                neg = _none_of(toks, k, cont, item, words, last_noun, fact, clause_words, p.marks)
+            else:
+                neg = _negation(
+                    toks, k, cont, clause, words, last_noun, fact, clause_words, p.marks
+                )
             if neg is not None:
                 p.negs.append(neg)
                 negated.update(_neg_span(k, neg, clause))
+                if neg.kind == "zero":
+                    zeroed.add(clause[k])
+            elif k == last_word and not fact:
+                # "<the fact's words> -- not": a closing "not" denies all before it (#332)
+                p.negs.append(_Neg(frozenset({"--"}), "--", "frame", toks[k][1]))
     for k in range(n):
         if k not in negated:
             p.affirmed.update(cont[k])
+    if fact:  # a count given again, and the words of its later mentions
+        at: dict = {}
+        for q in sorted(q_at.values(), key=lambda q: q.at):
+            if q.value and q.role == "result":
+                at.setdefault(q.value, []).append(q)
+        for v, qs in at.items():
+            if len(qs) > 1:
+                p.whole_words[v] = frozenset().union(*(q.pre | q.post for q in qs[1:]))
+
+
+_CAUSAL_PAIRS = frozenset(_CAUSAL)
+
+
+def _superlative(toks, words, cont, k):
+    """``(word, what it is said of)`` for a rank word at ``k`` ("the worst finding", "worst: HW
+    (heating) coil", "the most severe issue"), or None (#332)."""
+    w = words[k]
+    if w == "most" and k + 1 < len(toks) and words[k + 1] in _SEVERE:
+        w, j = "most " + words[k + 1], k + 2
+    elif w in _SUPERLATIVE:
+        if k and words[k - 1] == "at":
+            return None  # "at best", "at worst"
+        if k + 1 < len(toks) and words[k + 1] == "first":
+            return None  # "(worst first)": an order
+        j = k + 1
+    else:
+        return None
+    obj: set = set()
+    seen = 0
+    while j < len(toks) and seen < 3:  # past a colon or a parenthesis: "worst: HW (heating)"
+        if toks[j][0] == "num" or (toks[j][0] == "sym" and toks[j][1] in ",;.!?|"):
+            break
+        if toks[j][0] == "word" and cont[j]:
+            obj.update(cont[j])
+            seen += 1
+        j += 1
+    said = " ".join(
+        t[1] for x, t in enumerate(toks[k:j], k) if x == k or (t[0] == "word" and cont[x])
+    )
+    return w, frozenset(obj), said
 
 
 def _neg_span(k: int, neg: _Neg, clause: list) -> range:
@@ -1248,7 +1605,7 @@ def _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, marks
     n = len(toks)
     w = words[k]
     if w == "none" or w == "nothing" or w == "nobody":
-        return _none_of(toks, k, cont, clause, words, last_noun, fact, clause_words)
+        return _none_of(toks, k, cont, clause, words, last_noun, fact, clause_words, marks)
     np = w in ("no", "without", "neither", "nor")
     j = k + 1
     while j < n and clause[j] == clause[k] and toks[j][0] == "word" and words[j] in _NEG_SKIP:
@@ -1276,13 +1633,30 @@ def _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, marks
         j += 1
     if not scope:
         return None
+    if w == "no" and _counted(words[scope[-1]]):
+        # "no faults were found", "no untrusted points": a count of none (#332), read as a zero
+        noun_at, mods, pred, lead = _zero_parts(toks, cont, words, scope, j, k, clause)
+        noun = _counted(words[noun_at])
+        cw = frozenset(clause_words(k))
+        return _Neg(
+            frozenset(s for x in scope for s in cont[x]) | {_stem(noun)},
+            _stem(noun),
+            "zero",
+            _raw(toks, k, noun_at, marks),
+            clause=cw,
+            after=cw,
+            mods=mods,
+            pred=pred,
+            lead=lead,
+            ctx=cw,
+        )
     head_tok = scope[-1] if np else scope[0]
     head = cont[head_tok][-1]
     verdict = (
         _VERDICT.get(words[head_tok]) is not None or _DIRECTION.get(words[head_tok]) is not None
     )
     stems = frozenset(s for x in scope for s in cont[x])
-    raw = " ".join(toks[x][1] for x in range(k, scope[-1] + 1))
+    raw = _raw(toks, k, scope[-1], marks)
     subject, named = "", False
     if fact and not np:  # "drift not evaluated", "pairs were not judged": what it is about
         x = k - 1
@@ -1312,7 +1686,7 @@ def _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, marks
     )
 
 
-def _none_of(toks, k, cont, clause, words, last_noun, fact, clause_words):
+def _none_of(toks, k, cont, clause, words, last_noun, fact, clause_words, marks):
     """The zero a "none (of the 8 flagged hours ...)" at ``k`` states: what it counts (a counted
     thing named there, else the one counted before it) and the words of what it is about."""
     n = len(toks)
@@ -1334,66 +1708,127 @@ def _none_of(toks, k, cont, clause, words, last_noun, fact, clause_words):
     if not stems:
         return None
     head = _stem(noun) if noun else cont[scope[-1]][-1]
-    cw = frozenset(clause_words(k) | stems)
-    return _Neg(frozenset(stems), head, "zero", toks[k][1], clause=cw, after=cw)
+    noun_at, mods, pred, lead = _zero_parts(toks, cont, words, scope, j, k, clause)
+    end = noun_at if noun_at >= 0 else (scope[-1] if scope else k)
+    ctx = frozenset(s for x in range(n) if clause[x] == clause[k] for s in cont[x])
+    cw = ctx | stems  # ``clause`` is the list item: it reaches past a parenthesis
+    return _Neg(
+        frozenset(stems),
+        head,
+        "zero",
+        _raw(toks, k, end, marks),
+        clause=cw,
+        after=cw,
+        mods=mods,
+        pred=pred,
+        lead=lead,
+        ctx=ctx | stems,
+    )
 
 
 #: a time unit as the word a text writes for it
 _UNIT_WORD = {"h": "hour", "min": "minut", "s": "second"}
 
 
-def _zero(toks, k, q, cont, clause, words, last_noun, fact, clause_words):
+def _zero(toks, k, q, cont, item, words, last_noun, fact, clause_words, marks):
     """The zero a figure 0 at ``k`` states: ``0 untrusted`` (of the points counted before it),
     ``0 below the trust floor``, ``0 hours``; or, a share, ``CHW-leak 0% of the samples``: none
-    of the samples leaked on the chilled-water side."""
+    of the samples leaked on the chilled-water side. ``item``: the token's list item (a fact's
+    reaches past a parenthesis)."""
     n = len(toks)
     if q.unit == "%":
-        before = [t for t in range(max(0, k - 3), k) if clause[t] == clause[k] and cont[t]]
+        # "CHW-leak 0%", "the CHW-leak share is 0%": the words before the zero, not "share"
+        before = [
+            t
+            for t in range(max(0, k - 4), k)
+            if item[t] == item[k] and cont[t] and not set(cont[t]) <= _SHARE_WORDS
+        ]
         if not before:
             return None
-        stems = set(cont[before[-1]]) | {_stem(q.base)}
-        kind, head, subject = "share", cont[before[-1]][-1], _stem(q.base)
-    else:
-        j, scope = k + 1, []
-        while j < n and clause[j] == clause[k] and len(scope) < 4:
-            if toks[j][0] == "num":
-                break
-            if toks[j][0] == "word" and cont[j]:
-                scope.append(j)
-            j += 1
-        stems = {x for t in scope for x in cont[t]}
-        noun = q.unit if q.unit in _NOUNS.values() else ""
-        if not noun and not q.unit and not any(_noun(words[t]) for t in scope):
-            noun = last_noun
-        unit_word = _stem(_UNIT_WORD.get(q.unit, q.unit)) if q.unit and not noun else ""
-        thing = _stem(noun) if noun else unit_word
-        if thing:
-            stems.add(thing)
-        if not stems:
-            return None
-        kind, head, subject = "zero", thing or cont[scope[0]][-1], ""
+        base = _stem(q.base) if q.base else ""
+        stems = set(cont[before[-1]]) | ({base} if base else set())
+        kind, head, subject = "share", cont[before[-1]][-1], base
+        cw = frozenset(clause_words(k) | stems)
+        return _Neg(
+            frozenset(stems),
+            head,
+            kind,
+            _raw(toks, before[-1], k + 1, marks),
+            subject=subject,
+            clause=cw,
+            after=cw,
+        )
+    j = k + 1
+    # "0 of the 11 points": what it counts follows the total
+    x = j
+    if x < n and words[x] == "of":
+        x += 1
+        while x < n and words[x] in ("the", "its", "their", "these", "those"):
+            x += 1
+        if x < n and toks[x][0] == "num":
+            j = x + 1
+    scope = []
+    while j < n and item[j] == item[k] and len(scope) < 4:
+        if toks[j][0] == "num":
+            break
+        if toks[j][0] == "word" and cont[j]:
+            scope.append(j)
+        j += 1
+    stems = {x for t in scope for x in cont[t]}
+    noun = q.unit if q.unit in _NOUNS.values() else ""
+    if not noun and not q.unit and not any(_noun(words[t]) for t in scope):
+        noun = last_noun
+    if not noun and not q.unit:
+        noun = next((_counted(words[t]) for t in scope if _counted(words[t])), "")
+    unit_word = _stem(_UNIT_WORD.get(q.unit, q.unit)) if q.unit and not noun else ""
+    thing = _stem(noun) if noun else unit_word
+    if thing:
+        stems.add(thing)
+    if not stems:
+        return None
+    noun_at, mods, pred, lead = _zero_parts(toks, cont, words, scope, j, k, item)
+    end = noun_at if noun_at >= 0 else (scope[0] if scope else k)
+    head = thing or cont[scope[0]][-1]
+    # its list item, and (a fact's) what leads in to the list: "Drift on X: ..., 0 fault"
+    ctx = frozenset(s for x in range(n) if item[x] == item[k] or x < k for s in cont[x])
     cw = frozenset(clause_words(k) | stems)
-    return _Neg(frozenset(stems), head, kind, toks[k][1], subject=subject, clause=cw, after=cw)
+    return _Neg(
+        frozenset(stems),
+        head,
+        "zero",
+        _raw(toks, k, end, marks),
+        clause=cw,
+        after=cw,
+        mods=mods,
+        pred=pred,
+        lead=lead,
+        ctx=ctx | stems,
+    )
 
 
-def _rank(toks: list, words: list, k: int) -> set:
-    """The issue ranks named at token ``k``: "Issue 3", "Issues 3 and 4", "the 1st issue", "the
-    second issue" (#328)."""
+def _rank(toks: list, words: list, k: int) -> tuple:
+    """``(ranks, stated)``: the issue ranks named at token ``k``: "Issue 3", "Issues 3 and 4",
+    "the 1st issue", "the second issue" (#328); ``stated`` for a rank said as one ("the second
+    issue", "issue #1", "ranked first", "rank 2"), not an issue's label ("Issue 3", #332)."""
     n = len(toks)
     w = words[k]
     out = set()
+    if w in ("ranked", "ranks", "rank") and k + 1 < n and words[k + 1] in _ORDINAL_WORDS:
+        return {_ORDINAL_WORDS[words[k + 1]]}, True
     if w in _RANKED and w not in ("ranked",):
         j = k + 1
+        stated = w == "rank"
         if j < n and toks[j][1] == "#":
             j += 1
+            stated = True
         while j < n and toks[j][0] == "num" and toks[j][1].isdigit():
             out.add(int(toks[j][1]))
             j += 1
             if j < n and (toks[j][1] == "," or words[j] in ("and", "or", "to")):
                 j += 1
-        return out
+        return out, stated
     if w in _ORDINAL_WORDS and k + 1 < n and words[k + 1] in _RANKED:
-        return {_ORDINAL_WORDS[w]}
+        return {_ORDINAL_WORDS[w]}, True
     if (
         toks[k][0] == "word"
         and w in _ORDINAL
@@ -1404,8 +1839,8 @@ def _rank(toks: list, words: list, k: int) -> set:
         and words[k + 1] in _RANKED
         and toks[k - 1][1].isdigit()
     ):
-        return {int(toks[k - 1][1])}
-    return out
+        return {int(toks[k - 1][1])}, True
+    return out, False
 
 
 def _counted(word: str) -> str:
@@ -1476,6 +1911,8 @@ def _quantity(toks: list, i: int, value: Decimal, raw: str):
                 unit, k = _UNITS[nxt], k + 2
             elif w in _UNITS and (len(w) > 1 or glued or t[1] in _SHORT_SPACED):
                 unit, k = _UNITS[w], k + 1
+            elif glued and len(t[1]) == 1 and t[1].isupper():
+                return None  # "4P", "3P": a model's name, not a count (#332)
             elif glued:
                 unit, k = w, k + 1  # an unknown glued suffix ("4.5e1") is a unit of its own
     if (
@@ -1669,6 +2106,44 @@ _ROLE_FAMILIES = (
 _ROLE_RX = tuple((n, re.compile(s, re.I), re.compile(f)) for n, s, f in _ROLE_FAMILIES)
 
 
+def _labelled(qty: list) -> list:
+    """A fact's figures, each with the words that tell it from the figures of the same unit
+    listed with it (#332): ``86%`` of "HW-leak 86% / CHW-leak 0%" is the "heat" one, and "cool"
+    is its sibling's."""
+    seen: dict = {}
+    for q in qty:
+        if q.at >= 0 and q.role != "setting":  # "fan_heat_f = 2.0": named, not labelled
+            seen[(q.at, q.unit)] = (q.pre or q.post, q.grp)
+    out = []
+    for q in qty:
+        if (q.at, q.unit) not in seen:
+            out.append(q)
+            continue
+        own = seen[(q.at, q.unit)][0]
+        others = set()
+        for (at, unit), (words, grp) in seen.items():
+            if unit == q.unit and at != q.at and grp == q.grp:
+                others |= words
+        out.append(replace(q, label=frozenset(own - others), sib=frozenset(others - own)))
+    return out
+
+
+#: a paging notice: "'findings' shows rows 1-25 of 223"
+_PAGED = re.compile(r"'([A-Za-z_ ]+)' shows rows? (\d+)(?:-(\d+))? of (\d+)")
+
+
+def _paged(text: str) -> list:
+    """The figures of a paging notice, with the thing its list counts (#332): "rows 1-25 of
+    223" of 'findings' are 25 and 223 findings."""
+    m = _PAGED.search(text)
+    noun = _noun(m.group(1).split()[-1]) if m else ""
+    if m is None or not noun:
+        return []
+    return [
+        _Qty(Decimal(v), "", noun, "", "result", False) for v in m.groups()[1:] if v is not None
+    ]
+
+
 class _FactClaims:
     """What one fact exposes to the matcher: the claims of its text plus its structured fields
     (``value`` and ``unit``; ``value`` / ``verdict`` / ``severity`` as a verdict; ``direction``;
@@ -1683,8 +2158,10 @@ class _FactClaims:
         p = _Parsed()
         for piece in _split_sentences(text):
             q = _parse(piece, names, fact=True)
-            p.qty += q.qty
+            p.qty += _labelled(q.qty) + _paged(piece)
             p.negs += q.negs
+            p.sups += q.sups
+            p.whole_words.update(q.whole_words)
             for attr in (
                 "dates",
                 "times",
@@ -1697,6 +2174,7 @@ class _FactClaims:
                 "quant",
                 "ranks",
                 "rules",
+                "wholes",
             ):
                 getattr(p, attr).update(getattr(q, attr))
         value = data.get("value")
@@ -1714,10 +2192,20 @@ class _FactClaims:
         # a claim's own figure (``basis: "claimed"``) supports only a sentence that says it is a
         # claim, never a measured statement
         self.claimed = data.get("basis") == "claimed" or data.get("kind") == "claimed_figure"
+        own = set()  # the verdicts its structured fields give it (not its text's lists)
         for key in ("value", "verdict", "severity"):
             v = data.get(key)
             if isinstance(v, str) and v.lower() in _VALUE_VERDICT:
                 p.verdicts.add(_VALUE_VERDICT[v.lower()])
+                if key != "severity":
+                    own.add(_VALUE_VERDICT[v.lower()])
+        self.own = own
+        # a finding re-judged (#332): its severity before the re-judge is not its verdict, so it
+        # supports a sentence only where that names the finding ("the leaking_valve fault")
+        self.superseded = set()
+        sev = str(data.get("severity") or "").lower()
+        if data.get("kind") == "reference_effect" and _VALUE_VERDICT.get(sev) not in own:
+            self.superseded = {_VALUE_VERDICT[sev]} if sev in _VALUE_VERDICT else set()
         v = data.get("direction")
         if isinstance(v, str) and v.lower() in _VALUE_DIRECTION:
             p.dirs.add(_VALUE_DIRECTION[v.lower()])
@@ -1813,7 +2301,20 @@ def _known_names(context) -> list:
 # --------------------------------------------------------------------------- judging
 
 
-def _match(q: _Qty, facts: list, claim: bool = False) -> bool:
+def _bound(q: _Qty, f: _Qty) -> bool:
+    """Whether a sentence's figure ``q`` is said of what the fact's figure ``f`` is (#332): the
+    words of its clause before it (else after it) must not name only what another figure listed
+    with ``f`` is of ("the cooling valve leaked on 86%" against "HW-leak 86% / CHW-leak 0%")."""
+    if q.total or not f.sib:
+        return True
+    for seg in (q.pre, q.post):
+        own, other = seg & f.label, seg & f.sib
+        if own or other:
+            return bool(own)
+    return True
+
+
+def _match(q: _Qty, facts: list, claim: bool = False, bound: bool = True) -> bool:
     for fc in facts:
         if fc.claimed and not claim:
             continue  # a claim's own figure never supports a measured statement
@@ -1823,6 +2324,8 @@ def _match(q: _Qty, facts: list, claim: bool = False) -> bool:
             if (q.sign == "-") != (f.sign == "-") or (q.sign == "±" and f.sign != "±"):
                 continue
             if (q.unit and f.unit != q.unit) or (q.base and f.base != q.base):
+                continue
+            if bound and not _bound(q, f):
                 continue
             return True
         if q.year and any(d[0] == int(q.value) for d in fc.claims.dates):
@@ -1835,7 +2338,15 @@ def _number_problems(p: _Parsed, facts: list) -> list:
     for q in p.qty:
         if _match(q, facts, q.claim):
             continue
-        if any(f.value == q.value for fc in facts for f in fc.claims.qty):
+        if _match(q, facts, q.claim, bound=False):
+            other = sorted(
+                {w for fc in facts for f in fc.claims.qty for w in f.sib & (q.pre | q.post)}
+            )
+            why.append(
+                f"{q.show()}: a cited fact gives this figure for another of the things it lists "
+                f"(not {', '.join(map(repr, other))})"
+            )
+        elif any(f.value == q.value for fc in facts for f in fc.claims.qty):
             why.append(
                 f"{q.show()}: a cited fact has this number, but with another sign, unit, "
                 "counted thing or role (a threshold, target or setpoint is not a result)"
@@ -1861,12 +2372,32 @@ _ZEROS = frozenset({"zero", "share"})
 def _says_too(n: _Neg, f: _Neg) -> bool:
     """Whether a fact's negation (or zero) ``f`` says the sentence's negation ``n``: about the
     same words (the fact's are all in the sentence's clause), negating the same thing."""
-    if n.kind in _ZEROS or f.kind in _ZEROS:
+    if n.kind == "frame":
+        return False
+    if "share" in (n.kind, f.kind):
         # the counted thing a fact's zero inherited ("0 untrusted" of "11 points") may be left
-        # implicit ("of those, 0 are untrusted")
-        if not f.words - {f.head} <= n.clause:
+        # implicit ("of those, 0 are untrusted"), and what a share is of ("CHW-leak 0%")
+        need = f.words - {f.head} - ({f.subject} if f.subject and not n.subject else set())
+        if not need <= n.clause:
             return False
         return n.head in f.words
+    if n.kind in _ZEROS or f.kind in _ZEROS:
+        # a zero is read with its own clause (#332): what the fact's zero is of and its first
+        # verb ("0 rule(s) skipped ...") must be in the sentence's, the sentence's first verb in
+        # the fact's list item ("0 rules returned a fault" is not "0 rules skipped"), and the
+        # sentence must not deny what the fact's counted things are ("None of the 8 hours was
+        # flagged" against "none of the 8 flagged hours falls ...")
+        req = set(f.mods) | ({f.lead} if f.lead else set())
+        if not req and not f.ctx:
+            req = set(f.words) - {f.head}
+        if not req <= n.clause:
+            return False
+        if not (n.head == f.head or n.head in f.words or f.head in n.clause):
+            return False
+        ctx = f.ctx or f.clause or f.words
+        if n.lead and n.lead not in _GENERIC | _NOUN_STEMS | f.words | ctx:
+            return False
+        return not (n.pred & f.mods)
     own = f.words - ({f.subject} if f.subject and not f.named else set())
     if not own <= n.clause:
         return False
@@ -1899,9 +2430,18 @@ def _claim_problems(p: _Parsed, facts: list, vocab: _Vocab = _NO_VOCAB, text: st
             if srx.search(vis) and not any(name in fc.roles for fc in facts):
                 why.append(f"the {name} point: no cited fact is about it")
     verdicts = set().union(*(fc.claims.verdicts for fc in facts))
-    for v in sorted(p.verdicts - verdicts):
+    final = set().union(*(fc.claims.verdicts - fc.superseded for fc in facts))
+    for v in sorted(p.verdicts - final):
+        if v in verdicts and v not in p.stated:
+            continue  # "the leaking_valve fault": the finding's name, not a verdict on it now
+        said = p.vraw.get(v, v)
+        if v in verdicts:
+            why.append(f"verdict {said!r}: the cited fact re-judged it, and says otherwise now")
+            continue
         word = "word" if v in _ASSURANCE or v.startswith("not ") else "verdict"
-        why.append(f"{word} {v!r}: no cited fact states it")
+        if said.lower().split()[-2:] and tuple(said.lower().split()[-2:]) in _CAUSAL_PAIRS:
+            word = "cause or effect"
+        why.append(f"{word} {said!r}: no cited fact states it")
     dirs = set().union(*(fc.claims.dirs for fc in facts))
     words = {"up": "an increase", "down": "a decrease or saving", "waste": "waste"}
     why += [f"{words[d]}: no cited fact states it" for d in sorted(p.dirs - dirs)]
@@ -1912,22 +2452,52 @@ def _claim_problems(p: _Parsed, facts: list, vocab: _Vocab = _NO_VOCAB, text: st
         if c not in polar and _OPPOSITE[c] in polar
     ]
     quant = set().union(*(fc.claims.quant for fc in facts))
+    several = " (a claim about all of several facts is not read: say it of each)" * (len(facts) > 1)
     for qc in sorted(p.quant - quant):
         what = "all or every" if qc == "all" else "most"
-        why.append(f"'{what}': no cited fact says {what}")
+        why.append(f"'{what}': no cited fact says {what}{several}")
+    wholes = set().union(*(fc.claims.wholes for fc in facts))
+    for w in sorted(p.wholes - wholes):
+        said = p.whole_words.get(w, frozenset())
+        if any(said <= fc.claims.whole_words.get(w, {"-"}) for fc in facts):
+            continue  # "all 14 are below 90%" against "14 points ...; 14 are below 90%"
+        why.append(f"'all {w:f}': no cited fact says all {w:f} of them (a part or none is not all)")
     ranks = set().union(*(fc.claims.ranks for fc in facts))
     if p.ranks and ranks:
         why += [
             f"issue {r}: the cited facts rank {', '.join(str(x) for x in sorted(ranks))}"
             for r in sorted(p.ranks - ranks)
         ]
+    elif p.said_ranks:  # a rank said as one comes from a cited fact (#332)
+        why += [f"rank {r}: no cited fact gives a rank" for r in sorted(p.said_ranks)]
+    fsups = [s for fc in facts for s in fc.claims.sups]
+    for word, obj, said in p.sups:
+        own = obj - _NOUN_STEMS  # "the worst point": of a point, as the fact's name says
+        if 1 in ranks or any(w == word and own <= o and (own or not o) for w, o, _s in fsups):
+            continue
+        why.append(f"{said!r}: no cited fact ranks it so")
     fnegs = [f for fc in facts for f in fc.claims.negs]
+    own = set().union(*(fc.own for fc in facts))
     for n in p.negs:  # a negation the sentence states needs a fact that states it
         if n.verdict:
             continue  # "does not meet": the verdict's polarity is checked above
-        if not any(_says_too(n, f) for f in fnegs):
-            if n.kind in _ZEROS:
-                why.append(f"none of {n.head!r} ({n.raw!r}): no cited fact gives a zero of it")
+        if n.kind == "zero" and n.head in ("fault", "warn") and own & {"ok", "info"}:
+            continue  # "no fault" of a finding the cited fact judges ok
+        if n.kind == "zero":
+            # a zero needs a fact's zero; "none of the baselines meets" a "does not meet" in
+            # each cited fact (#332)
+            said = any(_says_too(n, f) for f in fnegs if f.kind not in ("verbal", "np")) or all(
+                any(_says_too(n, f) for f in fc.claims.negs) for fc in facts
+            )
+        else:
+            said = any(_says_too(n, f) for f in fnegs)
+        if not said:
+            if n.kind == "frame":
+                why.append(f"{n.raw!r}: it denies the rest of the sentence; no cited fact does")
+            elif n.kind in _ZEROS:
+                why.append(
+                    f"{n.raw!r}: no cited fact gives this zero, of this, in its own words{several}"
+                )
             else:
                 why.append(f"{n.raw!r}: no cited fact says so")
     affirmed = set().union(*(fc.claims.affirmed for fc in facts))
@@ -1990,7 +2560,7 @@ def _judge(
     text_cited = [c for c in extract_cites(_visible(text)) if c in all_ids]
     # a fact's own text, cited with its id, is the server's words (#328 follow-up)
     quotes = {}
-    for fid in all_ids:
+    for fid in set(extract_cites(text)) & all_ids:  # only the facts the text cites
         rx = _quoted_rx(getattr(context.by_id(fid), "text", ""))
         if rx is not None:
             quotes[fid] = rx
