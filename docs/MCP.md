@@ -78,7 +78,17 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   in the sentence and in the fact (#332): "All 11 points are trusted" against `9 trusted, 2
   suspect`, "no faults were found" against another clause's `0 rule(s) skipped`, "the cooling
   valve leaked on 86%" against `HW-leak 86% / CHW-leak 0%` and "still a fault" against a
-  finding re-judged ok all fail. Negations are compared both ways: a sentence must not drop
+  finding re-judged ok all fail. What a sentence says of a counted thing must agree with what a
+  cited fact says of it (#336), whatever the quantifier and wherever it stands -- "all 8", "8
+  out of 8", "the 8 flagged hours ... all fall", "both", "none of", "no rule", "not a single
+  fault", "fault-free", or none at all ("The 11 points are trusted" says all 11): "The 8 flagged
+  hours fall in the window" against "None of the 8 flagged hours falls in the window", "No rule
+  passed" against `19 ok` and "Both suspect points are trusted" fail. Labels are closed sets:
+  the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
+  side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
+  FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
+  CHW-leak 60%` and "1 point is suspect" against `2 suspect, 1 untrusted` fail, and a share the
+  fact tells apart by side fails when the sentence names no side. Negations are compared both ways: a sentence must not drop
   what a cited fact negates ("the valve leaks" against "no valve leak"); "it is false that ..."
   and a cause or effect ("accounts for", "will clear") need a fact that says so. Headings, bold
   lines and lead-ins ending in a colon are judged when they state something. A failing sentence
@@ -90,7 +100,21 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   keeps the draft's lines, headings, list markers and blank lines and removes only the failing
   sentences (#322); when one of those gave a verdict, a negation or a caveat, it opens with a
   `NOTICE:` line saying the text says less than the draft, and a banner says the same (#328): do
-  not show such a `verified_text` as the answer.
+  not show such a `verified_text` as the answer. The prompts ask for `check_citations` on the
+  whole revised draft each time, not only on the sentences changed (#336).
+- **What it does not check** (the full list is in CAPABILITY-REGISTRY.md). These pass when
+  their figures and names match, so they can be wrong and still be marked supported:
+  a counted thing named after its verb or later in its clause with no quantifier ("the window
+  covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in words
+  other than the cited fact's ("the 8 hours precede the window"); a cause after a bare
+  "because" ("declined because the input was untrusted"); a label outside the closed sets
+  where the cited fact gives only one figure; a claim about all of several facts. And these
+  fail closed although they can be true: "all" or "every" with no number unless a cited fact
+  says all or counts that label with its total; "all 8 ... fall outside the window" (a whole
+  count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
+  number); a share the fact tells apart by side, trust class or fault condition said without
+  one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
+  to", "caused by" or "explained by".
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the

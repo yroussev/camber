@@ -49,7 +49,8 @@ _FINISH = (
     "sure you are) rests on facts but is not one, so it is not marked supported: give it "
     "after the checked text, labelled as your judgment. A verified_text that opens with a "
     "NOTICE that sentences were removed is not the answer. Fix or remove each sentence it does "
-    "not mark supported and call check_citations again on the revised draft, until it marks "
+    "not mark supported and call check_citations again on the revised draft, the whole of it "
+    "every time (every sentence you will give, not only the ones you changed), until it marks "
     "every sentence supported: never give text it has not checked. Then give that last "
     "verified_text, and after it your labelled judgment, as the corrected text."
 )
