@@ -223,8 +223,8 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
     if unverified:
         banners.append(
             f"{unverified} allowed facility(ies) are not listed because their licence or "
-            "lifecycle cannot be established from the store's facility registry; they are not "
-            "served until it is repaired."
+            "lifecycle cannot be established (from the store's facility registry, or not all "
+            "of their files could be checked); they are not served until that is repaired."
         )
     data = {
         "facilities": shown,

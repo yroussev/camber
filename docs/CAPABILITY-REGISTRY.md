@@ -271,7 +271,10 @@ reduced to one short line.
    id, licence and a research-only flag into every part file, and the handler runs in a serving
    scope in which the store refuses a research-only part whatever facility, directory or store
    it sits in. A facility holding one is `refused_licence` before the handler runs (the
-   `facilities` listing withholds it), and a read the handler makes refuses it again. See
+   `facilities` listing withholds it), and a read the handler makes refuses it again. A facility
+   not all of whose files could be checked for the mark (a dangling symlink, an unreadable
+   directory, a symlink loop or files nested too deep, #334) is `refused_licence` with
+   `data["reason"] == "licence_unverified"` and counted in `withheld_unverified`. See
    [Provenance in the part files](DATASETS.md#provenance-in-the-part-files).
 4. **No-persist.** The handler runs inside the no-persist scope (#276): a config run folds no
    fault history, writes no report file or manifest entry, writes back no store cache and

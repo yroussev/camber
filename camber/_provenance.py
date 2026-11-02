@@ -107,6 +107,8 @@ def _marked_source(value: bytes, did: str, facility_id: str) -> dict:
     src = {"facility_id": facility_id}
     if did:
         src["dataset_id"] = did
+    elif value == _partprov.UNCHECKED:  # #334: not every file could be checked for a mark
+        src["title"] = "data not all of whose part files could be checked for a provenance mark"
     else:
         src["title"] = "data whose part files carry an unreadable provenance mark"
     if isinstance(licence, str) and licence:

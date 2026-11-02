@@ -591,8 +591,13 @@ read (damaged, longer than 4 KB or nested too deep to parse) counts as research-
 names the facility and the dataset, never a path. The check looks at every file a store read
 opens, whatever its name (#329): the store reads every file in a facility directory whose name
 does not start with `_` or `.`, so a part copied in as `x.parq`, `x.PARQUET`, `x` or
-`x.parquet.tmp` is checked like `x.parquet`, and a facility directory nested more than six levels
-deep is refused because not all of it was checked.
+`x.parquet.tmp` is checked like `x.parquet`. A facility the check cannot read in full is refused
+because not all of its files could be checked (`refused_licence` with the reason
+`licence_unverified`, never "marked as research-only", #334): one holding a dangling symlink, a
+directory it may not list, a symlink loop, or files nested more than six levels deep. The check
+goes on past such an entry, so research-only parts after it are still found and named. `camber
+store verify` lists every such entry, and every other file the store reads, so you can find and
+remove it.
 The local commands still read research-only data you have accepted the licence for: `camber
 run`, `camber report` and `camber lab`, with the non-commercial banner on every report. Since
 0.112 (#329) that banner and the licence block come from the part files' marks too, so a report
@@ -602,7 +607,11 @@ built from research-only parts copied into another facility or store carries the
 still apply to them (#290, #312: a facility named for a research-only dataset, a renamed or
 exactly copied partition), but a partial copy of an unmarked partition is not recognised.
 `camber datasets provenance --store DIR` lists every facility with how many of its parts carry
-provenance, and `--missing` lists those that lack it; `camber datasets ingest <id> --store DIR
+provenance, and `--missing` lists those that lack it. A facility that counts as research-only
+without naming a research-only dataset is tagged so in the table, as in `--json` (#334):
+`[mark unreadable: counts as research-only]` (a damaged mark, or one longer than 4 KB) or `[not
+all files could be checked: counts as research-only]` (`unchecked` in `--json`; such entries are
+not counted as parts); `camber datasets ingest <id> --store DIR
 --force` re-ingests a dataset with provenance in every part.
 
 Reading the key costs one footer read per part file, which the store's reads mostly do anyway;
