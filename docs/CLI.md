@@ -781,7 +781,7 @@ Docker Desktop container (or two machines on one share) do not share. Since 0.11
 claims `<dir>/_lock.owner` and keeps a heartbeat in it, so a writer on the other side waits and
 then exits 1 with `… is locked by <pid>@<host> since <time> on another system sharing this
 directory (kernel …)`; a claim whose writer was killed is taken over (at once when its process
-is seen to be gone, else after 10 seconds without a heartbeat). A writer stopped for longer than
+or, on the same system, the lock shows it gone, else at most 10 seconds after its last heartbeat). A writer stopped for longer than
 that (Ctrl-Z, `docker pause`) has its claim taken over by a writer on the other side too, and when
 it resumes it exits 1 with `… this writer lost its claim …` before it changes anything more
 (0.112, #330; see [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache) for the
@@ -888,7 +888,10 @@ stray `notes.txt`, `README` or Finder `Icon` file (unreadable: the facility's re
 is removed), a `x.parquet~` backup, and a part at the facility root or below the month (not
 canonical: the store reads them), and every entry that keeps the research-only check from seeing
 all of a facility (a dangling symlink, a directory it may not list, a symlink loop, files nested
-too deep), which counts as unreadable because `camber mcp` does not serve that facility.
+too deep), which counts as unreadable because `camber mcp` does not serve that facility. A
+directory it may not list (mode 000 or 0o111, at any level, the facility directory included) is
+listed by its store-relative path and the walk goes on, so the counts and `--json` still cover the
+rest of the store, with exit status 1 (#337: it stopped with `Permission denied` before).
 
 `store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
 store: missing, a file, or a directory of other things (no partitions, registry or workspace

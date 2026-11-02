@@ -400,9 +400,11 @@ def store_provenance(store) -> list:
 
     ``{"facility_id", "parts", "marked", "unmarked", "unreadable_marks", "unchecked", "datasets",
     "research_only_datasets", "research_only", "catalog", "state"}``, sorted by id.
-    ``unreadable_marks`` counts the marked parts whose mark names no dataset (damaged, too long:
-    research-only); ``unchecked`` the entries the walk could not check (#334: a dangling
-    symlink, an unreadable directory, files nested too deep), none of which counts as a part.
+    ``unreadable_marks`` counts the marked parts whose mark cannot be read (damaged, too long, a
+    field missing or of the wrong type, #337: :func:`camber.store._partprov.decode`), each
+    research-only, as the server counts it; ``unchecked`` the entries the walk could not check
+    (#334: a dangling symlink, an unreadable directory, files nested too deep), none of which
+    counts as a part.
     Either makes the facility ``research_only``, as the server refuses it. ``catalog`` is
     whether the facility came from a catalog dataset (its registry entry records one, or it is
     named ``ds-...``). ``state`` is ``"marked"`` (every part
@@ -440,7 +442,7 @@ def store_provenance(store) -> list:
                 "parts": parts,
                 "marked": parts - unmarked,
                 "unmarked": unmarked,
-                "unreadable_marks": sum(marks[v] for v in values if not _partprov.dataset_of(v)),
+                "unreadable_marks": sum(marks[v] for v in values if _partprov.decode(v) is None),
                 "unchecked": unchecked,
                 "datasets": sorted({_partprov.dataset_of(v) for v in values} - {""}),
                 "research_only_datasets": sorted(

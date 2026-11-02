@@ -303,6 +303,22 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   server refused it. The table now adds `[mark unreadable: counts as research-only]` or `[not all
   files could be checked: counts as research-only]`, and `--json` adds `unreadable_marks`,
   `unchecked` and `research_only_datasets`.
+- **`coverage` with `equips` or `roles` keeps the facility's whole window (#337).** With a
+  filter, the window shrank to the selection's own first and last sample, so the same point read
+  "19.1% of the whole window, 2 gaps" without it and "100.0% of the whole window, 0 gaps" with
+  it, and both could be cited. An open start or end is now the facility's first or last stored
+  sample whatever the filter selects, so a point's coverage and gaps no longer change with it.
+- **`camber store verify` goes on past a directory it cannot list (#337).** A directory of mode
+  000 or 0o111 (a month, a year or the facility directory) stopped it with `Permission denied`
+  and an absolute path, with no counts, list or JSON. It now lists the directory as unreadable
+  by its store-relative path, checks the rest of the store, prints the counts (or `--json`) and
+  exits 1. A directory it can list but not enter is said to be a permission problem, not "a
+  dangling symlink or a loop?". `store normalize` walks the same way.
+- **Lock and cleanup timings in the docs (#337).** A killed writer's claim is taken over at most
+  10 s after its last heartbeat, at once on the same system when the lock already shows it gone;
+  a killed `camber mcp` server's matplotlib directory is removed by the next server to start, at
+  the latest by one starting 2 minutes after the kill (DATASETS.md, CLI.md, PORTFOLIO.md,
+  DOCKER.md, MCP.md).
 
 ### Changed
 - **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
@@ -403,6 +419,14 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   facility (a dangling symlink, an unreadable directory, a symlink loop, files nested too deep)
   is unreadable. **A script that runs `store verify` may now see exit code 1** on a store that
   passed before: remove or move the files it lists out of the facility directory.
+- **One rule for a provenance mark with a field of the wrong type (#337).** A hand-written mark
+  whose `dataset_id` was a number or an object was tagged "counts as research-only" in the
+  `datasets provenance` table while its `--json` said `research_only: false` and the server
+  served the facility. A mark whose `dataset_id` is not a non-empty string, whose `licence` is
+  not a string or whose `research_only` is not `true` / `false` (or that lacks one of them) is now
+  unreadable everywhere: research-only in the table, in `--json` and in the server's checks.
+  **A facility holding such a mark is now refused by `camber mcp`**; `camber datasets ingest
+  <id> --force` writes a well-formed mark, or remove the hand-edited part.
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text

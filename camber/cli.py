@@ -2145,7 +2145,12 @@ def _cmd_store_verify(args) -> int:
 
     try:
         r = _normalize.verify(args.store, facility_id=args.facility)
-    except (ValueError, OSError) as e:
+    except OSError as e:  # #337: a path inside the store by its store-relative name only
+        where = os.path.relpath(e.filename, args.store) if isinstance(e.filename, str) else ""
+        where = "" if where in ("", ".") or where.startswith("..") else f": {where}"
+        print(f"error: {e.strerror or e}{where}", file=sys.stderr)
+        return 1
+    except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     c = r["counts"]

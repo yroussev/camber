@@ -202,7 +202,11 @@ def _targets(root: str):
 
 
 def _parts(sroot: str, facility_id=None):
-    """Every part file of a store: ``(facility_id, year, month or None, directory, name)``."""
+    """Every part file of a store: ``(facility_id, year, month or None, directory, name)``.
+
+    0.112 (#337): found by the provenance check's own walk (:func:`camber.store._partprov.scan`),
+    so a directory that cannot be listed (mode 000 or 0o111, at any level) is skipped here and the
+    walk goes on; :func:`_read_set_rows` lists it as unreadable."""
     if not os.path.isdir(sroot):
         return
     fdirs = sorted(d for d in os.listdir(sroot) if d.startswith(f"{_FACILITY}="))
@@ -213,29 +217,27 @@ def _parts(sroot: str, facility_id=None):
         fpath = os.path.join(sroot, fd)
         if not os.path.isdir(fpath):
             continue
-        for yd in sorted(os.listdir(fpath)):
-            ypath = os.path.join(fpath, yd)
-            if not yd.startswith(f"{_YEAR}=") or not os.path.isdir(ypath):
+        try:
+            files, _unchecked = _partprov.scan(fpath)
+        except OSError:  # the facility directory itself cannot be listed: _read_set_rows says so
+            continue
+        found = []
+        for path, _size, _mtime in files:
+            rel = os.path.relpath(path, fpath).split(os.sep)
+            n = rel[-1]
+            if len(rel) not in (2, 3) or not n.endswith(".parquet"):
+                continue  # outside the year=/month= layout: _read_set_rows lists it
+            yd, md = rel[0], (rel[1] if len(rel) == 3 else None)
+            if not yd.startswith(f"{_YEAR}=") or not (md or f"{_MONTH}=").startswith(f"{_MONTH}="):
                 continue
             try:
                 year = int(yd.split("=", 1)[1])
+                month = int(md.split("=", 1)[1]) if md is not None else None
             except ValueError:
                 continue
-            names = sorted(os.listdir(ypath))
-            for n in names:
-                if _is_part(ypath, n):
-                    yield fid, year, None, ypath, n
-            for md in names:
-                mpath = os.path.join(ypath, md)
-                if not md.startswith(f"{_MONTH}=") or not os.path.isdir(mpath):
-                    continue
-                try:
-                    month = int(md.split("=", 1)[1])
-                except ValueError:
-                    continue
-                for n in sorted(os.listdir(mpath)):
-                    if _is_part(mpath, n):
-                        yield fid, year, month, mpath, n
+            found.append(((yd, md or "", n), (fid, year, month, os.path.dirname(path), n)))
+        for _key, row in sorted(found):  # a year's own files before its months, as listed
+            yield row
 
 
 def _is_part(d: str, n: str) -> bool:

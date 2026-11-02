@@ -41,7 +41,8 @@ Containers of one Docker Desktop VM share its kernel, and so its `flock` on a bi
 excludes nothing there). So a paused container writer is **not** taken over by another container:
 that one waits, as for a running writer, and after its `--lock-timeout` exits 1 with `… -- a
 writer that is alive but stopped …`. Unpause or stop the paused container. A container writer
-that was killed is taken over by another container after 10 seconds. See
+that was killed is taken over by another container within at most 10 seconds: at once when the
+lock already shows it gone, as for a container started after the kill. See
 [docs/DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
 
 Config is via environment variables (already set in the image): `CAMBER_STORE` (default

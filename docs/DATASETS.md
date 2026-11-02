@@ -587,7 +587,10 @@ research-only, whatever facility id, directory or store it sits in: a facility h
 when no check named its facility. A facility that mixes marked and unmarked parts is refused as
 a whole. A mark is research-only when its flag says so, when its licence is non-commercial or
 no-derivatives, or when the catalog now holds that dataset research-only; a mark that cannot be
-read (damaged, longer than 4 KB or nested too deep to parse) counts as research-only. The refusal
+read (damaged, longer than 4 KB or nested too deep to parse, or with a field missing or of the
+wrong type: a `dataset_id` that is not a non-empty string, a `licence` that is not a string, a
+`research_only` that is not `true` or `false`; #337) counts as research-only, by the same rule
+for the server's checks and `camber datasets provenance`, table and `--json`. The refusal
 names the facility and the dataset, never a path. The check looks at every file a store read
 opens, whatever its name (#329): the store reads every file in a facility directory whose name
 does not start with `_` or `.`, so a part copied in as `x.parq`, `x.PARQUET`, `x` or
@@ -609,7 +612,8 @@ exactly copied partition), but a partial copy of an unmarked partition is not re
 `camber datasets provenance --store DIR` lists every facility with how many of its parts carry
 provenance, and `--missing` lists those that lack it. A facility that counts as research-only
 without naming a research-only dataset is tagged so in the table, as in `--json` (#334):
-`[mark unreadable: counts as research-only]` (a damaged mark, or one longer than 4 KB) or `[not
+`[mark unreadable: counts as research-only]` (a damaged mark, one longer than 4 KB, or one with
+a field missing or of the wrong type) or `[not
 all files could be checked: counts as research-only]` (`unchecked` in `--json`; such entries are
 not counted as parts); `camber datasets ingest <id> --store DIR
 --force` re-ingests a dataset with provenance in every part.
@@ -665,7 +669,8 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   `… is locked by <pid>@<host> since <time> on another system sharing this directory (kernel …)`.
   A claim left by a writer that was killed is taken over at once when its process is seen to be
   gone (same kernel and pid namespace, and its pid has exited or now names a process that started
-  at another time), else after 10 seconds without a heartbeat. Since #330 the `flock` alone no
+  at another time) or, on the same system, the lock shows it gone, else at most 10 seconds after
+  its last heartbeat. Since #330 the `flock` alone no
   longer counts as that proof: on a Docker Desktop bind mount the `flock` of the process whose
   open created the lock file excludes nothing, so two containers (or two processes of one
   container) could both write. A claim from another container of the same VM is now waited for
@@ -701,7 +706,7 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   | The holder | A writer of the same system | A writer on another system |
   |---|---|---|
   | runs | waits; refused when its wait runs out | waits; refused when its wait runs out |
-  | was killed or exited | takes over: at once when it sees the process is gone (same pid namespace: two host processes, or two of one container), else after 10 s without a heartbeat (another container) | takes over after 10 s without a heartbeat |
+  | was killed or exited | takes over: at once when it sees the process is gone (same pid namespace: two host processes, or two of one container) or the lock shows it gone (another container, when the writer starts after the kill), else at most 10 s after the last heartbeat (another container, a writer already waiting) | takes over after 10 s without a heartbeat |
   | is stopped (Ctrl-Z, `docker pause`, a debugger) | **waits**, as for a running holder; refused when its wait runs out | takes over after 10 s without a heartbeat |
 
   A stopped process still holds its kernel's lock, so every writer of that system honours it: a

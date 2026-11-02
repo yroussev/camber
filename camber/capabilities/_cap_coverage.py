@@ -4,6 +4,8 @@ Per point: samples, first and last sample, the sampling interval, coverage over 
 the gaps in it; per equipment, the mean and the worst point. The interval is the median spacing
 of the point's own samples (:func:`camber.ingest.quality.infer_freq`); a gap is a stretch longer
 than 1.5 intervals with no valid sample, including a late start or an early end in the window.
+The window is ``start`` to ``end``; an open end is the facility's first or last stored sample,
+whatever ``equips`` / ``roles`` select (0.112, #337: it was the selection's own span).
 """
 
 from __future__ import annotations
@@ -19,8 +21,9 @@ from ._sanitize import name
 #: what ``coverage`` means here; sensor_trust's differs (#304: one point read 35% and 100%)
 _COVERAGE = (
     "the share of the samples expected at the point's own interval that are present over the "
-    "whole window (start to end; by default the facility's first to last sample), so a point "
-    "that starts late or ends early counts the missing stretch. sensor_trust's coverage is over "
+    "whole window (start to end; by default the facility's first to last stored sample, "
+    "whatever equips or roles select), so a point that starts late or ends early counts the "
+    "missing stretch. sensor_trust's coverage is over "
     "the point's own span instead (from its first sample), or over its equipment's running hours"
 )
 
@@ -191,6 +194,15 @@ def _point(ts: pd.DatetimeIndex, w0, w1) -> tuple:
     }, gaps
 
 
+def _like(t, tz):
+    """``t`` (from file statistics: UTC when the column has a zone) in the read's zone ``tz``."""
+    if t is None:
+        return None
+    if t.tzinfo is not None:
+        return t.tz_convert(tz)
+    return t.tz_localize("UTC").tz_convert(tz) if tz is not None else t
+
+
 def coverage(ctx, arguments: dict) -> CapabilityResult:
     """Coverage and gaps per point and per equipment of one allowed facility."""
     fid = arguments["facility_id"]
@@ -218,8 +230,13 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
     )
     long = long[long["value"].notna()] if not long.empty else long
     ts_all = pd.to_datetime(long["ts"]) if not long.empty else pd.Series(dtype="datetime64[ns]")
-    w0 = pd.Timestamp(start) if start else (ts_all.min() if len(ts_all) else None)
-    w1 = pd.Timestamp(end) if end else (ts_all.max() if len(ts_all) else None)
+    # 0.112 (#337): an open end of the window is the facility's first / last stored sample, not
+    # the selection's, so equips / roles never change a point's coverage or gaps
+    lo = hi = None
+    if len(ts_all) and not (start and end):
+        lo, hi = (_like(t, ts_all.dt.tz) for t in store._ts_span(fid))
+    w0 = pd.Timestamp(start) if start else lo
+    w1 = pd.Timestamp(end) if end else hi
     groups: dict = {}
     for (equip, role), g in long.groupby(["equip", "role"], sort=True) if not long.empty else ():
         groups[(equip, role)] = pd.DatetimeIndex(pd.to_datetime(g["ts"])).unique().sort_values()

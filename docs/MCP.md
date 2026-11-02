@@ -204,8 +204,9 @@ also records the server (pid, kernel, pid namespace, start time) and the server 
 time. Another container's server is judged by its lock where `flock` works, as on a named volume.
 On a Docker Desktop bind mount `flock` excludes nothing, so there its heartbeat decides: its
 directory is removed once the file has not been touched for 2 minutes. A live server's
-directory is kept there. A killed server's directory is removed by the first server that starts
-2 minutes or more after the kill. A 0.111
+directory is kept there. A killed server's directory is removed by the next server to start: at once
+where its lock already shows it gone, and at the latest by any server that starts 2 minutes or
+more after the kill. A 0.111
 server's directory is judged by its process id, and those named without a process id (0.111
 development builds) are removed once they are a day old. A name
 it cannot read as a process id is left alone, and nothing the sweep meets stops the start (#316).

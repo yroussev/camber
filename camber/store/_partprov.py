@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import errno
 import functools
 import json
 import os
@@ -74,9 +75,17 @@ def value_for_entry(entry) -> bytes:
 _MAX_VALUE = 4096
 
 
+#: the type each field of a :data:`KEY` value must have, as :func:`encode` writes it
+_FIELDS = {"dataset_id": str, "licence": str, "research_only": bool}
+
+
 def decode(value) -> dict | None:
-    """The :data:`KEY` value as a dict, ``None`` when it is not a JSON object (or is too long or
-    too deeply nested to parse, #329)."""
+    """The :data:`KEY` value as a dict, ``None`` when it cannot be read: not a JSON object, too
+    long or too deeply nested to parse (#329), or a field of the wrong type -- a ``dataset_id``
+    that is not a non-empty string, a ``licence`` that is not a string, a ``research_only`` that
+    is not a boolean, or one of them missing (0.112, #337). The one rule for every reader of a
+    mark: the up-front check, the read-time check and ``camber datasets provenance`` all count
+    such a value as unreadable, so research-only (fail closed)."""
     try:
         raw = bytes(value)
         if len(raw) > _MAX_VALUE:
@@ -84,7 +93,11 @@ def decode(value) -> dict | None:
         doc = json.loads(raw.decode("utf-8"))
     except (TypeError, ValueError, RecursionError):
         return None
-    return doc if isinstance(doc, dict) else None
+    if not isinstance(doc, dict):
+        return None
+    if any(type(doc.get(k)) is not t for k, t in _FIELDS.items()) or not doc["dataset_id"]:
+        return None
+    return doc
 
 
 @functools.lru_cache(maxsize=256)
@@ -94,29 +107,25 @@ def research_only(value: bytes) -> bool:
     dataset id (terms changed since the ingest). A value that cannot be read counts (fail
     closed)."""
     doc = decode(value)
-    if doc is None or doc.get("research_only") is not False:
+    if doc is None or doc["research_only"] is not False:
         return True
     from ..datasets._catalog import is_research_only_licence
 
-    if is_research_only_licence(str(doc.get("licence") or "")):
+    if is_research_only_licence(doc["licence"]):
         return True
-    did = doc.get("dataset_id")
-    if did:
-        try:
-            from ..datasets import get
+    try:
+        from ..datasets import get
 
-            entry = get(str(did))
-        except Exception:  # noqa: BLE001 - an unknown / retired id: the recorded value decides
-            return False
-        return bool(entry.research_only) or is_research_only_licence(str(entry.licence or ""))
-    return False
+        entry = get(doc["dataset_id"])
+    except Exception:  # noqa: BLE001 - an unknown / retired id: the recorded value decides
+        return False
+    return bool(entry.research_only) or is_research_only_licence(str(entry.licence or ""))
 
 
 def dataset_of(value) -> str:
     """The dataset id a :data:`KEY` value names (``""`` when none can be read)."""
-    doc = decode(value) or {}
-    did = doc.get("dataset_id")
-    return did if isinstance(did, str) else ""
+    doc = decode(value)
+    return doc["dataset_id"] if doc is not None else ""
 
 
 def merge(values):
@@ -260,8 +269,16 @@ def scan(fdir: str) -> tuple:
                     continue
                 try:
                     st = os.stat(e.path)  # follows a link: a dangling one or a loop fails
-                except (OSError, ValueError):
-                    bad.append((e.path, "cannot be resolved (a dangling symlink or a loop?)"))
+                except (OSError, ValueError) as err:
+                    denied = getattr(err, "errno", None) in (errno.EACCES, errno.EPERM)
+                    bad.append(
+                        (
+                            e.path,
+                            "cannot be read (permission denied)"
+                            if denied
+                            else "cannot be resolved (a dangling symlink or a loop?)",
+                        )
+                    )
                     continue
                 if stat.S_ISDIR(st.st_mode):
                     if (st.st_dev, st.st_ino) in up:  # a link back to a directory above it

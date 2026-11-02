@@ -493,7 +493,8 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
   Desktop container on a bind mount (they run different kernels), so a writer also claims
   `_lock.owner` with a heartbeat: a writer on the other side waits for it and is then refused,
   naming the holder's system, and a claim whose writer was killed is taken over (at once when its
-  process is seen to be gone, else after 10 seconds without a heartbeat). A writer stopped for
+  process or, on the same system, the lock shows it gone, else at most 10 seconds after its last
+  heartbeat). A writer stopped for
   longer than that loses its claim to a writer on the other side and fails before its next change
   when it resumes (0.112, #330); a writer of its own system (the same host, or a container of the
   same Docker VM) waits for it instead, and is told it is stopped (#335). Still, write a workspace from one side only; see
