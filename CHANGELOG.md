@@ -218,6 +218,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   starts with a `camber` object: `facts` maps each fact id to its text (the same ids and text as the
   facts block, all of them resolved by `check_citations`) and `notices` lists the notices. The
   prompts say where to find fact ids in either form.
+- **On Linux, an MCP worker that grew far past its usual memory is replaced again.** A worker
+  measured its peak memory with `ru_maxrss`, which on Linux carries over the peak of the server
+  process that started it: once the server had held more memory than a worker's first call
+  needed, every worker looked that large, and a call that took it well past its usual size
+  never had it replaced, so it kept that memory. A worker now reports its own peak (`VmHWM`).
+  macOS was not affected.
 
 ### Changed
 - **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
