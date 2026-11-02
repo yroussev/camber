@@ -296,23 +296,38 @@ _FLOCK_WORKS: dict = {}  # directory -> whether flock excludes there (probed onc
 def _lock_owner(path: str) -> None:
     """Write this process's identity to ``path``'s owner file and hold it locked for the life
     of this process (the lock: POSIX only)."""
+    # written and locked under a temporary name, then renamed into place: a sweep never sees
+    # the owner file empty or unlocked, which on a local disk reads as a dead server's
+    tmp = os.path.join(path, f"{_MPL_OWNER}.{os.getpid()}.tmp")
     try:
         from ..portfolio._lock import process_identity
 
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(os.path.join(path, _MPL_OWNER), flags, 0o600)
+        flags = os.O_RDWR | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(tmp, flags, 0o600)
     except (OSError, ImportError):
         return
+    locked = False
     try:
-        os.ftruncate(fd, 0)
-        os.write(fd, json.dumps(process_identity(), sort_keys=True).encode("utf-8"))
-        import fcntl
+        try:
+            import fcntl
 
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (OSError, ImportError):  # Windows: the record and the process id rule
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            locked = True
+        except (OSError, ImportError):  # Windows: the record and the process id rule
+            pass
+        os.write(fd, json.dumps(process_identity(), sort_keys=True).encode("utf-8"))
+        os.replace(tmp, os.path.join(path, _MPL_OWNER))
+    except OSError:
         os.close(fd)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
         return
-    _MPL_LOCKS.append(fd)
+    if locked:
+        _MPL_LOCKS.append(fd)
+    else:
+        os.close(fd)
 
 
 def _beat_owner(path: str, stop) -> None:
