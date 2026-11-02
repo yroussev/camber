@@ -475,3 +475,29 @@ def test_whole_sentences_of_a_notice_quoted_word_for_word_are_supported():
 def test_a_server_never_strips_its_own_zero_summary():
     text, banners = _grounded(f"0 facilities are visible {_c(NONE_VISIBLE)}.", [NONE_VISIBLE])
     assert not banners and text.startswith("0 facilities are visible"), banners
+
+
+def test_the_prompts_page_the_report_and_take_a_whole_claim():
+    from camber.capabilities import default_registry
+
+    prompts = {p.name: p for p in default_registry().prompts()}
+
+    def text(name, **args):
+        return "\n".join(m["text"] for m in prompts[name].render({"facility_id": FAC, **args}))
+
+    for name in ("plan_site_visit", "rcx_executive_summary"):
+        body = text(name)
+        assert "again with the offset the notice names" in body, name
+        assert "keep the default top_n and limit" in body.lower(), name
+    # a host's slash command may pass only the claim's first word
+    cut = text("check_savings_claim", claim="The")
+    assert "If that looks cut short, use the whole claim" in cut
+    assert "pass it whole as claim" in text("check_savings_claim")
+    # and every prompt asks for a re-check of the revised draft
+    for name in prompts:
+        args = {a.name: "AHU-1" for a in prompts[name].arguments if a.name != "facility_id"}
+        if "finding_id" in args:
+            args["finding_id"] = "leaking_valve@AHU-1"
+        if "equips" in args:
+            args["equips"] = "AHU-1, AHU-2"
+        assert "check_citations again on the revised draft" in text(name, **args), name

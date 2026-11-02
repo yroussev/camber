@@ -317,6 +317,10 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   cite the issue fact for a rank, and give an inference after the checked text, labelled as
   judgment. The prompts now ask the model to run `check_citations` again on its revised draft
   until every sentence is supported, and to give only that text and its labelled judgment.
+  `plan_site_visit` and `rcx_executive_summary` ask it to page `rcx_report` with the `offset`
+  a notice names rather than ask for a larger `top_n`, and `check_savings_claim` to use the
+  whole claim from the conversation when the argument looks cut short (a host's slash command
+  can pass only its first word).
 - **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
   every fact must be one the session was sent, unchanged, or the call is refused with
   `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out
