@@ -187,8 +187,10 @@ def check_savings_claim(args: dict) -> list:
             "the uncertainty (fsu) and the baseline fit statistics. Note any declined result "
             "and its reason, any rebaseline trigger, and whether the reporting period lies "
             "outside the baseline's conditions.",
-            'Restate the claim citing its claimed_figure facts ("The claim states a 12% saving '
-            '[A1@mv_summary-...]"). Give a verdict: supported, partly supported, or not '
+            "Restate the claim's figures as its claimed_figure facts state them, citing each "
+            '("The claim states 12% [A1@mv_summary-...]"), with no word of direction (a saving, '
+            "a reduction, an increase): a bare figure says none. Give a verdict: supported, "
+            "partly supported, or not "
             "supported by the M&V results, and what would be needed to support it (the verdict "
             "is your judgment: see below).",
         ),

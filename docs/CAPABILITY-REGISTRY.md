@@ -437,8 +437,9 @@ cannot match is not supported. **Supported means matched, not proven true.**
   (`1.`, `2)`), a step (`Ranked cause 1`, `step 2`, `Stop 1`, `#3`) and an ordinal (`2nd`) are
   labels, not figures. A fact with `basis: "claimed"` (a claim's own figure, from
   `mv_summary`'s `claim`) supports a figure only in a clause that presents it as a claim ("the
-  claim states 15%"), never a measured statement; its `direction` (a saving is `down`) lets "the
-  claim states a 15% saving" be cited. A **derived number** -- a difference, sum, ratio or
+  claim states 15%"), never a measured statement; its `direction` (a saving is `down`, from the
+  claim's own words) lets "the claim states a 15% saving" be cited, but a bare "15%" gives none.
+  A **derived number** -- a difference, sum, ratio or
   annualised figure of the facts' figures -- is not supported unless a fact states it.
 - **Claims** (`unsupported_claim`), checked against the facts the sentence cites:
   - **Names.** An equipment, meter or facility the sentence names -- an id with a digit or an
@@ -485,11 +486,19 @@ cannot match is not supported. **Supported means matched, not proven true.**
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
   verdict verb such as "passed" included) outside a relative clause, or advice -- such as `# AHU-1 triage`, `Findings:`, `## Points
   that never move`, `## Savings claim check` or `1. Sensor offset.` is kept and not judged. A
-  `NOTICE:` line repeating the text of a `notice` fact among the facts (passed in `facts`, or
-  cited) is kept and not judged; a `NOTICE:` line that cites its notice fact is matched like
-  any sentence; any other `NOTICE:` line is judged like a sentence. "in." after a figure or
+  `NOTICE:` line (`Notice:` or bold too) repeating the text of a `notice` fact among the facts
+  (passed in `facts`, or cited) is kept and not judged; any other `NOTICE:` line is judged like
+  a sentence. "in." after a figure or
   before "w.c.", "vs." and "e.g." do not end a sentence, nor does a full stop inside a quoted
   name.
+- **A fact's own words.** A fact's whole text quoted word for word and cited with its own id is
+  one supported sentence, however many sentences, verdicts, negations or caveats it holds
+  ("`"AHU-1" leaking_valve (ok): ... no valve leak ...`", an RCx "Recommended action, ..."), and
+  so is a `NOTICE:` line that repeats a notice and cites its `N` id. The quote must open a line
+  (after a list marker or a `NOTICE:` label) or a sentence and run whole up to its citation,
+  with nothing after it but a full stop, a space or the line's end. A quote with a word added,
+  changed or left out, or citing another fact, is judged like any other sentence, and words
+  before it on the line are a sentence of their own.
 - **`verified_text`** is the draft with only the failing sentences removed: its lines, list
   markers (a removed first sentence leaves its marker to the next), headings and blank lines
   stay, and a line whose sentences all failed goes. When a removed sentence gave a verdict, a

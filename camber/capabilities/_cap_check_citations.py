@@ -15,7 +15,8 @@ included), and the names, point roles, verdicts, directions, negations, quantifi
 states must be ones those facts make (that module's doc says exactly what is read). The caller's
 facility ids and their registry names are names too, so another facility named in a sentence
 must be one a cited fact names; rule, tool and field names are not equipment. A ``NOTICE:`` line
-repeating the text of a ``notice`` fact among the facts is kept and not judged.
+repeating the text of a ``notice`` fact among the facts is kept and not judged; a fact's whole
+text quoted word for word with its own id (a notice's ``N`` id too) is one supported sentence.
 ``verified_text`` keeps the draft's lines, headings, list markers and blank lines (#322); when
 it drops a sentence that gave a verdict, a negation or a caveat, it opens with :data:`REMOVED`
 and the result says so (#328), so a stripped answer never reads as more certain than the draft.

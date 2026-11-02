@@ -74,8 +74,16 @@ Every line that makes a claim is judged, a heading, a bold line or a lead-in end
 included (0.112, #328). A heading or label that states nothing -- no citation, figure, date,
 negation, assurance word, verb outside a relative clause or advice, such as ``# AHU-1
 triage``, ``Findings:``, ``## Points that never move`` or ``1. Sensor offset.`` -- is kept and
-not judged. A ``NOTICE:`` line repeating one of the
-``notices`` passed in (a server's own banners) is kept and not judged either.
+not judged. A ``NOTICE:`` line (``Notice:`` or bold too) repeating one of the ``notices`` passed
+in (a server's own banners) is kept and not judged either.
+
+A fact's own text quoted word for word and cited with that fact's id is the server's words, and
+supported as one sentence however many sentences, verdicts, negations or caveats it holds (#328
+follow-up): it must open a line (after a list marker or a ``NOTICE:`` label) or a sentence, run
+whole up to its citation, and be followed by nothing but a full stop, a space or the line's end.
+A notice is a fact (``N1@...``), so a NOTICE line that repeats one and cites it is supported. A
+quote with a word added, changed or left out, or citing another fact, is judged like any other
+sentence (and words before it on the line are a sentence of their own).
 
 A fact id may be context-qualified, ``[F1@ctx]`` (0.107, #194): the part after ``@`` names where the
 fact lives (the RCx report uses ``summary``, ``appA``, ``appB`` and an issue's key), so ids from
@@ -111,7 +119,12 @@ _INCH_AFTER = re.compile(r"(?:w\.?\s?c\b|wc\b|wg\b|h2o\b)", re.I)
 _MARKER = re.compile(r"(?:\(?\d{1,3}[.)]|[-*•>])(?=\s|\Z)")
 #: a heading-shaped line: markdown ``#``, a short line ending in a colon, or a bold-only line
 _HEADING = re.compile(r"\s*(?:#{1,6}\s+\S.*|[^.!?]{1,80}:|\*\*[^*]+\*\*:?)\s*")
-_NOTICE = re.compile(r"\s*(?:[-*•>]\s+)?NOTICE:\s*(.*?)\s*")
+_NOTICE = re.compile(r"\s*(?:[-*•>]\s+)?(?:\*\*)?NOTICE\s*:(?:\*\*)?\s*(.*?)\s*", re.I)
+#: what may open a line before a quoted fact (#328): a list marker, a ``NOTICE:`` label (any case,
+#: bold or not), or both
+_QUOTE_LEAD = re.compile(
+    r"\s*(?:(?:\(?\d{1,3}[.)]|[-*•>])\s+)?(?:\*\*)?(?:notice\s*:)?(?:\*\*)?\s*", re.I
+)
 #: what a reader does not see: HTML comments (an unterminated one: to the end), tags,
 #: zero-width marks, and a markdown link's target
 _COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
@@ -165,7 +178,7 @@ def extract_cites(text: str) -> list:
 class _Seg:
     start: int
     end: int
-    kind: str  # "sentence" (judged) | "heading" | "notice" (kept, not judged)
+    kind: str  # "sentence" (judged) | "quote" (a fact's own text) | "heading" | "notice" (kept)
 
 
 def _ends(text: str, a: int, b: int) -> list:
@@ -202,9 +215,52 @@ def _split_sentences(text: str) -> list:
     return [s for s in out if s.strip()]
 
 
-def _segments(text: str, notices=()) -> list:
-    """The sentences, headings and known notices of ``text``, as spans of it, in order. Lines
-    are split at sentence ends; an HTML comment is never split."""
+def _quoted_rx(fact_text: str):
+    """A pattern for ``fact_text`` at the end of a string, any run of whitespace standing for
+    any other (None for an empty text)."""
+    words = str(fact_text or "").split()
+    if not words:
+        return None
+    return re.compile(r"\s+".join(map(re.escape, words)) + r"\s*\Z")
+
+
+def _quotes(text: str, masked: str, s0: int, e0: int, quotes: dict) -> list:
+    """The spans ``(start, end)`` of one line ``text[s0:e0]`` that quote a fact word for word
+    and cite it (#328 follow-up): a fact's whole text followed by a citation that names that
+    fact's id, opening the line (after a list marker or a ``NOTICE:`` label) or a sentence, and
+    with nothing after the citation (and a full stop) but a space or the line's end. The span
+    runs from the line's start, or the quote's, to the end of its citation."""
+    out: list = []
+    floor = s0
+    for m in _CITES.finditer(masked, s0, e0):
+        ids = _ID_SEP.split(m.group(1).strip())
+        end = m.end() + (1 if masked[m.end() : m.end() + 1] == "." else 0)
+        if end < e0 and masked[end] not in " \t":
+            continue
+        best = None
+        for fid in ids:
+            rx = quotes.get(fid)
+            q = rx.search(text, floor, m.start()) if rx is not None else None
+            if q is not None and (best is None or q.start() < best):
+                best = q.start()
+        if best is None:
+            continue
+        lead = text[floor:best]
+        if floor == s0 and _QUOTE_LEAD.fullmatch(lead):
+            start = s0
+        elif text[best - 1] in " \t" and text[s0:best].rstrip()[-1:] in (".", "!", "?", "]"):
+            start = best
+        else:
+            continue
+        out.append((start, end))
+        floor = end
+    return out
+
+
+def _segments(text: str, notices=(), quotes=None) -> list:
+    """The sentences, headings, known notices and quoted facts of ``text``, as spans of it, in
+    order. Lines are split at sentence ends, never inside a quoted fact (``quotes`` maps a fact
+    id to a pattern of its text, :func:`_quoted_rx`); an HTML comment is never split."""
     text = text or ""
     masked = _COMMENT.sub(lambda m: " " * len(m.group(0)), text)
     masked = "\n".join(_unquoted(line) for line in masked.split("\n"))
@@ -225,8 +281,21 @@ def _segments(text: str, notices=()) -> list:
         if _HEADING.fullmatch(line) and _is_heading(text[s0:e0]):
             out.append(_Seg(s0, e0, "heading"))
             continue
+        quoted = _quotes(text, masked, s0, e0, quotes) if quotes else []
+        ends = _ends(masked, s0, e0)
+        if quoted:  # a quoted fact is one piece: no end inside it, one at each side of it
+            ends = [(a, b) for a, b in ends if not any(q0 <= a < q1 for q0, q1 in quoted)]
+            for q0, q1 in quoted:
+                pe = len(text[:q0].rstrip())
+                if q0 > s0 and all(a != pe for a, _ in ends):
+                    ends.append((pe, q0))
+                nxt = q1 + len(text[q1:e0]) - len(text[q1:e0].lstrip())
+                if q1 < e0:
+                    ends.append((q1, nxt))
+            ends.sort()
+        starts = {q0 for q0, _ in quoted}
         spans, cut = [], s0
-        for a, b in _ends(masked, s0, e0):
+        for a, b in ends:
             spans.append((cut, a))
             cut = b
         spans.append((cut, e0))
@@ -247,7 +316,10 @@ def _segments(text: str, notices=()) -> list:
             merged.append([lead, e0])
         for a, b in merged:
             # a short label that states nothing ("1. Sensor offset.") is kept, not judged
-            kind = "heading" if _is_label(text[a:b]) else "sentence"
+            if a in starts:
+                kind = "quote"
+            else:
+                kind = "heading" if _is_label(text[a:b]) else "sentence"
             out.append(_Seg(a, b, kind))
     return out
 
@@ -1072,6 +1144,16 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
     for q in p.qty:  # a figure as the text writes it (not the counted thing _fill gave it)
         if q.at >= 0:
             q_at.setdefault(q.at, q)
+    # "HW-leak 0% / CHW-leak 0% of the samples": a share listed before one that says what it is
+    # of is of that too, for its zero (a fact's figures have it already, from _fill)
+    share_of: dict = {}
+    for a, b in zip(p.qty, p.qty[1:]):
+        if a.unit == "%" == b.unit and not a.base and b.base and 0 <= a.at < b.at:
+            between = toks[a.at + 1 : b.at]
+            if not any(t[0] == "sym" and t[1] in ",;:()" for t in between) and (
+                sum(1 for t in between if t[0] == "word") <= 2
+            ):
+                share_of[a.at] = b.base
     for k in range(n):
         kind = toks[k][0]
         w = words[k]
@@ -1079,6 +1161,8 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             q = q_at.get(k)
             if q is not None and q.unit in _NOUNS.values():
                 last_noun = q.unit
+            if q is not None and not q.base and k in share_of:
+                q = replace(q, base=share_of[k])
             if q is not None and q.value == 0 and (q.unit in _COUNT_UNITS or not q.unit or q.base):
                 neg = _zero(toks, k, q, cont, clause, words, last_noun, fact, clause_words)
                 if neg is not None:
@@ -1904,9 +1988,15 @@ def _judge(
         return [cache[fid] for fid in ids]
 
     text_cited = [c for c in extract_cites(_visible(text)) if c in all_ids]
+    # a fact's own text, cited with its id, is the server's words (#328 follow-up)
+    quotes = {}
+    for fid in all_ids:
+        rx = _quoted_rx(getattr(context.by_id(fid), "text", ""))
+        if rx is not None:
+            quotes[fid] = rx
     out = []
-    for seg in _segments(text, notices):
-        if seg.kind != "sentence":
+    for seg in _segments(text, notices, quotes):
+        if seg.kind not in ("sentence", "quote"):
             continue
         sent = text[seg.start : seg.end]
         vis = _visible(sent)
@@ -1914,7 +2004,9 @@ def _judge(
         own = [c for c in cites if c in all_ids]
         unknown = [c for c in cites if c not in all_ids]
         reason, why = "", []
-        if per_sentence and not own:
+        if seg.kind == "quote":
+            pass  # supported: it says what the fact it cites says, word for word
+        elif per_sentence and not own:
             reason, why = "uncited-sentence", ["it cites no known fact"]
         else:
             p = _parse(vis, vocab)

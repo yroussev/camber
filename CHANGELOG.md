@@ -97,6 +97,19 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   list label ("1. Sensor offset.") is kept in place, and a removed first sentence leaves its
   list marker. `finding_detail` no longer strips its own reference-window fact from its summary,
   and the notice that a summary sentence was removed no longer says it was always a figure.
+  A real-client run then found the check still rejecting the server's own words: a fact's whole
+  text, quoted word for word with its own id, is now one supported sentence however many
+  sentences, verdicts or negations it holds ("leaking_valve (ok): ... no valve leak", an RCx
+  "Recommended action, ..." text, a multi-sentence rule-parameter or licence notice), and so is
+  a NOTICE line that repeats a notice and cites its `N` id ("NOTICE:", "Notice:" or bold),
+  which a full stop or semicolon in it no longer splits into an uncited half. A quote with a
+  word added, changed or left out, or citing another fact, is judged as before. The
+  `check_savings_claim` prompt no longer recommends "The claim states a 12% saving", which
+  fails when the claim was a bare "12%": it asks for the claimed figure with no word of
+  direction ("The claim states 12%"). A share listed before the one that says what it is of
+  ("HW-leak 0% / CHW-leak 0% of the samples") is now read as a zero of that too, as in the
+  facts: copying that list is supported, and "HW-leak 0%" cited to a fact with "HW-leak 86%"
+  no longer is.
 - **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
   and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
   with only the failing sentences removed: paragraphs, list markers, headings and the trailing
