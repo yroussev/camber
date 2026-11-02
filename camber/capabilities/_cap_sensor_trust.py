@@ -471,6 +471,8 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 "equip": r["equip"],
                 "role": r["role"],
                 "value": r["trust"],
+                # 0.112 (#336): its place in the least-trusted-first list ("the least trusted")
+                "rank": (arguments.get("offset") or 0) + i - 1,
                 "text": f"{name(r['equip'])} {name(r['role'])}: trust {r['trust']:.2f} "
                 f"({r['verdict']}; {why}); coverage {r['coverage']:.0%} of its own span",
             }

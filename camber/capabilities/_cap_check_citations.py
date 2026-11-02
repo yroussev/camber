@@ -12,7 +12,9 @@ required and taken as given: the result says ``provenance: "unverified"``.
 one known fact id (``[F1@rule_run]``, or several: ``[F1@a, F2@b]``) when ``per_sentence`` is on,
 every figure it states must be one a fact it cites states (sign, unit, counted thing and role
 included), and the names, point roles, verdicts, directions, negations, quantifiers and ranks it
-states must be ones those facts make (that module's doc says exactly what is read). The caller's
+states must be ones those facts make, what it says of a counted thing must agree with their
+count of it, and closed-set labels (heating or cooling side, trust class, fault condition) bind
+their own figures (#336; that module's doc says exactly what is read). The caller's
 facility ids and their registry names are names too, so another facility named in a sentence
 must be one a cited fact names; rule, tool and field names are not equipment. A ``NOTICE:`` line
 repeating the text of a ``notice`` fact among the facts is kept and not judged; a fact's whole

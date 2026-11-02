@@ -448,10 +448,24 @@ cannot match is not supported. **Supported means matched, not proven true.**
   sentence whose words before a figure (else after it) name only what another figure of the
   same list is ("the cooling valve leaked on 86%", "CHW-leak was 86%", "0% ... showed a heating
   leak" against `HW-leak 86% / CHW-leak 0%`; "2 points are trusted" against `9 trusted, 2
-  suspect`) fails. A paging notice's rows count what its list holds ("only the first 25 of 223
+  suspect`) fails. **Labels of a closed family** are read as such (0.112, #336): the side
+  (heating: heating, heat, HW, hot water, HHW, reheat, preheat, steam, boiler; cooling: cooling,
+  cool, CHW, chilled water, DX, refrigerant; "fan heat" is neither), the trust class (trusted,
+  suspect, untrusted) and the G36 fault condition (FC10, FC11, ...). A figure's label of a
+  family, the nearest in its own words or, past a parenthesis or a slash, in its list, must be
+  the label of the fact's figure, and where the fact tells its figures of one unit apart by a
+  family the sentence must say which: "the hot-water valve leaked on 60%" against `HW-leak 0% /
+  CHW-leak 60%`, "FC10 ... 56%" against `FC10 ... 100%; FC11 ... 56%`, "1 point is suspect"
+  against `2 suspect, 1 untrusted; 1 below the trust floor` and "the valve leaked on 60%" all
+  fail. A part of a total counts what the total counts ("20 of the 106 flagged hours", "9 out
+  of 11 points"), and so do the bare counts after a lead-in ("Of the 92 points, 1 is
+  untrusted"). A bias "taken off" is the correction with its sign changed ("the +3.0 °F bias
+  taken off" against `corrected ... by -3.0 °F`); a figure that matches only with the other sign
+  says so in its `why`. A paging notice's rows count what its list holds ("only the first 25 of 223
   findings" against `'findings' shows rows 1-25 of 223`). A figure glued to one capital letter
   (`4P`, `3P`) is a model's name, not a count. A date, time or year must be one a cited fact carries in
-  its text or in a date field ("in 2017" matches a `reporting_period` of 2017). A list marker
+  its text or in a date field ("in 2017" matches a `reporting_period` of 2017; "the 2016
+  baseline" is a year, not 2016 baselines). A list marker
   (`1.`, `2)`), a step (`Ranked cause 1`, `step 2`, `Stop 1`, `#3`) and an ordinal (`2nd`) are
   labels, not figures. A fact with `basis: "claimed"` (a claim's own figure, from
   `mv_summary`'s `claim`) supports a figure only in a clause that presents it as a claim ("the
@@ -487,24 +501,34 @@ cannot match is not supported. **Supported means matched, not proven true.**
     fault", "0 info") is matched with that figure. A finding **re-judged** with a sensor's bias
     taken off (`finding_detail`'s `R1`) supports only its new verdict: its first one ("`(fault)
     re-judged ...: ok`") names the finding ("the leaking_valve fault on AHU-1 is explained") and
-    supports no "is still a fault" (0.112, #332). A word that **denies** what it frames (false,
+    supports no "is still a fault", "stands", "remains valid" or "still holds" (0.112, #332,
+    #336). "The least trusted point" is a rank (below), not the verdict "trusted". A word that **denies** what it frames (false,
     untrue, incorrect, wrong, mistaken, inaccurate, "not true"), like an assurance word, passes
     only where a cited fact uses it: "it is false that ..." and "..., but that is wrong" fail.
     A **cause or an effect** ("accounts for", "due to", "because of", "caused by", "responsible
     for", "about the same size as", "consistent with", "will clear", "will fix", "would
     resolve", ...) is the verdict "explained" (its negation "persists"), even when hedged: it
     needs a cited fact that states the explanation (`R1`'s "explained by the sensor offset").
+    A cause named after its effect ("declined because of the untrusted input", "due to",
+    "caused by", "attributable to", "results from") is also supported by a cited fact that
+    states that cause of that effect with "because", "due to", "caused by" or "explained by" in
+    its words ("1 check(s) declined because an input scored below the trust floor 0.5 (...
+    untrusted input(s): ...)"); a counted thing may stand for the cause ("because of that
+    sensor") (#336).
   - **Directions.** A direction word (rose, increased, fell, decreased, saved, avoided, reduced,
     wastes, ...) must be one a cited fact uses (or its `direction`), except after "would",
     "could" and the like; "fall on 2025-05-14" is not one. "High" / "low" and "above" / "below"
-    must not be the opposite of what the cited facts say.
+    must not be the opposite of what the cited facts say; "above" or "below" ending a phrase
+    ("the figures above", "see below") is a place in the text (#336).
   - **Negations, both ways.** A negation the sentence states ("did not leak", "never moves",
     "without", "no <thing>") needs a cited fact that negates the same thing: a fact's "no valve
     leak" supports "the valve did not leak", while "drift not evaluated" supports no other
     negation, and "CHW-leak 0%" says nothing of the heating valve. And a sentence must not
     state what a cited fact negates: "the valve leaks" against "no valve leak", "the setpoint
     moves" against "never moves", "on the same days" against "on other days". A closing "not"
-    ("<a fact's words> -- not") denies the sentence and is never supported. A fact that a check
+    ("<a fact's words> -- not") denies the sentence and is never supported. A fact's negation of
+    something it is not about ("measured_fan_heat_f not set" in a rule's parameters) supports
+    only a sentence that names it or says all its words: "no fan heat was set" fails (#336). A fact that a check
     was skipped, declined or had insufficient data says it "was not judged", so that sentence
     can be cited; "not a pass" cannot.
   - **Zeros, each with its own clause** (0.112, #332). A zero ("0 <things>", "no <things>",
@@ -518,7 +542,9 @@ cannot match is not supported. **Supported means matched, not proven true.**
     against `14 fault, 0 warn` fail, and "0 rules returned a warn" passes. "No fault" also
     passes against a finding whose `value` is ok. "None of the baselines meets G14", a zero
     across several facts, needs each cited fact to negate it ("does not meet"). A reading of
-    zero ("bias +0.0") is no zero count.
+    zero ("bias +0.0") is no zero count. "Not a single <thing>", "not one of", "zero
+    <things>", "neither ... nor", "nothing", "<thing>-free" and "free of <things>" are zeros
+    too (#336).
   - **Quantifiers and ranks.** "All" or "every" needs a fact that says all, every or 100%;
     "most" one that says most or a share above half; "none" is a zero (above). A **whole count**
     ("all 11 points", "106 of the 106", "every one of the 37") needs a fact that says all of that
@@ -529,7 +555,30 @@ cannot match is not supported. **Supported means matched, not proven true.**
     second issue, issue #1, ranked first, rank 2) needs a cited fact that gives a rank, and a
     rank word (worst, top, best, biggest, largest, most severe) needs a cited fact that is rank
     1 or uses that word of the same thing ("worst: HW (heating) coil" supports "the worst coil
-    is the heating coil", not "the worst issue").
+    is the heating coil", not "the worst issue"). "Least trusted" is a rank word too, which
+    `sensor_trust`'s point facts support with their place in its least-trusted-first list
+    (`rank`); "best" and "most trusted" are never supported by a rank 1 (#336).
+  - **Counted things** (0.112, #336). What a sentence says of a counted thing (points, hours,
+    rules, faults, ...) as a whole, none or a part must agree with what the cited facts say of
+    the same thing. The quantifier may stand before the noun ("all", "all of the", "every one
+    of", "each of", "both", "N of the N", "N out of N", "none of", "no", "not a single", "not
+    one of", "zero", "neither", "some", "several", "most", "k of the N"), after it ("the 11
+    points are all trusted", "the 8 flagged hours all fall", ", all of them,"), or be left out:
+    a counted thing opening its clause with "the" ("The 11 points are trusted", "The flagged
+    hours fall in the window") is all of them, a bare count ("8 flagged hours fall ...") that
+    many, and "Of the 11 points, all are ..." / "none is ..." the lead-in's. It is matched
+    against (a) the facts' count of its label: "9 trusted, 2 suspect, 0 untrusted" of "11
+    points" makes "The 11 points are trusted", "9 out of 11 points are suspect" and "Not a single
+    point is suspect" fail; and a verdict's count anywhere in a cited fact ("14 fault, 0 warn, 2
+    info and 19 ok") makes "No rule returned a fault or a warn", "Not a single fault was found",
+    "<facility> is fault-free" and "No rule passed" fail; and against (b) a cited fact's count
+    of things with the same statement -- the fact's verb, or two of its words, and no word it
+    does not use: "None of the 8 flagged hours ... falls in the window" makes "The 8 flagged
+    hours fall in the window", "8 out of 8 flagged hours ...", "Some of the 8 ..." and "The
+    flagged hours are inside the window" fail, "20 of the 106 ..." makes "The 106 flagged hours
+    fall in the window" fail, and "outside" (or "beyond") the window is the rest of them ("The 8
+    flagged hours fall outside the reference window" passes). One thing is not two labels of
+    one family: "Both suspect points are trusted" fails.
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -562,7 +611,20 @@ What it does not check: whether a claim is true beyond what the cited facts stat
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
 gives as a subject, a point role outside the families above, which cited fact a figure belongs
-to when a sentence cites several, and the predicate of a whole count beyond the words above. A
+to when a sentence cites several, and the predicate of a whole count beyond the words above.
+Of counted things and labels (#336), these pass when their figures and names match and can be
+wrong: a counted thing after its verb, or later in its clause, with no quantifier ("the window
+covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in other
+words than the cited fact's ("the 8 hours precede the window"); a cause after a bare
+"because" ("declined because the input was untrusted"); a label outside the closed sets where
+the cited fact gives one figure only; a claim about all of several facts ("both baselines").
+And these fail closed although they can be true: "all" or "every" with no number, unless a
+cited fact says all or counts that label with its total; a whole count the fact gives only as
+a complement ("all 8 flagged hours fall outside the window" against "none of the 8 ... falls
+in"); a complement's number ("86 of the 106 fall outside", a derived number); a figure the fact
+tells apart by side, trust class or fault condition said without one, or with a side the
+lists do not know ("the glycol valve"); a cause a cited fact implies but does not state with
+"because", "due to", "caused by" or "explained by" ("declined -- untrusted input(s)"). A
 model's own judgment -- a verdict on a savings claim, advice, a ranking, how sure it is, an
 inference worded without the cause and effect words above -- rests on facts but is not one: it
 is not recognised as judgment, so it passes when its figures, names and listed words match,

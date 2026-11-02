@@ -94,6 +94,30 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   counts ("only the first 25 of 223 findings"), and whole sentences of a fact or notice quoted
   word for word. `4P` and `3P` are model names, not counts, and a `why` gives the words as
   written (no internal placeholders or stems) and says when a claim spans several facts.
+- **`check_citations` reads what a sentence says of a counted thing, and labels as closed sets
+  (#336).** Fresh wordings of the same wrong claims still passed: a dropped or moved quantifier
+  ("The 8 flagged hours ... all fall in the reference window" or "8 out of 8 flagged hours fall
+  ..." against "None of the 8 flagged hours ... falls"; "The 11 points are trusted" against 9
+  trusted, 2 suspect), a zero said otherwise ("Not a single fault was found", "No rule passed",
+  "is fault-free" against a run with faults; "No rule returned a fault or a warn", which an
+  earlier 0.112 build rejected, borrowed the run's `0 warn`), and a figure moved to another
+  label ("the hot-water valve", "reheat", "preheat" or "steam" valve given the cooling side's
+  share; FC10's share given to FC11; "1 point is suspect" against 2 suspect, 1 untrusted). Now
+  whatever the quantifier and wherever it stands -- before the noun, after it, or none at all,
+  where "the 11 points" is all of them -- the count a sentence gives must be a cited fact's
+  count of that label or of that statement, the heating and cooling sides (each with its
+  spellings), the trust classes and the fault conditions each bind their own figures, and a
+  figure the fact tells apart by one of them fails when the sentence does not say which. Also:
+  "stands", "remains valid" and "still holds" no longer keep a finding re-judged ok a fault;
+  "no fan heat was set" no longer matches "measured_fan_heat_f not set". True sentences that
+  were stripped now pass: "declined because of the untrusted input" when a cited notice says
+  "declined because an input scored below the trust floor", "with the +3.0 °F bias taken off"
+  against "corrected by -3.0 °F" (a figure with the other sign says so in its `why`), "the
+  figures above", "the 2016 baseline", and "the least trusted point" for the first of
+  `sensor_trust`'s least-trusted-first list (its point facts now carry their `rank`). The
+  prompts ask for `check_citations` on the whole revised draft each time, not only the
+  sentences changed. The forms still not read, and those that fail closed, are listed in
+  CAPABILITY-REGISTRY.md, "What it does not check".
 - **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
   acceptance test found sentences that say the opposite of their cited fact marked
   "supported": "the heating valve leaks" against "no valve leak", "the setpoint moves" against

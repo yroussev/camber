@@ -453,7 +453,7 @@ def test_a_model_name_is_not_a_count_and_a_whole_set_says_why():
     [
         (f'The "AHU-1" warn lists no conditional_on sensor. {_c(RESET)}', "no conditional_on"),
         (f"I have not explained it. {_c(RUN)}", "not explained"),
-        (f"The cooling valve leaked on 86% of both-valves-shut samples {_c(LEAK)}.", "'cool'"),
+        (f"The cooling valve leaked on 86% of both-valves-shut samples {_c(LEAK)}.", "'cooling'"),
     ],
 )
 def test_the_why_names_the_words_as_written(text, words):
