@@ -1285,8 +1285,14 @@ def _cmd_datasets_provenance(args) -> int:
         print("every facility's part files carry provenance" if args.missing else "no facility")
         return 0
     for r in rows:
-        tag = " research-only" if r["research_only"] else ""
-        ids = f" [{', '.join(r['datasets'])}{tag}]" if r["datasets"] else ""
+        ro = set(r["research_only_datasets"])
+        ids = ", ".join(d + (" research-only" if d in ro else "") for d in r["datasets"])
+        ids = f" [{ids}]" if ids else ""
+        # #334: what makes a facility research-only without naming a dataset, as --json says
+        if r["unreadable_marks"]:
+            ids += " [mark unreadable: counts as research-only]"
+        if r["unchecked"]:
+            ids += " [not all files could be checked: counts as research-only]"
         print(
             f"{r['facility_id']:32s} {r['marked']:>6d}/{r['parts']:<6d} "
             f"{_PROV_STATES[r['state']]}{ids}"

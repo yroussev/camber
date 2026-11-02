@@ -875,6 +875,14 @@ readable, canonical or not; 1
 when a part fails to read or a facility's data is stranded outside its partition, or, with
 `--strict`, when a part is not canonical or anything is left over.
 
+Since 0.112 (#334) `store verify` uses the store readers' definition of a part file: every file in
+a facility directory whose name does not start with `_` or `.`, at any level. So it also lists a
+stray `notes.txt`, `README` or Finder `Icon` file (unreadable: the facility's reads fail until it
+is removed), a `x.parquet~` backup, and a part at the facility root or below the month (not
+canonical: the store reads them), and every entry that keeps the research-only check from seeing
+all of a facility (a dangling symlink, a directory it may not list, a symlink loop, files nested
+too deep), which counts as unreadable because `camber mcp` does not serve that facility.
+
 `store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
 store: missing, a file, or a directory of other things (no partitions, registry or workspace
 marker). They exit 1 and create nothing. `--facility` must name a facility the store knows. An

@@ -142,7 +142,17 @@ def _abandoned_threads() -> bool:
 
 
 def _peak_rss() -> int:
-    """This process's peak resident memory in bytes (0 when unknown)."""
+    """This process's peak resident memory in bytes (0 when unknown). On Linux its own high-water
+    mark, ``VmHWM``: ``ru_maxrss`` there keeps the peak of the process that started it across
+    ``exec``, so every worker of a server that once held 700 MB reported 700 MB, its steady state
+    looked that large, and a much larger call never had it replaced."""
+    try:
+        with open("/proc/self/status", encoding="ascii", errors="replace") as fh:
+            for line in fh:
+                if line.startswith("VmHWM:"):
+                    return int(line.split()[1]) * 1024  # kB
+    except (OSError, ValueError, IndexError):
+        pass
     try:
         import resource
 

@@ -47,6 +47,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   and roles (the data-reading tools still refused it). The check, `camber datasets provenance`
   and the store readers now share one definition of a part file, and a facility directory
   nested too deep to check in full is refused.
+- **A dangling symlink or an unreadable directory no longer hides research-only parts (#334).**
+  The research-only check walked a facility directory and stopped at the first entry it could
+  not resolve, so research-only parts copied in by hand after a dangling symlink (or a directory
+  it may not list) went unchecked: `facilities` listed the facility, `points` served its
+  equipment ids, classes, roles and data span, `camber datasets provenance` showed nothing
+  marked and a local report had no non-commercial banner (the data-reading tools still refused
+  it). The check now goes on past every entry it skips, and a facility it cannot check in full
+  -- a dangling symlink, a directory it may not list, a symlink loop or files nested too deep --
+  is refused with the reason that not all of its files could be checked (`refused_licence`,
+  `licence_unverified`). A change below the month level (a copied-in subdirectory) is now seen
+  by the cached check too.
 
 ### Fixed
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
@@ -237,6 +248,38 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   starts with a `camber` object: `facts` maps each fact id to its text (the same ids and text as the
   facts block, all of them resolved by `check_citations`) and `notices` lists the notices. The
   prompts say where to find fact ids in either form.
+- **On Linux, an MCP worker that grew far past its usual memory is replaced again.** A worker
+  measured its peak memory with `ru_maxrss`, which on Linux carries over the peak of the server
+  process that started it: once the server had held more memory than a worker's first call
+  needed, every worker looked that large, and a call that took it well past its usual size
+  never had it replaced, so it kept that memory. A worker now reports its own peak (`VmHWM`).
+  macOS was not affected.
+- **Default results fit a host's tool-output limit (#333).** On a 648-point facility the default
+  `rcx_report` was about 54,000 characters of `structuredContent`; a command-line host that caps
+  a tool result at 25,000 tokens set it aside in a file the model could not read, so a site-visit
+  plan covered 3 of 32 issues. The JSON runs at about two characters a token, so the "100 KB (25k
+  tokens)" the docs gave was wrong. Every default result now stays within 25,000 characters of
+  `structuredContent` (facts and notices included; up to about 21,000 on the largest facilities
+  tested), a test holds every tool to it, and docs/MCP.md gives the real figures. Paging notices
+  give the exact `offset` of the next page.
+- **The `facilities` notice names the research-only facilities it withholds (#333).** It gave
+  only a count, so a model told a user that a correct facility id might be wrong. It now lists
+  the withheld ids (never a path) and says the id is right but the data's licence forbids this
+  use; the notice for facilities whose licence cannot be established names them too.
+- **docs/MCP.md says how to pass a multi-word prompt argument (#333).** A host's slash command
+  can split `check_savings_claim`'s `claim` on spaces, quoted or not; give the claim in the
+  conversation instead.
+- **A facility nested too deep or holding a symlink loop is no longer called research-only
+  (#334).** It was refused as holding "part files marked as research-only" even when it held
+  only open data, and `camber datasets provenance` showed a marked part that did not exist. The
+  refusal now says that not all of its files could be checked, and the provenance counts only
+  real parts.
+- **`camber datasets provenance` says when a facility counts as research-only (#334).** A
+  facility whose marks cannot be read (damaged, longer than 4 KB) or not all of whose files
+  could be checked had no tag in the table, though `--json` said `research_only: true` and the
+  server refused it. The table now adds `[mark unreadable: counts as research-only]` or `[not all
+  files could be checked: counts as research-only]`, and `--json` adds `unreadable_marks`,
+  `unchecked` and `research_only_datasets`.
 
 ### Changed
 - **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
@@ -311,6 +354,28 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
 - The `camber` console script now starts from `camber.__main__:main` (`camber.cli:main` still
   works), so a Ctrl-C while the CLI loads exits 130 quietly. Packagers that list the entry point
   themselves should change it (#322).
+- **Smaller default pages, and `rcx_report` pages its issues by size (#333).** The defaults are
+  now `rule_run` 12 findings (was 25), `sensor_trust` 40 points (100), `coverage` 20 rows per list
+  (50), `points` 200 (250), `facilities` 40 (100), `drift` 10 per list (25) and `rule_params`
+  15 rules (25; 7 with `detail`, was 10). `rcx_report` without `top_n` returns as many of the best-ranked issues as
+  fit (at most 8; it was the config's `top_n`, else 8) and 5 appendix A entries (20); its
+  `fact_index` entries are `{id, kind}`, no longer repeating each fact's `text` and `equip` (read
+  them from the result's facts). `dataset_search` and `mv_summary` are paged (`limit`, `offset`:
+  20 datasets, 5 meters with all their findings; their counts still cover everything). `drift`'s
+  `diagnoses[].detail` no longer repeats `equip`, `severity` and `summary`, and a long metric note
+  that several findings of a page share is said once, in a notice, not in each finding's
+  `metrics`. A paging notice says "call again with offset=N for the next page" and no longer
+  suggests a larger limit. A caller that read a whole list from one default call should page
+  with `offset`, or pass `limit` / `top_n` (a larger page can pass a host's limit).
+- **`camber store verify` checks every file the store reads (#334).** It looked only at
+  `*.parquet` files in `year=/month=` directories, so a stray `notes.txt`, `README`, `.csv` or
+  Finder `Icon` file that makes a facility's reads fail (`unavailable ... damaged`) was not
+  reported, and it exited 0. It now uses the store readers' definition of a part file: such a
+  file is unreadable, a `x.parquet~` backup or a part at the facility root or below the month is
+  listed as not canonical, and an entry that keeps the research-only check from seeing all of a
+  facility (a dangling symlink, an unreadable directory, a symlink loop, files nested too deep)
+  is unreadable. **A script that runs `store verify` may now see exit code 1** on a store that
+  passed before: remove or move the files it lists out of the facility directory.
 
 ### Added
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
@@ -350,6 +415,12 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   with how many of its part files carry their dataset's provenance, and names the catalog
   facilities that lack it (ingested before 0.112). It reads the files' footers and writes
   nothing.
+- **`mv_summary` states each meter's baseline and reporting dates (#333).** A claim's periods
+  ("against the 2016 baseline") could not be checked: no result gave a date. Each finding's
+  `metrics` now carry `baseline_start` / `baseline_end` (and on a saving `reporting_start` /
+  `reporting_end`), and its fact gives them as `baseline_period` / `reporting_period` and in its
+  text ("baseline period 2016-01-01 to 2016-12-31 (the year 2016)"), so a sentence can cite them.
+  An `mv_baseline` finding's metrics gain the `window` the versioned one already had.
 
 ## [0.111.0] — 2026-10-31
 

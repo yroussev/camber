@@ -246,6 +246,70 @@ def _is_part(d: str, n: str) -> bool:
     )
 
 
+def _read_set_rows(stores, facility_id, seen) -> list:
+    """Report rows for what a store read of a facility opens or meets beyond :func:`_parts`
+    (0.112, #334), with the provenance check's own walk (:func:`camber.store._partprov.scan`, the
+    one definition of a part file): a file at the facility root or nested deeper than the month,
+    one whose name does not end in ``.parquet`` (``x.parquet~``, ``notes.txt``, ``Icon\\r``), and
+    every entry the walk could not check (a dangling symlink, an unreadable directory, files
+    nested too deep), which keeps the facility from being served. ``seen``: the paths
+    :func:`_parts` listed."""
+    rows = []
+    for label, sroot in stores:
+        if not os.path.isdir(sroot):
+            continue
+        rollup_store = label != "store"
+        for fd in sorted(d for d in os.listdir(sroot) if d.startswith(f"{_FACILITY}=")):
+            fid = fd.split("=", 1)[1]
+            fpath = os.path.join(sroot, fd)
+            if (facility_id is not None and fid != facility_id) or not os.path.isdir(fpath):
+                continue
+            try:
+                files, unchecked = _partprov.scan(fpath)
+            except OSError:
+                files, unchecked = [], [(fpath, "the facility directory cannot be listed")]
+            base = {"store": label, "facility_id": fid, "year": None, "month": None}
+            for path, _size, _mtime in files:
+                if path in seen:
+                    continue
+                info = check_part(path)
+                n = os.path.basename(path)
+                where = (
+                    "outside the year=/month= layout"
+                    if n.endswith(".parquet")
+                    else "its name does not end in .parquet"
+                )
+                rows.append(
+                    {
+                        **base,
+                        "path": os.path.relpath(path, sroot).replace(os.sep, "/"),
+                        "origin": part_origin(n, info["meta"], rollup_store=rollup_store),
+                        "canonical": False,
+                        "marker": info["marker"],
+                        "rows": info["rows"],
+                        "bytes": info["bytes"],
+                        "problems": [f"{where}, but the store reads it", *info["problems"]],
+                        "error": info["error"],
+                    }
+                )
+            for path, why in unchecked:
+                rows.append(
+                    {
+                        **base,
+                        "path": os.path.relpath(path, sroot).replace(os.sep, "/"),
+                        "origin": "store",
+                        "canonical": False,
+                        "marker": False,
+                        "rows": None,
+                        "bytes": None,
+                        "problems": [],
+                        "error": f"{why}: not every file could be checked, so the facility is "
+                        "not served by `camber mcp`",
+                    }
+                )
+    return rows
+
+
 def _facility_gate(main: str, ws):
     """``why(facility_id)``: the reason normalize leaves a facility alone, or ``None``."""
     reg = FacilityRegistry(main)
@@ -413,6 +477,12 @@ def verify(root, *, facility_id=None) -> dict:
     (``ValueError``); ``leftovers`` lists what interrupted ingests left (#213; the
     next ingest recovers them) and ``empty_facilities`` the registered facilities with no part
     file in a state that should have some.
+
+    0.112 (#334): ``parts`` also lists every other file a store read of a facility opens (the
+    provenance check's definition of a part file: at the facility root, nested deeper than the
+    month, or not named ``*.parquet``: not canonical, or unreadable when it is not Parquet), and
+    every entry that keeps a facility from being checked in full (a dangling symlink, an
+    unreadable directory, files nested too deep), counted as unreadable.
     """
     from .facilities import _require_store_dir
 
@@ -423,6 +493,8 @@ def verify(root, *, facility_id=None) -> dict:
     if facility_id is not None:
         _require_known_facility(main, stores, facility_id)
     rows, _todo, _skipped = _scan(stores, facility_id, None)
+    seen = {os.path.join(sr, r["path"]) for r in rows for lb, sr in stores if lb == r["store"]}
+    rows += _read_set_rows(stores, facility_id, seen)
     counts = _counts(rows)
     health = _health(main, facility_id)
     stranded = any(x["stranded"] for x in health["leftovers"])

@@ -398,9 +398,14 @@ def dataset_status(entries, *, data_dir=None, store=None) -> list:
 def store_provenance(store) -> list:
     """Per facility of ``store``: the dataset provenance its part files carry (0.112, #319).
 
-    ``{"facility_id", "parts", "marked", "unmarked", "datasets", "research_only", "catalog",
-    "state"}``, sorted by id. ``catalog`` is whether the facility came from a catalog dataset (its
-    registry entry records one, or it is named ``ds-...``). ``state`` is ``"marked"`` (every part
+    ``{"facility_id", "parts", "marked", "unmarked", "unreadable_marks", "unchecked", "datasets",
+    "research_only_datasets", "research_only", "catalog", "state"}``, sorted by id.
+    ``unreadable_marks`` counts the marked parts whose mark names no dataset (damaged, too long:
+    research-only); ``unchecked`` the entries the walk could not check (#334: a dangling
+    symlink, an unreadable directory, files nested too deep), none of which counts as a part.
+    Either makes the facility ``research_only``, as the server refuses it. ``catalog`` is
+    whether the facility came from a catalog dataset (its registry entry records one, or it is
+    named ``ds-...``). ``state`` is ``"marked"`` (every part
     carries provenance), ``"missing"`` (a catalog facility none of whose parts does: ingested
     before 0.112; a forced re-ingest adds it), ``"mixed"`` (some parts do), ``"own"`` (the user's
     own data, no provenance needed) or ``"empty"``. Footers only; nothing is written.
@@ -415,6 +420,7 @@ def store_provenance(store) -> list:
     out = []
     for fid in st.facilities():
         marks = _partprov.facility_marks(st.root, fid)
+        unchecked = marks.pop(_partprov.UNCHECKED, 0)
         parts = sum(marks.values())
         unmarked = marks.get(None, 0)
         values = [v for v in marks if v is not None]
@@ -434,8 +440,13 @@ def store_provenance(store) -> list:
                 "parts": parts,
                 "marked": parts - unmarked,
                 "unmarked": unmarked,
+                "unreadable_marks": sum(marks[v] for v in values if not _partprov.dataset_of(v)),
+                "unchecked": unchecked,
                 "datasets": sorted({_partprov.dataset_of(v) for v in values} - {""}),
-                "research_only": any(_partprov.research_only(v) for v in values),
+                "research_only_datasets": sorted(
+                    {_partprov.dataset_of(v) for v in values if _partprov.research_only(v)} - {""}
+                ),
+                "research_only": bool(unchecked) or any(_partprov.research_only(v) for v in values),
                 "catalog": catalog,
                 "state": state,
             }

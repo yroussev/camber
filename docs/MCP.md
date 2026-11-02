@@ -42,7 +42,9 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   and nothing stops someone with write access to the store from rewriting the files to strip the
   mark, or from exporting the data out of Parquet and ingesting it as their own. Keep the store
   writable only by the people who ingest into it, and change it with CAMBER's own commands
-  (`camber datasets remove`, `camber facility ...`) rather than by hand.
+  (`camber datasets remove`, `camber facility ...`) rather than by hand. The `facilities`
+  listing leaves a refused facility out, and its notice names each one it withholds (its id,
+  never a path) and why (0.112, #333), so a model does not tell a user that a right id is wrong.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because a required input scores below it is announced in a NOTICE line, with
   the count, the rules and every input below it with its score; `sensor_trust` reports the same
@@ -50,10 +52,11 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   decline a check on its own, unless the rule cannot judge without it (the outdoor-air signal
   of `dcv_verification`, for one; see CAPABILITY-REGISTRY.md). A finding resting on an input whose configured sensor
   reference disagrees is not declined but marked `conditional_on` that sensor.
-- **Model-sized results.** A tool returns one page of each list by default, so a typical result
-  stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
-  says what was left out and how to get it. A reply over 2 MB is refused as too large, and a
-  call has a time budget (see **Results** below).
+- **Model-sized results.** A tool returns one page of each list by default, so its default
+  result fits a host that caps a tool result at 25,000 tokens: at most 25,000 characters of
+  `structuredContent` (see **Sizes** below); `offset` asks for the next page, and a notice says
+  what was left out and the exact `offset` to pass. A reply over 2 MB is refused as too large,
+  and a call has a time budget (see **Results** below).
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx-1a2b3c]`, which point at the
   values in the result. The token after the context depends on the call, the allowlist, the run
   config, the trust floor and the stored data, so two servers (or one server before and after an
@@ -100,6 +103,15 @@ A name that is not one clean line of at most 200 characters is never offered, no
 summaries' sanitiser would change (HTML or markdown markup, a URL, a fact-id bracket) or that
 starts with `NOTICE` (0.111, #307), and any other argument completes to nothing. A host shows these to the person filling in a prompt. The model
 itself cannot list or start a prompt in most hosts, only a person can.
+
+**A multi-word prompt argument** (0.112, #333). A host that starts a prompt from a slash command
+may split what follows on spaces, quoted or not: in testing, the `claude` command line gave
+`check_savings_claim` only the first word of a quoted `claim`. Every other prompt argument is one
+word (an id, or `equips` as comma-separated ids with no spaces). For a claim, start the prompt
+with its facility only (`claim` is optional) and give the claim in your next message, or skip
+the slash command and ask in the conversation ("Check this savings claim for ds-site-1: the
+2017 retrofit cut ... by 12% against the 2016 baseline"); the model passes the whole claim to
+`mv_summary` itself.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
 
@@ -389,13 +401,28 @@ return it serialized as JSON in a text block, for clients that pass only `conten
 so the JSON goes out twice: once, compact, in `content` and once in `structuredContent`. Rather
 than leave one out, the server keeps results small:
 
-- **Pages.** Every list comes a page at a time: `rule_run` 25 findings, `sensor_trust` 100
-  points, `coverage` 50 rows per list, `points` 250, `facilities` 100, `rule_params` 25 rules (10
-  with `detail`), `check_citations` the failing sentences only (every sentence and
-  `verified_text` with `detail: true`), `rcx_report` its `top_n` ranked issues (default 8) with
-  their facts and the first 20 appendix entries of its fact index. Pass `limit` (up to 1,000)
-  and `offset` for more; `rcx_report` takes `top_n` and `offset` for issues and `limit` for the
-  appendix. Counts such as `count`, `n_points` and the RCx KPIs are of the whole list.
+- **Pages.** Every list comes a page at a time: `rule_run` 12 findings, `sensor_trust` 40
+  points, `coverage` 20 rows per list, `points` 200, `facilities` 40, `drift` 10 per list,
+  `rule_params` 15 rules (7 with `detail`), `dataset_search` 20 datasets, `mv_summary` 5 meters
+  with all their findings, `check_citations` the failing sentences only (every sentence and
+  `verified_text` with `detail: true`), `rcx_report` as many of its best-ranked issues as fit
+  (at most 8) with their facts and the first 5 appendix entries of its fact index. Pass
+  `offset` for the next page (the notice gives it); `limit` (up to 1,000) sets the page size,
+  and a larger page makes a larger result. `rcx_report` takes `top_n` and `offset` for issues
+  and `limit` for the appendix. Counts such as `count`, `n_points` and the RCx KPIs are of the
+  whole list.
+- **The default fits a host's limit** (0.112, #333). Some hosts cap what a tool result may put
+  in front of the model: the `claude` command line, for one, sets a result over 25,000 tokens
+  aside in a file and shows the model an error instead (its `MAX_MCP_OUTPUT_TOKENS` environment
+  variable sets the limit), and a model with no file tool never sees the result. A
+  host that gives the model only `structuredContent` counts that JSON, and this JSON (hex fact
+  ids, short keys, numbers) runs at about two characters a token, so 25,000 tokens is about
+  50,000 characters, not the 100 KB a prose rule of thumb gives. The default pages keep every
+  default result at most 25,000 characters of `structuredContent` (the data and the `camber`
+  facts and notices), half that budget; a test holds every tool to it. On the largest facilities
+  tested (two VAV fleets of about 650 points) the defaults are 11,000 to 21,000 characters:
+  `rcx_report` about 20,000 with 4 issues, `sensor_trust` 18,000, `points` 14,000, `coverage`
+  13,000. A larger `limit` or `top_n` can pass a host's limit: page with `offset` instead.
 - **`truncated` means something was left out.** Whenever a list in the result is not the whole
   list, `_meta["camber/truncated"]` is `true` and a notice says which list, the rows shown, the
   total and the call that gets the rest.
@@ -408,12 +435,12 @@ than leave one out, the server keeps results small:
   each `outputSchema` (it validates the same). The server still checks every result against the
   full schema.
 
-On a 650-point fleet, typical calls now return 50 to 100 KB (they were 0.3 to 1.2 MB), and
+On a 650-point fleet, a default call's whole reply (the summary, the JSON text block, the facts
+block, `structuredContent` and `_meta`) is 30 to 65 KB (they were 0.3 to 1.2 MB in 0.110), and
 `tools/list` is about 48 KB (the `camber` declaration adds about 130 bytes a tool: each
 `outputSchema` is a document of its own, so a `$ref` cannot share one definition between tools).
 The facts block (0.112) adds 10 to 15 % to a reply, and the compact copy of the facts in
-`structuredContent` (#331) 5 to 17 % more: on a 56-point facility `coverage` is 120 KB,
-`rcx_report` 69 KB and `sensor_trust` 44 KB.
+`structuredContent` (#331) 5 to 17 % more.
 
 ## From Python
 

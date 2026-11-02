@@ -88,7 +88,7 @@ _RUN_ARGS = {
 }
 
 #: findings (and skipped rules) per page by default (#299): about 60 KB on the wire
-_PAGE = 25
+_PAGE = 12  # 25 before 0.112 (#333): a page fits a host's tool-output limit
 
 RULE_RUN_INPUT = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

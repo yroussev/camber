@@ -307,6 +307,34 @@ def test_a_dead_pid_1_servers_directory_is_swept_and_a_live_ones_kept(tmp_path, 
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file locks")
+def test_the_owner_file_appears_whole_and_locked(tmp_path, monkeypatch):
+    """A sweep that reads the owner file while the server writes it must never see it empty or
+    unlocked: on a local disk that reads as a dead server's directory."""
+    from camber.mcp import _launch
+
+    owner = tmp_path / _launch._MPL_OWNER
+    replace, renamed = os.replace, []
+
+    def checked(src, dst):
+        assert not owner.exists()  # nothing to read until the record is complete
+        assert json.loads(open(src).read())["pid"] == os.getpid()
+        assert _launch._owner_gone(str(tmp_path)) is None  # no owner file yet: not "gone"
+        replace(src, dst)
+        renamed.append(dst)
+
+    monkeypatch.setattr(_launch.os, "replace", checked)
+    _launch._lock_owner(str(tmp_path))
+    try:
+        assert renamed == [str(owner)]
+        assert os.listdir(tmp_path) == [_launch._MPL_OWNER]
+        assert json.loads(owner.read_text())["pid"] == os.getpid()
+        assert _launch._owner_gone(str(tmp_path)) is False  # this process runs and holds it
+    finally:
+        while _launch._MPL_LOCKS:
+            os.close(_launch._MPL_LOCKS.pop())
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file locks")
 def test_the_flock_probe_and_the_servers_heartbeat(tmp_path, monkeypatch):
     import tempfile
 
