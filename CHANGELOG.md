@@ -102,9 +102,9 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   "is fault-free" against a run with faults; "No rule returned a fault or a warn", which an
   earlier 0.112 build rejected, borrowed the run's `0 warn`), and a figure moved to another
   label ("the hot-water valve", "reheat", "preheat" or "steam" valve given the cooling side's
-  share; FC10's share given to FC11; "1 point is suspect" against 2 suspect, 1 untrusted). Now
-  whatever the quantifier and wherever it stands -- before the noun, after it, or none at all,
-  where "the 11 points" is all of them -- the count a sentence gives must be a cited fact's
+  share; FC10's share given to FC11; "1 point is suspect" against 2 suspect, 1 untrusted). Now,
+  with the quantifiers CAPABILITY-REGISTRY.md lists, before the noun, after it, or none at all
+  (where "the 11 points" is all of them), the count a sentence gives must be a cited fact's
   count of that label or of that statement, the heating and cooling sides (each with its
   spellings), the trust classes and the fault conditions each bind their own figures, and a
   figure the fact tells apart by one of them fails when the sentence does not say which. Also:
@@ -117,6 +117,31 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   `sensor_trust`'s least-trusted-first list (its point facts now carry their `rank`). The
   prompts ask for `check_citations` on the whole revised draft each time, not only the
   sentences changed. The forms still not read, and those that fail closed, are listed in
+  CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` reads "both", "each" and "all" across items, verdicts on a whole set, and
+  more forms of zeros and counts (#338).** The fourth round of the 0.112 acceptance test still
+  found wrong sentences marked supported. "Both AHUs fail leaking_valve" (or "each AHU", "the
+  AHUs all", "on both units", "every unit") citing one air handler's finding, or citing a second
+  one that says "no valve leak", now fails: such a set is read against the equipment, points,
+  meters or facilities the cited facts are about, each needs a cited fact stating the claim of
+  it, and "both" or a number needs that many. "The 5 rules passed", "The 7 equipment are
+  healthy" and "The 3 rules returned a fault" now fail against a run with faults, warns or oks
+  besides. Zeros said as "Faults on X: 0", "Number of faults: 0", "faults were not found",
+  "there aren't any faults", "fault free", "suspect-free", "free of suspect points" and
+  "neither suspect nor untrusted points" now agree with the fact's count. "The 37 judged samples
+  were flagged" against "flagged 8 hours (32 of 37 judged samples, 86.5%)", "The 1672
+  free-cooling hours ran mechanical cooling" against 42% of them, "There were 8 flagged hours in
+  the reference window" against "None of the 8 ... falls in the window", "1 point is below the
+  trust floor and 1 is suspect", "A single point is suspect", "They are all trusted" and a table
+  cell "all trusted" now fail where the fact says otherwise. "The majority of" and "the bulk of"
+  are read as "most of", "over 9" as more than 9, and "half of" as a share of the count, so
+  "At least half of the 11 points are trusted" passes again. True sentences that were stripped
+  now pass: "86.5% of the judged samples were flagged", "0% heating and 0% cooling leak", one
+  clause's "high" next to another clause's "neither high nor low" cited to another fact, "trusted
+  at 0.97 and the ... setpoint at 1.00", "One ok result" and "The claim names 2017, 12% and
+  2016". Every result now says that it covers only the text passed, and the prompts that a
+  reworded answer must be checked again; MCP.md says the same for a question asked in the
+  conversation. The forms still not read, and those that fail closed, are listed in
   CAPABILITY-REGISTRY.md, "What it does not check".
 - **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
   acceptance test found sentences that say the opposite of their cited fact marked
@@ -358,6 +383,13 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   container) gave different ids for the same data. A path now counts by what it resolves to: the
   store by its data, a folder by its entries, the mapping and `shared_oat` files by their size and
   modification time. The ids of a server started with a `--config` change once; cite the new ones.
+- **`check_citations`'s summary says what it covers (#338).** Its text now ends "This check
+  covers only the text passed in this call ...: give the user only text a check marked
+  supported, and if you reword, shorten or add to it afterwards, even one sentence, check the
+  whole text again before you give it or say that it was checked." A client
+  that compares that text with a fixed string should match its start. A sentence that says
+  "both", "each" or "all" of several equipment or points now needs a cited fact about each one:
+  cite them all ("Both AHUs fail leaking_valve [F2] [F7]").
 - **`verified_text` says when it dropped a verdict or caveat (#328).** Removing an unsupported
   verdict or caveat ("for information only", "conditional on the sensor") while keeping the
   figures they qualified made a checked answer read as more certain than its draft. When a
