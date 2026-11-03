@@ -37,7 +37,8 @@ _CITE_RULES = (
     "equipment is not a pass: say it was not judged, citing the fact that reports it. Use a "
     "verdict, negation or assurance word (passes, fails, not, never, none, all, verified, "
     "clean, real, confident) only as a fact you cite does: check_citations compares them both "
-    "ways. Quote a name from the data in double quotes. If a call is refused (not_allowed, "
+    "ways. Say 'both', 'each' or 'all' of several equipment or points only citing a fact about "
+    "each one. Quote a name from the data in double quotes. If a call is refused (not_allowed, "
     "refused_licence), say so and stop; do not work around it."
 )
 
@@ -51,7 +52,9 @@ _FINISH = (
     "NOTICE that sentences were removed is not the answer. Fix or remove each sentence it does "
     "not mark supported and call check_citations again on the revised draft, the whole of it "
     "every time (every sentence you will give, not only the ones you changed), until it marks "
-    "every sentence supported: never give text it has not checked. Then give that last "
+    "every sentence supported: never give text it has not checked. A check covers only the "
+    "text it was given: if you reword, shorten or add a sentence after it, check the whole text "
+    "again, and never say the check passed for text you changed after it. Then give that last "
     "verified_text, and after it your labelled judgment, as the corrected text."
 )
 

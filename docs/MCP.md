@@ -79,11 +79,17 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   suspect`, "no faults were found" against another clause's `0 rule(s) skipped`, "the cooling
   valve leaked on 86%" against `HW-leak 86% / CHW-leak 0%` and "still a fault" against a
   finding re-judged ok all fail. What a sentence says of a counted thing must agree with what a
-  cited fact says of it (#336), whatever the quantifier and wherever it stands -- "all 8", "8
-  out of 8", "the 8 flagged hours ... all fall", "both", "none of", "no rule", "not a single
-  fault", "fault-free", or none at all ("The 11 points are trusted" says all 11): "The 8 flagged
-  hours fall in the window" against "None of the 8 flagged hours falls in the window", "No rule
-  passed" against `19 ok` and "Both suspect points are trusted" fail. Labels are closed sets:
+  cited fact says of it (#336, #338), with the quantifiers and zeros CAPABILITY-REGISTRY.md
+  lists, before or after the noun or left out -- "all 8", "8 out of 8", "the 8 flagged hours
+  ... all fall", "both", "none of", "no rule", "not a single fault", "fault-free", "Faults: 0",
+  "faults were not found", "there are 8 flagged hours in the window", "at least half of", "the
+  majority of", "86.5% of", or none at all ("The 11 points are trusted" says all 11): "The 8
+  flagged hours fall in the window" against "None of the 8 flagged hours falls in the window",
+  "No rule passed" against `19 ok`, "The 5 rules passed" against `14 fault, ..., 19 ok`, "The
+  37 judged samples were flagged" against "flagged 8 hours (32 of 37 judged samples)" and "Both
+  suspect points are trusted" fail. "Both", "each" or "all" said of equipment, points, meters
+  or facilities ("Both AHUs fail leaking_valve") needs a cited fact stating it of each one, and
+  fails when a cited fact about one of them says otherwise (#338). Labels are closed sets:
   the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
   side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
   FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
@@ -101,16 +107,24 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   sentences (#322); when one of those gave a verdict, a negation or a caveat, it opens with a
   `NOTICE:` line saying the text says less than the draft, and a banner says the same (#328): do
   not show such a `verified_text` as the answer. The prompts ask for `check_citations` on the
-  whole revised draft each time, not only on the sentences changed (#336).
+  whole revised draft each time, not only on the sentences changed (#336). Every result says
+  that it covers only the text passed in that call: a text reworded, shortened or extended
+  after a passing check is not checked until it is checked again (#338).
 - **What it does not check** (the full list is in CAPABILITY-REGISTRY.md). These pass when
   their figures and names match, so they can be wrong and still be marked supported:
   a counted thing named after its verb or later in its clause with no quantifier ("the window
   covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in words
   other than the cited fact's ("the 8 hours precede the window"); a cause after a bare
   "because" ("declined because the input was untrusted"); a label outside the closed sets
-  where the cited fact gives only one figure; a claim about all of several facts. And these
-  fail closed although they can be true: "all" or "every" with no number unless a cited fact
-  says all or counts that label with its total; "all 8 ... fall outside the window" (a whole
+  where the cited fact gives only one figure; a claim about all of several facts that are not
+  equipment, points, meters or facilities ("both baselines", "both valves"); a set said with no
+  number ("each AHU", "the AHUs") is read as the items the cited facts are about, so an item no
+  cited fact is about is not known to the check; a comparative with no figure ("more points are
+  suspect than trusted"); words outside the lists ("survives the re-judge", "lowest trust
+  score"). And these fail closed although they can be true: "all" or "every" with no number
+  unless a cited fact says all or counts that label with its total; "they are all trusted" or a
+  cell "all trusted" unless a cited fact counts all of them as trusted; "half of" a thing no
+  cited fact counts; a set of items backed by one cited fact; "all 8 ... fall outside the window" (a whole
   count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
   number); a share the fact tells apart by side, trust class or fault condition said without
   one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
@@ -135,7 +149,12 @@ word (an id, or `equips` as comma-separated ids with no spaces). For a claim, st
 with its facility only (`claim` is optional) and give the claim in your next message, or skip
 the slash command and ask in the conversation ("Check this savings claim for ds-site-1: the
 2017 retrofit cut ... by 12% against the 2016 baseline"); the model passes the whole claim to
-`mv_summary` itself.
+`mv_summary` itself. Prefer the first: a question asked in the conversation does not carry the
+prompt's instructions, and in testing the model reworded its answer after a passing check and
+told the user the check had passed for text that was never checked (#338). If you ask in the
+conversation, ask for the same discipline ("cite the fact ids, check the whole final answer with
+check_citations, give only the text it marked supported and label your own judgment"); every
+`check_citations` result also says that it covers only the text passed in that call.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
 

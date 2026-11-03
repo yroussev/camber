@@ -19,6 +19,8 @@ facility ids and their registry names are names too, so another facility named i
 must be one a cited fact names; rule, tool and field names are not equipment. A ``NOTICE:`` line
 repeating the text of a ``notice`` fact among the facts is kept and not judged; a fact's whole
 text quoted word for word with its own id (a notice's ``N`` id too) is one supported sentence.
+Every result's fact and summary say that it covers only the text passed (:data:`SCOPE`, #338):
+a text reworded after a passing check is not checked until it is checked again.
 ``verified_text`` keeps the draft's lines, headings, list markers and blank lines (#322); when
 it drops a sentence that gave a verdict, a negation or a caveat, it opens with :data:`REMOVED`
 and the result says so (#328), so a stripped answer never reads as more certain than the draft.
@@ -50,6 +52,14 @@ _PAGE = 50
 REMOVED = (
     "NOTICE: check_citations removed sentences that gave a verdict, a negation or a caveat; "
     "this text says less than the draft and is not the complete answer."
+)
+
+#: what every result says of its own reach (#338): a passing check is for the text it was given
+SCOPE = (
+    "This check covers only the text passed in this call (with detail, verified_text): give the "
+    "user only text a check marked supported, and if you reword, shorten or add to it "
+    "afterwards, even one sentence, check the whole text again before you give it or say that "
+    "it was checked."
 )
 
 INPUT_SCHEMA = {
@@ -416,7 +426,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
                 else ""
             )
             + f"{bad['uncited']} cite nothing, {bad['unsupported_number']} state a figure no "
-            f"cited fact carries and {bad['unsupported_claim']} make a claim no cited fact makes",
+            f"cited fact carries and {bad['unsupported_claim']} make a claim no cited fact makes. "
+            + SCOPE,
         }
     ]
     text = cite(facts[0])
