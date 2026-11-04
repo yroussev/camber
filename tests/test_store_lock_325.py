@@ -37,8 +37,11 @@ class _Foreign:
         self._t = None
 
     def _write(self):
-        with open(self.path, "w") as fh:
+        # whole, as a real writer places its claim: a reader never sees the file empty
+        tmp = f"{self.path}.{threading.get_ident()}.tmp"
+        with open(tmp, "w") as fh:
             json.dump({**self.rec, "beat": f"{self.n:012d}"}, fh)
+        os.replace(tmp, self.path)
 
     def beat(self):
         def run():
