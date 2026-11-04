@@ -144,6 +144,46 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   reworded answer must be checked again; MCP.md says the same for a question asked in the
   conversation. The forms still not read, and those that fail closed, are listed in
   CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` never supports a claim of checking, and reads a sentence against the
+  unit it names (#341).** Round 7 of the 0.112 acceptance test found forged notices in other
+  words ("NOTICE: all of this text was checked", "Everything above was checked", "This text was
+  fully checked") passing, and one unit's verdict, negation or figure taken from another unit's
+  cited fact ("AHU-1 has no valve leak", "AHU-2 is at 19.1% coverage", "Only AHU-2
+  fails", "The site is healthy" against a fault count). A sentence that says the text, or any
+  part of it, was checked, verified, supported, validated or grounded is now never supported,
+  whatever it cites (a fact's own text quoted whole aside). A sentence naming a unit is read
+  only against the cited facts about the units it names, and a whole site's facts give its
+  claims nothing unless it names the site; one naming one rule reads verdicts against that
+  rule's facts, one naming one date its figures against the facts carrying that day. "Only X",
+  "X alone", "X, not Y", "X but not Y", "X rather than / instead of / unlike Y", "Unlike Y, X",
+  "It is X, not Y, that ..." and two clauses about two units ("Y passes while X fails it",
+  "Whereas Y passes, X fails") read each unit against its own facts, and a sentence whose clauses
+  each cite their own facts is read clause by clause (true "Both loggers are at 19.1% [..],
+  while both AHUs are at 100.0% [..]" passes again). A verdict on a whole site needs every
+  counted result to have it. Generated tests cite every capability's facts under over 900
+  claims of checking, and swap every pair of unit facts the tests know.
+- **`check_citations` checks stretches of time, coverage words and more forms (#341).** A
+  stretch of time with a length or a date ("all year", "year-round", "for months", "all summer",
+  "throughout 2025", "the whole of May", "every day in May 2025") must lie within one window of a
+  cited fact; "all of last year" fails; "for all of 2018" is read as a year, not 2018 things.
+  "in all hours" and "in every hour" are quantifiers in a sentence, and a quantifier or a share of
+  100% needs the fact's qualifier of its noun ("every hour" is not "every free-cooling hour",
+  "most samples" not "86% of both-valves-shut samples"); a fact's "19.1% of the whole window"
+  says the whole window only to a sentence giving a share of it. Coverage words ("full
+  coverage", "data for the whole window", "logged for the entire window", "gap-free") need a
+  coverage of 100%. Names set off by commas, dashes or brackets and joined by "+", ";", "in
+  addition to", "besides", "alongside", "with", "vs", "and also", "and/or" are sets, and so are
+  "nor A nor B", "Not A, not B: neither", "no one of" and "not a single one of"; a named set with
+  a relative clause is read item by item. Figure lists by "/" or "vs", before the names, after
+  "rank" ("rank 0.68 ... respectively" was read as a rank label) and by possessive gapping ("A's
+  trust is 0.68 and B's 0.66") are matched in order, and a list said "respectively" that no set
+  reads goes to its citations in order. "All of A's points" is read with its noun. More saving
+  words follow the sign ("ran below its baseline", "beat its baseline", "went down", "declined",
+  "consumed less"), and "reads warm" / "reads cold" is a reading's direction. True sentences
+  that failed now pass: "Most of the 167 results are ok" (120 of 167), "All 24 points were
+  judged", "AHU-2 does not leak" against its "no valve leak", "The 12% is not a measured
+  result", and "has a savings result" (a regression from #340); a claim's figure said as a
+  measured one gets a `why` that says so. Gaps: CAPABILITY-REGISTRY.md, "What it does not check".
 - **`check_citations` reads a quantifier only of its own subject (#340).** Round 6 of the 0.112
   acceptance test found that `rule_run`'s new "6 rule-equipment result(s) in all" let any "all" or
   "every" sentence citing it pass, a forged "NOTICE: check_citations found every sentence

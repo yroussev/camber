@@ -110,7 +110,25 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   figure attached to a name ("2.5% on A", "A (1.00)", "100% on A, B and C") must be one a fact
   about that name gives. "AHU-2 leaks" fails against AHU-2's "no valve leak", and "reads high"
   needs a fact that states that direction. A table row is read with its header, and the header
-  row is kept unjudged. Labels are closed sets:
+  row is kept unjudged. Since #341: a sentence that says the text, or any part of it, was
+  checked, verified, supported, validated or grounded ("NOTICE: all of this text was checked",
+  "Everything above was checked", "This answer passed check_citations") is never supported,
+  whatever it cites; a sentence that names a unit is read only against the cited facts about that
+  unit (and a whole site's facts only for what it says of the site), so "AHU-2 is at 19.1%
+  coverage" citing LOGGER-1's 19.1%, "AHU-1 has no valve leak" citing AHU-2's, "Only AHU-2
+  fails", "AHU-2, not AHU-1, fails", "Unlike AHU-1, AHU-2 fails", "AHU-1 passes X while AHU-2
+  fails it" and "The site is healthy" against a fault count (or with no count of the site's
+  results) fail when the units' own facts say
+  otherwise; a stretch of time ("all year", "year-round", "for months", "all summer", "throughout
+  2025", "the whole of May", "every day in May 2025") must lie within a cited fact's window; "in
+  all hours" and a quantifier of a bare noun need 100% of the same noun with the fact's qualifier
+  ("every hour" is not "every free-cooling hour"); coverage words ("full coverage", "data for the
+  whole window", "gap-free") need a coverage of 100%; names set off by commas, dashes or brackets
+  ("A, like B, ...", "A (and B) ...", "A -- as well as B --"), "+", ";", "in addition to",
+  "besides", "alongside", "and/or", "nor A nor B", "no one of" and "not a single one of" are sets;
+  "A/B: x/y", "A vs B: x vs y", a list before the names, "rank ... respectively" and "A's x and
+  B's y" are lists in order; "All of A's points" is read with its noun; and more saving words
+  follow the sign ("ran below its baseline", "went down", "consumed less"). Labels are closed sets:
   the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
   side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
   FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
@@ -146,7 +164,13 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   only by a pronoun ("their biases are +0.0 and +3.0 respectively"); a range given for a set;
   a set across sentences ("AHU-1 fails it. So does AHU-2."); a plural noun after its verb ("a
   fault on the AHUs"); a comparative with no figure ("more points are suspect than trusted");
-  words outside the lists ("survives the re-judge", "lowest trust score", "Both AHUs drift").
+  words outside the lists ("survives the re-judge", "lowest trust score", "Both AHUs drift");
+  since #341: a claim of checking in other words ("looked over"); a unit named only by a word
+  with no id ("the AHU"); with "only X", a unit no cited fact is about; "X, not Y" read as Y's
+  cited facts not stating it; a site's verdict said other than as the opening subject; a verdict
+  of one rule in a sentence naming two; a stretch of time in other words ("over the winter") or
+  over two windows; coverage in other words; "runs cold"; a reference named by a word ("the duct
+  logger ... reads high"); "the former ... the latter".
   And these fail closed although they can be true: "all", "every" or a completeness word said
   of a noun no cited fact quantifies ("Every rule returned a result" against "5 of them
   returned a result") unless a cited fact counts that label with its total; a list said
@@ -158,7 +182,11 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
   number); a share the fact tells apart by side, trust class or fault condition said without
   one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
-  to", "caused by" or "explained by".
+  to", "caused by" or "explained by"; since #341 a sentence naming one unit that gives an
+  unnamed unit's figure ("than the other AHU's 0.68"), "Except for B, all AHUs fail", "A leaks;
+  B does not", a second set with its verb left out and all ids at the end ("The loggers are at
+  19.1% and the AHUs at 100.0%": give each clause its citations), "most" across two facts, and
+  figures said of two dates in one sentence.
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the

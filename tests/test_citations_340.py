@@ -134,7 +134,11 @@ FORGED_ITEMS = [
     "Most sensors were replaced last year {c}.",
     "Every AHU has a new actuator {c}.",
 ]
-_QUANT_WHY = ("says all or every of it", "says most of it")
+_QUANT_WHY = (
+    "says all or every of it",
+    "says most of it",
+    "was checked; only check_citations",  # #341: a claim of checking, whatever it cites
+)
 _SET_WHY = ("states it of", "state it of", "not about 2 or more", "not most of them")
 
 
