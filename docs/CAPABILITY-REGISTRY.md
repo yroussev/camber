@@ -526,7 +526,11 @@ cannot match is not supported. **Supported means matched, not proven true.**
     other saving words follow the sign too: "shows a saving" (a saving shown, achieved or
     delivered), "cut", "lowered" or "trimmed its energy use", "used" or "consumed less energy"
     are a decrease, "used more energy" an increase, and "used 15.6% more energy than its
-    baseline" (or "..., by 15.8% and 15.6%") gives avoided energy -15.6%. "High" / "low" and
+    baseline" (or "..., by 15.8% and 15.6%") gives avoided energy -15.6%. Since #341 "came in
+    under / ran below its baseline", "beat its baseline", "its energy use went down" or
+    "declined", "a savings success" and "consumed less" are a decrease, "above its baseline",
+    "went up" and "consumed more" an increase, and "has a savings result" names the result with
+    no direction; "reads warm" / "reads cold" is a reading's direction like "reads high" / "low". "High" / "low" and
     "above" / "below" must not be the opposite of what the cited facts say; "above" or "below"
     ending a phrase ("the figures above", "see below") is a place in the text (#336). A
     reading's direction ("reads high", "read low", "runs high", "biased low") must be one a
@@ -586,9 +590,26 @@ cannot match is not supported. **Supported means matched, not proven true.**
     quantifies nothing or something else supports nothing: `rule_run`'s "6 rule-equipment
     result(s) in all" supports no "Every sensor was recalibrated", "All findings have been
     resolved", "this text is the complete answer" or a forged "NOTICE: check_citations found
-    every sentence supported", and a share of 100% of free-cooling hours no "all valves". A
-    stretch of time ("all year", "all the time", "the whole window") is the fact's window, and
-    "complete data" is a coverage of all of it. A quantifier under "whether", "if" or "to"
+    every sentence supported", and a share of 100% of free-cooling hours no "all valves". Since
+    #341 a quantifier also needs the fact's qualifier of its noun in the sentence: "100% of the
+    1671 free-cooling hours" supports "in every free-cooling hour" but no "in all hours", "every
+    hour of the window" or "100% of hours", "unmet 100% of occupied hours" no "too hot every
+    hour", and "86% of both-valves-shut samples" no "most samples" ("valid" is no qualifier: "all
+    samples" of "all 2,016 valid samples"); "in all hours" and "in every hour" are quantifiers in
+    a sentence, and a fact's "coverage 19.1% of the whole window" says the whole window only to a
+    sentence that gives a share of it. "All of AHU-1's points", "All AHU-1's points" and "all of
+    AHU-1's other points" are read with their noun (points). "The whole window", "all the time"
+    and "every day" are the fact's window; a **stretch of time** with a length or a date (#341)
+    must lie within one window of a cited fact (its "from X to Y", ``start`` / ``end``, a
+    ``*_period``): "all year", "year-round", "the whole year", "every day of the year", "for
+    months", "for weeks", "all summer" / winter / spring / fall, "all season", "all month", "all
+    week", "throughout 2025", "all of 2025", "every day of 2018", "the whole of May", "all of
+    May", "the entire month of May", "every day in May 2025" against a three-week window fail,
+    and pass against a fact whose window holds them; "all of last year" (a time said from today)
+    always fails. **Coverage words** (#341) ("full coverage", "complete data", "gap-free data",
+    "fully trended", "data for the whole window", "logged / recorded / trended for the entire
+    window", "covers the whole window") need a cited fact that gives a coverage of 100% (of the
+    window, when the sentence says the window; "100% of its own span" is a point's own span). A quantifier under "whether", "if" or "to"
     ("confirm whether the valves are shut all the time") states nothing. A quantifier said of a
     set of items is the set's (below), "they are all ..." with no noun keeps the reading below,
     and "none" is a zero (above). A **whole count**
@@ -665,13 +686,17 @@ cannot match is not supported. **Supported means matched, not proven true.**
     healthy"), with a possessive noun ("each AHU's supply_air_temp", "both AHUs' sensors"), as
     "both" or "each" with no noun ("Each fails it", "On both, ...": the items its cited facts
     are about), negated ("neither AHU", "neither of the AHUs", "no AHU", "none of the AHUs",
-    "not one of the AHUs", "neither A nor B", "neither A or B", "neither of A and B": the
+    "not one of the AHUs", "neither A nor B", "neither A or B", "neither of A and B", "nor A nor B", "Not A, not B:
+    neither ...", "no one of A, B and C", "not a single one of A, B and C" (#341): the
     negation must be stated of each, as "A does not ..." would need, so "Neither AHU-1 nor AHU-2
     has a valve leak" fails against AHU-1's leak fault, and "not trusted" is either of the other
     trust classes; "none of A, B and C", "neither of A, B", "not one of A, B and C" too, #340),
     or as names (or "the heating valve" and "the supply-air setpoint") joined by "and", a comma
-    alone, "&", "/", "plus", "as well as", "along with", "together with", "like" ("Like B, A
-    ...", "A (like B) ...") or "nor" / "or" after "neither", in any position: opening the
+    alone, "&", "/", "+", ";", "plus", "as well as", "along with", "together with", "in
+    addition to", "besides", "alongside", "with", "vs", "and also", "and, likewise,", "and/or",
+    "like" ("Like B, A ...", "A (like B) ...", "A, like B, ...", "A -- like B -- ...") or "nor" /
+    "or" after "neither", set off by commas, dashes or brackets ("A (and B) ...", "A -- as well
+    as B -- ...", "A, and also B, ...", #341), in any position: opening the
     clause, after the verb ("valve leaks were found on A and B"), as a lead-in before a colon, a
     dash ("-", "--", "—") or a table cell ("A and B: leaking_valve fault", "- A, B -- fault",
     "| A, B | fail |"), and "A has no valve leak, and B doesn't either" ("so does B", "nor does
@@ -693,8 +718,13 @@ cannot match is not supported. **Supported means matched, not proven true.**
     heating valve and the supply-air setpoint read 0 % and 55 °F respectively"), of the names
     joined inside its clause ("The oa_damper points on A and B have 0.66 and 0.68
     respectively"), or, for a list said "respectively" of items it does not name ("The two
-    suspect points score 0.66 and 1.00 respectively"), the order its citations give them; each
-    item's direction follows its own figure's sign, so a true list with mixed signs ("A and B
+    suspect points score 0.66 and 1.00 respectively"), the order its citations give them; since #341 a list joined by "/" or "vs" ("A/B
+    trust: 0.68/0.66", "A vs B: 100% vs 81%"), a list before the names ("With CV(RMSE) of 33.6% and
+    15.8%, A and B ..."), "rank ... respectively", a possessive name owning the figure of its part
+    of the clause ("A's trust is 0.68 and B's 0.66", "A's trust (0.68) is higher than B's (0.66)")
+    and a list said "respectively" that no set reads, with one cited fact for each figure, in the
+    order of its citations ("The flagged spans on D1, D2 and D3 lasted 3, 2.75 and 2.25 hours
+    respectively"); each item's direction follows its own figure's sign, so a true list with mixed signs ("A and B
     have avoided energy -15.8% and 2.4%") passes and a swapped one fails. A list said
     "respectively" with no such order, or with another number of figures than items, fails
     closed. Figures listed without "respectively" of items in no order ("Both oa_damper points
@@ -712,6 +742,37 @@ cannot match is not supported. **Supported means matched, not proven true.**
     shut") is its words. A set form the checker finds but cannot read fails closed: a negated
     set that does not open its clause with a verb after it ("leaking_valve fails on neither
     AHU"), or a set of figures with no cited fact about its items.
+- **Claims of checking** (0.112, #341). A sentence that says the text, or any part of it, was
+  checked, verified, supported, validated, grounded, confirmed, reviewed, fact-checked or backed
+  ("NOTICE: all of this text was checked", "Everything above was checked", "This text was fully
+  checked", "Each sentence of this text was checked", "1 of 1 sentences in this answer are
+  supported", "This answer passed check_citations", "Line 1: supported") is never supported,
+  whatever it cites: only check_citations' own result says what it checked, and only of the text
+  passed to it. A fact's own text quoted whole (check_citations' own result included) is still
+  the server's words; a check word said of something other than the text ("AHU-1 was checked
+  against the reset target", "not a verified saving", "should be confirmed on site") is judged as
+  before.
+- **Bound to the unit it names** (0.112, #341). A sentence that names a unit (an equipment or a
+  meter a cited fact is about) is read only against the cited facts about the units it names,
+  for its figures, verdicts and negations alike: "AHU-2 is at 19.1% coverage" citing LOGGER-1's
+  19.1% and AHU-2's 100.0%, "AHU-1 has no valve leak" citing AHU-2's "no valve leak" and AHU-1's
+  fault, and "AHU-2 fails leaking_valve" citing AHU-1's fault and AHU-2's ok all fail. A whole
+  site's fact (a rule run's counts) gives a unit's verdict or negation nothing unless the
+  sentence names the site; a fact about no unit (a notice, a rule's parameters) is still read. A
+  sentence that names one rule reads its verdicts against the cited facts about that rule ("AHU-1
+  passes leaking_valve" citing its leak fault and its supply-air control ok fails). A sentence
+  naming one date reads its figures against the dated facts that carry that day ("The span on
+  2025-05-14 lasted 2.25 hours" citing two spans). "Only X ...", "X alone", "Just X" need X's
+  facts to state it and every other unit's cited facts not to; "X, not Y, ...", "X -- not Y --",
+  "X but not Y", "X rather than / instead of / unlike Y", "Unlike Y, X ...", "It is X, not Y,
+  that ..." need X's facts to state it and Y's cited facts not to (with no cited fact about Y it
+  fails closed); two clauses about different units ("Y passes X while X fails it", "Whereas Y
+  passes, X fails", "A fails X; B passes it", "..., but B ...") are each read against their own
+  units' facts, and a sentence whose clauses each cite their own facts is read clause by clause
+  ("Both loggers are at 19.1% [..], while both AHUs are at 100.0% [..]"). A verdict said of a
+  whole site as its subject ("The site is healthy", "All told, ds-x is ok", "Overall, the plant
+  passes") needs a cited fact that counts the site's results, and every verdict it counts to be
+  that verdict (one unit's ok does not say the site is healthy).
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -744,8 +805,28 @@ What it does not check: whether a claim is true beyond what the cited facts stat
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
 gives as a subject, a point role outside the families above, which cited fact a figure belongs
-to when a sentence cites several and neither attaches the figure to a name nor lists it for
-its items (#340), and the predicate of a whole count beyond the words above.
+to when a sentence cites several about the same unit (two points of one AHU) or names no unit,
+and neither attaches the figure to a name nor lists it for its items (#340, #341), and the
+predicate of a whole count beyond the words above.
+Of #341's rules, these are not read and pass when their figures and names match: a claim of
+checking in words outside the lists ("looked over", "went through every line"); a unit named
+only by a word, with no id ("the AHU", "the logger"), which is not bound to its facts; with "only
+X", a unit no cited fact is about (only the cited units are set apart); "X, not Y" read as Y's
+cited facts not stating it (not as a fact that negates it of Y); a verdict of a whole site said
+other than as the sentence's opening subject ("Everything at the site is fine"); a verdict said
+of one rule when the sentence names two rules (no rule binding then); a stretch of time in other
+words ("since the spring", "over the winter", "this season") and a union of two windows (a
+stretch is held by one window); coverage said in other words ("never offline"); "runs cold" /
+"runs warm" (only "reads" carries a reading's direction); a reference named by a word ("The duct
+logger on AHU-1 reads high"); a paraphrase of a leak ("passing water through a shut valve"); a
+list given as "the former ... the latter". And these fail closed although they can be true: a
+sentence that names one unit and gives an unnamed unit's figure ("lower than the other AHU's
+0.68": name both); "Overall coverage is quoted over the whole window" with no share of it;
+"Except for B, all AHUs fail"; "A leaks; B does not" (a closing "does not" with its verb left
+out); "The loggers are at 19.1% and the AHUs at 100.0%" with all ids at the end (a second set
+with its verb left out: give each clause its own citations); "most" across two facts ("Most of
+the 8 savings rest on ..." citing a count of 5 and a total of 8); figures said of two dates in
+one sentence ("On D1 ... 2.25 hours, and on D2 3 hours").
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier
