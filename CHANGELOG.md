@@ -143,6 +143,17 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   reworded answer must be checked again; MCP.md says the same for a question asked in the
   conversation. The forms still not read, and those that fail closed, are listed in
   CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` reads a claim about a set of items as one rule, item by item (#339).**
+  Round 5 of the 0.112 acceptance test still found sets judged on one item's fact. A sentence
+  about two or more equipment, points, meters or facilities -- by quantifier, number, "the
+  AHUs", "X's 7 AHUs", "each AHU's ...", "the pair of", a negated set ("neither A nor B", "no
+  AHU", "none of the AHUs") or names joined anywhere (colon, dash or table-cell lead-ins too) --
+  now needs the cited facts about each item to state the same claim, figures included: "Both
+  meters save 2.5%" against -15.6% on one and "Neither AHU-1 nor AHU-2 has a valve leak"
+  against AHU-1's fault fail. A set is read with its own clause. "Suspect: 0", "Passed: 5
+  rules" and "| Suspect | 0 |" count their figure, "faulted" is a verdict, and a saving's
+  direction follows its sign ("reduced its energy use" fails against -3.1%). Several true
+  sentences are no longer stripped. Gaps: CAPABILITY-REGISTRY.md, "What it does not check".
 - **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
   acceptance test found sentences that say the opposite of their cited fact marked
   "supported": "the heating valve leaks" against "no valve leak", "the setpoint moves" against
@@ -383,6 +394,8 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   container) gave different ids for the same data. A path now counts by what it resolves to: the
   store by its data, a folder by its entries, the mapping and `shared_oat` files by their size and
   modification time. The ids of a server started with a `--config` change once; cite the new ones.
+- **`rule_run`'s summary fact counts its verdicts as rule-equipment results (#339):** "... and
+  3 of them returned a result, 6 rule-equipment result(s) in all: 1 fault, ...". Match its start.
 - **`check_citations`'s summary says what it covers (#338).** Its text now ends "This check
   covers only the text passed in this call ...: give the user only text a check marked
   supported, and if you reword, shorten or add to it afterwards, even one sentence, check the

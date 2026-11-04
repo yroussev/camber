@@ -517,9 +517,14 @@ cannot match is not supported. **Supported means matched, not proven true.**
     sensor") (#336).
   - **Directions.** A direction word (rose, increased, fell, decreased, saved, avoided, reduced,
     wastes, ...) must be one a cited fact uses (or its `direction`), except after "would",
-    "could" and the like; "fall on 2025-05-14" is not one. "High" / "low" and "above" / "below"
-    must not be the opposite of what the cited facts say; "above" or "below" ending a phrase
-    ("the figures above", "see below") is a place in the text (#336).
+    "could" and the like; "fall on 2025-05-14" and "falls below the trust floor" are not one.
+    A saving's direction follows its sign (#339), in the fact and in the sentence: "avoided
+    energy -21,825 (-3.1%)" is an increase, so "reduced its energy use" and "saved energy" fail
+    against it and "increased its energy use", "did not save energy", "used more energy than its
+    baseline", "a negative avoided energy" and "avoided energy -21,825" pass; "this saving is
+    ..." naming the result is read as the fact's own saving, whatever its sign. "High" / "low"
+    and "above" / "below" must not be the opposite of what the cited facts say; "above" or
+    "below" ending a phrase ("the figures above", "see below") is a place in the text (#336).
   - **Negations, both ways.** A negation the sentence states ("did not leak", "never moves",
     "without", "no <thing>") needs a cited fact that negates the same thing: a fact's "no valve
     leak" supports "the valve did not leak", while "drift not evaluated" supports no other
@@ -548,7 +553,13 @@ cannot match is not supported. **Supported means matched, not proven true.**
     0", "Number of suspect points: 0"), "<things> were not found" (or not detected, reported,
     seen, flagged), "there aren't any <things>", "fault free" with no hyphen, a trust class
     "-free" or "free of suspect points" (its points), and "neither suspect nor untrusted points"
-    (each label with the noun, #338).
+    (each label with the noun, #338). A trust class or a verdict alone before a colon, a dash
+    or in a table row counts its figure too (#339): "Suspect: 0" and "| Suspect | 0 |" are "0
+    suspect points", "Trusted: 24" is "24 trusted points", "Passed: 5" is "5 ok", "Failed: 0"
+    is "0 fault", "Passed: 5 rules" is "5 rules passed", "Rules passed: 5 of 5" is "5 of 5 rules
+    passed" and a row "| 5 of 5 | passed |" is "5 of 5 results passed". A zero of a part of a
+    total ("None of the 59 judged samples were flagged") is supported by a cited fact's count of
+    the same total with that statement ("0 of 59 judged both-valves-shut samples").
   - **Quantifiers and ranks.** "All" or "every" needs a fact that says all, every or 100%;
     "most" one that says most or a share above half; "none" is a zero (above). A **whole count**
     ("all 11 points", "106 of the 106", "every one of the 37") needs a fact that says all of that
@@ -599,26 +610,53 @@ cannot match is not supported. **Supported means matched, not proven true.**
     are in it and "there are flagged hours in the window" some (an existential, fronted or
     not). A bare count after "and" that a verb follows counts what the count before it counts
     ("1 point is below the trust floor and 1 is suspect", "one is untrusted and one is
-    suspect"); "a single" and "a lone" are one; "over 9" (opening its clause or after a verb,
-    not "over 366 days") and "upwards of 9" are "more than 9", which a fact's 9 does not
-    support. "All" with no counted thing ("They are all trusted", "all of them", a table cell
+    suspect"), and so does "none" after "and" ("3 points are suspect and none is trusted");
+    "the rest" after a count is the fact's total less that count ("21 are trusted and the rest
+    are untrusted" against `21 trusted, 3 suspect, 0 untrusted` of `24 points` fails, #339); "a
+    single" and "a lone" are one; "over 9" (opening its clause or after a verb, not "over 366
+    days"), "well over 9", "just over 9" and "upwards of 9" are "more than 9", which a fact's 9
+    does not support. "No suspect point is below the trust floor" says that of the suspect
+    points, not that there are none; a count of rules with a verdict ("1 rule returned a fault")
+    is read against `rule_run`'s verdict counts only where it ran on one equipment, since its
+    verdicts count rule-equipment results, not rules. "All" with no counted thing ("They are all trusted", "all of them", a table cell
     "all trusted") is read with its label: a cited fact must count all of them with it (`17
     trusted` of `17 points`; every verdict count but that one 0), or, with no label, say all.
-  - **Sets of items** (0.112, #338). "Both", "each", "every", "all", "all 3", "the 2" or a
-    plural opening its clause with "the" ("The AHUs fail ...", "The AHUs both ...", "on both
-    units"), said of equipment (AHU, unit, RTU, VAV, chiller, tower, ...), points or sensors,
-    meters or facilities that no cited fact counts, is read against the items the cited facts
-    are about (a fact's equipment, its point, its meter or its facility). Every such item must
-    have a cited fact that states the claim of it on its own -- its figures, verdicts,
-    directions, negations and point role, the other items' figures and names aside ("suspect on
-    both units, at 0.66 on AHU-1 and 0.68 on AHU-2" passes) -- so a cited fact about one item
-    that says otherwise fails the sentence ("Both AHUs fail leaking_valve [F2] [F6]" with F6's
-    "no valve leak"); "both" or a number needs that many items so stated, and a set said with no
-    number at least two ("Each AHU fails leaking_valve [F2]" and "both AHUs are affected [L3]"
-    fail). With no cited fact about one item, the cited facts' verdict counts must give every
-    result its verdict. A set a cited fact counts ("both suspect points" against `2 suspect`) is
-    a counted thing (above), and one a cited fact names itself ("with both valves shut") is its
-    words.
+  - **Sets of items** (0.112, #338, #339). One rule: a sentence that says something of two
+    or more items -- equipment (AHU, unit, RTU, VAV, box, chiller, tower, logger, ...), points,
+    sensors, valves, dampers or reference comparisons, meters or facilities -- needs, for
+    every item, the cited facts about it (one of them, or all of them together) to state that
+    same claim of it: its figures, verdicts, directions, negations and point role. A cited fact
+    about one item that says otherwise fails the sentence, and the `why` names that item. The
+    set may be said with a quantifier or a number ("both", "each", "every", "all", "all 3",
+    "the 2", "the pair of", "the two"), as a plural opening its clause with "the" or a
+    possessive ("The AHUs fail ...", "The VAV boxes on X are healthy", "X's 7 AHUs are
+    healthy"), with a possessive noun ("each AHU's supply_air_temp", "both AHUs' sensors"), as
+    "both" or "each" with no noun ("Each fails it", "On both, ...": the items its cited facts
+    are about), negated ("neither AHU", "neither of the AHUs", "no AHU", "none of the AHUs",
+    "not one of the AHUs", "neither A nor B", "neither A or B", "neither of A and B": the
+    negation must be stated of each, as "A does not ..." would need, so "Neither AHU-1 nor AHU-2
+    has a valve leak" fails against AHU-1's leak fault, and "not trusted" is either of the other
+    trust classes), or as names (or "the heating valve" and "the OA damper") joined by "and",
+    "nor" or "or" after "neither", in any position: opening the clause, after the verb ("valve
+    leaks were found on A and B"), as a lead-in before a colon, a dash or a table cell ("A and
+    B: leaking_valve fault", "- A, B: fault", "| A, B | fail |"), and "A has no valve leak, and
+    B doesn't either" ("so does B", "nor does B", "B as well"). Figures are the item's own: a
+    figure in what the set's clause says of it must be a cited fact's about that item ("Both
+    meters save 2.5%" against -15.6% on one fails); a figure the sentence gives another named
+    item ("suspect on both units, at 0.66 on AHU-1 and 0.68 on AHU-2") is that item's, and
+    figures listed one for each ("suspect at 0.66 and 0.68", "(0.68 to 0.70)", "15.8% and 33.6%
+    respectively") need each item to have one of them. What the set is said is read with its
+    own clause: "Both AHUs warn ..., but only AHU-1 fails leaking_valve" says only the warn of
+    both. "Both" or a number needs that many items so stated, and a set said with no number at
+    least two ("Each AHU fails leaking_valve [F2]" and "No AHU has a valve leak [F6]" fail). A
+    trust class said of equipment that opens its clause ("Both AHUs are suspect") is not read
+    from the facts about its points. With no cited fact about one of the items, a verdict is
+    read against the cited facts' verdict counts (every result must have it), and a figure, or
+    a negated set, fails. A set a cited fact counts ("both suspect points" against `2
+    suspect`) is a counted thing (above), and one a cited fact names itself ("with both valves
+    shut") is its words. A set form the checker finds but cannot read fails closed: a negated
+    set that does not open its clause with a verb after it ("leaking_valve fails on neither
+    AHU"), or a set of figures with no cited fact about its items.
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -658,19 +696,32 @@ covers the 8 flagged hours" is not read as all 8); a statement about a counted t
 words than the cited fact's ("the 8 hours precede the window"); a cause after a bare
 "because" ("declined because the input was untrusted"); a label outside the closed sets where
 the cited fact gives one figure only; a claim about all of several facts that are not items of
-the kinds above ("both baselines", "both valves", "the zones"). Of sets of items (#338): a set
-said with no number ("each AHU", "every unit", "the AHUs") is read as the items the cited facts
+the kinds above ("both baselines", "the zones"). Of sets of items (#338, #339): a set said with
+no number ("each AHU", "every unit", "the AHUs", "no AHU") is read as the items the cited facts
 are about, so an item that no cited fact is about (a third air handler) is not known to the
-check; a plural after its verb ("a fault on the AHUs") is not read as a set; "agrees" against
-"disagrees" is read as written, a negated form ("does not agree") is not. A comparative with no
-figure ("more points are suspect than trusted") is not read, nor are the words "survives",
-"remains", "continues" or "is still flagged" said of a re-judged finding, nor "lowest trust
-score" as a rank. And these fail closed although they can be true: "all" or "every" with no
+check; a plural noun after its verb ("a fault on the AHUs") is not read as a set (names joined
+after it are); a set across sentences is not read ("AHU-1 fails it. So does AHU-2.": each
+sentence is judged alone, and "both" or "each" with no noun is read against its own sentence's
+citations); names joined with their possessives ("AHU-1's and AHU-2's sensors") are not read
+as a set, and "AHU-1 or AHU-2" is one of them, not each; with no cited fact about one of its
+items, what a set says that is not a figure, a verdict or a negation is not read ("Both valves
+feed the finding"); "agrees" against "disagrees" is read as written, a negated form ("does not
+agree") is not. A comparative with no figure ("more points are suspect than trusted") is not
+read, but for "more" or "less energy than its baseline" (a direction, #339), nor are the words
+"survives", "remains", "continues" or "is still flagged" said of a re-judged finding, nor
+"lowest trust score" as a rank. And these fail closed although they can be true: "all" or "every" with no
 number, unless a cited fact says all or counts that label with its total; "they are all ...",
 "all of them" or a cell "all trusted" unless a cited fact counts all of them with that label (a
 pronoun is not resolved); "half" (or "a quarter") of a thing no cited fact counts; a set of
 items backed by fewer cited facts than its number, or by one when it has none ("The occupancy
-points are flagged, for example ..."); "over 9" or "more than 9" against a fact's 9; "most" or
+points are flagged, for example ..."); a negated set that does not open its clause
+("leaking_valve fails on neither AHU"); a set's figure with no cited fact about its items
+("Both AHUs have 24 points" citing a facility); a trust class said of equipment that opens
+its clause ("Both AHUs are suspect", from facts about their points); two verdicts said of one
+set in one clause ("Both AHUs warn on X and fail Y": a verdict verb after the set noun is read
+as its one label); "the rest" with no total in a cited fact; a count of results said with a
+verdict noun ("14 results are faults and none is a warn": say "14 fault"); "over 9", "well
+over 9" or "more than 9" against a fact's 9 or 10 (a bound is not a count); "most" or
 "the majority of" unless a cited fact says most or gives a share above half; a whole count the fact gives only as
 a complement ("all 8 flagged hours fall outside the window" against "none of the 8 ... falls
 in"); a complement's number ("86 of the 106 fall outside", a derived number); a figure the fact

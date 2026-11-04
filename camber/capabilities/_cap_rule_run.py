@@ -268,9 +268,11 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "facility_id": fid,
             "value": len(rows),
             "counts": counts,
+            # the verdicts count rule-equipment results, not rules (#339)
             "text": f"{n_rules} rules were run on {res.equipment} equipment of {fid} and "
-            f"{n_found} of them returned a result: {counts['fault']} fault, {counts['warn']} warn, "
-            f"{counts['info']} info and {counts['ok']} ok; {skips}{declined}",
+            f"{n_found} of them returned a result, {len(rows)} rule-equipment result(s) in all: "
+            f"{counts['fault']} fault, {counts['warn']} warn, {counts['info']} info and "
+            f"{counts['ok']} ok; {skips}{declined}",
         }
     ]
     text = [

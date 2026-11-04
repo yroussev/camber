@@ -87,9 +87,16 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   flagged hours fall in the window" against "None of the 8 flagged hours falls in the window",
   "No rule passed" against `19 ok`, "The 5 rules passed" against `14 fault, ..., 19 ok`, "The
   37 judged samples were flagged" against "flagged 8 hours (32 of 37 judged samples)" and "Both
-  suspect points are trusted" fail. "Both", "each" or "all" said of equipment, points, meters
-  or facilities ("Both AHUs fail leaking_valve") needs a cited fact stating it of each one, and
-  fails when a cited fact about one of them says otherwise (#338). Labels are closed sets:
+  suspect points are trusted" fail. A claim about two or more equipment, points, meters or
+  facilities -- by "both", "each", "all", a number, "the AHUs", "X's 7 AHUs", "each AHU's ...",
+  "the pair of", names joined in any position (a colon lead-in, a list item or a table cell
+  too), or negated ("neither A nor B", "no AHU", "none of the AHUs") -- needs, for each item,
+  the cited facts about it to state that same claim of it, figures included: "Both meters save
+  2.5%" against -15.6% on one, "Neither AHU-1 nor AHU-2 has a valve leak" against AHU-1's leak
+  fault and "AHU-1, AHU-2: leaking_valve fault" against AHU-2's ok fail (#338, #339). A bare
+  trust class or verdict before a colon or in a table cell counts its figure ("Suspect: 0",
+  "Passed: 5", "| Suspect | 0 |"), and a saving's direction follows its sign: "reduced its
+  energy use" fails against avoided energy -3.1% (#339). Labels are closed sets:
   the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
   side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
   FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
@@ -117,14 +124,17 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   other than the cited fact's ("the 8 hours precede the window"); a cause after a bare
   "because" ("declined because the input was untrusted"); a label outside the closed sets
   where the cited fact gives only one figure; a claim about all of several facts that are not
-  equipment, points, meters or facilities ("both baselines", "both valves"); a set said with no
-  number ("each AHU", "the AHUs") is read as the items the cited facts are about, so an item no
-  cited fact is about is not known to the check; a comparative with no figure ("more points are
-  suspect than trusted"); words outside the lists ("survives the re-judge", "lowest trust
-  score"). And these fail closed although they can be true: "all" or "every" with no number
-  unless a cited fact says all or counts that label with its total; "they are all trusted" or a
-  cell "all trusted" unless a cited fact counts all of them as trusted; "half of" a thing no
-  cited fact counts; a set of items backed by one cited fact; "all 8 ... fall outside the window" (a whole
+  equipment, points, meters or facilities ("both baselines"); a set said with no number ("each
+  AHU", "the AHUs", "no AHU") is read as the items the cited facts are about, so an item no
+  cited fact is about is not known to the check; a set across sentences ("AHU-1 fails it. So
+  does AHU-2."); a plural noun after its verb ("a fault on the AHUs"); a comparative with no
+  figure ("more points are suspect than trusted"); words outside the lists ("survives the
+  re-judge", "lowest trust score"). And these fail closed although they can be true: "all" or
+  "every" with no number unless a cited fact says all or counts that label with its total;
+  "they are all trusted" or a cell "all trusted" unless a cited fact counts all of them as
+  trusted; "half of" a thing no cited fact counts; a set of items backed by one cited fact; a
+  negated set that does not open its clause ("fails on neither AHU"); a set's figure with no
+  cited fact about its items; "over 9" or "well over 9" against a fact's 9 or 10; "all 8 ... fall outside the window" (a whole
   count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
   number); a share the fact tells apart by side, trust class or fault condition said without
   one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
