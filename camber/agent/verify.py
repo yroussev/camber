@@ -70,8 +70,11 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
     and the fact's with its own list item: the fact's zero must count the same thing, with its
     words and first verb in the sentence, and the sentence must not deny what its counted
     things are (#332);
-  - **quantifiers and ranks**: "all" / "every" needs a fact that says all, every or 100%, "most"
-    one that says most or a share above half; a whole count ("all 11", "8 of the 8", "8 out of
+  - **quantifiers and ranks**: "all" / "every" (and a completeness word: "complete", "whole",
+    "entire") needs a fact that says all, every or 100% of the same noun, "most" one that says
+    most or a share above half of it, or a count of it with that label (#340): a fact's word
+    that quantifies something else ("6 results in all") supports no "every sensor" or "the
+    complete answer"; a whole count ("all 11", "8 of the 8", "8 out of
     8", "the 11 points are all ...") a fact that says all of that many or gives the count again;
     "Issue 3" must be a rank a cited fact gives, when a cited fact gives ranks; a rank said as
     one ("the second issue", "#1") or a rank word ("worst", "top", "least trusted") one a cited
@@ -108,7 +111,14 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
     no number at least two. A set form found but not read (a negated set not opening its
     clause, a set's figure with no cited fact about its items) fails closed. A saving's
     direction follows its sign ("avoided energy -3.1%" is an increase), and a trust class or
-    verdict alone before a colon or in a table cell counts its figure ("Suspect: 0").
+    verdict alone before a colon or in a table cell counts its figure ("Suspect: 0"). Since
+    #340: names joined by a comma, "&", "/", "plus", "as well as", "along with", "like", "--"
+    and "none of A, B and C" are sets, and so are a plural or a bare "Both" as a lead-in; "most
+    AHUs" and "k of the N AHUs" are read item by item; a list of figures goes to its items in
+    order (names, parts, or for "respectively" of unnamed items the citations), each with its
+    own sign; a figure attached to a name ("x on A", "A (x)") must be a fact's about that name;
+    "AHU-2 leaks" states the opposite of AHU-2's "no valve leak"; a reading's "high" / "low"
+    needs a fact that states it; a table row is read with its header.
 
 Citations count only in the visible text: one inside an HTML comment or tag does not. ``[A, B]``
 and ``[A; B]`` cite both ids (0.112).
@@ -186,6 +196,8 @@ _QUOTE_LEAD = re.compile(
 #: what a reader does not see: HTML comments (an unterminated one: to the end), tags,
 #: zero-width marks, and a markdown link's target
 _COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
+#: a Markdown table's rule under its header row ("|---|:--:|")
+_TABLE_RULE = re.compile(r"\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{0,}:?\s*\|?\s*")
 _TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 _INVISIBLE = re.compile("[​-‏⁠-⁤﻿­]")
 _LINK = re.compile(r"(\[[^\[\]]*\])\([^()\s]*(?:\s+\"[^\"]*\")?\)")
@@ -237,6 +249,7 @@ class _Seg:
     start: int
     end: int
     kind: str  # "sentence" (judged) | "quote" (a fact's own text) | "heading" | "notice" (kept)
+    header: tuple = ()  # (a table row's, #340) its table's header cells
 
 
 def _ends(text: str, a: int, b: int) -> list:
@@ -334,13 +347,30 @@ def _segments(text: str, notices=(), quotes=None) -> list:
     known = {" ".join(str(n).split()) for n in notices or ()}
     out: list = []
     pos = 0
-    for line in masked.split("\n"):
+    lines = masked.split("\n")
+    header: tuple = ()
+    for idx, line in enumerate(lines):
         ls = pos
         pos += len(line) + 1
+        if not line.strip().startswith("|"):
+            header = ()
         if not line.strip():
             continue
         s0 = ls + (len(line) - len(line.lstrip()))
         e0 = ls + len(line.rstrip())
+        if (
+            line.strip().startswith("|")
+            and idx + 1 < len(lines)
+            and _TABLE_RULE.fullmatch(lines[idx + 1])
+            and not _CITES.search(text[s0:e0])
+            and not re.search(r"\d", text[s0:e0])
+        ):
+            out.append(_Seg(s0, e0, "heading"))  # a table's header row names its columns (#340)
+            header = tuple(c.strip() for c in text[s0:e0].strip().strip("|").split("|"))
+            continue
+        if header and _TABLE_RULE.fullmatch(line):
+            out.append(_Seg(s0, e0, "heading"))
+            continue
         m = _NOTICE.fullmatch(text[ls : ls + len(line)])
         if m is not None and " ".join(m.group(1).split()) in known:
             out.append(_Seg(s0, e0, "notice"))
@@ -387,8 +417,39 @@ def _segments(text: str, notices=(), quotes=None) -> list:
                 kind = "quote"
             else:
                 kind = "heading" if _is_label(text[a:b]) else "sentence"
-            out.append(_Seg(a, b, kind))
+            out.append(_Seg(a, b, kind, header if kind == "sentence" else ()))
     return out
+
+
+#: the things a table column may count ("| Faults |", "| Points |"): its figure is that many
+_COUNT_HEADERS = frozenset(
+    "point rule fault warn info ok finding sample equipment meter gap issue result sensor check "
+    "span alarm event reading row zone building facility".split()
+)
+
+
+def _table_text(row: str, header: tuple) -> str:
+    """A table row read with its header (#340): each figure cell with its column's name, a count
+    before its label ("| AHU-1 | 1 |" under "Faults": "AHU-1: 1 Faults"), any other figure after
+    its column's name and with the row's first cell ("| A | -15.6% |" under "Avoided energy": "A:
+    Avoided energy -15.6% on A"). A row whose cells do not match the header is read as it is."""
+    cells = [c.strip() for c in row.strip().strip("|").split("|")]
+    if len(cells) != len(header) or len(cells) < 2 or not cells[0] or re.match(r"\d", cells[0]):
+        return row  # "| 5 of 5 | passed |": a count and its verdict, read as it is
+    first, parts = cells[0], []
+    one = not re.search(r",|\band\b|&|/", first)  # "| A, B | ... |": a list of them
+    for head, cell in zip(header[1:], cells[1:]):
+        if not re.search(r"\d", _CITES.sub(" ", cell)) or not head:
+            parts.append(cell)
+            continue
+        words = re.findall(r"[a-z]+", head.lower())
+        counts = len(words) <= 2 and any(
+            _FAMILY.get(w) or _counted(w) in _COUNT_HEADERS or w in _TRUST_CLASSES for w in words
+        )
+        parts.append(
+            f"{cell} {head}" if counts else f"{head} {cell}" + (f" on {first}" if one else "")
+        )
+    return f"{first}: " + ", ".join(p for p in parts if p)
 
 
 #: verbs and auxiliaries that make a heading-shaped line a statement (#328)
@@ -1069,6 +1130,10 @@ class _Set:
     pron: bool = False  # "each" or "both" with no noun of its own ("Each fails it")
     poss: bool = False  # its noun is a possessive ("each AHU's sensor"): its sensor
     opens: bool = False  # it opens its clause: what the clause says is said of it
+    # (#340) the joined parts in order, as token spans ``(start, end)``: the order a list of one
+    # figure each ("15.8% and 33.6% respectively") gives its figures in
+    parts: tuple = ()
+    total: object = None  # (#340) a part's total: the 2 of "one of the two AHUs"
 
 
 @dataclass
@@ -1083,7 +1148,12 @@ class _Parsed:
     affirmed: set = field(default_factory=set)  # stems it states outside any negation
     words: set = field(default_factory=set)  # every content stem
     polar: set = field(default_factory=set)  # high / low / above / below
+    polar_aff: set = field(default_factory=set)  # (#340) those said outside any negation
+    read_dirs: set = field(default_factory=set)  # (a sentence's, #340) "reads high": high
     quant: set = field(default_factory=set)  # "all" / "most"
+    # (#340) each quantifier with what it is said of: ``(class, noun key, as written)``, the
+    # noun's key "" when it has none ("they are all ..."); a fact's "in all", "at all" is none
+    quant_of: list = field(default_factory=list)
     ranks: set = field(default_factory=set)  # issue ranks it names
     said_ranks: set = field(default_factory=set)  # those said as a rank ("the second issue")
     rules: set = field(default_factory=set)  # rule names it names
@@ -1113,6 +1183,9 @@ class _Parsed:
     # (a sentence's) names joined as one subject ("AHU-1 and AHU-2 both fail ..."): ``(said,
     # names)``, each said the same of (#338)
     named: list = field(default_factory=list)
+    # (a sentence's) the direction words whose direction a figure's sign gives ("avoided energy
+    # -15.8%"): ``(figure token, word token)``, read again with each item's own figure (#340)
+    signed_dirs: list = field(default_factory=list)
 
 
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)*)"|“([^”]*)”')
@@ -1555,6 +1628,14 @@ def _lead_in(qty: list, toks: list) -> None:
         if q.at <= comma or q.year or q.role != "result" or q.sign:
             continue
         nxt = toks[q.at + 1][1].lower() if q.at + 1 < len(toks) else ""
+        after = [t[1].lower() for t in toks[q.at + 1 : q.at + 4]]
+        if after[:1] in (["is"], ["are"], ["was"], ["were"]) and head.unit in ("result", "finding"):
+            label = after[2] if after[1:2] in (["a"], ["an"]) and len(after) > 2 else after[1:2]
+            label = label if isinstance(label, str) else (label[0] if label else "")
+            if _VERDICT_WORD.get(label) and not q.unit:
+                # "Of the 6 results, 1 is a fault, 2 are warn": a count of that verdict (#340)
+                qty[k] = replace(q, unit=_VERDICT_WORD[label], of_noun="")
+                continue
         if not q.unit or (q.unit in _VERDICT_UNITS and _verbish(nxt)):
             # "Of the 3 rules, 1 returned a fault": 1 rule, not 1 fault (#339)
             qty[k] = replace(q, unit=head.unit, of_noun="")
@@ -1616,6 +1697,19 @@ def _fill(qty: list, toks: list) -> None:
             qty[k] = _Qty(q.value, q.sign, nxt.unit, q.base, q.role, False, q.at)
         elif q.unit == "%" == nxt.unit and not q.base and nxt.base and len(words) <= 2:
             qty[k] = _Qty(q.value, q.sign, "%", nxt.base, q.role, q.year, q.at)
+    # "unmet 82% of occupied hours (too hot 82%, too cold 0%)": a share in parentheses after one
+    # that says what it is of is of that too (#340)
+    inherited: set = set()
+    for k, q in enumerate(qty):
+        if q.unit != "%" or q.base or q.at < 0:
+            continue
+        for a in reversed(qty[:k]):
+            if a.unit == "%" and a.base and 0 <= a.at < q.at:
+                between = [t[1] for t in toks[a.at + 1 : q.at]]
+                if ")" not in between and ("(" in between or a.at in inherited):
+                    qty[k] = replace(q, base=a.base)
+                    inherited.add(q.at)
+                break
     # "32 of 37 judged samples, 86.5%": the share is of those samples (#338)
     for k, q in enumerate(qty):
         if q.unit != "%" or q.base or q.at < 0:
@@ -1873,6 +1967,8 @@ def _zero_parts(toks, cont, words, scope: list, end: int, k: int, bound: list):
     pred = frozenset(s for j in pred_at for s in cont[j])
     lead_at = next((j for j in pred_at if _verbish(words[j])), pred_at[0] if pred_at else -1)
     lead = cont[lead_at][-1] if lead_at >= 0 else ""
+    if lead == "fall" and lead_at + 1 < len(toks) and words[lead_at + 1] in _COMPARE:
+        lead = ""  # "no point falls below the floor": where it is, a comparison, no verb (#340)
     return noun_at, mods, pred, lead
 
 
@@ -2008,6 +2104,7 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             ):
                 share_of[a.at] = b.base
     last_word = max((x for x in range(n) if toks[x][0] in ("word", "num")), default=-1)
+    pol_at: list = []
     for k in range(n):
         kind = toks[k][0]
         w = words[k]
@@ -2124,18 +2221,39 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             fig = None
             if k and words[k - 1] in ("negative", "minus"):
                 d = "up"  # "a negative avoided energy", "negative savings": an increase (#339)
-            for x in range(k + 1, min(n, k + 5)):
+            # "avoided energy -21,825"; "the avoided energy shares of A and B were -15.6% and 2.5%":
+            # a quantity named, its figure later in its clause (#340)
+            reach = 13 if nxt in ("energy", "use", "consumption", "share", "shares") else 5
+            for x in range(k + 1, min(n, k + reach)):
                 if clause[x] != clause[k]:
                     break
                 fig = q_at.get(x)
                 if fig is not None:
-                    d = "up" if fig.sign == "-" else d
+                    d = "up" if fig.sign == "-" and d == "down" else d
+                    if not fact and not (k and words[k - 1] in ("negative", "minus")):
+                        p.signed_dirs.append((x, k))  # its sign gives it, item by item (#340)
                     break
-            if fig is None and d == "down" and w in ("saving", "savings"):
+            if (
+                fig is None
+                and d == "down"
+                and w in ("saving", "savings")
+                and not any(
+                    words[x] in _SHOWS for x in range(max(0, k - 3), k) if clause[x] == clause[k]
+                )
+            ):
                 # "this saving is for information only": the result named, a decrease unless
                 # a fact gives it below zero (:class:`_FactClaims`); a sentence's is a fact's
                 # that names its saving, whatever its sign
                 d = "down?"
+        if (
+            d is None
+            and not fact
+            and w in _DOWN_WORDS
+            and any(words[x] in _ENERGY for x in range(k + 1, min(n, k + 4)))
+        ):
+            d = "down"  # "cut its energy use", "lowered its consumption" (#340)
+        if d is None and not fact and w in ("more", "less") and nxt in _ENERGY:
+            d = "up" if w == "more" else "down"  # "used less energy in 2017" (#340)
         if d is None and w in ("more", "less", "fewer") and not fact:
             # "used more energy than its baseline": an increase on its baseline (#339)
             ahead = words[k + 1 : k + 6]
@@ -2162,6 +2280,9 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             pol = "other"
         if pol is not None:
             p.polar.add(pol)
+            pol_at.append((k, pol))
+            if pol in ("high", "low") and k and words[k - 1] in _READS and not fact:
+                p.read_dirs.add(pol)  # "reads high": a direction a cited fact must state (#340)
         qc = _QUANT.get(w)
         if w in ("all", "every", "each") and not (k and words[k - 1] in ("at", "after", "in")):
             j = k + 1  # "all 11 points", "each of the 8", "every one of the 37" (#332)
@@ -2171,24 +2292,48 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
             if v and (w == "all" or nxt in ("of", "one")):
                 p.wholes.add(v)
                 p.whole_words.setdefault(v, said_of(k))
+        if qc is not None and hypothetical(k) and not fact:
+            qc = None  # "confirm whether the valves are shut all the time": not a claim (#340)
         if qc == "all" and not (k and words[k - 1] in ("at", "after", "in", "of", "above")):
             # "all of the samples", "all 4 issues", "every check": not "all good"
             after = words[k + 2] if k + 2 < n else ""
             if nxt == "of" and after in ("it", "them", "this", "that"):
                 pass  # "all of it": a share of one whole, not a count of things
             elif k + 1 < n and toks[k + 1][0] == "num":
-                pass  # "all 14 are untrusted": the figure is checked, as a whole one
+                # "all 14 are untrusted": the figure is checked, as a whole one; a fact's "all
+                # 2,016 valid samples" says all of its samples (#340)
+                if fact and w == "all":
+                    p.quant_of.append(("all", *_quant_head(toks, words, cont, k, toks[k][1])))
             elif _whole_of(toks, words, k):
                 pass  # "all of the 17 points", "every one of the 17": checked as a whole (#336)
             elif w == "every" or nxt in _ALL_BEFORE:
                 p.quant.add("all")
+                p.quant_of.append(("all", *_quant_head(toks, words, cont, k, toks[k][1])))
             elif _FAMILY.get(nxt) and not fact:
                 pass  # "all ok", "all trusted": a label, read with the counts (#338)
             elif _counted(nxt) or nxt.endswith("s"):
                 p.quant.add("all")
-        elif qc == "most" and (nxt == "of" or _noun(nxt) or w == "majority"):
+                p.quant_of.append(("all", *_quant_head(toks, words, cont, k, toks[k][1])))
+        elif qc == "most" and (
+            nxt == "of"
+            or _noun(nxt)
+            or w == "majority"
+            or (nxt.endswith("s") and not nxt.endswith(("ous", "ss")))  # "most tenants" (#340)
+        ):
             if not (k and words[k - 1] in ("the", "at")):
                 p.quant.add("most")
+                p.quant_of.append(("most", *_quant_head(toks, words, cont, k, toks[k][1])))
+        elif w in _COMPLETE and not hypothetical(k) and negated_before(k) < 0:
+            # "the complete answer", "the whole window", "is complete" (#340): a completeness
+            # word is "all" said of its noun (or of its clause's subject)
+            head, said = _quant_head(toks, words, cont, k, toks[k][1])
+            if not head:
+                head, said = _subject_head(toks, words, cont, clause, k, toks[k][1])
+            if head == "data":
+                head = "coverag"  # "complete data": its coverage is all of the window
+            if head or not fact:
+                p.quant.add("all")
+                p.quant_of.append(("all", head, said))
         rank, stated = _rank(toks, words, k)
         p.ranks.update(rank)
         if stated:
@@ -2218,6 +2363,9 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
     for k in range(n):
         if k not in negated:
             p.affirmed.update(cont[k])
+    p.polar_aff.update(pol for k, pol in pol_at if k not in negated)
+    if not fact:
+        _baseline_signs(p, toks, words, clause)
     _counts(p, toks, words, cont, clause, item, fact)
     if not fact:
         _sets(p, toks, words, cont, clause)
@@ -2248,6 +2396,38 @@ _CAUSE_AFTER = frozenset(
         ("explained", "by"),
     }
 )
+
+
+def _baseline_signs(p: _Parsed, toks, words, clause) -> None:
+    """ "used 15.6% more energy than its baseline", "used more energy than their baselines, by
+    15.8% and 15.6%": the figure is an avoided energy below zero, as an M&V fact gives it (#340);
+    "less" keeps its sign."""
+    n = len(toks)
+
+    def than_baseline(k):  # "more" at k, then "than" and "baseline" close after it
+        ahead = words[k + 1 : k + 7]
+        return "than" in ahead and any(w.startswith("baseline") for w in words[k + 2 : k + 10] if w)
+
+    more = [k for k in range(n) if words[k] in ("more", "less") and than_baseline(k)]
+    if not more:
+        return
+    out = []
+    for q in p.qty:
+        k = q.at
+        if q.sign or k < 0 or q.unit not in ("%", ""):
+            out.append(q)
+            continue
+        after = [x for x in more if k < x <= k + 3 and clause[x] == clause[k]]
+        before = [
+            x
+            for x in more
+            if x < k and "by" in words[x:k] and all(t[1] not in (".", ";") for t in toks[x:k])
+        ]
+        hit = (after or before[-1:])[:1]
+        if hit and words[hit[0]] == "more":
+            q = replace(q, sign="-")
+        out.append(q)
+    p.qty[:] = out
 
 
 def _causes(p: _Parsed, toks, words, cont, clause, fact: bool) -> None:
@@ -2518,7 +2698,14 @@ def _counts(p: _Parsed, toks, words, cont, clause, item, fact: bool) -> None:
                 fig = next((f"#{q.show()}" for q in p.qty if q.at == x), "")
                 break
             rest.append(x)
-        lead_at = next((x for x in rest if cont[x] and _verbish(words[x])), -1)
+        lead_at = next(  # "the rest are suspect or untrusted": a label is not its verb (#340)
+            (
+                x
+                for x in rest
+                if cont[x] and _verbish(words[x]) and not (is_rest and _FAMILY.get(words[x]))
+            ),
+            -1,
+        )
         if lead_at < 0:
             lead_at = next((x for x in rest if cont[x] or words[x] in _COMPARE), -1)
         back_lead = False
@@ -2681,7 +2868,47 @@ def _lead_after(toks, x: int) -> bool:
     tok = toks[x][1]
     if tok in (":", "|", "—", "–"):
         return True
+    if tok == "-" and x + 1 < len(toks) and toks[x + 1][1] == "-":
+        return True  # "A, B -- fault": a dash typed as two hyphens (#340)
     return tok == "-" and (x + 1 >= len(toks) or toks[x + 1][2] > toks[x][3])
+
+
+def _relative_after(toks, words, j: int) -> bool:
+    """Whether a relative clause follows the noun at ``j`` (#340): "The AHUs, both of which pass
+    ..., warn ...", "The AHUs, which fail ..., warn ..." (what it says is said of each item)."""
+    n = len(toks)
+    if j + 2 >= n or toks[j + 1][1] != ",":
+        return False
+    if words[j + 2] in ("which", "who", "that"):
+        return True
+    return words[j + 2] in ("both", "all", "each", "none", "neither") and words[j + 3 : j + 5] in (
+        ["of", "which"],
+        ["of", "whom"],
+    )
+
+
+def _np_end(toks, words, j: int) -> int:
+    """The token after the noun phrase a set's noun at ``j`` heads (#340): past a possessive and
+    the names and nouns it owns ('The AHUs\' "supply_air_temp" points: ...')."""
+    n, x = len(toks), j + 1
+    if x < n and toks[x][1] in ("'", "’"):
+        x += 1 + (x + 1 < n and words[x + 1] == "s")
+        while (
+            x < n
+            and toks[x][0] == "word"
+            and (
+                toks[x][1].startswith("QQ")
+                or _item_noun(words[x])
+                or (x < j + 5 and _cont_word(words[x]))
+            )
+        ):
+            x += 1
+    return x
+
+
+def _cont_word(w: str) -> bool:
+    """Whether ``w`` is a word of a noun phrase: not a function word, a verb or an auxiliary."""
+    return bool(w) and w not in _FUNCTION and not _verbish(w) and w not in _AUX
 
 
 def _pred_at(toks, words, a: int, b: int) -> int:
@@ -2715,8 +2942,8 @@ def _conjunct(toks, words, j: int):
             and not _item_noun(words[y])
         ):
             return None
-        noun = _item_noun(words[y])
-        if noun and noun == words[y]:  # singular: "the heating valve"
+        noun = _item_noun(words[y]) or ("setpoint" if words[y] == "setpoint" else "")
+        if noun and noun == words[y]:  # singular: "the heating valve", "the supply-air setpoint"
             if y + 1 < n and toks[y + 1][0] == "word" and _item_noun(words[y + 1]):
                 continue
             return j, y, ""
@@ -2791,17 +3018,40 @@ def _sets(p: _Parsed, toks, words, cont, clause) -> None:
             x -= 1
         q = words[x] if x >= 0 else ""
         has_of = any(words[y] == "of" for y in range(x + 1, i + 1))
+        part = None  # "One of the two AHUs fails", "Two of the three VAVs fail": k of them (#340)
         if "one" in words[x + 1 : i + 1] and q not in ("each", "every", "not"):
-            continue  # "one of the two AHUs": a part, not each of them
+            first = x + 1
+            if not (
+                plural
+                and words[first] == "one"
+                and first + 1 < n
+                and words[first + 1] == "of"
+                and opens(first)
+            ):
+                continue  # "one of the two AHUs" in another clause: a part, not each of them
+            part = (first, Decimal(1))
+        elif (
+            plural
+            and has_of
+            and x >= 0
+            and toks[x][0] in ("num", "word")
+            and _number_at(toks, words, x) is not None
+            and opens(x)
+        ):
+            part = (x, _number_at(toks, words, x))
         owner = x >= 2 and q == "s" and toks[x - 1][1] in ("'", "’")  # "fac-b's 7 AHUs" (#339)
         start = x
-        if q == "both":
+        if part is not None:
+            how, k, start = "part", part[1], part[0]
+        elif q == "both":
             how, k = "both", Decimal(2)
         elif q == "pair" and has_of:  # "the pair of AHUs" (#339)
             how, k = "both", Decimal(2)
             start = x - (x >= 1 and words[x - 1] in ("the", "a"))
         elif q in ("each", "every", "all") and (q != "every" or not plural or has_of):
             how, k = q, v
+        elif q == "most" and plural:
+            how = "most"  # "Most AHUs fail", "the majority of the AHUs": more than half (#340)
         elif q == "neither" or (q == "none" and has_of) or (q == "no" and not has_of):
             how, neg = q, True  # "neither AHU", "none of the AHUs", "no AHU" (#339)
             k = Decimal(2) if q == "neither" and v is None else v
@@ -2816,6 +3066,9 @@ def _sets(p: _Parsed, toks, words, cont, clause) -> None:
             first = x - 2 if owner else i
             if not opens(first):
                 continue  # "The 14 points on the 2 chillers": not what the clause is about
+            # "The AHUs: fault", 'The AHUs\' "supply_air_temp" points: both disagree': a
+            # lead-in, what follows the colon, dash or table cell is said of it (#340)
+            lead0 = _lead_after(toks, _np_end(toks, words, j))
             late = next(
                 (
                     words[z]
@@ -2829,25 +3082,50 @@ def _sets(p: _Parsed, toks, words, cont, clause) -> None:
             names = j + 1 < n and toks[j + 1][1].startswith(_NAME)
             if names:
                 named_at.add(j)  # "The three meters A, B and C meet ...": the names say which
-            elif how == "def" and not any(
-                toks[z][0] == "word" and cont[z] for z in range(j + 1, n) if clause[z] == clause[j]
+            elif (
+                how == "def"
+                and not lead0
+                and not _relative_after(toks, words, j)
+                and not any(
+                    toks[z][0] == "word" and cont[z]
+                    for z in range(j + 1, n)
+                    if clause[z] == clause[j]
+                )
             ):
                 continue  # "the AHUs." alone: no statement of them
             start = first
+        elif v is not None and plural and x < 0 and q == "" and opens(i + 1):
+            how, k, start = "num", v, i + 1  # "Two AHUs fail ...": that many of them (#340)
+        elif (
+            plural
+            and v is None
+            and j - i <= 2
+            and words[j] not in ("unit", "units")
+            and not any(words[z] in _CONJ for z in range(i + 1, j))
+            and opens(i + 1)
+            and _lead_after(toks, _np_end(toks, words, j))
+            and not any(toks[z][0] == "num" for z in range(j + 1, n))
+        ):
+            # "| AHUs | fault |", "AHUs: fault": a bare plural as a lead-in, of all of them
+            # (#340); not "AHUs: 2 faults, 1 ok", a count
+            how, start = "def", i + 1
         else:
             continue
         if v is not None and k is None:
             k = v
         start = max(start, 0)
-        if v is not None:  # "the 2 AHUs": the set's number, read with the set
+        if how == "part":  # its k and its total are the set's: read against its items
+            p.qty[:] = [replace(q, of_set=True) if q.at in (start, i + 1) else q for q in p.qty]
+        elif v is not None:  # "the 2 AHUs": the set's number, read with the set
             at = i + 1
             p.qty[:] = [replace(q, of_set=True) if q.at == at else q for q in p.qty]
         for z in range(start, min(n, j + 4)):  # its "all" is the set's, not a label's
             if words[z] in ("all", "both", "each", "every") and clause[z] == clause[j]:
                 p.late_at.add(z)
                 consumed.add(z)
-        lead = _lead_after(toks, j + 1)  # "| Both AHUs | fault |", "Both AHUs: fault"
-        scope = _set_scope(toks, words, j, lead)
+        lead_at = _np_end(toks, words, j)
+        lead = _lead_after(toks, lead_at)  # "| Both AHUs | fault |", "Both AHUs:"
+        scope = _set_scope(toks, words, lead_at if lead else j, lead)
         pred = -1
         if neg and not leads(start):
             if how != "neither":
@@ -2869,6 +3147,7 @@ def _sets(p: _Parsed, toks, words, cont, clause) -> None:
                 pred=pred,
                 poss=poss,
                 opens=opens(start),
+                total=v if how == "part" else None,
             )
         )
     _joined(p, toks, words, cont, clause, opens, named_at)
@@ -2905,9 +3184,13 @@ def _sets(p: _Parsed, toks, words, cont, clause) -> None:
                 or _VERDICT.get(words[y]) is not None
                 or _DIRECTION.get(words[y]) is not None
                 or words[y] in ("read", "reads", "move", "moves", "show", "shows")
+                or _POLAR.get(words[y]) is not None  # "Both disagree" (#340)
+                or words[y] in ("leak", "leaks", "leaking", "leaked")
             )
         )  # "Each fails it", "Both never move": not "Both coils were open"
-        alone = opens(j) and (verb or (j + 1 < n and toks[j + 1][1] == ","))
+        alone = opens(j) and (
+            verb or (j + 1 < n and toks[j + 1][1] == ",") or _lead_after(toks, j + 1)
+        )  # "Both: faulted" (#340)
         on = prev in ("on", "for", "of") and opens(j - 1) and j + 1 < n and toks[j + 1][1] == ","
         if not (alone or on):
             continue
@@ -2939,13 +3222,28 @@ def _joined(p: _Parsed, toks, words, cont, clause, opens, named_at) -> None:
         if first is None:
             j += 1
             continue
-        parts, x, nor, conj = [first], first[1] + 1, False, False
+        parts, x, nor, conj, comma, aside = [first], first[1] + 1, False, False, False, False
         while x < n:
-            y = x + (toks[x][1] == ",")
-            if y < n and words[y] in ("and", "nor", "or"):
+            y = x
+            if toks[x][1] in (",", "&", "/"):  # "A, B", "A & B", "A/B" (#340)
+                conj = conj or toks[x][1] != ","
+                comma = comma or toks[x][1] == ","
+                y += 1
+            if y < n and words[y] in ("and", "nor", "or", "plus"):
                 nor = nor or words[y] in ("nor", "or")  # "neither A or B" too
                 conj = True
                 y += 1
+            elif words[y : y + 3] == ["as", "well", "as"]:  # "A, as well as B, fails" (#340)
+                conj, aside, y = True, True, y + 3
+            elif words[y : y + 2] in (["along", "with"], ["together", "with"]):
+                conj, aside, y = True, True, y + 2
+            elif y < n and toks[y][1] == "(" and y + 1 < n and words[y + 1] in ("like", "as"):
+                inner = _conjunct(toks, words, y + 2) if y + 2 < n else None  # "A (like B)"
+                if inner is not None and inner[1] + 1 < n and toks[inner[1] + 1][1] == ")":
+                    parts.append(inner)
+                    conj, x = True, inner[1] + 2
+                    continue
+                break
             if y == x or y >= n:
                 break
             nxt = _conjunct(toks, words, y)
@@ -2959,28 +3257,49 @@ def _joined(p: _Parsed, toks, words, cont, clause, opens, named_at) -> None:
         if len(parts) < 2 or len(names) != len(set(names)):
             continue
         a, b = parts[0][0], parts[-1][1]
+        if b + 1 < n and toks[b + 1][1] == ")":
+            b += 1  # "A (like B)": the parenthesis is the set's
         before = words[a - 1] if a else ""
-        if before in _NOT_A_SET:
-            continue
+        like = (
+            before == "like" and comma and opens(a - 1) and not (a >= 2 and toks[a - 2][1] == "(")
+        )
+        if before in _NOT_A_SET and not like:
+            continue  # "between A and B", "rules like A and B"; not "Like B, A fails" (#340)
         lead_word = int(before in ("both", "neither"))
-        if before == "of" and a >= 2 and words[a - 2] == "neither":
-            before, lead_word = "neither", 2  # "Neither of AHU-1 and AHU-2 fails" (#339)
+        negword = "neither" if before == "neither" else ""
+        if before == "of" and a >= 2 and words[a - 2] in ("neither", "none"):
+            # "Neither of AHU-1 and AHU-2 fails" (#339), "None of A, B and C faults" (#340)
+            negword, lead_word = words[a - 2], 2
             nor = True
+        elif before == "of" and a >= 3 and words[a - 3 : a - 1] == ["not", "one"]:
+            negword, lead_word, nor = "none", 3, True  # "Not one of A, B and C faults"
+        elif words[max(0, a - 2) : a] in (["together", "with"], ["along", "with"]) or (
+            before == "like" and not (a >= 2 and toks[a - 2][1] == "(")
+        ):
+            # "Together with B, A fails", "Like B, A fails" (#340): B is joined with A (the
+            # comma between them read the two as one list)
+            lead_word, conj = (1 if before == "like" else 2), True
         start = a - lead_word
         at_open = opens(start) or any(z in named_at for z in range(max(0, a - 6), a))
         lead = _lead_after(toks, b + 1)
-        if not conj and not lead:
-            continue  # 'For "AHU-2" "supply_air_temp", the comparison ...': a comma, no list
+        after_b = b + 1 + (aside and b + 1 < n and toks[b + 1][1] == ",")
+        verb = after_b < n and toks[after_b][0] == "word"
+        if not conj and not lead and not (comma and (verb or negword) and (at_open or negword)):
+            # 'For "AHU-2" "supply_air_temp", the comparison ...': a comma, no list; but "A, B
+            # fail ..." and "None of A, B fails" are a set (#340)
+            continue
         if slots and not (at_open and not lead):
             continue  # "the heating valve and the cooling valve" mid-sentence: not read
-        if nor and before != "neither" and "and" not in words[a : b + 1]:
+        if nor and not negword and "and" not in words[a : b + 1]:
             continue  # "AHU-1 or AHU-2": one of them, not each
-        neg = nor and before == "neither"
+        neg = nor and bool(negword)
         if neg and slots:
             continue
-        verb = b + 1 < n and toks[b + 1][0] == "word"
         if at_open and not (verb or lead) and not neg:
             continue  # "AHU-1 and AHU-2." alone
+        for z in range(after_b, min(n, after_b + 2)):  # "A, B and C all fault": the set's "all"
+            if words[z] in ("all", "both", "each") and not (z + 1 < n and words[z + 1] == "of"):
+                p.late_at.add(z)
         scope = _set_scope(toks, words, b, lead)
         pred = _pred_at(toks, words, b + 1, scope) if neg and at_open else -1
         k = next(
@@ -2995,10 +3314,11 @@ def _joined(p: _Parsed, toks, words, cont, clause, opens, named_at) -> None:
                 "point"
                 if any(
                     _item_noun(words[c]) in ("point", "sensor", "valve", "damper")
+                    or words[c] == "setpoint"
                     for _x, c, _t in parts
                 )
                 else "",
-                "neither" if neg else "named",
+                negword if neg else "named",
                 start,
                 b,
                 scope,
@@ -3007,6 +3327,7 @@ def _joined(p: _Parsed, toks, words, cont, clause, opens, named_at) -> None:
                 slots,
                 lead,
                 pred,
+                parts=tuple((x0, x1) for x0, x1, _t in parts),
             )
         )
     # "A has no valve leak, and B doesn't either", "..., and so does B", "nor does B" (#339)
@@ -3019,13 +3340,17 @@ def _joined(p: _Parsed, toks, words, cont, clause, opens, named_at) -> None:
         b1, b2 = (words[z - 1] if z else ""), (words[z - 2] if z > 1 else "")
         after = words[z + 1 : z + 5]
         echo = (
-            (b1 in _AUX and b2 in ("so", "neither", "nor"))
+            (b1 in _AUX and b2 in ("so", "neither", "nor", "as"))  # "as does B" (#340)
             or (
                 after
                 and (after[0] in _AUX or _negates(after[0]))
                 and any(w in ("either", "too") for w in after)
             )
             or after[:2] == ["as", "well"]
+            # "..., and likewise B", "B also does", "the same goes for B" (#340)
+            or b1 in ("likewise", "similarly")
+            or (after[:1] == ["also"] and after[1:2] and after[1] in _AUX)
+            or (b1 in ("for", "of", "with") and "same" in words[max(0, z - 5) : z - 1])
         )
         if not echo:
             continue
@@ -3088,6 +3413,7 @@ def _alls(p: _Parsed, toks, words, cont, clause) -> None:
             p.all_labels.add(label)
         elif w != "each" or pronoun:
             p.quant.add("all")
+            p.quant_of.append(("all", "", toks[k][1]))  # "they are all ...": of no noun
 
 
 def _there_be(words, i: int) -> bool:
@@ -3109,6 +3435,75 @@ def _still_holds(toks, words, k) -> bool:
     nxt = words[k + 1] if k + 1 < len(toks) else ""
     end = k + 1 >= len(toks) or toks[k + 1][0] == "sym"
     return prev == "still" or end or nxt in ("after", "once", "when", "even", "true", "up")
+
+
+#: completeness words (#340): "the complete answer", "the whole window", "it is complete" say all
+#: of their noun, as "all" does
+_COMPLETE = frozenset("complete completely entire entirely whole exhaustive comprehensive".split())
+
+
+def _qkey(word: str) -> str:
+    """A noun as the key a quantifier is matched by (#340): a unit ("hours": "h"), a counted
+    thing, an item noun ("AHUs": "ahu"), else its stem; a stretch of time ("all year", "all the
+    time", "the whole window") is the window."""
+    w = re.sub(r"['’]s$", "", word.lower())
+    if w in _TIME_WORDS:
+        return "window"
+    if len(w) > 1 and w in _UNITS:
+        return str(_UNITS[w])
+    return _noun(w) or _item_noun(w) or _stem(w)
+
+
+#: a stretch of time a fact or a sentence says all of (#340): "flat for the whole window"
+_TIME_WORDS = frozenset(
+    "time window windows period periods year years month months week weeks day days span".split()
+)
+
+
+def _quant_head(toks, words, cont, k, said: str = "") -> tuple:
+    """The key of the noun a quantifier (or a completeness word) at ``k`` is said of (#340):
+    the last noun of the phrase after it ("all findings on X": finding; "every sentence
+    supported": sentence; "all of the data": data; "the whole window": window; "all 2,016 valid
+    samples": sample), or "" (none: "all of them", "is complete"); and ``said`` with the noun as
+    written ("every sentence")."""
+    n, j, head, word = len(toks), k + 1, "", ""
+
+    def nounish(w):
+        return bool(w) and bool(_counted(w) or _item_noun(w) or (len(w) > 1 and w in _UNITS))
+
+    while j < n and (
+        words[j] in ("of", "the", "its", "their", "these", "those", "this", "that", "one", "a")
+        or toks[j][0] == "num"
+    ):
+        j += 1
+    while j < n and toks[j][0] == "word":
+        w = words[j]
+        if toks[j][1].startswith("QQ"):
+            j += 1
+            continue
+        nxt = words[j + 1] if j + 1 < n and toks[j + 1][0] == "word" else ""
+        if w in _NOUN_STOP or w in _FUNCTION or w in _AUX or _negates(w) or w in _PRONOUNS:
+            break
+        last = w.split("-")[-1]
+        if _verbish(w) and not (nounish(nxt) or nounish(last)):
+            break
+        if cont[j]:
+            head, word = _qkey(last), toks[j][1]
+        named = j + 1 < n and toks[j + 1][1].startswith("QQ")
+        if nounish(last) and not nounish(nxt) and not named:
+            break  # "all samples read 0 %": the noun ends it ('every tower "cw_flow" point' not)
+        j += 1
+    return head, (f"{said} {word}" if word else said)
+
+
+def _subject_head(toks, words, cont, clause, k, said: str = "") -> tuple:
+    """The key of the noun before a predicate at ``k`` ("the answer is complete": answer)."""
+    x = k - 1
+    while x >= 0 and clause[x] == clause[k]:
+        if toks[x][0] == "word" and cont[x] and not _verbish(words[x]) and words[x] not in _AUX:
+            return _qkey(words[x].split("-")[-1]), f"{toks[x][1]} ... {said}"
+        x -= 1
+    return "", said
 
 
 def _whole_of(toks, words, k) -> bool:
@@ -3794,6 +4189,7 @@ class _FactClaims:
     a sentence that presents it as a claim."""
 
     def __init__(self, fact, names):
+        self.id = str(getattr(fact, "id", "") or "")
         text = str(getattr(fact, "text", "") or "")
         data = getattr(fact, "data", None)
         data = data if isinstance(data, dict) else {}
@@ -3808,6 +4204,7 @@ class _FactClaims:
             p.counts += q.counts
             p.causes += q.causes
             p.sups += q.sups
+            p.quant_of += q.quant_of
             p.whole_words.update(q.whole_words)
             for attr in (
                 "dates",
@@ -3818,6 +4215,7 @@ class _FactClaims:
                 "affirmed",
                 "words",
                 "polar",
+                "polar_aff",
                 "quant",
                 "ranks",
                 "rules",
@@ -3864,13 +4262,27 @@ class _FactClaims:
             r = holder.get("rank")
             if isinstance(r, int) and not isinstance(r, bool):
                 p.ranks.add(r)
-        if any(isinstance(q.value, Decimal) and q.unit == "%" and q.value == 100 for q in p.qty):
+        # what it says all, every, whole or most of (#340): only its own quantifiers, each with
+        # its noun ("every issue", "the whole window", "all 2,016 valid samples"), and a share
+        # of 100% (or above half) with what it is of; a word of its own that is no quantifier of
+        # anything ("6 results in all", "not at all") supports none
+        self.quant_nouns: dict = {"all": set(), "most": set()}
+        for qc, key, _raw in p.quant_of:
+            if key:
+                self.quant_nouns[qc].add(key)
+        for q in p.qty:
+            if q.unit != "%" or q.role != "result" or not isinstance(q.value, Decimal):
+                continue
+            qc = "all" if q.value == 100 else ("most" if 50 < q.value < 100 else "")
+            if qc:
+                p.quant.add(qc)
+                self.quant_nouns[qc] |= {q.base} - {""} | set(q.post) | set(q.pre)
+        for q in p.qty:  # "biased +3.0", "bias -2.1 °F": the point reads high / low (#340)
+            if q.sign in ("+", "-") and q.value and {"bia", "bias"} & q.pre:
+                p.polar_aff.add("high" if q.sign == "+" else "low")
+        if self.quant_nouns["all"]:
             p.quant.add("all")
-        if any(q.unit == "%" and 50 < q.value < 100 and q.role == "result" for q in p.qty):
-            p.quant.add("most")
-        if re.search(r"\b(?:all|every|always|entire|whole)\b", text, re.I):
-            p.quant.add("all")
-        if re.search(r"\b(?:most|majority)\b", text, re.I):
+        if self.quant_nouns["most"]:
             p.quant.add("most")
         strings = [text.lower(), str(getattr(fact, "equip", "") or "").lower()]
         _strings(data, strings, p)
@@ -3971,6 +4383,7 @@ def _bound(q: _Qty, f: _Qty) -> bool:
     if q.total or not f.sib:
         return True
     for seg in (q.pre, q.post):
+        seg = seg - _GENERIC  # "returned 6 results": a word that says nothing of the thing (#340)
         own, other = seg & f.label, seg & f.sib
         if own or other:
             return bool(own)
@@ -4088,6 +4501,7 @@ def _set_counted(noun: str, facts: list) -> bool:
 def _number_problems(p: _Parsed, facts: list) -> list:
     why = []
     sets = {st.k for st in p.sets if st.k is not None and not _set_counted(st.noun, facts)}
+    sets |= {st.total for st in p.sets if st.total is not None}  # "one of the two AHUs" (#340)
     shares = [c for c in p.counts if c.how.startswith("frac")]
     said_by = [(t, fc.claims.words) for fc in facts for t in fc.claims.counts]
     parts = {x[0] for fc in facts for x in fc.parts}
@@ -4101,6 +4515,24 @@ def _number_problems(p: _Parsed, facts: list) -> list:
                 f"'{'half' if q.value == Decimal('0.5') else 'quarter'}': no cited fact gives a "
                 "count of them to read this share by (say it as the fact's count)"
             )
+            continue
+        noun = _item_noun(p.toks[q.at + 1][1]) if 0 <= q.at < len(p.toks) - 1 else ""
+        if noun and not q.unit and not q.of_set and q.role == "result" and not q.year:
+            # "One of the two AHUs fails", "the three VAVs": a count of items (#340), as many as
+            # the cited facts are about, or a count a cited fact gives of them; not any figure
+            # with that number ("three AHUs" is not "+3.0 °F")
+            items = len(_items_of(facts, _ITEM_NOUNS[noun]))
+            units = {_counted(noun), "equipment" if _ITEM_NOUNS[noun] == "equip" else ""} - {""}
+            said = re.compile(
+                rf"(?<![\d.,]){q.value:f}\s+{re.escape(p.toks[q.at + 1][1].lower())}\b"
+            )
+            if q.value == items or any(
+                any(f.value == q.value and f.unit in units for f in fc.claims.qty)
+                or said.search(fc.hay)
+                for fc in facts
+            ):
+                continue
+            why.append(f"{q.show()} {noun}: the cited facts are about {items} of them")
             continue
         if _match(q, facts, q.claim):
             continue
@@ -4169,11 +4601,24 @@ def _number_problems(p: _Parsed, facts: list) -> list:
                 why.append(
                     f"{mine}{size}: a cited fact gives this figure with the other sign ({given})"
                 )
-        elif any(f.value == q.value for fc in facts for f in fc.claims.qty):
-            why.append(
-                f"{q.show()}: a cited fact has this number, but with another sign, unit, "
-                "counted thing or role (a threshold, target or setpoint is not a result)"
+        elif same := [f for fc in facts for f in fc.claims.qty if f.value == q.value]:
+            # what differs, said as it is (#340): not a threshold aside where no role differs
+            shown = ", ".join(
+                sorted({f.show() + (f" of {f.base}" if f.base else "") for f in same})
             )
+            if all(f.role != q.role for f in same) and q.role == "result":
+                why.append(
+                    f"{q.show()}: a cited fact gives this number only as a threshold, target or "
+                    f"setpoint ({shown}), not as a result"
+                )
+            elif all(f.role != q.role for f in same):
+                why.append(
+                    f"{q.show()}: a cited fact gives this number as a result ({shown}); the "
+                    "sentence gives it as a bound (more or less than), threshold, target or "
+                    "setpoint"
+                )
+            else:
+                why.append(f"{q.show()}: a cited fact has this number only as {shown}")
         else:
             why.append(f"{q.show()}: no cited fact states this figure")
     for d in sorted(p.dates, key=str):
@@ -4287,6 +4732,82 @@ def _attributed(p: _Parsed, q: _Qty, st) -> set:
     }
 
 
+_ATTACH = frozenset("on for at in of".split())
+#: verbs that say a saving was made (#340): "shows a saving", "both show savings" (a decrease
+#: claimed, so a saving below zero contradicts it); "the saving is for information only" names it
+_SHOWS = frozenset(
+    "show shows showed shown achieve achieves achieved deliver delivers delivered produce "
+    "produces produced yield yields yielded realize realizes realized see sees saw make makes "
+    "made has have had gain gains gained".split()
+)
+#: words that lower energy use (#340), read as a decrease with an energy word after them
+_DOWN_WORDS = frozenset("cut cuts cutting lowered lowers lowering trimmed slashed".split())
+_ENERGY = frozenset(
+    "energy electricity power gas fuel consumption use usage demand load kwh mwh therms steam "
+    "water".split()
+)
+#: the verbs a reading's direction follows (#340): "reads high", "is reading low", "biased high"
+_READS = frozenset("read reads reading runs ran running biased drifts drifted drifting".split())
+#: the parts of an equipment a negation may name (#340): "no valve leak" is AHU-2's, so "AHU-2
+#: leaks" states its opposite; "AHU-2's damper leaks" names another part
+_COMPONENTS = frozenset(
+    _stem(w)
+    for w in "valve damper coil fan pump sensor actuator duct pipe seal filter belt".split()
+)
+
+
+def _owners(p: _Parsed, q: _Qty) -> set:
+    """The names a sentence attaches a figure to (#340): the name just before it ("VAV-2 81%",
+    "A (100%)", "A: 81%", "A at 0.66") or after it ("2.5% on A", "100% for A and B", "0.66 for A
+    and B": every name joined there), lower case."""
+    toks = p.toks
+    a = q.at
+    if not toks or not 0 <= a < len(toks):
+        return set()
+    out: set = set()
+    x = a - 1
+    if x >= 0 and toks[x][1] in ("+", "-", "±") and toks[x][3] == toks[a][2]:
+        x -= 1  # its sign
+    if x >= 0 and toks[x][1] in ("(", ":", "=", "|") or (x >= 0 and toks[x][1].lower() == "at"):
+        x -= 1
+    if x >= 0 and toks[x][1] in p.marks and toks[x][1].startswith(_NAME):
+        out.add(p.marks[toks[x][1]].lower())
+    y = a + 1
+    while y < len(toks) and y <= a + 7:
+        t = toks[y]
+        w = t[1].lower()
+        if t[1] in (",", ";", ")", "|", ".", ":") or w in _PART_END or t[0] == "num":
+            break
+        if w in _ATTACH and y + 1 < len(toks):
+            z = y + 1 + (toks[y + 1][1].lower() == "the")
+            if z < len(toks) and toks[z][1] in p.marks and toks[z][1].startswith(_NAME):
+                name = p.marks[toks[z][1]].lower()
+                out.add(name)
+                for st in p.sets:  # "on A, B and C": all of them
+                    if st.names and name in st.names and st.start <= z <= st.end:
+                        out |= set(st.names)
+                break
+        y += 1
+    return out
+
+
+def _attribution_problems(p: _Parsed, facts: list) -> list:
+    """A figure the sentence attaches to a name (#340: "2.5% on A and -15.6% on B", "A (1.00) and B
+    (0.66)", "VAV-1 100% and VAV-2 81%", "100% of the hours on A, B and C") must be one a cited
+    fact about that name gives, not only one another cited fact gives."""
+    why: list = []
+    if not p.ids:
+        return why
+    for q in p.qty:
+        if q.of_set or q.at < 0 or not _match(q, facts, q.claim):
+            continue
+        for name in sorted(_owners(p, q)):
+            about = [fc for fc in facts if name in _about(fc)]
+            if about and not _match(q, about, q.claim):
+                why.append(f"{q.show()}: no cited fact about {name!r} gives this figure")
+    return why
+
+
 def _clause_start(p: _Parsed, start: int) -> int:
     """The first token of the clause a set at ``start`` opens, when another clause stands
     before it in its sentence ("Both AHUs warn ...; both also fail ...", "..., and both fail
@@ -4325,6 +4846,86 @@ def _listed(p: _Parsed, st) -> set:
         run = [b]
     if len(run) > 1:
         out.update(run)
+    return out
+
+
+def _runs(p: _Parsed, st) -> list:
+    """The lists of figures in a set's clause, one figure for each item (#340): runs of two or
+    more figures joined by "and", "or" or commas ("15.8% and 33.6%", "100%, 81% and 82%"), each
+    as its tokens in order; a range ("0.60 to 0.66", "0.68-0.70") is not one."""
+    toks = p.toks
+    ats = sorted({q.at for q in p.qty if st.start <= q.at < st.scope and not q.of_set})
+    runs: list = []
+    run: list = ats[:1]
+    for a, b in zip(ats, ats[1:]):
+        between = []
+        for x in range(a + 1, b):
+            t = toks[x]
+            if t[0] == "num" or t[1] in ("%", "°") or t[1].lower() in _UNITS:
+                continue
+            if t[1] in ("+", "-", "±") and x + 1 < len(toks) and toks[x + 1][0] == "num":
+                if toks[x + 1][2] == t[3] and (x == a + 1 or toks[x - 1][3] < t[2]):
+                    continue  # a sign, not a range's dash
+            between.append(t[1].lower())
+        if between and set(between) <= {"and", ",", "or"}:
+            run.append(b)
+            continue
+        if len(run) > 1:
+            runs.append(run)
+        run = [b]
+    if len(run) > 1:
+        runs.append(run)
+    return runs
+
+
+def _set_order(p: _Parsed, st, facts: list, kind: str, cites=(), resp=False):
+    """The items of a set in the order the sentence names them (#340), as lists of the cited
+    facts about each: its names ("A and B"), its parts by their point role ("the heating valve
+    and the supply-air setpoint"), or the names joined inside its clause ("The oa_damper points
+    on A and B"); with "respectively" and none of these, the order its citations give them
+    (``cites``: the ids it cites, in order); None when the sentence gives no order."""
+    toks = p.toks
+    if st.names and not st.slots:
+        return [[fc for fc in facts if name in _about(fc)] for name in st.names]
+    if st.parts:
+        out = []
+        for a, b in st.parts:
+            tok = toks[a][1] if a < len(toks) else ""
+            if tok in p.marks:
+                name = p.marks[tok].lower()
+                out.append([fc for fc in facts if name in _about(fc)])
+                continue
+            text = _span_text(p, a, b + 1)
+            fams = {nm for nm, srx, _f in _ROLE_RX if srx.search(text)}
+            match = [
+                fcs
+                for _key, fcs in _items_of(facts, kind or "point").items()
+                if fams and all(fams <= fc.roles for fc in fcs)
+            ]
+            if len(match) != 1:
+                return None
+            out.append(match[0])
+        return out
+    inner = [
+        x for x in p.sets if x is not st and x.names and st.start <= x.start and x.end < st.scope
+    ]
+    if not kind:
+        return None
+    items = _items_of(facts, kind)
+    if not inner:
+        if not resp or not cites:
+            return None
+        at = {fid: i for i, fid in reversed(list(enumerate(cites)))}
+        first = {key: min(at.get(fc.id, len(cites)) for fc in fcs) for key, fcs in items.items()}
+        if len(set(first.values())) != len(first):
+            return None  # two items first cited together: no order
+        return [items[key] for key in sorted(items, key=lambda key: first[key])]
+    out = []
+    for name in inner[0].names:
+        keys = [key for key, fcs in items.items() if any(name in _about(fc) for fc in fcs)]
+        if len(keys) != 1:
+            return None
+        out.append(items[keys[0]])
     return out
 
 
@@ -4417,7 +5018,9 @@ def _set_problems(p: _Parsed, facts: list, vocab: _Vocab, text: str, only=None) 
             *(f"not {c}" for c in _TRUST_CLASSES),
         }
 
-        def stated(fcs, kind="", st=st, item_p=item_p, whole=whole, sst=sst, trust=trust):
+        def stated(
+            fcs, kind="", st=st, item_p=item_p, whole=whole, sst=sst, trust=trust, at=None, txt=None
+        ):
             if kind == "equip" and trust and st.opens and not st.poss:
                 fcs = [fc for fc in fcs if not fc.point]  # a point's trust is not its unit's
             # a cited fact about it, or the cited facts about it together, state it
@@ -4428,7 +5031,51 @@ def _set_problems(p: _Parsed, facts: list, vocab: _Vocab, text: str, only=None) 
                     and not _claim_problems(item_p, these, vocab, "")
                     for these in tries
                 )
-            return any(_states_alone(whole, these, facts, vocab, text, sst) for these in tries)
+            txt = text if txt is None else txt
+            return any(_states_alone(whole, these, facts, vocab, txt, sst, at) for these in tries)
+
+        # a list of one figure for each item ("A and B have 15.8% and 33.6% respectively",
+        # "A, B and C ran 100%, 100% and 42%") gives the items their figures in order (#340)
+        wtoks = [t[1].lower() for t in whole.toks]
+        group = (  # "The AHUs and the loggers have 100% and 19.1% respectively": of each group
+            sst.end + 3 < len(wtoks)
+            and wtoks[sst.end + 1] == "and"
+            and wtoks[sst.end + 2] in _DEFINITE
+            and any(_item_noun(w) for w in wtoks[sst.end + 3 : sst.end + 5])
+        )
+        if not st.neg and not st.pron and not group:
+            kind0 = st.kind or ("equip" if st.names else "")
+            resp = "respectively" in wtoks[sst.start : sst.scope]
+            figs = sorted(
+                {q.at for q in whole.qty if sst.start <= q.at < sst.scope and not q.of_set}
+            )
+            resp = resp and bool(figs)  # "respectively" of no figure: not a list of them
+            order = _set_order(whole, sst, facts, kind0, extract_cites(text), resp)
+            runs = [r for r in _runs(whole, sst) if order and len(r) == len(order)]
+            if resp and not runs and order and len(figs) == len(order):
+                runs = [figs]  # "... a fault with 86% and ok with 0% respectively": in order
+            if resp and not runs:
+                why.append(
+                    f"{said!r}: a list said 'respectively' needs one figure for each item, in the "
+                    "order the sentence names the items (name each one)"
+                    if order is None
+                    else f"{said!r}: a list said 'respectively' needs one figure for each of its "
+                    f"{len(order)} items"
+                )
+                continue
+            if order and all(order) and (runs or (st.slots and len(sst.parts) == len(order))):
+                keys = {id(fcs[0]): key for key, fcs in _items_of(facts, kind0 or "equip").items()}
+                for i, fcs in enumerate(order):
+                    txt = text
+                    if st.slots:  # "the heating valve and the supply-air setpoint": each its own
+                        for z, (a, b) in enumerate(sst.parts):
+                            if z != i:
+                                txt = txt.replace(_span_text(whole, a, b + 1), " ", 1)
+                    if not stated(fcs, kind0, at=(i, len(order), runs) if runs else None, txt=txt):
+                        name = st.names[i] if st.names and not st.slots else ""
+                        name = name or keys.get(id(fcs[0])) or _span_text(whole, *sst.parts[i])
+                        why.append(f"{said!r}: no cited fact states it of {name!r}")
+                continue
 
         if st.names:
             seen = 0
@@ -4496,6 +5143,22 @@ def _set_problems(p: _Parsed, facts: list, vocab: _Vocab, text: str, only=None) 
             continue
         ok = [key for key, fcs in items.items() if stated(fcs, kind)]
         bad = [key for key in items if key not in ok]
+        if st.how == "part":
+            if st.total is not None and st.total != len(items):
+                why.append(f"{said!r}: the cited facts are about {len(items)} of them")
+            elif len(ok) != st.k:
+                why.append(
+                    f"{said!r}: the cited facts state it of {len(ok)} of the {len(items)}, not "
+                    f"{st.k:f}"
+                )
+            continue
+        if st.how == "most":
+            if len(items) < 2 or 2 * len(ok) <= len(items):
+                why.append(
+                    f"{said!r}: the cited facts state it of {len(ok)} of the {len(items)}: not "
+                    "most of them"
+                )
+            continue
         k = st.k
         need = k if k is not None else 2
         if bad:
@@ -4513,15 +5176,24 @@ def _set_problems(p: _Parsed, facts: list, vocab: _Vocab, text: str, only=None) 
     return why
 
 
-def _states_alone(p: _Parsed, fcs: list, facts: list, vocab: _Vocab, text: str, st=None) -> bool:
+def _states_alone(
+    p: _Parsed, fcs: list, facts: list, vocab: _Vocab, text: str, st=None, at=None
+) -> bool:
     """Whether the cited facts ``fcs`` (about one item) state what the sentence says of each
     item on their own (#338, #339): its verdicts, directions, negations and point roles, and its
     figures: a figure in what the set's clause says of it must be theirs (#339: "Both meters
     save 2.5%" against -15.6% on one), but a figure the sentence gives another named item ("at
     0.68 on AHU-2") is that item's, and figures given as a list or "respectively" are each one
     item's; a figure outside the set's clause is the item's only where another cited fact does
-    not give it. Its names are the items'."""
+    not give it. Its names are the items'. ``at``: ``(i, n)``, the item is the i-th of n the
+    sentence names in order, so the i-th figure of each list of n is its own, the others not, and
+    a direction a figure's sign gives is read with its own (#340)."""
     others = [f for f in facts if all(f is not fc for fc in fcs)]
+    assign: dict = {}
+    if at is not None and st is not None:
+        for run in at[2] if len(at) > 2 else _runs(p, st):
+            if len(run) == at[1]:
+                assign.update((x, run[at[0]]) for x in run)
     mine = set().union(*(_about(fc) for fc in fcs))
     fc = fcs
     items = set().union(*(_about(f) for f in facts))  # a facility named is no item's
@@ -4532,6 +5204,10 @@ def _states_alone(p: _Parsed, fcs: list, facts: list, vocab: _Vocab, text: str, 
     for q in p.qty:
         if q.of_set:
             continue
+        if q.at in assign:
+            if assign[q.at] == q.at:
+                keep.append(q)  # its own figure: its facts must give it
+            continue  # another item's
         if st is not None and q.at >= 0:
             named = _attributed(p, q, st) & items
             if named:
@@ -4549,11 +5225,20 @@ def _states_alone(p: _Parsed, fcs: list, facts: list, vocab: _Vocab, text: str, 
             keep.append(q)
     if listed and not hits:
         return False
+    dirs = p.dirs
+    if assign and p.signed_dirs:  # "avoided energy -15.8% and 2.4%": each its own sign's (#340)
+        signs = {q.at: q.sign for q in p.qty}
+        given = {"up" if signs.get(x) == "-" else "down" for x, _k in p.signed_dirs}
+        dirs = (set(p.dirs) - given) | {
+            "up" if signs.get(assign.get(x, x)) == "-" else "down" for x, _k in p.signed_dirs
+        }
     alone = replace(
         p,
         qty=keep,
+        dirs=dirs,
         ids=set(),
         quant=set(),
+        quant_of=[],
         wholes=set(),
         counts=[],
         sets=[],
@@ -4685,18 +5370,43 @@ def _claim_problems(
         for c in sorted(p.polar)
         if c not in polar and _OPPOSITE[c] in polar
     ]
+    # "reads high": a reading's direction is one a cited fact states, not only one no cited fact
+    # contradicts (#340)
+    aff = set().union(*(fc.claims.polar_aff for fc in facts))
+    why += [
+        f"'reads {c}': no cited fact states this direction"
+        for c in sorted(p.read_dirs)
+        if c not in aff and not (c not in polar and _OPPOSITE[c] in polar)
+    ]
+    # a quantifier is supported only by what a cited fact says all, every or most of (#340):
+    # the same noun ("every issue" for "every issue", "100% of the hours" for "all hours"), not a
+    # word of the fact's own that quantifies something else ("6 results in all" supports no
+    # "every sensor"); a set of items is read against its items instead (#338)
     quant = set().union(*(fc.claims.quant for fc in facts))
-    if any(
-        st.how in ("all", "every")
+    nouns = {
+        qc: set().union(*(fc.quant_nouns.get(qc, set()) for fc in facts)) for qc in ("all", "most")
+    }
+    by_set = {
+        key
+        for st in p.sets
+        if st.how in ("all", "every", "each", "most")
         and not _set_counted(st.noun, facts)
         and any(fc.item.get(st.kind) for fc in facts)
-        for st in p.sets
-    ):
-        quant.add("all")  # "every AHU": read against the items the cited facts are about (#338)
+        for key in (st.noun, _qkey(st.noun))
+    }
+    read = _read_quant(p, facts)
     several = " (a claim about all of several facts is not read: say it of each)" * (len(facts) > 1)
-    for qc in sorted(p.quant - quant):
+    done = set()
+    for qc, key, said in p.quant_of:
+        if key and (key in nouns[qc] or key in by_set or (qc, key) in read):
+            continue
+        if not key and qc in quant:
+            continue
+        if (qc, key) in done:
+            continue
+        done.add((qc, key))
         what = "all or every" if qc == "all" else "most"
-        why.append(f"'{what}': no cited fact says {what}{several}")
+        why.append(f"{said!r}: no cited fact says {what} of it{several}")
     parts = [x for fc in facts for x in fc.parts]
     for fam, label in sorted(p.all_labels):  # "they are all trusted", "all ok" (#338)
         of = [x for x in parts if x[1] == fam]
@@ -4745,6 +5455,7 @@ def _claim_problems(
             continue
         why.append(f"{said!r}: no cited fact ranks it so")
     why += _count_problems(p, facts)
+    why += _attribution_problems(p, facts)
     if p.sets:
         why += _set_problems(p, facts, vocab, text)
     names = frozenset(
@@ -4791,13 +5502,27 @@ def _claim_problems(
             else:
                 why.append(f"{n.raw!r}: no cited fact says so")
     affirmed = set().union(*(fc.claims.affirmed for fc in facts))
+    # (#340) with equipment named, a cited fact's negation of another unit is not this one's, and
+    # only the facts about the same unit say otherwise ("AHU-2 leaks" against AHU-2's "no valve
+    # leak" fails though AHU-1's fault says "leak")
+    equips = {str(fc.item.get("equip") or "").lower() for fc in facts} - {""}
+    named_eq = p.ids & equips
+    one_unit = len(named_eq) == 1  # a sentence about several reads each clause apart: not here
     flagged = set()
     for i, fc in enumerate(facts):  # what a cited fact negates, the sentence must not state
         # (a sentence citing one fact for its first clause and another for its second: only
         # the words of the clauses that cite this fact, #338)
         stated = bound[i] if bound is not None and bound[i] is not None else p.affirmed
+        eq = str(fc.item.get("equip") or "").lower()
+        if eq and one_unit and eq not in named_eq:
+            continue  # another unit's
+        aff = affirmed
+        if eq and one_unit:
+            aff = set().union(
+                *(g.claims.affirmed for g in facts if str(g.item.get("equip") or "").lower() == eq)
+            )
         for f in fc.claims.negs:
-            if f.verdict or f.kind == "zero" or f.head in affirmed or f.head in flagged:
+            if f.verdict or f.kind == "zero" or f.head in aff or f.head in flagged:
                 continue
             need = set(f.words)
             if f.kind == "share":  # "CHW-leak 0% of the samples": the leak, not the samples
@@ -4807,6 +5532,22 @@ def _claim_problems(
             if f.head in stated and need <= stated:
                 flagged.add(f.head)
                 why.append(f"{f.raw!r}: a cited fact says so, and the sentence states the opposite")
+            elif (
+                f.head in stated
+                and f.kind in ("np", "verbal")
+                and need - {f.head} <= _COMPONENTS
+                and not (stated & _COMPONENTS) - need
+                and fc.item.get("equip")
+                and (not named_eq or (one_unit and fc.item["equip"].lower() in named_eq))
+                and f.head not in aff
+            ):
+                # "AHU-2 leaks", "Both AHUs are leaking" against "no valve leak": said of the
+                # equipment the fact is about, with no other part of it named (#340)
+                flagged.add(f.head)
+                why.append(
+                    f"{f.raw!r}: a cited fact says so of {fc.item['equip']!r}, and the sentence "
+                    "states the opposite"
+                )
     return why
 
 
@@ -4845,6 +5586,21 @@ def _count_problems(p: _Parsed, facts: list) -> list:
                     f"{', '.join(sorted(b))} as well (one {_FAMILY_NAME[fam]} each)"
                 )
         for fam in ("trust", "verdict"):
+            if c.how == "rest" and len(labels.get(fam, ())) > 1:
+                # "89 are trusted and the rest are suspect or untrusted": the rest is all of
+                # those labels together (#340)
+                rel = [
+                    x
+                    for x in parts
+                    if x[1] == fam and x[2] in labels[fam] and x[0] == c.noun and x[4] is not None
+                ]
+                totals = {x[4] for x in rel}
+                if not rel:
+                    why.append(f"{said!r}: no cited fact gives the total to read it by")
+                elif not any(sum(x[3] for x in rel if x[4] == t) == t - c.k for t in totals):
+                    got, names = sum(x[3] for x in rel), " or ".join(sorted(labels[fam]))
+                    why.append(f"{said!r}: a cited fact counts {got:f} as {names}")
+                continue
             for label in sorted(labels.get(fam, ())):
                 rel = [
                     x
@@ -4881,6 +5637,15 @@ def _count_problems(p: _Parsed, facts: list) -> list:
                         x = rel[0]
                         of = f" of {x[4]:f}" if x[4] is not None else ""
                         why.append(f"{said!r}: a cited fact counts {x[3]:f}{of} as {label}")
+                elif c.how == "most" and len(labels[fam]) == 1:
+                    # "Most points are suspect" against "21 trusted, 3 suspect" (#340)
+                    rel = [x for x in rel if x[0] == c.noun and x[4]]
+                    if rel and not any(2 * x[3] > x[4] for x in rel):
+                        x = rel[0]
+                        why.append(
+                            f"{said!r}: a cited fact counts {x[3]:f} of {x[4]:f} as {label}: not "
+                            "most of them"
+                        )
                 elif c.how in ("all", "def") and len(labels[fam]) == 1:
                     rel = [x for x in rel if x[0] == c.noun]
                     if rel and not any(
@@ -4898,6 +5663,27 @@ def _count_problems(p: _Parsed, facts: list) -> list:
         if not any(_says(c, t.how, t.k, t.total) for t in same):
             why.append(f"{said!r}: a cited fact gives another count of them: {same[0].raw!r}")
     return why
+
+
+def _read_quant(p: _Parsed, facts: list) -> set:
+    """The quantifiers ``(class, noun key)`` a sentence's counts read against a cited fact's count
+    of the same things with the same label (#340): "Most points are trusted" against "24 points
+    ...: 21 trusted" is read there, so it needs no fact that says "most"."""
+    parts = [x for fc in facts for x in fc.parts]
+    out = set()
+    for c in p.counts:
+        if c.how not in ("most", "all"):
+            continue
+        labels = {(f, lab) for f, lab in c.modfam | c.predfam if f in ("trust", "verdict")}
+        if len(labels) != 1:
+            continue
+        fam, label = next(iter(labels))
+        rel = [x for x in parts if x[1] == fam and x[2] == label and x[0] == c.noun and x[4]]
+        if c.how == "most" and any(2 * x[3] > x[4] for x in rel):
+            out.add(("most", _qkey(c.noun)))
+        if c.how == "all" and any(x[3] == x[4] for x in rel):
+            out.add(("all", _qkey(c.noun)))
+    return out
 
 
 def _same(c: _Count, said_by: list) -> list:
@@ -5088,6 +5874,8 @@ def _judge(
             continue
         sent = text[seg.start : seg.end]
         vis = _visible(sent)
+        if seg.header:
+            vis = _table_text(vis, seg.header)
         cites = extract_cites(vis)
         own = [c for c in cites if c in all_ids]
         unknown = [c for c in cites if c not in all_ids]

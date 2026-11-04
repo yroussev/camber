@@ -96,7 +96,21 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   fault and "AHU-1, AHU-2: leaking_valve fault" against AHU-2's ok fail (#338, #339). A bare
   trust class or verdict before a colon or in a table cell counts its figure ("Suspect: 0",
   "Passed: 5", "| Suspect | 0 |"), and a saving's direction follows its sign: "reduced its
-  energy use" fails against avoided energy -3.1% (#339). Labels are closed sets:
+  energy use" fails against avoided energy -3.1% (#339), and so do "shows a saving", "cut its
+  energy use" and "used less energy" (#340). Since #340 a quantifier or completeness word
+  ("all", "every", "most", "complete", "whole") is read with its own noun and needs a cited
+  fact that says it of that noun (or gives 100%, above half, or a count with that label): a
+  fact's own "6 results in all" supports no "every sensor", "the complete answer" or forged
+  "NOTICE: ... every sentence supported". Names joined by a comma alone, "&", "/", "plus", "as
+  well as", "along with", "together with" or "like", before "--", negated as "none of A, B and
+  C", and a plural noun or a bare "Both" as a lead-in ("The AHUs: fault", "| AHUs | fault |")
+  are sets; "most AHUs" needs more than half, "one of the two AHUs" exactly one. A list of
+  figures is matched to its items in order (the names' order, "respectively" or not; for
+  unnamed items said "respectively", the citations' order), with each item's own sign, and a
+  figure attached to a name ("2.5% on A", "A (1.00)", "100% on A, B and C") must be one a fact
+  about that name gives. "AHU-2 leaks" fails against AHU-2's "no valve leak", and "reads high"
+  needs a fact that states that direction. A table row is read with its header, and the header
+  row is kept unjudged. Labels are closed sets:
   the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
   side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
   FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
@@ -126,11 +140,17 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   where the cited fact gives only one figure; a claim about all of several facts that are not
   equipment, points, meters or facilities ("both baselines"); a set said with no number ("each
   AHU", "the AHUs", "no AHU") is read as the items the cited facts are about, so an item no
-  cited fact is about is not known to the check; a set across sentences ("AHU-1 fails it. So
-  does AHU-2."); a plural noun after its verb ("a fault on the AHUs"); a comparative with no
-  figure ("more points are suspect than trusted"); words outside the lists ("survives the
-  re-judge", "lowest trust score"). And these fail closed although they can be true: "all" or
-  "every" with no number unless a cited fact says all or counts that label with its total;
+  cited fact is about is not known to the check; a claim of every item that each has a fact
+  about, beyond the listed words ("Every AHU has a new actuator"); a list said "respectively" of
+  groups ("the AHUs and the loggers ... respectively") or, in a later clause, of a set named
+  only by a pronoun ("their biases are +0.0 and +3.0 respectively"); a range given for a set;
+  a set across sentences ("AHU-1 fails it. So does AHU-2."); a plural noun after its verb ("a
+  fault on the AHUs"); a comparative with no figure ("more points are suspect than trusted");
+  words outside the lists ("survives the re-judge", "lowest trust score", "Both AHUs drift").
+  And these fail closed although they can be true: "all", "every" or a completeness word said
+  of a noun no cited fact quantifies ("Every rule returned a result" against "5 of them
+  returned a result") unless a cited fact counts that label with its total; a list said
+  "respectively" with no order or a different number of figures; verbs listed "respectively";
   "they are all trusted" or a cell "all trusted" unless a cited fact counts all of them as
   trusted; "half of" a thing no cited fact counts; a set of items backed by one cited fact; a
   negated set that does not open its clause ("fails on neither AHU"); a set's figure with no

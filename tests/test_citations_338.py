@@ -813,7 +813,9 @@ def test_a_trust_class_count_in_every_form(text, right):
                 False,
             ),
             (f"The bulk of the 106 flagged hours fall in the reference window {_c(PART)}.", False),
-            (f"A majority of the 11 points are trusted {_c(TRUST)}.", False),
+            # 9 of the 11 are trusted: a majority, read against the count (#340)
+            (f"A majority of the 11 points are trusted {_c(TRUST)}.", True),
+            (f"A majority of the 11 points are suspect {_c(TRUST)}.", False),
             # "over N" is more than N: the fact gives exactly N
             (f"Over 9 of the 11 points on {FAC} are trusted {_c(TRUST)}.", False),
             (f"Upwards of 9 of the 11 points on {FAC} are trusted {_c(TRUST)}.", False),
