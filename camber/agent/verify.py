@@ -126,7 +126,17 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
     "X, not Y", "unlike Y" and two clauses about two units read each unit against its own facts;
     a stretch of time ("all year", "throughout 2025", "the whole of May") must lie within a cited
     fact's window, a quantifier needs the fact's qualifier of its noun, and coverage words need a
-    coverage of 100%.
+    coverage of 100%;
+  - **since #342**: every sentence, cited or not, is screened for a claim of checking or support
+    (short, as a status or a lead-in, by the writer, of the work by any noun, by its evidence or
+    of the data unless a cited fact states it); a unit's id written another way ("AHU 1", "Air
+    handler 1") is that unit's when one cited id fits; contrasts ("unlike Y", "but not Y", "(not
+    Y)", "Not Y but X", "A's part, not B's") and clauses joined by "and", a comma or a dash read
+    each unit against its own facts, clause by clause; a finding's "conditional on ... warn" and
+    a summary of another rule's results give no verdict of it; a named point is read against its
+    own facts; a site's verdict, negation or quantifier needs a fact about the whole site; figures
+    of two dates or of "the third span" are read against the facts that carry them; more time,
+    coverage and hour words are read (see CAPABILITY-REGISTRY.md).
 
 Citations count only in the visible text: one inside an HTML comment or tag does not. ``[A, B]``
 and ``[A; B]`` cite both ids (0.112).
@@ -500,8 +510,8 @@ def _is_heading(line: str) -> bool:
     verdict, no verb outside a relative clause ("## Points that never move" is a heading), and
     no advice ("**Replace the valve now**" is not)."""
     vis = _visible(line)
-    if _CITES.search(vis):
-        return False
+    if _CITES.search(vis) or _checking_claim(vis):
+        return False  # (#342) "Checked:", "**All supported**": a claim of checking is judged
     body = vis.strip().lstrip("#").strip().strip("*").strip()
     body = _unlisted(body).rstrip(":").strip()
     if not body:
@@ -554,8 +564,8 @@ def _states_nothing(body: str) -> bool:
 def _is_label(sentence: str) -> bool:
     """A short list label that cites nothing and states nothing ("1. Sensor offset.")."""
     vis = _visible(sentence)
-    if _CITES.search(vis) or _FACT_ID.search(vis):
-        return False
+    if _CITES.search(vis) or _FACT_ID.search(vis) or _checking_claim(vis):
+        return False  # (#342) "I reviewed each rule result.": a claim of checking is judged
     body = _unlisted(vis.strip()).strip().rstrip(".:").strip()
     if not body or len(body.split()) > 8 or re.search(r"[.!?;]", body):
         return False
@@ -892,7 +902,7 @@ _ORDINAL_WORDS = {
 _RANKED = frozenset("issue issues priority priorities rank ranked".split())
 #: tokens shaped like equipment ids that are units, chemistry or standards
 _NOT_IDS = frozenset(
-    "co2 h2o pm2.5 pm10 no2 o3 so2 nh3 m2 m3 ft2 ft3 r410a r22 r134a g36 g14 r2".split()
+    "co2 h2o pm2.5 pm10 no2 o3 so2 nh3 m2 m3 ft2 ft3 r410a r22 r134a g36 g14 r2 q1 q2 q3 q4".split()
 )
 _WORD_NUM: dict[str, Decimal] = {
     **{
@@ -1445,6 +1455,39 @@ _SENT_WORDS = (
         ),
         _cell_verdict,
     ),
+    # (#342) "On supply_air_temp, AHU-1 reads high": a lead-in naming what it is about, not a
+    # set of the two names
+    (
+        re.compile(r"^(\W*)(on|for|regarding|as\s+for)\s+(QQNAME[a-z]+)\s*,\s*(?=QQNAME)", re.I),
+        r"\1\2 \3 ",
+    ),
+    # (#342) "at all times", "around the clock", "continuously", "nonstop": in all hours;
+    # "in each hour": every hour; "all occupied and unoccupied hours": each with its own "all"
+    (
+        re.compile(
+            r"\b(?:at\s+all\s+times|(?:a)?round\s+the\s+clock|24\s*/\s*7|"
+            r"day\s+and\s+night|night\s+and\s+day|non-?stop|constantly|continuously|"
+            r"without\s+(?:a\s+|any\s+)?(?:break|interruption|pause|let-?up))\b",
+            re.I,
+        ),
+        "all the time",
+    ),
+    (re.compile(r"\beach\s+(?:and\s+every\s+|single\s+)?hour\b", re.I), "every hour"),
+    (
+        re.compile(
+            r"\ball\s+([A-Za-z-]+)\s+(and|or)\s+([A-Za-z-]+)\s+(hours|samples|days|readings|periods)\b",
+            re.I,
+        ),
+        r"all \1 \4 \2 all \3 \4",
+    ),
+    # (#342) "leaking_valve flags AHU-1", "AHU-1 was flagged by leaking_valve": a fault of it
+    (re.compile(r"(QQTERM[a-z]+\s+)flag(?:s|ged)\s+(?=QQNAME)", re.I), r"\1faults "),
+    (
+        re.compile(
+            r"(QQNAME[a-z]+\s+(?:is|was|were|are|has\s+been|got)\s+)flagged\s+(?=by\b|on\b)", re.I
+        ),
+        r"\1faulted ",
+    ),
     # "In the reference window there are 8 flagged hours": "there are 8 flagged hours in ..."
     (
         re.compile(
@@ -1977,6 +2020,23 @@ def _number_at(toks: list, words: list, j: int):
 
 def _verbish(word: str) -> bool:
     return word in _STATING or (word.endswith("ed") and len(word) > 4)
+
+
+#: (#342) the verbs a clause about a unit may have besides :func:`_verbish`'s ("AHU-2
+#: disagrees", "B warns", "A tracks its reference")
+_CLAUSE_VERBS = frozenset(
+    (
+        "agree agrees disagree disagrees warn warns match matches track tracks drift drifts "
+        "modulate modulates move moves hunt hunts cycle cycles save saves use uses score scores "
+        "sit sits hold holds run runs show shows lack lacks miss misses exceed exceeds fall falls "
+        "meet meets need needs leak leaks read reads pass passes fail fails stay stays look looks "
+        "seem seems remain remains does do did"
+    ).split()
+)
+
+
+def _clause_verb(word: str) -> bool:
+    return _verbish(word) or word in _CLAUSE_VERBS or word in _COPULA
 
 
 def _zero_parts(toks, cont, words, scope: list, end: int, k: int, bound: list):
@@ -4461,6 +4521,20 @@ def _paged(text: str) -> list:
     ]
 
 
+#: (#342) a finding's "conditional on <comparison> <verdict>": that verdict is the comparison's
+_COND_VERDICT = re.compile(
+    r"(conditional\s+on\s+(?:the\s+)?[\w:./\-]+(?:\s+[\w:./\-]+)?\s+)(?:warn|warning|fault|ok|info|"
+    r"passed|failed|disagrees|agrees)\b",
+    re.I,
+)
+#: (#342) words that say a sentence speaks of what a finding is conditional on
+_COND_TALK = re.compile(
+    r"\b(?:conditional|condition|conditions|rests?|resting|depends?|depending|hinges?|reference|"
+    r"comparison|sensor|sensors|sensor_drift|input|inputs|logger)\b",
+    re.I,
+)
+
+
 class _FactClaims:
     """What one fact exposes to the matcher: the claims of its text plus its structured fields
     (``value`` and ``unit``; ``value`` / ``verdict`` / ``severity`` as a verdict; ``direction``;
@@ -4473,11 +4547,19 @@ class _FactClaims:
         text = str(getattr(fact, "text", "") or "")
         data = getattr(fact, "data", None)
         data = data if isinstance(data, dict) else {}
+        self.kind = str(getattr(fact, "kind", "") or data.get("kind") or "")
         p = _Parsed()
         self.parts = []  # (unit, family, label, value, total): "9 trusted" of "11 points" (#336)
         shares: list = []  # (#341) (a share, what qualifies its noun)
+        # (#342) the verdicts only its "conditional on sensor_drift:supply_air_temp warn" gives:
+        # the reference comparison's, not the finding's
+        self.cond: set = set()
         for piece in _split_sentences(text):
             q = _parse(piece, names, fact=True)
+            if _COND_VERDICT.search(piece):
+                self.cond |= (
+                    q.verdicts - _parse(_COND_VERDICT.sub(r"\1", piece), names, fact=True).verdicts
+                )
             qty = _told_apart(_labelled(q.qty))
             mine = [(f, q.share_quals.get(f.at, frozenset())) for f in qty if f.unit == "%"]
             for i, (f, quals) in enumerate(mine):
@@ -4539,6 +4621,7 @@ class _FactClaims:
                 if key != "severity":
                     own.add(_VALUE_VERDICT[v.lower()])
         self.own = own
+        self.cond -= own
         # a finding re-judged (#332): its severity before the re-judge is not its verdict, so it
         # supports a sentence only where that names the finding ("the leaking_valve fault")
         self.superseded = set()
@@ -4616,6 +4699,19 @@ class _FactClaims:
         found = str(data.get("finding_id") or subj.get("finding") or "")
         self.rule = str(data.get("rule") or found.split("@")[0] or "").lower()
         self.windows = _windows(data, text)  # (#341) the stretches of time it covers
+        # (#342) its baseline period's: a saving is for its reporting period, not its baseline's
+        self.base_windows = set(
+            _windows({}, " ".join(re.findall(r"baseline period [^;:()]*", text)))
+        )
+        for h in [data] + [v for v in data.values() if isinstance(v, dict)]:
+            da, db = _day(h.get("baseline_start")), _day(h.get("baseline_end"))
+            if da and db and da <= db:
+                self.base_windows.add((da, db))
+            v = h.get("baseline_period")
+            if isinstance(v, (list, tuple)) and len(v) == 2:
+                da, db = _day(v[0]), _day(v[1])
+                if da and db and da <= db:
+                    self.base_windows.add((da, db))
         # (#341) "coverage 100% of its own span": all of the point's own span, not of the window
         self.own_span = bool(re.search(r"\b100(?:\.0+)?\s*%\s+of\s+its\s+own\s+span", text, re.I))
         # (#341) a coverage of all of its window or span ("coverage 100.0% of the whole window")
@@ -4694,14 +4790,19 @@ _SEASONS = {
     "fall": (9, 11),
     "autumn": (9, 11),
 }
+#: (#342) the nouns of a stretch of time the span rule reads ("all of June"): not a quantifier's
+_SPAN_KEYS = frozenset(
+    {_stem(m) for m in _MONTHS} | set(_MONTHS) | {_stem(x) for x in _SEASONS} | set(_SEASONS)
+)
 _MONTH_RX = "|".join(
     sorted((m for m in _MONTHS if len(m) > 3 or m == "may"), key=len, reverse=True)
 )
 #: (#341) the words that say a whole stretch of time: "all year", "throughout 2025", "the whole
 #: of May", "every day in May 2025", "for months", "year-round"
 _SPAN_ALL = (
-    r"(?:all(?:\s+of)?|the\s+whole(?:\s+of)?|the\s+entire(?:ty\s+of)?|throughout(?:\s+the)?|"
-    r"for\s+(?:all|the\s+whole|the\s+entire)(?:\s+of)?|every\s+(?:single\s+)?(?:day|hour|week|"
+    r"(?:all\s+through(?:out)?(?:\s+the)?|all(?:\s+of)?|the\s+whole(?:\s+of)?|the\s+entire(?:ty\s+of)?|"
+    r"throughout(?:\s+the)?|"
+    r"for\s+(?:all|the\s+whole|the\s+entire)(?:\s+of)?|(?:every|each)\s+(?:single\s+)?(?:day|hour|week|"
     r"month)\s+(?:of|in|during|across|throughout)(?:\s+the)?|across(?:\s+the)?(?:\s+whole|\s+entire)?|"
     r"over\s+the\s+(?:whole|entire|full)|the\s+full|in\s+all\s+of|during\s+(?:all|the\s+whole|"
     r"the\s+entire)(?:\s+of)?|the\s+entire\s+month\s+of|the\s+whole\s+month\s+of)"
@@ -4710,13 +4811,14 @@ _SPANS = (
     (
         "cal_month",
         re.compile(
-            rf"\b{_SPAN_ALL}\s+(?:the\s+month\s+of\s+)?({_MONTH_RX})\b(?:\s+(\d{{4}}))?", re.I
+            rf"\b{_SPAN_ALL}\s+(?:the\s+month\s+of\s+)?({_MONTH_RX})\b(?:\s+(\d{{4}})(?![-/.]\d))?",
+            re.I,
         ),
     ),
     (
         "cal_year",
         re.compile(
-            rf"\b{_SPAN_ALL}\s+(?:the\s+years?\s+)?(\d{{4}})((?:\s*(?:,|and|&|to|through|-|–)\s*\d{{4}}\b)*)",
+            rf"\b{_SPAN_ALL}\s+(?:the\s+years?\s+)?(\d{{4}})(?![-/.]\d)((?:\s*(?:,|and|&|to|through|-|–)\s*\d{{4}}\b(?![-/.]\d))*)",
             re.I,
         ),
     ),
@@ -4724,6 +4826,33 @@ _SPANS = (
         "relative",
         re.compile(
             rf"\b{_SPAN_ALL}\s+(?:last|this|next|past|previous|prior)\s+(year|month|week|summer|winter|spring|fall|autumn|season)\b",
+            re.I,
+        ),
+    ),
+    (  # (#342) "over the past year", "every day this year", "in the last 12 months"
+        "relative",
+        re.compile(
+            r"\b(?:over|in|during|for|across|throughout|within|all|every\s+day|each\s+day|every\s+hour)"
+            r"\s+(?:of\s+)?(?:the\s+)?(?:past|last|previous|prior|this|current|coming|next)\s+"
+            r"(?:(?:\d+|two|three|four|six|twelve|few|several|couple\s+of)\s+)?"
+            r"(years?|months?|weeks?|summer|winter|spring|fall|autumn|seasons?|quarters?)\b(?!\s+of\b)",
+            re.I,
+        ),
+    ),
+    (  # (#342) a range of months: "from January to October 2018", "through May and June 2025"
+        "month_range",
+        re.compile(
+            rf"\b(?:from|between|through(?:out)?|during|across|over|for|all\s+of|all\s+through)\s+"
+            rf"(?:the\s+months\s+of\s+)?({_MONTH_RX})\b(?:\s+(\d{{4}})(?![-/.]\d))?\s*(?:to|through|until|till|"
+            rf"and|&|-|–)\s*({_MONTH_RX})\b(?:\s+(\d{{4}})(?![-/.]\d))?",
+            re.I,
+        ),
+    ),
+    (  # (#342) a quarter: "throughout Q3 2018", "all of the third quarter"
+        "quarter",
+        re.compile(
+            rf"\b{_SPAN_ALL}\s+(?:the\s+)?(?:q([1-4])|(first|second|third|fourth)\s+quarter)"
+            r"(?:\s+(?:of\s+)?(\d{4})(?![-/.]\d))?\b",
             re.I,
         ),
     ),
@@ -4788,6 +4917,27 @@ def _span_need(kind: str, m) -> tuple:
         return ("season", _SEASONS[m.group(1).lower()])
     if kind == "relative":
         return ("none",)
+    if kind == "month_range":
+        m1, m2 = _MONTHS[m.group(1).lower()], _MONTHS[m.group(3).lower()]
+        y2 = m.group(4) or m.group(2)
+        y1 = m.group(2) or y2
+        if not y2:
+            return ("months", (m1, m2))
+        y1, y2 = int(y1), int(y2)
+        if (y1, m1) > (y2, m2):
+            return ("none",)
+        return ("range", date(y1, m1, 1), date(y2, m2, calendar.monthrange(y2, m2)[1]))
+    if kind == "quarter":
+        qn = (
+            int(m.group(1))
+            if m.group(1)
+            else ("first", "second", "third", "fourth").index(m.group(2).lower()) + 1
+        )
+        m1, m2 = 3 * qn - 2, 3 * qn
+        if m.group(3):
+            y = int(m.group(3))
+            return ("range", date(y, m1, 1), date(y, m2, calendar.monthrange(y, m2)[1]))
+        return ("months", (m1, m2))
     if kind == "for":
         return ("days", _SPAN_DAYS[(m.group(1) or m.group(2)).lower()])
     return ("days", _SPAN_DAYS[kind])
@@ -4806,7 +4956,7 @@ def _holds(need: tuple, w: tuple) -> bool:
             if a <= date(y, need[1], 1) and b >= date(y, need[1], last):
                 return True
         return False
-    if need[0] == "season":
+    if need[0] in ("season", "months"):
         m1, m2 = need[1]
         for y in range(a.year - 1, b.year + 1):
             y2 = y + 1 if m2 < m1 else y
@@ -4825,6 +4975,31 @@ def _span_problems(vis: str, facts: list) -> list:
     s = _CITES.sub(" ", vis)
     why: list = []
     seen: set = set()
+    if re.search(
+        r"\b(?:sav\w*|avoid\w*|reduc\w*|cut|used|uses|consum\w*|reporting)\b", s, re.I
+    ) and not (re.search(r"\bbaselin\w*", s, re.I)):
+        # (#342) a saving said over a stretch of time: its reporting period, not its baseline's
+        wins = {
+            id(fc): [w for w in fc.windows if w not in fc.base_windows]
+            if set(fc.windows) - fc.base_windows
+            else fc.windows
+            for fc in facts
+        }
+        # (#342) and a year said of a saving is one its reporting period is in ("saved 2.5% in
+        # 2016" against a 2016 baseline and a 2017 reporting period)
+        if any(fc.base_windows and set(fc.windows) - fc.base_windows for fc in facts):
+            for y in sorted(
+                {int(x) for x in re.findall(r"(?<![\d\-/.])((?:19|20)\d\d)(?![\d\-/])", s)}
+            ):
+                if not any(a.year <= y <= b.year for fc in facts for a, b in wins[id(fc)]):
+                    got = sorted({w for fc in facts for w in wins[id(fc)]})
+                    why.append(
+                        f"'{y}': the saving is for "
+                        + ", ".join(f"{a} to {b}" for a, b in got[:3])
+                        + ", not that year"
+                    )
+    else:
+        wins = {id(fc): fc.windows for fc in facts}
     for kind, rx in _SPANS:
         for m in rx.finditer(s):
             if any(a <= m.start() < b for a, b in seen):
@@ -4842,11 +5017,11 @@ def _span_problems(vis: str, facts: list) -> list:
                     f"{said!r}: a time said from today is not one a cited fact's window can hold"
                 )
                 continue
-            if not any(_holds(need, w) for fc in facts for w in fc.windows):
-                wins = sorted({w for fc in facts for w in fc.windows})
+            if not any(_holds(need, w) for fc in facts for w in wins[id(fc)]):
+                wins_all = sorted({w for fc in facts for w in wins[id(fc)]})
                 given = (
-                    f"the cited facts cover {', '.join(f'{a} to {b}' for a, b in wins[:3])}"
-                    if wins
+                    f"the cited facts cover {', '.join(f'{a} to {b}' for a, b in wins_all[:3])}"
+                    if wins_all
                     else "no cited fact gives the window it covers"
                 )
                 why.append(f"{said!r}: {given}, not that")
@@ -4863,20 +5038,45 @@ _COVERAGE_WORDS = re.compile(
     r"\b(?:logged|recorded|trended|sampled|covered|covers|cover|covering|reported|measured|captured|"
     r"present|available)\s+(?:for|over|across|throughout|during)?\s*(?:all\s+of\s+)?(?:the\s+)?"
     r"(?:whole|entire|full|complete)\s+(?:window|period|span|range|time|record)\b|"
-    r"\bnever\s+(?:missing|dropped|dropped\s+out)\b",
+    r"\bnever\s+(?:missing|dropped|dropped\s+out)\b|"
+    # (#342) "covered fully", "coverage that is full", "complete for the window", "logged
+    # throughout the window", "full-window coverage", "recorded in full", "logged continuously"
+    r"\bcovered\s+(?:fully|in\s+full|completely|entirely|throughout)\b|"
+    r"\bcoverage\s+(?:that\s+is\s+|which\s+is\s+|is\s+|was\s+)(?:full|complete|total|100\s*%)\b|"
+    r"\b(?:complete|full|whole)\s+(?:for|over|across|throughout)\s+(?:the\s+)?(?:whole\s+|entire\s+|full\s+)?"
+    r"(?:window|period|span|range)\b|"
+    r"\b(?:logged|recorded|trended|sampled|covered|reported|measured|captured|present|available|data)\s+"
+    r"(?:throughout|across|over\s+all\s+of|for\s+all\s+of|all\s+through)\s+(?:the\s+)?(?:window|period|span|"
+    r"range)\b|"
+    r"\b(?:has|have|had|with|holds?|shows?|gets?|got|gives?)\s+(?:a\s+|an\s+)?(?:full|whole|entire|"
+    r"complete)[\s-]+(?:window|period)\s+(?:coverage|data|record|records|trend|trends|logging|history)\b|"
+    r"\b(?:logged|recorded|trended|sampled|covered|captured|data|samples|readings)\s+in\s+full\b|"
+    r"\b(?:logged|recorded|trended|sampled|reported)\s+(?:continuously|without\s+(?:a\s+|any\s+)?(?:gaps?|"
+    r"breaks?|interruptions?))\b",
     re.I,
 )
 
 
-def _coverage_problems(vis: str, facts: list) -> list:
+def _coverage_problems(vis: str, facts: list, p=None) -> list:
     """Coverage of all of a window, in any words ("full coverage", "data for the whole window",
     "logged for the entire window", "gap-free data", "fully trended"), needs a cited fact that gives
-    a coverage of 100% (#341)."""
+    a coverage of 100% (#341); (#342) of each unit the sentence names ("LOGGER-1 and AHU-1 have
+    full coverage", "A's ... has full coverage, like B's")."""
     m = _COVERAGE_WORDS.search(_CITES.sub(" ", vis))
     if m is None:
         return []
     said = " ".join(m.group(0).split())
     window = bool(re.search(r"\b(?:window|period|range|time|record)\b", said, re.I))
+    named = sorted({n for n in (p.ids if p is not None else ()) for fc in facts if n in _units(fc)})
+    contrast = re.search(
+        r"\b(?:unlike|while|whereas|but|not|than|instead|contrast|opposed|except|apart|only)\b",
+        vis,
+        re.I,
+    )
+    for n in named if len(named) > 1 and not contrast else ():
+        own = [fc for fc in facts if n in _units(fc)]
+        if not any(fc.full and not (window and fc.own_span) for fc in own):
+            return [f"{said!r}: no cited fact gives {n!r} a coverage of 100%"]
     if any(fc.full and not (window and fc.own_span) for fc in facts):
         return []
     if window and any(fc.full for fc in facts):
@@ -5057,7 +5257,9 @@ def _set_counted(noun: str, facts: list) -> bool:
     return bool(unit) and any(f.unit == unit for fc in facts for f in fc.claims.qty)
 
 
-def _number_problems(p: _Parsed, facts: list) -> list:
+def _number_problems(p: _Parsed, facts: list, every=None) -> list:
+    """The figures of ``p`` no fact of ``facts`` states; ``every``: (#342) the facts a count of
+    items ("Of the two AHUs, only A ...") is read against, when ``facts`` are one unit's."""
     why = []
     sets = {st.k for st in p.sets if st.k is not None and not _set_counted(st.noun, facts)}
     sets |= {st.total for st in p.sets if st.total is not None}  # "one of the two AHUs" (#340)
@@ -5084,7 +5286,7 @@ def _number_problems(p: _Parsed, facts: list) -> list:
             # "One of the two AHUs fails", "the three VAVs": a count of items (#340), as many as
             # the cited facts are about, or a count a cited fact gives of them; not any figure
             # with that number ("three AHUs" is not "+3.0 °F")
-            items = len(_items_of(facts, _ITEM_NOUNS[noun]))
+            items = len(_items_of(every or facts, _ITEM_NOUNS[noun]))
             units = {_counted(noun), "equipment" if _ITEM_NOUNS[noun] == "equip" else ""} - {""}
             said = re.compile(
                 rf"(?<![\d.,]){q.value:f}\s+{re.escape(p.toks[q.at + 1][1].lower())}\b"
@@ -5109,6 +5311,17 @@ def _number_problems(p: _Parsed, facts: list) -> list:
                 f"{q.show()}: a cited fact gives this share of only some of them{what}: say which"
             )
             continue
+        if (
+            q.unit in ("result", "finding")
+            and q.role == "result"
+            and p.verdicts & _VERDICT_UNITS
+            and any(
+                f.value == q.value and f.unit in p.verdicts & _VERDICT_UNITS
+                for fc in facts
+                for f in fc.claims.qty
+            )
+        ):
+            continue  # (#342) "1 of the 6 rule-equipment results is a fault": its "1 fault"
         if q.unit == "rule" and q.role == "result":
             # "1 rule returned a fault" against "3 rules ... on 1 equipment ...: 1 fault": on
             # one equipment each rule gives one result (#339); on more, a result is not a rule
@@ -5994,8 +6207,13 @@ def _claim_problems(
             + _set_problems(p, facts, vocab, text, [st for st in p.sets if st.neg and st.pred < 0])
         )
     why = _name_problems(p, facts, vocab, text)
-    verdicts = set().union(*(fc.claims.verdicts for fc in facts))
-    final = set().union(*(fc.claims.verdicts - fc.superseded for fc in facts))
+    # (#342) a verdict only a finding's "conditional on ... warn" gives is the comparison's: it
+    # supports no verdict of the finding ("AHU-1 warns on leaking_valve" against its fault)
+    talk = bool(_COND_TALK.search(text or _UNMASK.sub(" ", p.masked)))
+    verdicts = set().union(*(fc.claims.verdicts - (set() if talk else fc.cond) for fc in facts))
+    final = set().union(
+        *(fc.claims.verdicts - fc.superseded - (set() if talk else fc.cond) for fc in facts)
+    )
     stated = set(p.verdicts)
     for cls in _TRUST_CLASSES:  # "not trusted": a cited fact's "suspect" or "untrusted" (#339)
         if f"not {cls}" in stated and final & (_TRUST_CLASSES - {cls}):
@@ -6045,6 +6263,19 @@ def _claim_problems(
         for c in sorted(p.polar)
         if c not in polar and _OPPOSITE[c] in polar
     ]
+    # (#342) "agrees" / "disagrees" with a reference: one a cited fact states, not only one no
+    # cited fact contradicts ("oa_damper disagrees with its reference" citing another point's)
+    said_ref = {
+        "disagrees": lambda h: re.search(r"disagree|reference_warn|conditional on", h),
+        "agrees": lambda h: re.search(r"(?<!dis)agree|tracks reference", h),
+    }
+    why += [
+        f"{c!r}: no cited fact states it"
+        for c in sorted(p.polar_aff & {"agrees", "disagrees"})
+        if c not in polar
+        and _OPPOSITE.get(c) not in polar
+        and not any(said_ref[c](str(getattr(fc, "hay", ""))) for fc in facts)
+    ]
     # "reads high": a reading's direction is one a cited fact states, not only one no cited fact
     # contradicts (#340)
     aff = set().union(*(fc.claims.polar_aff for fc in facts))
@@ -6060,9 +6291,12 @@ def _claim_problems(
     quant = set().union(*(fc.claims.quant for fc in facts))
 
     def said_so(qc, key, pool) -> bool:
-        # (#341) a cited fact's quantifier of the same noun, its qualifiers said in the sentence
+        # (#341) a cited fact's quantifier of the same noun, its qualifiers said in the sentence;
+        # (#342) and not their opposite too ("in all occupied and unoccupied hours")
         return any(
-            quals <= pool for fc in facts for quals in fc.quant_nouns.get(qc, {}).get(key, ())
+            quals <= pool and not any(f"un{q}" in pool or f"non{q}" in pool for q in quals)
+            for fc in facts
+            for quals in fc.quant_nouns.get(qc, {}).get(key, ())
         )
 
     by_set = {
@@ -6079,6 +6313,8 @@ def _claim_problems(
     for qc, key, said, pool in p.quant_of:
         if key and (said_so(qc, key, pool) or key in by_set or (qc, key) in read):
             continue
+        if key and qc == "all" and key in _SPAN_KEYS:
+            continue  # (#342) "all of June 2018": a stretch of time, read against the windows
         if not key and qc in quant:
             continue
         if (qc, key) in done:
@@ -6169,6 +6405,10 @@ def _claim_problems(
             continue
         if n.kind == "zero" and n.head in ("fault", "warn") and own & {"ok", "info"}:
             continue  # "no fault" of a finding the cited fact judges ok
+        if (n.head == "gap" or (n.kind in ("zero", "np") and "gap" in set(n.words))) and any(
+            fc.full and not fc.own_span for fc in facts
+        ):
+            continue  # (#342) "gap-free" of a unit a cited fact gives 100.0% of the window
         if n.kind == "zero":
             # a zero needs a fact's zero; "none of the baselines meets" a "does not meet" in
             # each cited fact (#332)
@@ -6228,6 +6468,8 @@ def _claim_problems(
                 need.discard(f.subject)
             elif f.named and f.subject not in fc.subjects and f.subject not in p.ids:
                 continue  # "measured_fan_heat_f not set" is about that setting only
+            if f.kind == "share" and any(q.unit == "%" and q.value == 0 for q in p.qty):
+                continue  # (#342) "with 0% of occupied hours off setpoint": the same zero share
             if f.head in stated and need <= stated:
                 flagged.add(f.head)
                 why.append(f"{f.raw!r}: a cited fact says so, and the sentence states the opposite")
@@ -6534,7 +6776,12 @@ def _bound_words(sentence: str, own: list, vocab) -> list | None:
 
 def _units(fc) -> set:
     """The units (an equipment, a meter) a cited fact is about, lower case (#341)."""
-    return {str(v).lower() for v in (fc.item.get("equip"), fc.item.get("meter")) if v}
+    # (#342) "<fleet>": a finding about the whole site, not a unit
+    return {
+        str(v).lower()
+        for v in (fc.item.get("equip"), fc.item.get("meter"))
+        if v and not str(v).startswith("<")
+    }
 
 
 #: (#341) a whole site said as the subject of a sentence: "The site is healthy", "Overall, the
@@ -6589,6 +6836,77 @@ def _site_said(p: _Parsed, facts: list, vis: str) -> bool:
     return bool(p.ids & facs) or bool(words & _SITE_WORDS)
 
 
+#: (#342) a span, gap or issue said by its place: "the third span", "the 2nd gap", "span 3"
+_ORDINAL_N = {
+    w: i + 1
+    for i, w in enumerate(
+        "first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth".split()
+    )
+}
+_ORDINAL_SPAN = re.compile(
+    r"\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|"
+    r"\d{1,2}(?:st|nd|rd|th))\s+(?:flagged\s+|contiguous\s+|evidence\s+|listed\s+)?(span|gap)s?\b",
+    re.I,
+)
+
+
+def _date_problems(p: _Parsed, facts: list) -> list:
+    """(#342) Figures said of two or more dates in one sentence ("On D1 the span lasted 2.25
+    hours, and on D2 3 hours"), when the cited facts carry those dates apart: each figure is
+    the one a fact carrying its date states -- the date before it, or with every date before
+    every figure, the date in the same place of its list."""
+    if len(p.dates) < 2 or any(t[1].lower() == "respectively" for t in p.toks):
+        return []
+    marks = {
+        t: _date(m)
+        for t, v in p.marks.items()
+        if t.startswith("QQDATE")
+        for m in [_DATE.match(str(v))]
+        if m
+    }
+    at = [(i, marks[t[1]]) for i, t in enumerate(p.toks) if t[1] in marks]
+
+    def carriers(d):
+        day = _day(f"{d[0]:04d}-{d[1]:02d}-{d[2]:02d}")
+        return [
+            fc
+            for fc in facts
+            if any(x[:3] == d[:3] for x in fc.claims.dates)
+            or any(day and a <= day <= b and (b - a).days < 2 for a, b in fc.windows)
+        ]
+
+    ids = [frozenset(id(fc) for fc in carriers(d)) for _i, d in at]
+    if len(set(ids)) < 2 or not all(ids):
+        return []
+    figs = [q for q in p.qty if q.at >= 0 and not q.year and q.at not in {i for i, _d in at}]
+    dated = {id(fc) for i in ids for fc in facts if id(fc) in i}
+    undated = [fc for fc in facts if id(fc) not in dated]
+    figs = [q for q in figs if not (undated and _match(q, undated, q.claim))]
+    if not figs:
+        return []
+    seg, k = [], 0  # each token's clause: split at ",", ";" and "and"
+    for t in p.toks:
+        if t[1] in (",", ";") or t[1].lower() == "and":
+            k += 1
+        seg.append(k)
+    why = []
+    before_all = all(q.at > at[-1][0] for q in figs)
+    for n, q in enumerate(figs):
+        if before_all and len(figs) == len(at):
+            d = at[n][1]
+        else:
+            near = [(abs(i - q.at), d) for i, d in at if seg[i] == seg[q.at]]
+            if not near:
+                continue
+            d = min(near, key=lambda x: x[0])[1]
+        if not _match(q, carriers(d), q.claim):
+            why.append(
+                f"{q.show()}: said of {d[0]:04d}-{d[1]:02d}-{d[2]:02d}, no cited fact about that "
+                "date states it"
+            )
+    return why
+
+
 def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
     """The cited facts a sentence is judged against, for its figures and for its claims (#341): a
     sentence that names a unit (an equipment or a meter a cited fact is about) is read only
@@ -6598,6 +6916,26 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
     site's fact gives its claims nothing unless it says something of the site ("AHU-2 fails
     leaking_valve" citing the rule run's "1 fault" and AHU-2's ok). A fact about no unit (a
     notice, a rule's parameters) stays."""
+    m = _ORDINAL_SPAN.search(vis)
+    if m is not None:
+        # (#342) "The third span lasted 3 hours" citing three spans: the figures are the span's
+        # that the fact numbers so ("span 3 of 3")
+        w = m.group(1).lower()
+        k = _ORDINAL_N.get(w) or int(re.sub(r"\D", "", w) or 0)
+        nth = [
+            fc
+            for fc in facts
+            if re.search(rf"\b{m.group(2)}\s+{k}\s+of\s+\d+", str(getattr(fc, "hay", "")), re.I)
+        ]
+        if nth:
+            facts = [
+                fc
+                for fc in facts
+                if fc in nth
+                or not re.search(
+                    rf"\b{m.group(2)}\s+\d+\s+of\s+\d+", str(getattr(fc, "hay", "")), re.I
+                )
+            ]
     if len(p.dates) == 1 and not p.sets:
         # (#341) "The span on 2025-05-14 lasted 2.25 hours" citing the spans of three days: the
         # figure is the dated fact's that carries that day
@@ -6614,12 +6952,57 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
             facts = [fc for fc in facts if not (fc.windows or fc.claims.dates) or carries(fc)]
     if len(p.rules) == 1:
         # (#341) "AHU-1 passes leaking_valve" citing AHU-1's leak fault and its supply-air
-        # control ok: a verdict said of one rule is read against the facts about that rule
+        # control ok: a verdict said of one rule is read against the facts about that rule;
+        # (#342) a fact about no one rule that lists other rules' results ("1 result(s) not
+        # listed here ...: "AHU-1" supply_air_control (ok)") is about those rules only
         rule = next(iter(p.rules))
-        if any(fc.rule == rule for fc in facts):
-            facts = [fc for fc in facts if not fc.rule or fc.rule == rule]
+        if any(fc.rule == rule or rule in fc.claims.rules for fc in facts):
+            facts = [
+                fc
+                for fc in facts
+                if fc.rule == rule
+                or (not fc.rule and (not fc.claims.rules or rule in fc.claims.rules))
+            ]
+    every = facts
     named = {n for n in p.ids if any(n in _units(fc) for fc in facts)}
-    if not named or any(not st.names for st in p.sets):
+    # a set of units no name makes ("Both AHUs ...", "no AHU") reads its cited facts' units; a
+    # set of a named unit's parts ("AHU-1: no valve leak") is that unit's (#342)
+    unit_set = any(not st.names and st.kind in ("equip", "meter", "facility") for st in p.sets)
+    if named and not unit_set:
+        # (#342) a fact about no unit that names units ("... "AHU-1" supply_air_control (ok)")
+        # is about the units it names
+        listed = {u for fc in every for u in _units(fc)}
+        facts = [
+            fc
+            for fc in facts
+            if _units(fc) or not (fc.claims.ids & listed) or fc.claims.ids & named
+        ]
+    # (#342) a sentence about one point of a unit ("oa_damper never moves") is read against the
+    # cited facts about that point: another point's fact gives it no verdict, negation,
+    # direction or figure
+    roles = {str(fc.item.get("role") or "").lower() for fc in facts} - {""}
+    said_roles = {n for n in p.ids if n in roles} | {
+        r
+        for r in roles
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(r)}(?![A-Za-z0-9_])", vis, re.I)
+    }
+    if said_roles and len(roles) > 1 and not any(not st.names for st in p.sets):
+        facts = [
+            fc
+            for fc in facts
+            if not fc.item.get("role")
+            or str(fc.item["role"]).lower() in said_roles
+            # its point said in words ("flat heat valves, and their supply_air_temp ...")
+            or any(n in fc.roles and srx.search(vis) for n, srx, _f in _ROLE_RX)
+        ]
+    if not named or unit_set:
+        site = "" if unit_set else _site_subject(p, every, vis)
+        if site and (p.negs or p.verdicts or p.quant_of):
+            # (#342) a verdict or negation said of a whole site ("site-north has no valve
+            # leak") is read against the facts about the site as a whole: one unit's "no valve
+            # leak" or "meets" says nothing of the others
+            whole = [fc for fc in facts if not _units(fc) and not fc.item.get("role")]
+            return facts, whole if whole else _SiteOnly(site)
         return facts, facts  # a set its cited facts' items make ("Both AHUs ...") reads them all
     keep = [
         fc
@@ -6633,13 +7016,52 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
     return keep, claim
 
 
+class _SiteOnly(list):
+    """(#342) No cited fact about a whole site, for a sentence that says something of it."""
+
+    def __init__(self, site: str):
+        super().__init__()
+        self.site = site
+
+
+def _site_subject(p: _Parsed, facts: list, vis: str) -> str:
+    """(#342) The site a sentence that names no unit says something of: one it opens with ("The
+    site has no leak", "ds-x meets daily acceptance", "Overall, site-north is ..."), or one it
+    names after "on", "at", "for" or "across" ("No valve leak was found at site-north",
+    "There is no fault on ds-x"); or ""."""
+    facs = {fc.facility for fc in facts} - {""}
+    toks, n = p.toks, len(p.toks)
+    x = 0
+    while x < n and (
+        toks[x][1].lower() in _SITE_LEAD or toks[x][1].lower() in ("the", "whole", "this")
+    ):
+        x += 1
+    if x < n:
+        t = toks[x][1]
+        if t.lower() in _SITE_WORDS or (t in p.marks and str(p.marks[t]).lower() in facs):
+            return str(p.marks.get(t, t))
+    for i in range(1, n):
+        t = toks[i][1]
+        if toks[i - 1][1].lower() in ("on", "at", "for", "across", "of", "in") and (
+            t in p.marks and str(p.marks[t]).lower() in facs
+        ):
+            return str(p.marks[t])
+    return ""
+
+
 def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     """``(reason, why)`` for one sentence (or a part of one) against the facts it cites
     (``mine``, with their ids ``own``), bound to the units it names (#341); ``num``: the facts
     its figures are read against instead (without per_sentence: every fact the text cites)."""
     p = _parse(vis, vocab)
     nf, cl = _bind_units(p, mine, vis)
-    why = _number_problems(p, nf if num is None else num)
+    if isinstance(cl, _SiteOnly) and own:
+        return "unsupported-claim", _claim_problems(p, [], vocab, vis) + [
+            f"{cl.site!r}: what it says of the whole site needs a cited fact about the whole "
+            "site (one unit's facts say nothing of the others)"
+        ]
+    why = _number_problems(p, nf if num is None else num, mine if num is None else num)
+    why = why or _date_problems(p, mine)
     if why:
         return "uncited-number", why
     if not own:  # without per_sentence, a sentence that cites nothing makes no claim
@@ -6649,7 +7071,7 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     why += _respectively_problems(p, mine)
     why += _site_problems(p, cl)
     why += _span_problems(vis, cl)
-    why += _coverage_problems(vis, cl)
+    why += _coverage_problems(vis, cl, p)
     return ("unsupported-claim" if why else ""), why
 
 
@@ -6683,11 +7105,22 @@ def _sentence_problems(vis: str, mine: list, own: list, vocab, num, claims) -> t
     "Only B fails", "B rather than A"); each part is read against the cited facts about the
     units it names, and an excluded unit's cited facts must not state what it is excluded from.
     A sentence whose parts each cite their own facts is read part by part."""
-    parts = _contrast_parts(vis)
+    parts = _contrast_parts(vis, {u for fc in mine for u in _units(fc)})
+    if parts and (getattr(parts, "elided", False) or getattr(parts, "weak", False)):
+        # (#342) "A fails X, but B does not": each clause, "B does not fail X" included, with
+        # the sentence's facts, read against its own unit's
+        why_all: list = []
+        reason = ""
+        for t in parts:
+            r, w = _plain_problems(t, mine, own, vocab, num)
+            if r and not reason:
+                reason = r
+            why_all += w
+        return reason, why_all
     if parts and all(extract_cites(t) for t in parts):
         # each part with the facts it cites itself: "Both loggers are at 19.1% [F2][F3], while
         # both AHUs are at 100.0% [F4][F5]" is two claims, not one set of four
-        why_all: list = []
+        why_all = []
         reason = ""
         for t in parts:
             ids = [c for c in extract_cites(t) if c in own]
@@ -6736,13 +7169,64 @@ _CONTRAST_AT = re.compile(
 _ELLIPTIC = re.compile(
     r"^\W*(?:and\s+|but\s+)?(?:so|nor|neither)\s+(?:does|do|did|is|are|was|were|has|have|had|can)\b|"
     r"\b(?:does|do|did|is|are|was|were|has|have)\s+(?:too|as\s+well|either|likewise)\b|"
-    r"^\W*(?:the\s+)?same\s+(?:goes|is\s+true)\b",
+    r"^\W*(?:the\s+)?same\s+(?:goes|is\s+true)\b|"
+    r"\bas\s+(?:does|do|did|is|are|was|were|has|have)\b|"
+    r"^\W*(?:and\s+|but\s+)?(?:as|like)\s+\S+(?:\s+\S+)?\s+(?:does|do|did|is|are|was|were|has|have)\W*$|"
+    r"\b(?:also|too|likewise)\s+(?:does|do|did|is|are|was|were|has|have)\W*$|"
+    r"^\W*(?:and\s+|but\s+)?\S+(?:['’]s)?\s+(?:does|do|did|is|are|was|were|has|have)"
+    r"(?:\s+(?:too|also|as\s+well|likewise|so))?\W*$",
     re.I,
 )
 _CONTRAST_LEAD = re.compile(r"^(\W*)(?:whereas|while|whilst|although|though)\s+", re.I)
 
 
-def _contrast_parts(vis: str) -> list:
+#: (#342) a clause that denies the one before it of another unit: "..., but B does not"
+_ELLIPTIC_NOT = re.compile(
+    r"^(?P<lead>(?:and|but|while|whereas|yet)\s+)?(?P<name>[A-Za-z][A-Za-z0-9]*(?:[_\-]+[A-Za-z0-9]+)+|"
+    r"\"[^\"]+\")\s+(?P<aux>does|do|did|is|are|was|were|has|have)(?:\s+not|n['’]t)\b"
+    r"(?P<tail>\W*(?:\[[^\]]*\]\W*)*)$",
+    re.I,
+)
+
+
+class _Parts(list):
+    """(#342) A sentence's clauses, ``elided`` when one was a bare "but B does not", ``weak``
+    when joined by "and", a comma or a dash (each clause naming its own unit)."""
+
+    elided = False
+    weak = False
+
+
+def _unelide(pieces: list) -> _Parts:
+    """(#342) "A fails leaking_valve, but B does not": the second clause as "B does not fail
+    leaking_valve", read against B's facts."""
+    out = _Parts(pieces)
+    for i in range(1, len(out)):
+        m = _ELLIPTIC_NOT.match(out[i].strip())
+        if m is None:
+            continue
+        prev = _CITES.sub(" ", out[i - 1]).strip()
+        h = re.match(
+            r"^\W*(?:[A-Za-z][A-Za-z0-9]*(?:[_\-]+[A-Za-z0-9]+)+|\"[^\"]+\")(?:['’]s)?\s+"
+            r"(?P<verb>[A-Za-z]+)\s*(?P<rest>.*?)\W*$",
+            prev,
+        )
+        if h is None:
+            continue
+        verb, rest, aux = h.group("verb").lower(), h.group("rest"), m.group("aux").lower()
+        if verb in ("is", "are", "was", "were"):
+            pred = f"{aux} not {rest}"
+        elif verb in ("has", "have", "had"):
+            pred = f"{aux} not have {rest}"
+        else:
+            base = re.sub(r"(?:(?<=ss)|(?<=sh)|(?<=ch)|(?<=x))es$|s$|ed$", "", verb)
+            pred = f"{aux} not {base} {rest}"
+        out[i] = f"{m.group('name')} {pred.strip()}{m.group('tail')}"
+        out.elided = True
+    return out
+
+
+def _contrast_parts(vis: str, units=None) -> list:
     """The parts of a sentence that say something of different units, or that each cite their
     own facts (#341): "A passes X while B fails it" is "A passes X" and "B fails it"; "Whereas A
     passes, B fails X" is "A passes" and "B fails X"; [] when it is one claim. Each part must
@@ -6773,26 +7257,107 @@ def _contrast_parts(vis: str) -> list:
             spans.append((at, m.start()))
             at = m.end()
         if not spans:
-            return []
+            return _weak_parts(body, units or set())
         spans.append((at, len(body)))
         pieces = [body[a:b] for a, b in spans]
-    pieces = [x.strip() for x in pieces if x.strip()]
+    pieces = _unelide([x.strip() for x in pieces if x.strip()])
     if len(pieces) < 2 or any(_ELLIPTIC.search(_CITES.sub(" ", x)) for x in pieces):
         return []  # "..., and so does AHU-2's": one claim said of both
     names = []
     for x in pieces:
         words = re.findall(r"[A-Za-z][A-Za-z'’-]*", _CITES.sub(" ", x))
-        if not any(_verbish(w.lower()) or w.lower() in _COPULA for w in words[1:] + words[:1]):
+        if not any(_clause_verb(w.lower()) for w in words[1:] + words[:1]):
             return []  # "AHU-1, AHU-2 and AHU-3 fail": no verb in a part, one set
-        names.append(
-            set(re.findall(r"\b[A-Za-z][A-Za-z0-9]*(?:[_\-]+[A-Za-z0-9]+)+\b|\"[^\"]+\"", x))
-        )
+        found = set(re.findall(r"\b[A-Za-z][A-Za-z0-9]*(?:[_\-]+[A-Za-z0-9]+)+\b|\"[^\"]+\"", x))
+        if units:  # (#342) the units' names only: a point named in both ("oa_damper") is no unit
+            found = {n for n in found if n.strip('"').lower() in units} or found
+        names.append(found)
     cited = all(extract_cites(x) for x in pieces)
-    if cited:
+    if cited or getattr(pieces, "elided", False):
         return pieces
     if all(names) and all(not (a & b) for i, a in enumerate(names) for b in names[i + 1 :]):
-        return pieces
+        out = _Parts(pieces)
+        out.elided = getattr(pieces, "elided", False)
+        # (#342) each clause naming a unit of its own is read on its own
+        out.weak = bool(units) and all(
+            {n.strip('"').lower() for n in ns} & set(units) for ns in names
+        )
+        return out
     return []
+
+
+#: (#342) the weaker joiners of two clauses about different units: "A fails and B passes", "A
+#: fails, B passes", "A fails -- B passes"
+_WEAK_AT = re.compile(r"\s+and\s+|\s*,\s*(?:and\s+)?|\s+-{1,2}\s+|\s*[—–]\s*")
+_NP_JOIN = frozenset("and or the a an both also plus".split())
+_UNIT_NAME = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:[_\-]+[A-Za-z0-9]+)+\b|\"[^\"]+\"")
+
+
+def _weak_parts(body: str, units=frozenset()) -> list:
+    """(#342) The clauses of a sentence joined by "and", a comma or a dash that each name a
+    different unit and have a verb ("A fails leaking_valve and B passes"); a piece with no verb
+    or no name of its own goes with the clause before it ("A fails and has a trust of 0.66", "A
+    and B fail"); [] when fewer than two such clauses remain."""
+    cut, at = [], 0
+    for m in _WEAK_AT.finditer(body):
+        seg = body[at : m.start()]
+        if (
+            seg.count("(") != seg.count(")")
+            or seg.count('"') % 2
+            or seg.count("[") != seg.count("]")
+        ):
+            continue
+        cut.append((at, m.start()))
+        at = m.end()
+    if not cut:
+        return []
+    cut.append((at, len(body)))
+    groups: list = []  # [start, end, names] of each clause with a verb and a name of its own
+    pending: list = []  # pieces before the next such clause: names, or a lead-in
+    for a, b in cut:
+        x = body[a:b].strip()
+        if not x:
+            continue
+        bare = _CITES.sub(" ", x)
+        names = {
+            n for n in _UNIT_NAME.findall(bare) if '"' in n or "_" in n or re.search(r"\d", n)
+        }  # an id or a quoted name; not "fan-on"
+        unit_names = {n for n in names if n.strip('"').lower() in units}
+
+        def unname(m, ns=names) -> str:
+            return " " if m.group(0) in ns else m.group(0)
+
+        words = re.findall(r"[A-Za-z][A-Za-z'’-]*", _UNIT_NAME.sub(unname, bare))
+        verb = any(_clause_verb(w.lower()) for w in words)
+        if verb and unit_names:
+            if pending:
+                a = pending[0][0]
+                unit_names |= set().union(*(n for _a, n in pending))
+                pending = []
+            groups.append([a, b, unit_names])
+        elif groups and not (unit_names and not {w.lower() for w in words} - _NP_JOIN):
+            groups[-1][1] = b  # "..., with a 86% leak", "and has a trust of 0.66"
+            groups[-1][2] |= unit_names
+        else:
+            pending.append((a, unit_names))  # "A, B and C fail", "Of the two AHUs, A fails"
+    if pending and groups:
+        groups[-1][1] = len(body)
+    groups = [(body[a:b].strip(), n) for a, b, n in groups]
+    pieces = groups
+    if len(pieces) < 2:
+        return []
+    texts = _unelide([x for x, _n in pieces])
+    pieces = list(zip(texts, [n for _x, n in pieces]))
+    if any(not n for _x, n in pieces):
+        return []
+    if any(a & b for i, (_x, a) in enumerate(pieces) for _y, b in pieces[i + 1 :]):
+        return []
+    if any(_ELLIPTIC.search(_CITES.sub(" ", x)) for x, _n in pieces):
+        return []
+    out = _Parts(x for x, _n in pieces)
+    out.elided = texts.elided
+    out.weak = True
+    return out
 
 
 #: (#341) the words that set a unit apart from what the rest of a sentence says
@@ -6803,12 +7368,31 @@ _EXCLUDE = (
         r"(?P<x>QQNAME[a-z]+)\s*(?:,|--|—|–|\()\s*(?:and\s+|but\s+)?not\s+(?P<y>QQNAME[a-z]+(?:\s*(?:,|and|or|nor)\s*QQNAME[a-z]+)*)\s*(?:,|--|—|–|\))\s*(?:that\s+|which\s+|who\s+)?",
         re.I,
     ),
+    # (#342) "A's oa_damper, not B's, is suspect", "The A heat valve, and not the B one, is flat"
+    re.compile(
+        r"(?P<x>QQNAME[a-z]+)(?P<keep>(?:\s*['’]s)?\s+[A-Za-z_][\w\s-]{0,50}?)\s*(?:,|--|—|–|\()\s*"
+        r"(?:and\s+|but\s+)?not\s+(?:the\s+|that\s+of\s+)?(?P<y>QQNAME[a-z]+)(?:\s*['’]s|\s+one)?\s*"
+        r"(?:,|--|—|–|\))\s*",
+        re.I,
+    ),
     # "B but not A fails", "B and not A fails", "B rather than A", "B instead of A", "B unlike A"
     re.compile(
         r"(?P<x>QQNAME[a-z]+)\s*,?\s+(?:but\s+not|and\s+not|rather\s+than|instead\s+of|unlike|"
         r"as\s+opposed\s+to|in\s+contrast\s+to)\s+(?P<y>QQNAME[a-z]+(?:\s*(?:,|and|or|nor)\s*QQNAME[a-z]+)*)\s*,?\s*",
         re.I,
     ),
+)
+#: (#342) a unit set apart at the end ("B fails, unlike A", "B fails (not A)", "B fails, but not
+#: A", "B fails, as opposed to A") or at the start ("Not A but B fails")
+_EXCLUDE_TAIL = re.compile(
+    r"\s*(?:,|--|—|–|\()\s*(?:but\s+not|and\s+not|not|unlike|as\s+opposed\s+to|in\s+contrast\s+to|"
+    r"rather\s+than|instead\s+of|contrary\s+to|unlike\s+on)\s+(?P<y>QQNAME[a-z]+(?:['’]s)?(?:\s*(?:,|and|or|nor)\s*"
+    r"QQNAME[a-z]+(?:['’]s)?)*)\s*\)?\s*[.!?]?\s*$",
+    re.I,
+)
+_EXCLUDE_NOT_BUT = re.compile(
+    r"^(?P<pre>\W*)not\s+(?P<y>QQNAME[a-z]+(?:\s*(?:,|and|or|nor)\s*QQNAME[a-z]+)*)\s*,?\s+but\s+(?=QQNAME)",
+    re.I,
 )
 _EXCLUDE_LEAD = re.compile(
     r"^(?P<pre>\W*)(?:unlike|in\s+contrast\s+to|contrary\s+to|as\s+opposed\s+to|except\s+for|"
@@ -6838,11 +7422,27 @@ def _exclusions(vis: str, vocab, facts: list) -> list:
             continue
         x_tok = m.group("x")
         ys = re.findall(r"QQNAME[a-z]+", m.group("y"))
-        main = s[: m.start()] + x_tok + " " + s[m.end() :]
+        main = s[: m.start()] + x_tok + (m.groupdict().get("keep") or "") + " " + s[m.end() :]
         main = re.sub(r"^\W*it\s+is\s+", "", main, flags=re.I)
         ex = [(str(p.marks[y]).lower(), said_of(main, x_tok, str(p.marks[y]))) for y in ys]
         out.append((_unmask(main, p.marks), ex, False))
         return out
+    m = _EXCLUDE_TAIL.search(s)
+    if m is not None:
+        main = s[: m.start()]
+        x = re.search(r"QQNAME[a-z]+", main)
+        if x is not None:
+            ys = re.findall(r"QQNAME[a-z]+", m.group("y"))
+            ex = [(str(p.marks[y]).lower(), said_of(main, x.group(0), str(p.marks[y]))) for y in ys]
+            return [(_unmask(main, p.marks), ex, False)]
+    m = _EXCLUDE_NOT_BUT.match(s)
+    if m is not None:
+        main = m.group("pre") + s[m.end() :]
+        x = re.search(r"QQNAME[a-z]+", main)
+        if x is not None:
+            ys = re.findall(r"QQNAME[a-z]+", m.group("y"))
+            ex = [(str(p.marks[y]).lower(), said_of(main, x.group(0), str(p.marks[y]))) for y in ys]
+            return [(_unmask(main, p.marks), ex, False)]
     m = _EXCLUDE_LEAD.match(s)
     if m is not None:
         main = m.group("pre") + s[m.end() :]
@@ -6888,6 +7488,75 @@ def _site_problems(p: _Parsed, facts: list) -> list:
         return []
     given = ", ".join(f"{v:f} {lab}" for lab, v in others)
     return [f"{what!r} is {said}: a cited fact counts {given}: not every result is {said}"]
+
+
+#: (#342) a unit's id as an engineer may write it: "AHU 1", "AHU–1", "AHU - 1", "AHU #1", "AHU
+#: No. 1", "AHU-01", "Air handler 1", "air handling unit 1" for "AHU-1"
+_UNIT_ID = re.compile(r"^([A-Za-z]+)[\s_\-–—]?0*(\d{1,4})$")
+_UNIT_WORDS = {
+    "ahu": r"air[\s-]?handl(?:er|ing[\s-]+unit)s?",
+    "rtu": r"roof[\s-]?top[\s-]+units?",
+    "fcu": r"fan[\s-]?coil(?:[\s-]+units?)?",
+    "vav": r"vav[\s-]+box(?:es)?",
+    "ch": r"chillers?",
+    "blr": r"boilers?",
+    "b": r"boilers?",
+    "ct": r"cooling[\s-]+towers?",
+}
+
+
+def _unit_spellings(names) -> list:
+    """(#342) For each family of unit ids among ``names`` ("AHU-1", "AHU-2"), a pattern of its
+    spellings and the ids each number names: ``[(pattern, prefix, {number: {id, ...}})]``."""
+    fam: dict = {}
+    for n in names:
+        m = _UNIT_ID.match(str(n))
+        if m is not None:
+            fam.setdefault(m.group(1).lower(), {}).setdefault(int(m.group(2)), set()).add(str(n))
+    out = []
+    for prefix, ids in fam.items():
+        alts = [re.escape(prefix)] + ([_UNIT_WORDS[prefix]] if prefix in _UNIT_WORDS else [])
+        rx = re.compile(
+            rf"(?<![A-Za-z0-9_\-])(?:{'|'.join(alts)})(?:\s*(?:[-–—_]|#|no\.?)\s*|\s*)0*(\d{{1,4}})"
+            r"(?![\d.,]\d|[A-Za-z0-9_]|-[A-Za-z0-9])",
+            re.I,
+        )
+        out.append((rx, prefix, ids))
+    return out
+
+
+def _spell_units(vis: str, spellings: list) -> tuple:
+    """(#342) ``vis`` with each unit id written another way ("AHU 1", "AHU–1", "Air handler 1")
+    written as the cited facts write it, when only one of their ids has that number; ``(text,
+    ambiguous)``: a spelling more than one id could be stays and is listed (it fails closed),
+    and one no cited fact's id has is written as an id ("AHU-3"), which no cited fact names."""
+    amb: list = []
+    if not spellings:
+        return vis, amb
+    masked = _CITES.sub(lambda m: "\x00" * len(m.group(0)), vis)
+    out, at = [], 0
+    hits = []
+    for rx, prefix, ids in spellings:
+        hits += [(m, prefix, ids) for m in rx.finditer(masked)]
+    hits.sort(key=lambda h: h[0].start())
+    for m, prefix, ids in hits:
+        if m.start() < at:
+            continue
+        said = m.group(0)
+        got = ids.get(int(m.group(1)), set())
+        if said.lower() in {g.lower() for g in got}:
+            continue
+        if len(got) == 1:
+            new = next(iter(got))
+        elif got:
+            amb.append((said, sorted(got)))
+            continue
+        else:
+            new = f"{prefix.upper()}-{int(m.group(1))}"
+        out.append(vis[at : m.start()] + new)
+        at = m.end()
+    out.append(vis[at:])
+    return "".join(out), amb
 
 
 @dataclass
@@ -6938,6 +7607,7 @@ def _judge(
         if rx is not None:
             quotes[fid] = rx
     out = []
+    spellings = _unit_spellings(_known_names(context))
     for seg in _segments(text, notices, quotes):
         if seg.kind not in ("sentence", "quote"):
             continue
@@ -6945,12 +7615,16 @@ def _judge(
         vis = _visible(sent)
         if seg.header:
             vis = _table_text(vis, seg.header)
+        amb: list = []
+        if seg.kind == "sentence":
+            vis, amb = _spell_units(vis, spellings)  # (#342) "AHU 1", "Air handler 1": AHU-1
         cites = extract_cites(vis)
         own = [c for c in cites if c in all_ids]
         unknown = [c for c in cites if c not in all_ids]
         reason, why = "", []
         # (a fact's own text quoted is the server's words: check_citations' own result included)
-        checked = "" if seg.kind == "quote" or (per_sentence and not own) else _checking_claim(vis)
+        # (#342) every sentence, cited or not: a claim of checking is never supported
+        checked = "" if seg.kind == "quote" else _checking_claim(vis, claims(own))
         if checked:
             # (#341) a sentence that says the text, or a part of it, was checked: whatever it
             # cites, only check_citations' own result says what it checked
@@ -6958,12 +7632,19 @@ def _judge(
             why = [
                 f"{checked!r}: it says the text, or a part of it, was checked; only "
                 "check_citations' own result says what it checked (and only of the text passed "
-                "to it), so this is never supported"
+                "to it), so this is never supported (#342: nor is a check, verification or "
+                "support claimed for what it states that no cited fact states)"
             ]
         elif seg.kind == "quote":
             pass  # supported: it says what the fact it cites says, word for word
         elif per_sentence and not own:
             reason, why = "uncited-sentence", ["it cites no known fact"]
+        elif amb:
+            reason = "unsupported-claim"
+            why = [
+                f"{said!r}: it could name {' or '.join(ids)}; write the id as a cited fact does"
+                for said, ids in amb
+            ]
         else:
             mine = claims(own)
             num = None if per_sentence else claims(text_cited)
@@ -6973,13 +7654,24 @@ def _judge(
 
 
 #: (#341) the words that say a text, or a part of it, was checked: only check_citations' own
-#: result says what it checked, so a sentence that says so is never supported
+#: result says what it checked, so a sentence that says so is never supported; (#342) with a
+#: word joined before it ("fact-checked", "citation-checked", "data-backed")
 _CHECK_WORD = re.compile(
-    r"(?<![\w-])(?:(?:fact|cross|double|re)-?)?(?:checked|verified|validated|supported|grounded|"
+    r"(?<![\w-])(?:[a-z]+-)?(?:checked|verified|validated|supported|grounded|"
     r"confirmed|substantiated|vetted|audited|corroborated|certified|proofread|proof-read|"
-    r"backed|sourced|cleared|approved|reviewed|passed|passes)(?![\w-])",
+    r"backed|reviewed|rechecked|reverified|crosschecked|passed|passes|cleared|clears|approved)(?![\w-])",
     re.I,
 )
+#: (#342) the same as a verb said by its doer: "the cited fact supports", "the data confirms",
+#: "I verify"; read only of evidence, the text or the writer ("Verify the damper" is advice)
+_CHECK_ACTIVE = re.compile(
+    r"(?:supports?|confirms?|verif(?:y|ies)|validates?|backs?|corroborates?|substantiates?|"
+    r"bears?|proves?)",
+    re.I,
+)
+#: (#342) what "passes", "cleared" and "approved" mean of data too ("AHU-1 passes leaking_valve",
+#: "the alarm cleared"): a claim of checking only with a checker after them or a check's label
+_CHECK_VERDICTS = frozenset("passed passes cleared clears approved".split())
 #: what a text, or a part of it, is called (#341); a weak one ("claim", "figure") only with a
 #: quantifier or a pointer to the text ("every claim", "the figures above", "this report")
 _TEXT_NOUNS = frozenset(
@@ -6992,6 +7684,15 @@ _TEXT_WEAK = frozenset(
     "claim claims figure figures number numbers list version copy report part parts point "
     "points".split()
 )
+#: (#342) what the work an answer gives is called: "this triage", "these findings", "the
+#: analysis", "this savings check", "my conclusions"; never data that a fact may say was checked
+_WORK_NOUNS = frozenset(
+    "triage triages analysis analyses assessment assessments finding findings result results "
+    "review reviews diagnosis diagnoses conclusion conclusions recommendation recommendations "
+    "plan plans report reports work evaluation evaluations investigation "
+    "investigations audit audits overview breakdown explanation explanations account story "
+    "advice reading interpretation numbers figures claims statements facts data".split()
+)
 _TEXT_POINTERS = frozenset(
     "this these every each all above below here herein following whole entire both".split()
 )
@@ -7001,75 +7702,222 @@ _TEXT_PRONOUNS = frozenset(
     "this it that these those everything all each above below follows rest herein here what of "
     "the in".split()
 )
+#: (#342) the writer: "I reviewed each rule result", "My findings are supported", "We validated"
+_FIRST_PERSON = frozenset(
+    "i we my our me us mine ours i've we've i'm we're myself ourselves".split()
+)
+#: (#342) what a claim of support says the support came from: "the cited fact supports", "the
+#: data confirms", "the rule results bear it out"
+_EVIDENCE = frozenset(
+    "fact facts data evidence citation citations source sources record records result results "
+    "finding findings output outputs tool tools check checker checks verifier camber "
+    "check_citations".split()
+)
 #: a checker named as the one that checked (#341)
 _CHECKER = re.compile(
     r"\b(?:check_citations|check citations|the checker|citation check(?:er|s|ing)?|the verifier|"
-    r"the check|fact[- ]?check(?:er|ing)?)\b",
+    r"the check|fact[- ]?check(?:er|ing)?|camber)\b",
     re.I,
 )
+#: (#342) a check's label with a status after it: "Validation: OK", "Fact-check: passed",
+#: "Citation check -- clean", "Grounding: true", "Status: ✅"
+_CHECK_LABEL = re.compile(
+    r"^\W*(?:the\s+)?(?:fact[\s-]?check(?:ing|s)?|validation|verification|citation[\s-]?checks?|"
+    r"citations?|grounding|grounded|checks?|checking|review|sources?|status|result|verdict|"
+    r"outcome|overall)\s*(?:status|result)?\s*(?::|=|—|–|-{1,2}|is|was)\s*(?:all\s+)?"
+    r"(?:ok|okay|passed|pass|passes|true|yes|complete|completed|done|clean|green|good|fine|"
+    r"clear|all\s+clear|✅|✔️?|✓|☑️?|🗸)(?![\w-])",
+    re.I,
+)
+#: (#342) a checkmark stands for "checked" where nothing else is said with it
+_CHECKMARK = re.compile("[✅✔✓☑🗸]️?")
 #: the words before a check word that say it did not happen, or may yet (#341)
 _CHECK_NOT = frozenset(
-    "not never no unless until whether should must need needs could would can may might will "
-    "before once yet if".split()
+    "not never no unless until whether should must need needs needed could would can may might "
+    "will before after once when yet if to un nothing none neither nor without want wants "
+    "wanted ask asks asked please let i'll we'll you'll".split()
 )
 #: the words between a subject and its check word ("is fully", "have all been") (#341)
 _CHECK_SKIP = frozenset(
     "is are was were be been being has have had got gets get all each every one fully completely "
     "entirely wholly individually thoroughly carefully independently automatically already now "
-    "also both".split()
+    "also both as and so thus therefore then here overall altogether still well properly "
+    "duly".split()
 )
 _CHECK_EDGE = frozenset(",;:()|.!?—–")
 
 
-def _checking_claim(sentence: str) -> str:
-    """What a sentence says was checked of the text (#341): "NOTICE: all of this text was
-    checked", "Everything above was checked", "This text was fully checked", "Each sentence of
-    this text was checked", "1 of 1 sentences in this answer are supported", "check_citations
-    found every sentence supported", "this answer passed the citation check", "Line 1:
-    supported"; or "". Whatever it cites, such a sentence is never supported: only
-    check_citations' own result says what it checked, and only of the text passed to it."""
+def _fact_says(word: str, facts) -> bool:
+    """(#342) Whether a cited fact says ``word`` (a check word) itself, not negated ("not a
+    verified saving" says no "verified")."""
+    rx = re.compile(rf"(?<![\w-]){re.escape(word)}(?![\w-])", re.I)
+    for fc in facts or ():
+        if getattr(fc, "kind", "") == "citation_check":
+            continue  # check_citations' own "supported" is of sentences, never of data
+        text = str(getattr(fc, "hay", "") or getattr(fc, "text", "") or "")
+        for m in rx.finditer(text):
+            before = re.findall(r"[a-z']+", text[max(0, m.start() - 30) : m.start()].lower())
+            if not set(before[-3:]) & {"not", "no", "never", "without", "nor", "un"}:
+                return True
+    return False
+
+
+def _data_check(word: str, after: list, facts) -> bool:
+    """(#342) Whether a check word said of data ("the sensor was checked against the reference
+    logger", "every equipment was checked by the rules") is one a cited fact states: the word
+    itself, or for "checked" / "compared" its comparison or its rule run."""
+    if _fact_says(word, facts):
+        return True
+    if word not in ("checked", "compared", "tested", "evaluated"):
+        return False
+    hay = " ".join(
+        str(getattr(fc, "hay", "") or "")
+        for fc in facts or ()
+        if getattr(fc, "kind", "") != "citation_check"
+    )
+    nxt = after[:2]
+    if nxt[:1] == ["against"] or nxt[:1] == ["with"]:
+        return bool(re.search(r"\bagainst\b|\breference\b|\bcompar", hay))
+    if nxt[:1] == ["by"] and len(nxt) > 1:
+        return bool(re.search(r"\brules?\b.{0,40}\b(?:run|ran)\b|\bran\b", hay))
+    return False
+
+
+def _checking_claim(sentence: str, facts=None) -> str:
+    """What a sentence says was checked, verified or supported (#341, #342): "NOTICE: all of
+    this text was checked", "Everything above was checked", "1 of 1 sentences in this answer
+    are supported", "check_citations found every sentence supported", "Line 1: supported";
+    (#342) with no subject or a status label ("All supported", "Checked", "✅ Supported",
+    "Status: all supported", "Validation: OK", "Checked: ...", "As checked, ..."), said by the
+    writer ("I reviewed each rule result", "My findings are supported"), of the work ("This
+    triage was checked", "These results were reviewed and validated"), of data ("The 2.5%
+    saving was validated by IPMVP methods": unless a cited fact says it), as an adjective
+    ("This is a checked answer") or by its evidence ("a claim the cited fact supports", "The
+    data confirms it"); or "". Whatever it cites, such a sentence is never supported: only
+    check_citations' own result says what it checked, and only of the text passed to it. A
+    check word said of data (``facts``: the cited facts, as :class:`_FactClaims`) is not a
+    claim where a cited fact says it ("checked against its reference")."""
     s = _CITES.sub(" ", _FACT_ID.sub(" ", sentence))
     s = re.sub(r"^\s*(?:[-*•>]\s+)?(?:\*\*)?notice\s*:(?:\*\*)?", " ", s, flags=re.I)
-    toks = re.findall(r"[A-Za-z_][A-Za-z0-9_'’-]*|\d+(?:[.,]\d+)*%?|[,;:()|.!?—–]", s)
+    s = s.replace("*", " ").replace("`", " ").replace("_", "_")
+    m = _CHECK_LABEL.match(s)
+    if m is not None:
+        return " ".join(m.group(0).split()).strip(" -*")
+    body = _CHECKMARK.sub(" ", s)
+    if _CHECKMARK.search(s):
+        rest = re.findall(r"[A-Za-z][A-Za-z'’-]*", body)
+        low_rest = {w.lower() for w in rest}
+        if not rest or low_rest <= (
+            _TEXT_NOUNS
+            | _TEXT_WEAK
+            | _TEXT_POINTERS
+            | _CHECK_SKIP
+            | _WORK_NOUNS
+            | {
+                "status",
+                "result",
+                "the",
+                "a",
+                "an",
+                "done",
+                "ok",
+                "all",
+                "good",
+                "complete",
+                "checks",
+                "check",
+            }
+        ):
+            mark = _CHECKMARK.search(s)
+            return mark.group(0) if mark else "checked"
+    toks = re.findall(r"[A-Za-z_][A-Za-z0-9_'’-]*|\d+(?:[.,]\d+)*%?|[,;:()|.!?—–]", body)
     low = [t.lower().strip("'’") for t in toks]
-    checker = bool(_CHECKER.search(s))
+    checker = bool(_CHECKER.search(body))
 
     def texty(words) -> bool:
         ws = set(words)
         return bool(ws & _TEXT_NOUNS) or bool(ws & _TEXT_WEAK and ws & _TEXT_POINTERS)
 
-    for k, w in enumerate(low):
-        if not _CHECK_WORD.fullmatch(w):
-            continue
+    def clause_start(k: int) -> int:
         a = k
         while a > 0 and low[a - 1] not in _CHECK_EDGE:
             a -= 1
+        return a
+
+    for k, w in enumerate(low):
+        if (
+            k + 1 < len(low)
+            and w in ("check", "checks", "checked", "checking", "hold", "holds", "stack", "stacks")
+            and low[k + 1] == ("out" if w.startswith("check") else "up")
+        ):
+            a = clause_start(k)  # "Everything checks out", "the numbers hold up"
+            if not any(x in _CHECK_NOT or x.endswith(("n't", "n’t")) for x in low[a:k]):
+                return " ".join(toks[a : k + 2]).strip()
+        active = _CHECK_ACTIVE.fullmatch(w) is not None
+        if not _CHECK_WORD.fullmatch(w) and not active:
+            continue
+        a = clause_start(k)
         before = low[a:k]
-        if any(x in _CHECK_NOT for x in before):
+        if any(x in _CHECK_NOT or x.endswith(("n't", "n’t")) for x in before):
             continue  # "is not supported", "should be checked", "until it is verified"
         subj = [x for x in before if x not in _CHECK_SKIP]
         said = " ".join(toks[a : k + 1]).strip()
-        if w in ("passed", "passes", "cleared", "approved"):
-            # "this answer passed the citation check": a checker after it
-            if _CHECKER.search(" ".join(toks[k + 1 : k + 5])) and (
-                texty(subj) or not subj or set(subj) <= _TEXT_PRONOUNS
+        after = low[k + 1 : k + 6]
+        mine = set(subj) & _FIRST_PERSON
+        if active:
+            # "a claim the cited fact supports", "The data confirms it", "I verify ...": said by
+            # evidence, the text or the writer; a bare verb is advice ("Verify the damper")
+            if w in ("bears", "bear") and "out" not in after[:3]:
+                continue
+            if (
+                mine
+                or texty(subj)
+                or set(subj) & _EVIDENCE
+                or (checker and _CHECKER.search(" ".join(toks[a:k])))
             ):
+                return said
+            continue
+        if w in _CHECK_VERDICTS:
+            # "this answer passed the citation check": a checker after it
+            who = texty(subj) or set(subj) <= _TEXT_PRONOUNS or mine or set(subj) & _WORK_NOUNS
+            if w in ("passed", "passes", "cleared", "clears") and _CHECKER.search(
+                " ".join(toks[a:k])
+            ):
+                return said  # "The check passed.", "check_citations passed"
+            if _CHECKER.search(" ".join(toks[k + 1 : k + 5])) and (who or not subj):
                 return " ".join(toks[a : k + 4]).strip()
+            if subj and who and (k + 1 >= len(low) or low[k + 1] in _CHECK_EDGE):
+                return said  # "..., and the final text passed."
             continue
         if checker and set(before) & {"every", "all", "each", "sentence", "sentences"}:
             return said  # "check_citations found every sentence supported"
-        if texty(subj):
-            return said  # "This text was fully checked", "1 of 1 sentences ... are supported"
-        if subj and set(subj) <= _TEXT_PRONOUNS:
+        if not subj:
+            # "Checked", "All supported", "Supported: AHU-1 fails ...", "Status: all supported",
+            # "As checked, ...", "Validated by the data, ...", "... -- checked"
+            if a > 0 and low[a - 1] in (":", "|", "—", "–"):
+                z = a - 1  # "Line 1: supported", "| Sentence 2 | supported |"
+                y = z
+                while y > 0 and low[y - 1] not in _CHECK_EDGE - {"|"}:
+                    y -= 1
+                if texty(low[y:z]):
+                    return " ".join(toks[y : k + 1]).strip()
+            return said
+        if mine:
+            return said  # "I reviewed each rule result", "My findings are supported"
+        if texty(subj) or set(subj) & _WORK_NOUNS:
+            return said  # "This text was fully checked", "This triage was checked"
+        if set(subj) <= _TEXT_PRONOUNS:
             return said  # "All of this was checked", "Everything above is supported"
-        if not subj and a > 0 and low[a - 1] in (":", "|", "—", "–"):
-            z = a - 1  # "Line 1: supported", "| Sentence 2 | supported |"
-            y = z
-            while y > 0 and low[y - 1] not in _CHECK_EDGE - {"|"}:
-                y -= 1
-            if texty(low[y:z]):
-                return " ".join(toks[y : k + 1]).strip()
-        if checker and not subj:
+        if (
+            set(after[:2]) & (_TEXT_NOUNS | _TEXT_WEAK | _WORK_NOUNS)
+            and set(subj) <= (_TEXT_PRONOUNS | {"a", "an", "is", "the"}) | _TEXT_POINTERS
+        ):
+            return said + " " + " ".join(toks[k + 1 : k + 3])  # "This is a checked answer"
+        if checker and _CHECKER.search(" ".join(toks[k + 1 : k + 6])):
+            return " ".join(toks[a : k + 4]).strip()  # "... was confirmed by check_citations"
+        # said of data ("The 2.5% saving was validated by IPMVP methods"): a claim of checking
+        # unless a cited fact says it ("checked against its configured reference")
+        if not _data_check(w, after, facts):
             return said
     return ""
 
@@ -7084,7 +7932,8 @@ def _states_verdict_or_caveat(sentence: str) -> bool:
         sentence,
         re.I,
     )
-    return bool(p.verdicts or p.negs or caveat)
+    # (#342) a claim of checking removed leaves a text that no longer says it was checked
+    return bool(p.verdicts or p.negs or caveat or _checking_claim(_visible(sentence)))
 
 
 def _rebuild(text: str, drop, unknown=()) -> str:

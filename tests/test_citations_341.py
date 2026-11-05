@@ -289,7 +289,9 @@ def test_a_claim_of_checking_fails_citing_any_fact(fact):
     [
         # check words not said of the text: the rule does not read them as a claim of checking
         f"The saving is for information only, not a verified saving {_c(SAV_A)}.",
-        f"AHU-1 was checked against the reset target {_c(RESET)}.",
+        # (#342) a check word said of data passes only where a cited fact states it: "against
+        # its configured reference" (the reset target's "checked" no cited fact states, #342)
+        f"AHU-1's supply_air_temp was checked against its reference logger {_c(REF1)}.",
         f"Check the AHU-1 supply_air_temp sensor before acting on the equipment {_c(REF1)}.",
         f"The claimed 12% is not supported by the measured 2.5% {_c(SAV_A, CLAIMED)}.",
         f"The leak should be confirmed on site {_c(LEAK1)}.",

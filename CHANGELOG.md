@@ -148,6 +148,47 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   reworded answer must be checked again; MCP.md says the same for a question asked in the
   conversation. The forms still not read, and those that fail closed, are listed in
   CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` screens every sentence for a claim of checking, and binds verdicts to the
+  unit, rule and point they are said of (#342).** Round 8 of the 0.112 acceptance test found
+  short, status, lead-in and first-person claims of checking passing ("All supported",
+  "Checked", "✅ Supported", "Status: all supported", "I reviewed each rule result", "This triage
+  was checked", "The 2.5% saving was validated by IPMVP methods"), and uncited ones not judged
+  at all (kept in `verified_text` with `grounded` true, seen in a real host). Every sentence,
+  cited or not, is now screened: a claim that the text, the work, or what it states was checked,
+  verified, supported, validated, grounded, confirmed, reviewed, fact-checked or backed -- of
+  any noun, by the writer, by its evidence ("the cited fact supports"), by the checker ("The
+  check passed") or as a checkmark -- fails, never reaches `verified_text`, and opens it with the
+  NOTICE; a check word a cited fact states of the data ("checked against its reference") still
+  passes. Units, rules and points: "AHU 1", "AHU–1", "AHU - 1" and "Air handler 1" are bound to
+  AHU-1 when one cited id fits (else they fail closed); "B fails X, unlike A", "but not A", "(not
+  A)", "as opposed to A", "Not A but B", "A's damper, not B's", "B fails X and A passes" (or a
+  comma or dash), "A fails X, but B does not", "A: no valve leak" and "No valve leak was found on
+  A" read each unit against its own facts, as do "A agrees with its reference while B
+  disagrees" and "leaking_valve flags A"; a finding's "conditional on ... warn" and a rule run's
+  summary of another rule's result ("... supply_air_control (ok)") give no verdict of the
+  finding; a sentence naming a point is read against that point's facts ('"oa_damper" never
+  moves' citing the heat valve's flat line fails); a site's verdict, negation or quantifier
+  needs a fact about the whole site ("site-north has no valve leak" from one unit's ok, "ds-x
+  meets daily acceptance" from the summary and one meter's, fail). True sentences that failed
+  pass again (two #341 regressions among them): "Of the two AHUs, only A fails",
+  '"oa_damper", not "supply_air_temp", is at 0.66', "1 of the 6 rule-equipment results is a
+  fault", "with 0% of occupied running hours off setpoint", "AHU-1's data is gap-free" against
+  100.0%, "..., and AHU-2's oa_damper is suspect too at 0.68", "A fails X, but B does not".
+- **`check_citations` reads more stretches of time, coverage and hour words, and figures of a
+  date or a span's place (#342).** "each day of May 2025", "all through 2025", "through May and
+  June 2025", "from January to October 2018", "throughout Q1 2018" and times said from today
+  ("over the past year", "every day this year") are read against the cited windows, and a
+  saving's stretch of time or year against its reporting period, not its baseline's ("saved
+  2.5% throughout 2016" fails; "over the whole of 2016" was a regression from #341). "Covered
+  fully", "complete for the window", "logged throughout the window", "full-window coverage",
+  "recorded in full" and a set of named units need a coverage of 100% for each; "at all times",
+  "around the clock", "nonstop", "continuously", "in each hour" and "occupied and unoccupied
+  hours" are read as quantifiers of hours. Figures said of two dates are each read against the
+  fact carrying their date, and "The third span lasted 3 hours" against "span 3 of 3". True
+  forms pass again: "throughout 2025-05-12 to 2025-06-01" (a #341 regression), "all of June
+  2018", "the whole of August 2018", "throughout Q3 2018". Generated tests both ways in
+  tests/test_citations_342.py; the forms still not read, and those that fail closed, are listed
+  in CAPABILITY-REGISTRY.md and MCP.md, "What it does not check".
 - **`check_citations` never supports a claim of checking, and reads a sentence against the
   unit it names (#341).** Round 7 of the 0.112 acceptance test found forged notices in other
   words ("NOTICE: all of this text was checked", "Everything above was checked", "This text was

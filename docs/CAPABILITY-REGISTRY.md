@@ -606,10 +606,25 @@ cannot match is not supported. **Supported means matched, not proven true.**
     week", "throughout 2025", "all of 2025", "every day of 2018", "the whole of May", "all of
     May", "the entire month of May", "every day in May 2025" against a three-week window fail,
     and pass against a fact whose window holds them; "all of last year" (a time said from today)
-    always fails. **Coverage words** (#341) ("full coverage", "complete data", "gap-free data",
+    always fails. Since #342 also "each day of May 2025", "all through 2025", a range of months
+    ("from January to October 2018", "through May and June 2025"), a quarter ("throughout Q3
+    2018") and times said from today ("over the past year", "every day this year", "in the last
+    12 months", which always fail); "all of June 2018" and "the whole of August 2018" inside the
+    window pass; "throughout 2025-05-12 to 2025-06-01" is the dates, not "throughout 2025"; and a
+    saving's stretch of time or year is read against its reporting period, not its baseline's
+    ("saved 2.5% throughout 2016" or "in 2016" against a 2016 baseline and a 2017 reporting period
+    fails). **Coverage words** (#341) ("full coverage", "complete data", "gap-free data",
     "fully trended", "data for the whole window", "logged / recorded / trended for the entire
-    window", "covers the whole window") need a cited fact that gives a coverage of 100% (of the
-    window, when the sentence says the window; "100% of its own span" is a point's own span). A quantifier under "whether", "if" or "to"
+    window", "covers the whole window", and since #342 "covered fully", "coverage that is full",
+    "complete for the window", "logged throughout the window", "has full-window coverage",
+    "recorded in full", "data in full", "logged continuously") need a cited fact that gives a
+    coverage of 100% (of the window, when the sentence says the window; "100% of its own span" is
+    a point's own span), of each unit a set names ("LOGGER-1 and AHU-1 have full coverage"
+    against 19.1% and 100.0% fails, #342); "gap-free" of a unit a cited fact gives 100.0% of the
+    window passes (#342). Since #342 "at all times", "around the clock", "day and night",
+    "nonstop", "constantly" and "continuously" are "all the time", "each hour" is "every hour",
+    and "all occupied and unoccupied hours" is each with its own "all" (a qualifier with its
+    opposite holds no fact's "100% of occupied hours"). A quantifier under "whether", "if" or "to"
     ("confirm whether the valves are shut all the time") states nothing. A quantifier said of a
     set of items is the set's (below), "they are all ..." with no noun keeps the reading below,
     and "none" is a zero (above). A **whole count**
@@ -742,37 +757,90 @@ cannot match is not supported. **Supported means matched, not proven true.**
     shut") is its words. A set form the checker finds but cannot read fails closed: a negated
     set that does not open its clause with a verb after it ("leaking_valve fails on neither
     AHU"), or a set of figures with no cited fact about its items.
-- **Claims of checking** (0.112, #341). A sentence that says the text, or any part of it, was
-  checked, verified, supported, validated, grounded, confirmed, reviewed, fact-checked or backed
-  ("NOTICE: all of this text was checked", "Everything above was checked", "This text was fully
-  checked", "Each sentence of this text was checked", "1 of 1 sentences in this answer are
-  supported", "This answer passed check_citations", "Line 1: supported") is never supported,
-  whatever it cites: only check_citations' own result says what it checked, and only of the text
-  passed to it. A fact's own text quoted whole (check_citations' own result included) is still
-  the server's words; a check word said of something other than the text ("AHU-1 was checked
-  against the reset target", "not a verified saving", "should be confirmed on site") is judged as
-  before.
-- **Bound to the unit it names** (0.112, #341). A sentence that names a unit (an equipment or a
-  meter a cited fact is about) is read only against the cited facts about the units it names,
-  for its figures, verdicts and negations alike: "AHU-2 is at 19.1% coverage" citing LOGGER-1's
-  19.1% and AHU-2's 100.0%, "AHU-1 has no valve leak" citing AHU-2's "no valve leak" and AHU-1's
-  fault, and "AHU-2 fails leaking_valve" citing AHU-1's fault and AHU-2's ok all fail. A whole
-  site's fact (a rule run's counts) gives a unit's verdict or negation nothing unless the
-  sentence names the site; a fact about no unit (a notice, a rule's parameters) is still read. A
-  sentence that names one rule reads its verdicts against the cited facts about that rule ("AHU-1
-  passes leaking_valve" citing its leak fault and its supply-air control ok fails). A sentence
-  naming one date reads its figures against the dated facts that carry that day ("The span on
-  2025-05-14 lasted 2.25 hours" citing two spans). "Only X ...", "X alone", "Just X" need X's
+- **Claims of checking** (0.112, #341, #342). A sentence that says the text, any part of it,
+  the work it gives or what it states was checked, verified, supported, validated, grounded,
+  confirmed, reviewed, fact-checked, cross-checked, double-checked, vetted, corroborated,
+  substantiated, certified, citation-checked or backed, or that it checks out, is never
+  supported, whatever it cites: only check_citations' own result says what it checked, and only
+  of the text passed to it. Since #342 every sentence is screened, cited or not (an uncited one,
+  a short label or a heading included, is judged and fails: it never reaches `verified_text`,
+  `grounded` is false and `verified_text` opens with the NOTICE), in any of these forms: of the
+  text ("NOTICE: all of this text was checked", "1 of 1 sentences in this answer are
+  supported", "Line 1: supported"); short or as a status ("All supported", "Checked", "Supported
+  in full", "✅ Supported", "**All supported**", "Status: all supported", "Result: grounded",
+  "Validation: OK", "Fact-check: passed", a checkmark alone or with a status word); as a lead-in
+  or a tail ("Checked: ...", "Supported: ...", "Backed by the data: ...", "Validated by the data,
+  ...", "As checked, ...", "... -- checked", "..., a claim the cited fact supports"); by the
+  writer ("I reviewed each rule result", "I fact-checked this answer", "My findings are
+  supported", "Each of my claims is supported"); of the work, by any noun ("This triage was
+  checked", "These findings were fact-checked", "This savings check was reviewed against the
+  mv_summary results"); as an adjective ("This is a checked answer", "The answer is
+  citation-checked"); by its evidence ("The data supports this answer", "The cited facts confirm
+  every figure", "The rule results bear this out"); by the checker ("The check passed",
+  "check_citations marked every sentence supported"); and of the data ("The 2.5% saving was
+  validated by IPMVP methods", "These results were reviewed and validated"). A check word said
+  of the data is not a claim of checking where a cited fact states it ("AHU-3's supply_air_temp
+  was verified within 0.2 °F" citing a fact that says so; "checked against its reference" citing
+  a reference comparison; "checked by the rules" citing a rule run), nor where it is denied or
+  deferred ("not a verified saving", "should be confirmed on site", "until it is verified",
+  "Verify the damper" as advice); "passes" and "cleared" are verdicts of the data ("AHU-1 passes
+  supply_air_control") unless a checker is their subject or follows them. A fact's own text
+  quoted whole (check_citations' own result included) is still the server's words. A verdict on
+  a savings claim worded with these verbs ("the claimed 12% is supported by the measured 2.5%")
+  is a claim of support and fails: give it after the checked text, labelled as judgment.
+- **Bound to the unit it names** (0.112, #341, #342). A sentence that names a unit (an equipment
+  or a meter a cited fact is about) is read only against the cited facts about the units it
+  names, for its figures, verdicts and negations alike: "AHU-2 is at 19.1% coverage" citing
+  LOGGER-1's 19.1% and AHU-2's 100.0%, "AHU-1 has no valve leak" citing AHU-2's "no valve leak"
+  and AHU-1's fault, and "AHU-2 fails leaking_valve" citing AHU-1's fault and AHU-2's ok all fail.
+  A unit's id written another way is that unit's (#342): "AHU 1", "AHU–1", "AHU—1", "AHU - 1",
+  "AHU #1", "AHU-01", "AHU1", "Air handler 1" and "air handling unit 1" are "AHU-1" when only one
+  cited fact's id has that family and number (the words of a family: air handler or air handling
+  unit, rooftop unit, fan coil unit, VAV box, chiller, boiler, cooling tower); a spelling two
+  ids could take ("AHU 1" with "AHU-1" and "AHU1" cited) fails closed, and one no cited id has
+  ("AHU 3") is a name no cited fact names. A whole site's fact (a rule run's counts) gives a
+  unit's verdict or negation nothing unless the sentence names the site; a fact about no unit (a
+  notice, a rule's parameters) is still read, but one that lists units ("1 result(s) not listed
+  here ...: "AHU-1" supply_air_control (ok)") is about the units it lists (#342). A sentence
+  that names one rule reads its verdicts against the cited facts about that rule, a summary
+  fact's included: one that lists another rule's results supports none of this rule's ("AHU-1
+  passes leaking_valve" citing its leak fault and that summary's supply-air control ok fails,
+  #342). A finding's verdict is the one it gives itself: the verdict of the comparison it is
+  "conditional on" ("conditional on sensor_drift:supply_air_temp warn") supports no "AHU-1 warns
+  on leaking_valve" or "passes supply_air_control with a warn", unless the sentence speaks of
+  that condition ("conditional", "rests on", "reference", "sensor", "comparison", #342). A
+  sentence that names a point (a point role a cited fact is about) is read against the cited
+  facts about that point when they are about two or more (#342): another point's fact gives it
+  no verdict, negation, direction or figure ('"oa_damper" never moves' citing the damper's trust
+  and the heat valve's flat line fails), and "agrees" / "disagrees" with a reference needs a
+  cited fact that states it. A sentence naming one date reads its figures against the dated
+  facts that carry that day ("The span on 2025-05-14 lasted 2.25 hours" citing two spans); since
+  #342 a sentence naming two or more reads each figure against the facts that carry its own date
+  (the nearest date in its clause, or with every date before every figure the date in the same
+  place of the list: "On D1 the span lasted 2.25 hours, and on D2 3 hours" with the spans
+  swapped fails), and a span or gap said by its place ("The third span lasted 3 hours") is read
+  against the fact that numbers it so ("span 3 of 3"). "Only X ...", "X alone", "Just X" need X's
   facts to state it and every other unit's cited facts not to; "X, not Y, ...", "X -- not Y --",
-  "X but not Y", "X rather than / instead of / unlike Y", "Unlike Y, X ...", "It is X, not Y,
-  that ..." need X's facts to state it and Y's cited facts not to (with no cited fact about Y it
+  "X but not Y", "X rather than / instead of / unlike Y", "Unlike Y, X ...", "It is X, not Y, that
+  ..." and since #342 "X ..., unlike Y", "X ..., but not Y", "X ... (not Y)", "X ..., as opposed /
+  in contrast to Y", "Not Y but X ...", "X's part, not Y's, ..." and "The X part, and not the Y
+  one, ..." need X's facts to state it and Y's cited facts not to (with no cited fact about Y it
   fails closed); two clauses about different units ("Y passes X while X fails it", "Whereas Y
-  passes, X fails", "A fails X; B passes it", "..., but B ...") are each read against their own
-  units' facts, and a sentence whose clauses each cite their own facts is read clause by clause
-  ("Both loggers are at 19.1% [..], while both AHUs are at 100.0% [..]"). A verdict said of a
-  whole site as its subject ("The site is healthy", "All told, ds-x is ok", "Overall, the plant
-  passes") needs a cited fact that counts the site's results, and every verdict it counts to be
-  that verdict (one unit's ok does not say the site is healthy).
+  passes, X fails", "A fails X; B passes it", "..., but B ...", and since #342 "A fails X and B
+  passes", "A fails X, B passes", "A fails X -- B passes", "A agrees, and B disagrees, with its
+  reference", "A fails X, but B does not" read as "B does not fail X", and "A: no valve leak", "A
+  -- no valve leak", "No valve leak was found on A" as A's) are each read against their own
+  units' facts; when each clause names a unit of its own, clause by clause only. A sentence
+  whose clauses each cite their own facts is read clause by clause ("Both loggers are at 19.1%
+  [..], while both AHUs are at 100.0% [..]"). "leaking_valve flags A" and "A was flagged by
+  leaking_valve" are a fault of A (#342). A verdict said of a whole site as its subject ("The
+  site is healthy", "All told, ds-x is ok", "Overall, the plant passes") needs a cited fact that
+  counts the site's results, and every verdict it counts to be that verdict (one unit's ok does
+  not say the site is healthy); since #342 any verdict, negation or quantifier said of a site --
+  as the opening subject or named after "on", "at", "for", "across", "of" or "in", with no unit
+  named -- is read only against the cited facts about the whole site: "site-north has no valve
+  leak" citing one unit's "no valve leak", and "ds-x meets daily acceptance" citing the M&V
+  summary's counts and one meter's "meets", fail.
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -805,28 +873,46 @@ What it does not check: whether a claim is true beyond what the cited facts stat
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
 gives as a subject, a point role outside the families above, which cited fact a figure belongs
-to when a sentence cites several about the same unit (two points of one AHU) or names no unit,
-and neither attaches the figure to a name nor lists it for its items (#340, #341), and the
-predicate of a whole count beyond the words above.
-Of #341's rules, these are not read and pass when their figures and names match: a claim of
-checking in words outside the lists ("looked over", "went through every line"); a unit named
-only by a word, with no id ("the AHU", "the logger"), which is not bound to its facts; with "only
-X", a unit no cited fact is about (only the cited units are set apart); "X, not Y" read as Y's
-cited facts not stating it (not as a fact that negates it of Y); a verdict of a whole site said
-other than as the sentence's opening subject ("Everything at the site is fine"); a verdict said
-of one rule when the sentence names two rules (no rule binding then); a stretch of time in other
-words ("since the spring", "over the winter", "this season") and a union of two windows (a
-stretch is held by one window); coverage said in other words ("never offline"); "runs cold" /
-"runs warm" (only "reads" carries a reading's direction); a reference named by a word ("The duct
+to when a sentence cites several about the same unit and names none of their points (two points
+of one AHU with neither named, #342) or names no unit, and neither attaches the figure to a name
+nor lists it for its items (#340, #341), and the predicate of a whole count beyond the words
+above.
+Of #341's and #342's rules, these are not read and pass when their figures and names match: a
+claim of checking in words outside the lists ("looked over", "went through every line", "matches
+the data"), and a checkmark beside a statement ("✅ AHU-1 fails leaking_valve": read as that
+statement); a unit named only by a word, with no id ("the AHU", "the logger", "the other AHU"),
+or by an id with letters after its number ("VAV1__rogue_sat") written another way, or by a number
+in words ("AHU one"), which is not bound to its facts; a point named by a description ("the
+damper", "the supply-air sensor"), which is not bound to its point's facts; with "only X", a
+unit no cited fact is about (only the cited units are set apart); "X, not Y" read as Y's cited
+facts not stating it (not as a fact that negates it of Y); a site said other than as the opening
+subject or after "on", "at", "for", "across", "of" or "in" ("ds-x: healthy", "Site status --
+ok", a site in other words: "is in good shape"); a verdict said of one rule when the sentence
+names two rules (no rule binding then); a property said with a noun that is no verdict, negation
+or direction ("AHU-2 is below target with a leak", citing AHU-1's leak); a re-judged finding's
+new verdict supports a bare negation ("AHU-1 has no valve leak" citing its re-judged ok); a
+stretch of time in other words ("since the spring", "since last year", "since installation",
+"year-round since 2016", "over the winter", "this season") and a union of two windows (a stretch
+is held by one window); "for weeks" holds for a window of 14 days or more ("for weeks on end"
+passes on three weeks); coverage said in other words ("never offline"); "runs cold" / "runs
+warm" (only "reads" carries a reading's direction); a reference named by a word ("The duct
 logger on AHU-1 reads high"); a paraphrase of a leak ("passing water through a shut valve"); a
-list given as "the former ... the latter". And these fail closed although they can be true: a
-sentence that names one unit and gives an unnamed unit's figure ("lower than the other AHU's
-0.68": name both); "Overall coverage is quoted over the whole window" with no share of it;
-"Except for B, all AHUs fail"; "A leaks; B does not" (a closing "does not" with its verb left
+list given as "the former ... the latter"; possessives joined with "like" or "as well as" ("A's
+coverage, like B's, is 100.0%"); "flat while AHU-2's modulates" (a word outside the lists); the
+second of two clauses that names no unit of its own (a pronoun: "... and it has a trust of
+0.66") is the first clause's. And these fail closed although they can be true: a sentence that
+names one unit and gives an unnamed unit's figure ("lower than the other AHU's 0.68": name
+both); "Overall coverage is quoted over the whole window" with no share of it; "Except for B,
+all AHUs fail"; "A's part is suspect, but B's is not" (a possessive left with its verb left
 out); "The loggers are at 19.1% and the AHUs at 100.0%" with all ids at the end (a second set
-with its verb left out: give each clause its own citations); "most" across two facts ("Most of
-the 8 savings rest on ..." citing a count of 5 and a total of 8); figures said of two dates in
-one sentence ("On D1 ... 2.25 hours, and on D2 3 hours").
+with its verb left out: give each clause its own citations); "The two units share ..." with the
+figures attached to their names; "most" across two facts ("Most of the 8 savings rest on ..."
+citing a count of 5 and a total of 8); a length the facts do not state ("for three weeks", "for
+21 days", "for six months", a derived number); "the second half of May" ("half" of no count);
+"all winter" on a January-to-December window (a winter spans two years); a spelling of a unit
+two cited ids could take; "AHU No. 1" (the sentence ends at "No."); a verdict on a savings claim
+worded with a check word ("the claimed 23.8% is supported by the measured saving": judgment,
+give it after the checked text).
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier
@@ -864,8 +950,7 @@ points are flagged, for example ..."); a negated set that does not open its clau
 ("Both AHUs have 24 points" citing a facility); a trust class said of equipment that opens
 its clause ("Both AHUs are suspect", from facts about their points); two verdicts said of one
 set in one clause ("Both AHUs warn on X and fail Y": a verdict verb after the set noun is read
-as its one label); "the rest" with no total in a cited fact; a count of results said with a
-verdict noun ("14 results are faults and none is a warn": say "14 fault"); "over 9", "well
+as its one label); "the rest" with no total in a cited fact; "over 9", "well
 over 9" or "more than 9" against a fact's 9 or 10 (a bound is not a count); "most" or
 "the majority of" unless a cited fact says most of the same thing, gives a share above half of
 it or counts it with that label; "all", "every" or a completeness word said of a noun no cited
