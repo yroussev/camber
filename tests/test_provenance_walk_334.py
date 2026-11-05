@@ -250,3 +250,34 @@ def test_the_table_tags_a_mark_that_cannot_be_read(tmp_path, capsys):
     assert rows["padded"]["research_only"] and rows["padded"]["unreadable_marks"] > 0
     assert not rows["open"]["research_only"] and rows["open"]["unreadable_marks"] == 0
     _refused(_ctx(st.root, {"padded"}), "padded")
+
+
+def test_a_file_removed_between_the_listing_and_its_stat_is_skipped_not_unchecked(
+    store, monkeypatch
+):
+    """A re-ingest can swap a file out after the walk listed it: no read can open it any more,
+    so it is skipped, not counted as unchecked (which refused the facility mid-swap). A
+    dangling link, still there to ``lstat``, stays unchecked."""
+    fdir = _fdir(store.root, "hq")
+    files, bad = _partprov.scan(fdir)
+    assert files and not bad
+    gone, real_stat = files[0][0], os.stat
+    dangling = os.path.join(os.path.dirname(gone), "dangling.parquet")
+    os.symlink(os.path.join(os.path.dirname(gone), "missing.parquet"), dangling)
+
+    removed = []
+
+    def stat(path, *a, **k):
+        if path == gone and not removed:
+            removed.append(path)
+            os.remove(gone)  # the swap lands between scandir and stat
+        return real_stat(path, *a, **k)
+
+    monkeypatch.setattr(_partprov.os, "stat", stat)
+    try:
+        files2, bad2 = _partprov.scan(fdir)
+    finally:
+        _unlink(dangling)
+    assert [p for p, *_ in files2] == [p for p, *_ in files[1:]]
+    assert removed == [gone]
+    assert bad2 == [(dangling, "cannot be resolved (a dangling symlink or a loop?)")]

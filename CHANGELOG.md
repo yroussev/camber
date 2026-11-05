@@ -61,6 +61,10 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   by the cached check too.
 
 ### Fixed
+- **A facility is no longer refused while a re-ingest swaps its files (#334).** The provenance
+  walk counted a file removed between its listing and its `stat` as a dangling link, so a
+  reader during a forced re-ingest could get `refused_licence` ("not all of its files could be
+  checked"). Such a file is now skipped; a dangling link is still refused.
 - **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
   supported when it cited a known fact and its numbers appeared somewhere in that fact, so
   `-45%` passed against 45 %, `47,980 MWh` against a figure with no unit, a 60 °F threshold as

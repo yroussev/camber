@@ -242,8 +242,9 @@ def scan(fdir: str) -> tuple:
     """``([(path, size, mtime_ns)], [(path, why)])``: every regular file a dataset read of
     ``fdir`` could open (:func:`is_part_name`, any suffix, any level, a link followed) down to
     :data:`_MAX_DEPTH`, and every entry the walk could not check (a directory deeper than that,
-    or one it cannot list; a dangling link, a symlink loop or any entry it cannot ``stat``). The
-    walk never stops early: it skips what it cannot use and goes on (#334). Shared by the
+    or one it cannot list; a dangling link, a symlink loop or any entry it cannot ``stat``); an
+    entry removed between the listing and its ``stat`` (a re-ingest) is skipped. The walk never
+    stops early: it skips what it cannot use and goes on (#334). Shared by the
     provenance check and ``camber store verify``; a FIFO or device is neither read nor listed
     (#314). ``OSError`` when ``fdir`` itself cannot be listed: then every read of the facility
     fails (``unavailable``, #301), so there is nothing to check."""
@@ -253,6 +254,8 @@ def scan(fdir: str) -> tuple:
     def walk(path: str, depth: int, up: frozenset) -> None:
         try:
             it = os.scandir(path)
+        except FileNotFoundError:  # removed since it was listed (a re-ingest): nothing to read
+            return
         except OSError:
             bad.append((path, "the directory cannot be listed"))
             return
@@ -269,6 +272,13 @@ def scan(fdir: str) -> tuple:
                     continue
                 try:
                     st = os.stat(e.path)  # follows a link: a dangling one or a loop fails
+                except FileNotFoundError:
+                    # gone since it was listed (a re-ingest swapped it out): no read can open it;
+                    # a dangling link is still there to lstat, and is not checked
+                    if not os.path.lexists(e.path):
+                        continue
+                    bad.append((e.path, "cannot be resolved (a dangling symlink or a loop?)"))
+                    continue
                 except (OSError, ValueError) as err:
                     denied = getattr(err, "errno", None) in (errno.EACCES, errno.EPERM)
                     bad.append(
