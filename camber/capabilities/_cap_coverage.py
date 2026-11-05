@@ -4,6 +4,8 @@ Per point: samples, first and last sample, the sampling interval, coverage over 
 the gaps in it; per equipment, the mean and the worst point. The interval is the median spacing
 of the point's own samples (:func:`camber.ingest.quality.infer_freq`); a gap is a stretch longer
 than 1.5 intervals with no valid sample, including a late start or an early end in the window.
+The window is ``start`` to ``end``; an open end is the facility's first or last stored sample,
+whatever ``equips`` / ``roles`` select (0.112, #337: it was the selection's own span).
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 import pandas as pd
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import DATE, EQUIPS, FACILITY, TEXT, check_selection, window
+from ._common import DATE, EQUIPS, FACILITY, TEXT, check_selection, subject, when, window
 from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name
@@ -19,13 +21,14 @@ from ._sanitize import name
 #: what ``coverage`` means here; sensor_trust's differs (#304: one point read 35% and 100%)
 _COVERAGE = (
     "the share of the samples expected at the point's own interval that are present over the "
-    "whole window (start to end; by default the facility's first to last sample), so a point "
-    "that starts late or ends early counts the missing stretch. sensor_trust's coverage is over "
+    "whole window (start to end; by default the facility's first to last stored sample, "
+    "whatever equips or roles select), so a point that starts late or ends early counts the "
+    "missing stretch. sensor_trust's coverage is over "
     "the point's own span instead (from its first sample), or over its equipment's running hours"
 )
 
 #: rows per list and page by default (#299)
-_PAGE = 50
+_PAGE = 20  # 50 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -155,6 +158,9 @@ OUTPUT_SCHEMA = {
 
 #: equipment named in the summary and given their own fact
 _LISTED, _FACTS = 5, 100
+#: points and gaps of a page given their own fact (0.112, #294; a larger page lists the rest in
+#: data only, as for equipment)
+_ROW_FACTS = 200
 
 
 def _point(ts: pd.DatetimeIndex, w0, w1) -> tuple:
@@ -188,6 +194,15 @@ def _point(ts: pd.DatetimeIndex, w0, w1) -> tuple:
     }, gaps
 
 
+def _like(t, tz):
+    """``t`` (from file statistics: UTC when the column has a zone) in the read's zone ``tz``."""
+    if t is None:
+        return None
+    if t.tzinfo is not None:
+        return t.tz_convert(tz)
+    return t.tz_localize("UTC").tz_convert(tz) if tz is not None else t
+
+
 def coverage(ctx, arguments: dict) -> CapabilityResult:
     """Coverage and gaps per point and per equipment of one allowed facility."""
     fid = arguments["facility_id"]
@@ -215,8 +230,13 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
     )
     long = long[long["value"].notna()] if not long.empty else long
     ts_all = pd.to_datetime(long["ts"]) if not long.empty else pd.Series(dtype="datetime64[ns]")
-    w0 = pd.Timestamp(start) if start else (ts_all.min() if len(ts_all) else None)
-    w1 = pd.Timestamp(end) if end else (ts_all.max() if len(ts_all) else None)
+    # 0.112 (#337): an open end of the window is the facility's first / last stored sample, not
+    # the selection's, so equips / roles never change a point's coverage or gaps
+    lo = hi = None
+    if len(ts_all) and not (start and end):
+        lo, hi = (_like(t, ts_all.dt.tz) for t in store._ts_span(fid))
+    w0 = pd.Timestamp(start) if start else lo
+    w1 = pd.Timestamp(end) if end else hi
     groups: dict = {}
     for (equip, role), g in long.groupby(["equip", "role"], sort=True) if not long.empty else ():
         groups[(equip, role)] = pd.DatetimeIndex(pd.to_datetime(g["ts"])).unique().sort_values()
@@ -285,6 +305,8 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
             "kind": "coverage",
             "facility_id": fid,
             "value": round(mean * 100, 1),
+            "unit": "%",
+            "subject": subject(fid),
             "text": f"{fid}: {len(points)} points on {len(equipment)} equipment have a mean "
             f"coverage of {mean * 100:.1f}% of the whole window{span}; {low} point(s) are below "
             "90% and "
@@ -306,6 +328,8 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "equip_coverage",
                 "equip": e["equip"],
                 "value": round(e["coverage"] * 100, 1),
+                "unit": "%",
+                "subject": subject(fid, e["equip"]),
                 "text": f"{name(e['equip'])}: mean coverage {e['coverage'] * 100:.1f}% of the "
                 f"window over "
                 f"{e['n_points']} points; worst {name(e['worst_role'])} at "
@@ -318,25 +342,62 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
                 f"(worst {name(e['worst_role'])}) "
                 f"[F{i}@coverage]."
             )
+    points_page = (
+        page(points, arguments, default=_PAGE, what="points", order="worst first")
+        if by_point
+        else []
+    )
+    gaps_page = page(
+        gaps,
+        arguments,
+        default=_PAGE,
+        what="gaps",
+        order="longest first",
+        more="or raise min_gap_hours",
+    )
+    # 0.112 (#294): each point's coverage and each gap on the page is a fact, so a sentence
+    # giving a point's share or a gap's dates can be cited
+    for k, p in enumerate(points_page[:_ROW_FACTS], start=1):
+        facts.append(
+            {
+                "id": f"P{k}@coverage",
+                "kind": "point_coverage",
+                "equip": p["equip"],
+                "role": p["role"],
+                "value": round(p["coverage"] * 100, 1),
+                "unit": "%",
+                "subject": subject(fid, p["equip"], p["role"]),
+                "n_gaps": p["n_gaps"],
+                "longest_gap_hours": p["longest_gap_hours"],
+                "text": f"{name(p['equip'])} {name(p['role'])}: coverage "
+                f"{p['coverage'] * 100:.1f}% of the whole window ({p['n_samples']:,} samples), "
+                f"{p['n_gaps']} gap(s), the longest {p['longest_gap_hours']:g} hours",
+            }
+        )
+    for k, g in enumerate(gaps_page[:_ROW_FACTS], start=1):
+        facts.append(
+            {
+                "id": f"G{k}@coverage",
+                "kind": "gap",
+                "equip": g["equip"],
+                "role": g["role"],
+                "value": g["hours"],
+                "unit": "h",
+                "subject": subject(fid, g["equip"], g["role"]),
+                "start": g["start"],
+                "end": g["end"],
+                "text": f"{name(g['equip'])} {name(g['role'])} has no valid sample from "
+                f"{when(g['start'])} to {when(g['end'])}: a gap of {g['hours']:g} hours",
+            }
+        )
     data = {
         "facility_id": fid,
         "window": win,
         "coverage": mean,
         "n_points": len(points),
         "equipment": equipment_page,
-        "points": (
-            page(points, arguments, default=_PAGE, what="points", order="worst first")
-            if by_point
-            else []
-        ),
-        "gaps": page(
-            gaps,
-            arguments,
-            default=_PAGE,
-            what="gaps",
-            order="longest first",
-            more="or raise min_gap_hours",
-        ),
+        "points": points_page,
+        "gaps": gaps_page,
     }
     banners = []
     if ts_all.empty and keys:

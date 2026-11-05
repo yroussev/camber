@@ -1,7 +1,9 @@
 # Command-line interface
 
-The `camber` console script (installed with the package; also `python -m camber.cli`) exposes the
-analysis pipeline and the grounded agent as subcommands.
+The `camber` console script (installed with the package; also `python -m camber`) exposes the
+analysis pipeline and the grounded agent as subcommands. `camber --version` prints the installed
+version (0.112). Ctrl-C ends any command quietly with exit status 130, also while it is still
+starting.
 
 ```
 camber run     <config.json> [--out DIR] [--no-persist]   # run a config, print/write findings
@@ -560,6 +562,7 @@ camber datasets ingest <id>... | --all --store DIR [--subset S] [--dir D] [--for
                         [--from-dir DIR] [--accept-noncommercial] [--reason R]
                         [--quiet] [--lock-timeout SECONDS]
 camber datasets status [--dir D] [--store DIR] [--json]
+camber datasets provenance --store DIR [--missing] [--json]   # which parts carry their dataset's licence
 camber datasets remove <id> [--dir D] [--store DIR --purge-store [--reason R --yes|--confirm ID]]
                         [--lock-timeout SECONDS]
 camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
@@ -578,6 +581,13 @@ changed) re-ingest that would replace the data of a facility under a legal hold.
 deleted, while a facility of the dataset is under a legal hold or not `provisioning` /
 `active`. Both are audited (`datasets.ingest`, `datasets.remove`, `datasets.purge`). A plain store
 needs neither flag.
+
+`provenance` (0.112, #319) lists each facility of `--store` with how many of its part files carry
+their dataset's provenance (dataset id, licence, research-only flag, written by `ingest` since
+0.112): `provenance in every part`, `no provenance` (a catalog facility ingested before 0.112;
+`ingest --force` re-ingests it with provenance), `provenance in some parts only`, or `own data`.
+`--missing` lists only the facilities that lack it. It reads the part files' footers and writes
+nothing. See [DATASETS.md](DATASETS.md#provenance-in-the-part-files).
 
 `config --out` (0.107, #218) writes a config only for a dataset ingested in `--store`; without
 `--out` it prints the template with a warning.
@@ -733,7 +743,8 @@ client starts it; you do not run it by hand.
   an unknown option) exits 2 with one line on stderr; `camber mcp -h` shows the usage.
 - Logs go to stderr; stdout carries protocol messages only. The server exits when the client
   closes stdin or its end of stdout, stopping every call still running. `SIGTERM` and `SIGHUP`
-  stop it like Ctrl-C (exit status 143, 129 and 130).
+  stop it like Ctrl-C (exit status 143, 129 and 130), also while it loads, before it reads
+  stdin (#322).
 
 See [MCP.md](MCP.md) for client setup and the protocol details.
 
@@ -764,6 +775,21 @@ portfolio` and `retention apply` refuse at once unless given a wait (`retention 
 --lock-timeout S`, formerly `--wait S`), and `interop openfdd ingest --workspace` waits 0 unless
 `--lock-timeout` is given. The lab never waits on a workspace's lock. See
 [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+
+**One writer side per store (0.112, #325).** The lock is the kernel's `flock`, which a host and a
+Docker Desktop container (or two machines on one share) do not share. Since 0.112 a writer also
+claims `<dir>/_lock.owner` and keeps a heartbeat in it, so a writer on the other side waits and
+then exits 1 with `… is locked by <pid>@<host> since <time> on another system sharing this
+directory (kernel …)`; a claim whose writer was killed is taken over (at once when its process
+or, on the same system, the lock shows it gone, else at most 10 seconds after its last heartbeat). A writer stopped for longer than
+that (Ctrl-Z, `docker pause`) has its claim taken over by a writer on the other side too, and when
+it resumes it exits 1 with `… this writer lost its claim …` before it changes anything more
+(0.112, #330; see [DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache) for the
+one remaining window). A writer of the same system (another host process, or another container of
+the same Docker VM, which shares its kernel and so its lock) never takes a stopped writer's claim
+over: it waits, as for a running one, and is refused with `… -- a writer that is alive but stopped
+…` (0.112, #335); resume (`fg`, `docker unpause`) or end the stopped writer. CAMBER 0.111 and older make no claim: write a store or cache from the host or from
+containers, not both, and mount it read-only (`:ro`) where it is only read.
 
 ## Portfolio and facility lifecycle
 
@@ -844,9 +870,28 @@ written before 0.103), `edge` (an edge forwarder's part) and `rollup`. A workspa
 its rollup stores. It reads every part, takes no lock and changes nothing. Since 0.107 (#213) it
 also lists what an interrupted ingest left behind (a partition swap, a moved-aside partition, a
 staging directory; the next ingest recovers them) and registered facilities with no part files
-in a state that should have some. Exit code 0 when every part is readable, canonical or not; 1
+in a state that should have some. A staging directory whose writer still runs is marked so:
+`(its process is still running)`, or, for one made in a container or on another system,
+`(made on another system by the writer that holds the store's claim now)`, which the next ingest
+removes once that claim is let go or taken over (0.112, #330). Since 0.112 (#335) it also lists
+the temporary file of an interrupted registry or other atomic write at the store root
+(`_facilities.json.tmp`, `_facilities.json.tmp-<pid>-<token>`, ...) that a writer killed
+mid-write leaves; the next ingest removes it. A writer that lost its claim confirms it before it
+makes such a file and removes the file when it fails, so it leaves none. Exit code 0 when every part is
+readable, canonical or not; 1
 when a part fails to read or a facility's data is stranded outside its partition, or, with
 `--strict`, when a part is not canonical or anything is left over.
+
+Since 0.112 (#334) `store verify` uses the store readers' definition of a part file: every file in
+a facility directory whose name does not start with `_` or `.`, at any level. So it also lists a
+stray `notes.txt`, `README` or Finder `Icon` file (unreadable: the facility's reads fail until it
+is removed), a `x.parquet~` backup, and a part at the facility root or below the month (not
+canonical: the store reads them), and every entry that keeps the research-only check from seeing
+all of a facility (a dangling symlink, a directory it may not list, a symlink loop, files nested
+too deep), which counts as unreadable because `camber mcp` does not serve that facility. A
+directory it may not list (mode 000 or 0o111, at any level, the facility directory included) is
+listed by its store-relative path and the walk goes on, so the counts and `--json` still cover the
+rest of the store, with exit status 1 (#337: it stopped with `Permission denied` before).
 
 `store verify`, `normalize` and `migrate-partitions` (0.107, #215) refuse a path that is not a
 store: missing, a file, or a directory of other things (no partitions, registry or workspace

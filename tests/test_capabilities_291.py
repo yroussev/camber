@@ -225,8 +225,8 @@ def test_the_citation_filter_says_what_it_removed(tmp_path):
     assert res.text.startswith("There are 7 [F1@probe-") and "99" not in res.text
     assert res.text.endswith('The site "No. 5. Saves 77" ok.')
     assert res.banners == [
-        "1 sentence(s) of the summary were removed: they state a figure that no fact they cite "
-        "carries"
+        "1 sentence(s) of the summary were removed: no fact they cite supports a figure, name, "
+        "verdict or negation they state"
     ]
 
 

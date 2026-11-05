@@ -44,9 +44,11 @@ RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /data
 USER appuser
 EXPOSE 8080
-# Liveness: the read API answers GET /health.
+# Liveness: the read API answers GET /health. The check probes it only when the container runs
+# the API (this CMD, or `camber serve`); another command (`camber mcp`, a shell) serves no HTTP and
+# passes (#326). `docker run --no-healthcheck` turns it off.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import os,sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:'+os.environ.get('CAMBER_API_PORT','8080')+'/health',timeout=2).status==200 else 1)"
+    CMD ["python", "-m", "camber._healthcheck"]
 # Default: serve the read-only API over the mounted store (host/port/store from env).
 # Binding 0.0.0.0 needs a Host allowlist (0.103, DNS-rebinding defence): the default answers
 # localhost / 127.0.0.1 on any published port; add the DNS name clients use, e.g.

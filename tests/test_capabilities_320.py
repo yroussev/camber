@@ -371,7 +371,11 @@ def test_a_fact_names_the_conditional_results_not_listed(bias):
     assert fact["value"] == len(ok) and fact["finding_ids"] == [f["finding_id"] for f in ok]
     assert f"{ok[0]['rule']} (ok)" in fact["text"] and f"[{fact['id']}]" in res.text
     # the notice can now be cited: a sentence on it checks out against that fact
-    draft = f"{len(ok)} result(s) not listed here also rest on the suspect sensor [{fact['id']}]."
+    # (0.112, #294: "suspect" is a verdict the fact does not state: said as the fact says it)
+    draft = (
+        f"{len(ok)} result(s) not listed here also rest on an input whose configured sensor "
+        f"reference disagrees with it [{fact['id']}]."
+    )
     check = REG.call("check_citations", {"text": draft, "facts": res.facts}, ctx)
     assert check.data["grounded"] is True
     assert not [f for f in every.facts if f["kind"] == "conditional_not_listed"]

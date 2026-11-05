@@ -193,7 +193,9 @@ def test_rcx_report_facts_name_equipment_as_quoted_defanged_names(tmp_path):
     for eq in MARKUP:
         st.write_role_frame(fx.ahu_frame(weeks=1), facility_id="f", equip=eq, equip_class="AHU")
     res = REG.call("rcx_report", {"facility_id": "f", "top_n": 20, "limit": 200}, _ctx(st.root))
-    texts = [f["text"] for f in res.facts] + [f["text"] for f in res.data["fact_index"]]
+    # 0.112 (#333): the fact index names each fact; its text is in the result's facts only
+    assert {f["id"] for f in res.data["fact_index"]} <= {f["id"] for f in res.facts}
+    texts = [f["text"] for f in res.facts]
     assert texts
     for t in texts:
         assert not any(eq in t for eq in MARKUP), t

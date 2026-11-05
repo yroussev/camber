@@ -549,7 +549,9 @@ rejects their earlier spellings and names the key to use:
 - **Provenance.** The facility's registry entry records, under its `"dataset"` key, the licence,
   citation, DOIs, file checksums, the ingest's content hash, the fault label of every scenario,
   the runs excluded from scoring, the quirks applied, the data issues and whether corrections were
-  applied. Reports read it to print a **Data source & licence** block.
+  applied. Reports read it to print a **Data source & licence** block. Since 0.112 every part file
+  also carries the dataset id, its licence and a research-only flag in its own metadata (see
+  [Provenance in the part files](#provenance-in-the-part-files)).
 - **Idempotent.** Re-running `ingest` with the same inputs is skipped; `--force`, a different
   subset or a different corrections mode (the content hash covers it) replaces the dataset's
   facilities atomically (staged, then swapped in).
@@ -563,6 +565,61 @@ rejects their earlier spellings and names the key to use:
 - **Disk.** `camber datasets info <id>` shows each subset's download size and its estimated size
   once ingested; `ingest` warns when the store's filesystem has less free space than the estimate
   for the subset being ingested (a `full` subset is many times its `default`).
+
+### Provenance in the part files
+
+Since 0.112 (#319), `ingest` writes the dataset's provenance into the key-value metadata of every
+Parquet part file it creates, under the key `camber.provenance`: a small JSON object with the
+`dataset_id`, the `licence` and a `research_only` flag. Your own data (`camber ingest`, `camber
+store` writes, the edge landing) gets no such key, and costs nothing extra.
+
+The key stays with the data. Every CAMBER rewrite keeps it: an append leaves the existing parts as
+they are, `camber store normalize` and `camber store migrate-partitions` rewrite a part with its
+key, a retention rollup (`camber retention apply`) carries the key of the raw parts it summarizes,
+a forced re-ingest writes the new parts with it before the swap, and an archive bundle and its
+restore copy the files byte for byte. A part file copied elsewhere by hand -- one month into a
+test facility, a whole partition under another id, part files merged or renamed, or into
+another store -- carries it too.
+
+The capability registry (`camber mcp`, and the A2A server after it) refuses any part file marked
+research-only, whatever facility id, directory or store it sits in: a facility holding one is
+`refused_licence` before the call runs, and a read inside a tool call refuses such a part even
+when no check named its facility. A facility that mixes marked and unmarked parts is refused as
+a whole. A mark is research-only when its flag says so, when its licence is non-commercial or
+no-derivatives, or when the catalog now holds that dataset research-only; a mark that cannot be
+read (damaged, longer than 4 KB or nested too deep to parse, or with a field missing or of the
+wrong type: a `dataset_id` that is not a non-empty string, a `licence` that is not a string, a
+`research_only` that is not `true` or `false`; #337) counts as research-only, by the same rule
+for the server's checks and `camber datasets provenance`, table and `--json`. The refusal
+names the facility and the dataset, never a path. The check looks at every file a store read
+opens, whatever its name (#329): the store reads every file in a facility directory whose name
+does not start with `_` or `.`, so a part copied in as `x.parq`, `x.PARQUET`, `x` or
+`x.parquet.tmp` is checked like `x.parquet`. A facility the check cannot read in full is refused
+because not all of its files could be checked (`refused_licence` with the reason
+`licence_unverified`, never "marked as research-only", #334): one holding a dangling symlink, a
+directory it may not list, a symlink loop, or files nested more than six levels deep. The check
+goes on past such an entry, so research-only parts after it are still found and named. `camber
+store verify` lists every such entry, and every other file the store reads, so you can find and
+remove it.
+The local commands still read research-only data you have accepted the licence for: `camber
+run`, `camber report` and `camber lab`, with the non-commercial banner on every report. Since
+0.112 (#329) that banner and the licence block come from the part files' marks too, so a report
+built from research-only parts copied into another facility or store carries them.
+
+**Stores ingested before 0.112** have no mark in their part files. The registry checks of 0.111
+still apply to them (#290, #312: a facility named for a research-only dataset, a renamed or
+exactly copied partition), but a partial copy of an unmarked partition is not recognised.
+`camber datasets provenance --store DIR` lists every facility with how many of its parts carry
+provenance, and `--missing` lists those that lack it. A facility that counts as research-only
+without naming a research-only dataset is tagged so in the table, as in `--json` (#334):
+`[mark unreadable: counts as research-only]` (a damaged mark, one longer than 4 KB, or one with
+a field missing or of the wrong type) or `[not
+all files could be checked: counts as research-only]` (`unchecked` in `--json`; such entries are
+not counted as parts); `camber datasets ingest <id> --store DIR
+--force` re-ingests a dataset with provenance in every part.
+
+Reading the key costs one footer read per part file, which the store's reads mostly do anyway;
+the result is kept in memory per facility until a file of its partition changes.
 
 ## Caches, locks and a read-only shared cache
 
@@ -602,7 +659,64 @@ lab and `camber datasets ingest`, no longer get in each other's way:
   is released when its process exits, even after a crash or `kill -9`. A `_lock` file left behind
   is not a stale lock, only stale text, and the next writer takes it over;
 - advisory locks are unreliable on some network filesystems (older NFS, SMB without byte-range
-  locks). Keep a cache that several machines write on a local disk, or give each machine its own.
+  locks). Keep a cache that several machines write on a local disk, or give each machine its own;
+- **a host and a container count as two machines (0.112, #325).** `flock` reaches only the
+  processes of one kernel: a macOS or Windows host and a Docker Desktop container (which runs in a
+  VM) writing one bind-mounted store or cache both got it, and their ingests broke each other's
+  partitions while readers got wrong answers. Since 0.112 a writer also claims `<dir>/_lock.owner`
+  (an exclusive create, which every system sharing the directory sees) and keeps a heartbeat in it
+  while it writes. A writer on the other side waits for it as for the lock, then stops with
+  `… is locked by <pid>@<host> since <time> on another system sharing this directory (kernel …)`.
+  A claim left by a writer that was killed is taken over at once when its process is seen to be
+  gone (same kernel and pid namespace, and its pid has exited or now names a process that started
+  at another time) or, on the same system, the lock shows it gone, else at most 10 seconds after
+  its last heartbeat. Since #330 the `flock` alone no
+  longer counts as that proof: on a Docker Desktop bind mount the `flock` of the process whose
+  open created the lock file excludes nothing, so two containers (or two processes of one
+  container) could both write. A claim from another container of the same VM is now waited for
+  like one from the host. Since #335 a writer never locks through the open that created the lock
+  file, so there the `flock` excludes every container of the VM (they share its kernel), and the
+  claim stays as the second guard. CAMBER 0.111 and older make no claim, and a
+  directory shared by machines whose filesystem does not make an exclusive create atomic (some
+  network filesystems) is not covered. So: **write a store or a cache from one side only** -- the
+  host or containers, not both -- or give each its own copy; mounting it read-only (`:ro`) into
+  every container that only reads is always safe;
+- **a writer that was stopped loses its claim to the other side, and stops (0.112, #330).** A
+  stopped process cannot beat. A writer paused for more than 10 seconds (Ctrl-Z, `docker pause`,
+  a debugger, a sleeping laptop, heavy swapping) has its claim taken over by a writer on the
+  other side, as if it had been killed. When it resumes it does not carry on. Immediately before each step that changes the
+  store, cache or workspace, it checks that the claim still carries its own token: a partition
+  swap or delete, a write fence, a registry, manifest or workspace file write, an append's
+  renames. If the token is gone, the command fails with
+  `… this writer lost its claim on <dir>/_lock.owner -- it was stopped or stalled for over 10 s
+  … and <pid>@<host> since <time> (kernel …) took it over; it stopped before changing anything
+  more, so the directory is as that writer left it; run the command again`. A writer whose last
+  heartbeat is more than 2 seconds old writes one before it checks, so a waiter about to take the
+  claim over sees it alive and starts its 10 seconds again. **What remains:** a writer that stops
+  for more than 10 seconds exactly between that check and the single rename that follows it (a
+  few microseconds of work) completes that one rename after the other side has taken over. When
+  that writer then lets go and finds its claim taken, it fails with `… a step it took after its
+  last check may have overlapped that writer's: check the directory (camber store verify for a
+  store) and run the command again`, so it never reports success. Writing from one side only
+  avoids all of this;
+- **when a claim is taken over, and when it is not (0.112, #335).** "The same system" is one
+  kernel: the host's processes; all the containers of one Docker Desktop VM, which share its
+  kernel; on Linux, the host and its containers.
+
+  | The holder | A writer of the same system | A writer on another system |
+  |---|---|---|
+  | runs | waits; refused when its wait runs out | waits; refused when its wait runs out |
+  | was killed or exited | takes over: at once when it sees the process is gone (same pid namespace: two host processes, or two of one container) or the lock shows it gone (another container, when the writer starts after the kill), else at most 10 s after the last heartbeat (another container, a writer already waiting) | takes over after 10 s without a heartbeat |
+  | is stopped (Ctrl-Z, `docker pause`, a debugger) | **waits**, as for a running holder; refused when its wait runs out | takes over after 10 s without a heartbeat |
+
+  A stopped process still holds its kernel's lock, so every writer of that system honours it: a
+  stopped writer is never taken over there, two writers of one system never overlap, and the
+  stopped one carries on correctly when it resumes. The waiter is refused with `… is locked by
+  <pid>@<host> since <time> -- a writer that is alive but stopped (Ctrl-Z, docker pause, a
+  debugger): its heartbeat has not moved for N s …` once the heartbeat has stood still for 10
+  seconds of its wait (a shorter `--lock-timeout` cannot tell and gives the plain refusal).
+  Resume the stopped writer (`fg`, `docker unpause`) or end it, then run the command again. A
+  writer on another system does not share that lock, so it goes by the heartbeat alone.
 
 Since 0.104 the store lock covers every writer of a plain store, not just `camber datasets` and
 `camber lab`: `camber interop openfdd ingest`, `camber store migrate-partitions --apply`, `camber
@@ -620,7 +734,10 @@ folder on a shared drive that one person filled, now works:
 - **Ingest** reads the downloads where they are. Archive members already extracted in the cache
   are used as they are. Members it still needs are extracted into a scratch folder next to the
   ingest's staging area in the **store** (`<store>/_staging/`), which is deleted when the ingest
-  ends. So the store's disk needs room for them while the ingest runs, and each ingest extracts
+  ends. One left by a killed ingest is removed by the next ingest into that store. Since 0.112
+  (#330) each staging directory records its writer (pid, kernel, pid namespace, start time) in
+  `_owner.json`, because pid 1 is alive on every system: a killed pid-1 container ingest's
+  `ingest-1-*` used to stay forever. So the store's disk needs room for them while the ingest runs, and each ingest extracts
   them again. To avoid that, whoever fills the cache can ingest each dataset once, which leaves
   its members extracted there.
 - **Research-only acknowledgements are per user.** Against a read-only cache, your

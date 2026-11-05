@@ -130,7 +130,7 @@ all = [
 ]
 
 [project.scripts]
-camber = "camber.cli:main"
+camber = "camber.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["camber*"]

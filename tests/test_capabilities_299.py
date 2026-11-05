@@ -34,7 +34,7 @@ from camber.capabilities import (  # noqa: E402
     default_registry,
 )
 from camber.capabilities._page import page  # noqa: E402
-from camber.mcp import McpServer  # noqa: E402
+from camber.mcp import RESULT_KEY, McpServer  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 
 FID = fx.FID
@@ -118,12 +118,12 @@ def test_rcx_report_pages_appendix_a(store):
 def test_coverage_cut_gaps_set_truncated(store):
     ctx = _ctx(store)
     res = REG.call("coverage", {"facility_id": "holey"}, ctx)
-    assert len(res.data["gaps"]) == 50 and res.truncated
-    assert any("'gaps' shows rows 1-50 of" in b and "offset=50" in b for b in res.banners)
+    assert len(res.data["gaps"]) == 20 and res.truncated  # 50 before 0.112 (#333)
+    assert any("'gaps' shows rows 1-20 of" in b and "offset=20" in b for b in res.banners)
     every = REG.call("coverage", {"facility_id": "holey", "limit": 1000}, ctx)
-    assert len(every.data["gaps"]) > 50 and not every.truncated
-    nxt = REG.call("coverage", {"facility_id": "holey", "offset": 50}, ctx)
-    assert nxt.data["gaps"][0] == every.data["gaps"][50]
+    assert len(every.data["gaps"]) > 20 and not every.truncated
+    nxt = REG.call("coverage", {"facility_id": "holey", "offset": 20}, ctx)
+    assert nxt.data["gaps"][0] == every.data["gaps"][20]
 
 
 def test_a_page_sets_truncated_even_when_the_handler_does_not(store):
@@ -149,8 +149,7 @@ def test_a_page_sets_truncated_even_when_the_handler_does_not(store):
     res = reg.call("paged", {}, ctx)
     assert res.data["rows"] == list(range(10)) and res.truncated
     assert res.banners == [
-        "'rows' shows rows 1-10 of 30: call again with offset=10 for the next page, or a larger "
-        "limit (up to 1000)"
+        "'rows' shows rows 1-10 of 30: call again with offset=10 for the next page"
     ]
     assert not reg.call("paged", {"limit": 30}, ctx).truncated
     past = reg.call("paged", {"offset": 99}, ctx)
@@ -226,11 +225,14 @@ def test_mcp_counts_the_whole_reply(store, modern):
     res = _mcp(reg, _ctx(store, caps=Caps(max_bytes=10_000)), modern)
     assert res["isError"] is True and res["_meta"]["camber/error"]["code"] == "too_large"
     assert res["_meta"]["camber/error"]["data"]["bytes"] > 10_000
-    # under a larger cap: one compact JSON text block that matches structuredContent
+    # under a larger cap: one compact JSON text block that matches structuredContent, less the
+    # facts and notices it repeats (0.112, #331: they are the text blocks' own)
     res = _mcp(reg, _ctx(store, caps=Caps(max_bytes=100_000)), modern)
     summary, block = res["content"]
     assert summary["text"] == "Rows." and res["isError"] is False
-    assert block["text"] == json.dumps(res["structuredContent"], separators=(",", ":"))
+    rest = {k: v for k, v in res["structuredContent"].items() if k != RESULT_KEY}
+    assert block["text"] == json.dumps(rest, separators=(",", ":"))
+    assert res["structuredContent"][RESULT_KEY] == {"facts": {}, "notices": []}
 
 
 # --------------------------------------------------------------------------- compact defaults
@@ -258,10 +260,13 @@ def test_check_citations_is_compact_by_default(store):
 def test_rule_params_default_page_and_slim_facts(store):
     ctx = _ctx(store)
     res = REG.call("rule_params", {}, ctx)
-    assert len(res.data["rules"]) == 25 < res.data["count"] and res.truncated
+    # 25 and 10 before 0.112 (#333)
+    assert len(res.data["rules"]) == 15 < res.data["count"] and res.truncated
     detail = REG.call("rule_params", {"detail": True}, ctx)
-    assert len(detail.data["rules"]) == 10 and detail.truncated
+    assert len(detail.data["rules"]) == 7 and detail.truncated
     for f in detail.facts[1:]:  # a fact keeps the figures, not the prose
+        if f["kind"] == "notice":  # 0.112 (#294): a banner's own fact
+            continue
         assert all(set(p) <= {"name", "default", "unit", "range"} for p in f["params"])
     assert any("basis" in p for r in detail.data["rules"] for p in r["params"])
 
@@ -273,7 +278,10 @@ def test_the_tool_list_is_shorter():
     )
     tools = out["result"]["tools"]
     size = len(json.dumps(tools, separators=(",", ":"), ensure_ascii=False))
-    assert size < 45_000, size  # 48 KB in 0.110.0
+    # 48 KB in 0.110.0, 44.6 KB in 0.111.0; 0.112 adds the claim, unit and reason fields (45.0
+    # KB) and declares the facts and notices of structuredContent in every output schema (#331:
+    # 127 bytes a tool; an outputSchema is a document of its own, so a $ref cannot share one)
+    assert size < 48_000, size
     for t in tools:
         assert "$schema" not in t["inputSchema"] and "$schema" not in t["outputSchema"]
         assert "title" not in t["annotations"] and t["title"]

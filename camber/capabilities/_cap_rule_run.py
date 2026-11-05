@@ -24,6 +24,7 @@ from ._common import (
     MASK,
     SEVERITIES,
     SEVERITY,
+    _step_hours,
     by_severity,
     check_run_selection,
     cite,
@@ -32,6 +33,8 @@ from ._common import (
     finding_fact,
     finding_ids,
     finding_row,
+    flat_fact,
+    flat_roles,
     is_fleet_id,
     jsonable,
     mask_summary,
@@ -39,13 +42,18 @@ from ._common import (
     reference_conditions,
     reference_findings,
     reference_notes_banner,
+    role_unit,
     rule_names,
     run,
     severity_counts,
+    subject,
+    summary_text,
     trust_banner,
     trust_declines,
+    when,
     window,
     with_rules,
+    with_unit,
 )
 from ._page import OFFSET, limit_arg, page
 from ._sanitize import name, plain
@@ -80,7 +88,7 @@ _RUN_ARGS = {
 }
 
 #: findings (and skipped rules) per page by default (#299): about 60 KB on the wire
-_PAGE = 25
+_PAGE = 12  # 25 before 0.112 (#333): a page fits a host's tool-output limit
 
 RULE_RUN_INPUT = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -169,14 +177,16 @@ def _run_for(ctx, arguments: dict):
     return run(ctx, config, base_dir), from_caller, notice, (start, end)
 
 
-def _rows(ctx, fid: str, res, notes: list | None = None) -> list:
+def _rows(ctx, fid: str, res, notes: list | None = None, refs_out: list | None = None) -> list:
     """The run's findings as rows, each marked ``conditional_on`` the configured sensor
     references of its inputs that disagree (0.111, #313); what could not be compared is added
-    to ``notes`` (#320)."""
+    to ``notes`` (#320), and the comparisons to ``refs_out`` (0.112, #294)."""
     ids = finding_ids(res.findings)
     refs, ref_notes = reference_findings(ctx, fid, res)
     if notes is not None:
         notes.extend(ref_notes)
+    if refs_out is not None:
+        refs_out.extend(refs)
     conds = reference_conditions(res.findings, refs, getattr(res, "registry", None))
     rows = []
     for i, f, cond in zip(ids, res.findings, conds):
@@ -243,8 +253,14 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         f"{len(every_skip)} rule-equipment pair(s) ({n_skip_rules} rule(s)) skipped for missing "
         "inputs"
     )
+    if every_skip:  # 0.112 (#328): what a sentence saying "not judged" can cite
+        skips += ": those pairs were not judged"
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
-    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
+    declined = (
+        f"; {len(declines)} check(s) declined on untrusted input(s): those checks were not judged"
+        if declines
+        else ""
+    )
     facts = [
         {
             "id": "F1@rule_run",
@@ -252,9 +268,11 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             "facility_id": fid,
             "value": len(rows),
             "counts": counts,
+            # the verdicts count rule-equipment results, not rules (#339)
             "text": f"{n_rules} rules were run on {res.equipment} equipment of {fid} and "
-            f"{n_found} of them returned a result: {counts['fault']} fault, {counts['warn']} warn, "
-            f"{counts['info']} info and {counts['ok']} ok; {skips}{declined}",
+            f"{n_found} of them returned a result, {len(rows)} rule-equipment result(s) in all: "
+            f"{counts['fault']} fault, {counts['warn']} warn, {counts['info']} info and "
+            f"{counts['ok']} ok; {skips}{declined}",
         }
     ]
     text = [
@@ -266,7 +284,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
     for i, r in enumerate(shown[:_FACTS], start=2):
         fact_id = f"F{i}@rule_run"
         r["fact"] = fact_id
-        facts.append(finding_fact(fact_id, r))
+        facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
     banners = [config_notice] if config_notice else []
@@ -454,15 +472,21 @@ def _chart(ev) -> dict | None:
     return out
 
 
-def _violations(ev, frame):
+def _flag_mask(ev, frame) -> tuple:
+    """``(mask, basis)``: the flagged samples of the evidence ``ev`` (``(None, None)``: none)."""
     if ev is None:
-        return None
+        return None, None
     mask, basis = ev.mask, getattr(ev, "judged_basis", None) or None
     if mask is None and ev.template is not None:
         from ..charts.diagnostic import template_violations
 
         mask = template_violations(ev.frame if ev.frame is not None else frame, ev.template)
         basis = basis or "samples on the evidence chart"  # the rows with both template inputs
+    return mask, basis
+
+
+def _violations(ev, frame):
+    mask, basis = _flag_mask(ev, frame)
     if mask is None:
         return None
     return mask_summary(
@@ -547,6 +571,195 @@ def _parameters(rule: str, entry_params: dict, rule_obj=None) -> list:
     return out
 
 
+#: the spans of one named condition given their own fact (the longest), besides the union's
+_COND_SPANS = 5
+
+
+def _span_facts(fid: str, row: dict, viol: dict, conditions: list) -> list:
+    """One fact per flagged span (0.112, #294): the spans ``violations`` lists (the longest 20,
+    in time order), then those of each named condition the union does not list already (its
+    longest five), so a sentence giving a span's dates or hours can be cited."""
+    equip, rule = row["equip"], row["rule"]
+    who = f"{name(equip, own=is_fleet_id(rule, equip))} {rule}"
+    out: list = []
+
+    def add(span: dict, k: int, listed: int, total: int, condition: str | None = None):
+        of = f"{k} of {total}" if listed == total else f"{k} of the {listed} longest of {total}"
+        what = f" ({condition})" if condition else ""
+        out.append(
+            {
+                "id": f"S{len(out) + 1}@finding_detail",
+                "kind": "evidence_span",
+                "value": span["hours"],
+                "unit": "h",
+                "subject": subject(fid, equip, condition=condition),
+                "finding_id": row["finding_id"],
+                "start": span["start"],
+                "end": span["end"],
+                "text": f"{who} flagged span{what} {of} in time order: {when(span['start'])} to "
+                f"{when(span['end'])}, {span['hours']:g} hours",
+            }
+        )
+
+    spans = viol.get("spans") or []
+    for k, sp in enumerate(spans, start=1):
+        add(sp, k, len(spans), viol["n_spans"])
+    union = {(sp["start"], sp["end"]) for sp in spans}
+    for c in conditions:
+        own = [sp for sp in c["spans"] if (sp["start"], sp["end"]) not in union]
+        if not own or c["spans"] == spans:
+            continue
+        longest = sorted(own, key=lambda sp: (-sp["hours"], sp["start"]))[:_COND_SPANS]
+        longest.sort(key=lambda sp: sp["start"])
+        for k, sp in enumerate(longest, start=1):
+            add(sp, k, len(longest), c["n_spans"], condition=c["name"])
+    return out
+
+
+def _input_roles(rule_obj, rule: str) -> set:
+    """The role slugs ``rule``'s verdict reads (required, optional and any-of inputs)."""
+    from ..rules.triage import _rule_roles
+
+    return _rule_roles({rule: rule_obj}, rule) if rule_obj is not None else set()
+
+
+def _rejudged(rule_obj, equip: str, frame, severity: str, corrections: dict):
+    """The finding ``rule_obj`` gives ``equip`` with each point of ``corrections`` (``{role slug:
+    bias}``) corrected by its bias, or ``None`` when the rule cannot be re-judged on its own
+    frame (a fleet rule, a rule that does not give back ``severity`` on the frame as it is)."""
+    if rule_obj is None or hasattr(rule_obj, "analyze_fleet") or not hasattr(rule_obj, "analyze"):
+        return None
+    if frame is None or frame.empty:
+        return None
+    fixed = frame.copy()
+    hit = False
+    for col in frame.columns:
+        bias = corrections.get(str(jsonable(col)))
+        if bias is not None:
+            fixed[col] = pd.to_numeric(fixed[col], errors="coerce") - float(bias)
+            hit = True
+    if not hit:
+        return None
+    try:
+        again = rule_obj.analyze(equip, frame)
+        if again is None or str(again.severity) != severity:
+            return None
+        return rule_obj.analyze(equip, fixed)
+    except Exception:  # noqa: BLE001 - a rule that cannot re-run says nothing here
+        return None
+
+
+#: what a re-judged finding means, by verdict
+_EFFECT = {
+    "explained": "so the finding is explained by the sensor offset",
+    "reduced": "so the sensor offset explains part of the finding, not all of it",
+    "persists": "so the finding stands with the offset taken off: the offset does not explain it",
+    "worse": "so the finding is worse with the offset taken off",
+}
+
+
+def _reference_facts(fid, f, row: dict, rule_obj, frame, refs: list, mask) -> list:
+    """The facts relating the configured sensor references to one finding (0.112, #294).
+
+    For the disagreeing references the finding is ``conditional_on``: the rule re-judged on its
+    own frame with those points corrected by their bias, and whether that explains the finding.
+    For every reference on an input of the finding (a passing one too): how many of its flagged
+    hours fall in the window the comparison covers, since a bias measured on other days says
+    less about them."""
+    from ..rules.triage import _taints, sensor_causes
+
+    roles = _input_roles(rule_obj, f.rule)
+    if not roles or not refs:
+        return []
+    equip, own = str(f.equip), is_fleet_id(str(f.rule), str(f.equip))
+    who = f"{name(equip, own=own)} {f.rule} ({f.severity})"
+    tainting = [c.source for c in sensor_causes(refs) if _taints(c, equip, roles)]
+    out: list = []
+    corrections: dict = {}
+    for r in tainting:
+        bias = jsonable((r.metrics or {}).get("bias"))
+        if isinstance(bias, (int, float)):
+            corrections[str(r.rule).split(":", 1)[1]] = float(bias)
+    again = _rejudged(rule_obj, equip, frame, str(f.severity), corrections) if corrections else None
+    if again is not None:
+        before, after = SEVERITIES.index(str(f.severity)), SEVERITIES.index(str(again.severity))
+        if after == before:
+            verdict = "persists"
+        elif after < before:
+            verdict = "worse"
+        else:
+            verdict = "explained" if again.severity in ("ok", "info") else "reduced"
+        taken = ", ".join(
+            f"{name(k)} by {with_unit(-v, role_unit(k), '+.1f')}"
+            for k, v in sorted(corrections.items())
+        )
+        out.append(
+            {
+                "id": "R1@finding_detail",
+                "kind": "reference_effect",
+                "value": str(again.severity),
+                "verdict": verdict,
+                "subject": subject(fid, equip, finding=row["finding_id"]),
+                "bias": {k: round(v, 3) for k, v in sorted(corrections.items())},
+                "bias_unit": {k: role_unit(k) for k in sorted(corrections)},
+                "severity": str(f.severity),
+                "text": f"{who} re-judged with its input(s) corrected for the configured "
+                f"reference's bias ({taken}): {again.severity}, "
+                f"{summary_text(equip, again.summary, own=own)}; {_EFFECT[verdict]}",
+            }
+        )
+    flagged = None
+    if mask is not None:
+        m = pd.Series(mask).fillna(False).astype(bool)
+        if isinstance(m.index, pd.DatetimeIndex) and m.any():
+            flagged = m[m]
+    if flagged is None:
+        return out
+    step = _step_hours(pd.Series(mask).index)
+    total = len(flagged) * step
+    for r in sorted(refs, key=lambda r: (str(r.rule), str(r.equip))):
+        role = str(r.rule).split(":", 1)[1]
+        m = r.metrics or {}
+        on_input = role in roles and (str(r.equip) == equip or any(r is t for t in tainting))
+        if not on_input or not m.get("overlap_start") or not m.get("overlap_end"):
+            continue
+        w0, w1 = pd.Timestamp(m["overlap_start"]), pd.Timestamp(m["overlap_end"])
+        idx = flagged.index
+        try:
+            inside = int(((idx >= w0) & (idx <= w1)).sum())
+        except TypeError:  # one side time-zone aware, the other not: not comparable
+            continue
+        hours = round(inside * step, 2)
+        verdict = "outside" if inside == 0 else "inside" if inside == len(flagged) else "partly"
+        lead_in = {
+            "outside": f"None of the {total:g} flagged hours of {who} falls",
+            "inside": f"All {total:g} flagged hours of {who} fall",
+            "partly": f"{hours:g} of the {total:g} flagged hours of {who} fall",
+        }[verdict]
+        tail = (
+            ": the reference measured the sensor on other days than the finding's evidence"
+            if verdict == "outside"
+            else ""
+        )
+        out.append(
+            {
+                "id": f"R{len(out) + 1}@finding_detail",
+                "kind": "reference_window",
+                "value": hours,
+                "unit": "h",
+                "verdict": verdict,
+                "subject": subject(fid, equip, role, finding=row["finding_id"]),
+                "flagged_hours": round(total, 2),
+                "overlap_start": str(m["overlap_start"]),
+                "overlap_end": str(m["overlap_end"]),
+                "text": f"{lead_in} in the window the {name(role)} reference comparison on "
+                f"{name(str(r.equip))} covers ({when(w0)} to {when(w1)}, "
+                f"{str(r.severity)}){tail}",
+            }
+        )
+    return out
+
+
 def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     """One finding of a rule run, with its metrics, parameters and evidence hours."""
     from ..charts.evidence import finding_evidence
@@ -568,7 +781,8 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
             f"no finding {want!r} in this run (call rule_run with the same arguments to list "
             "the finding ids)",
         )
-    row = next(r for r in _rows(ctx, fid, res) if r["finding_id"] == want)
+    refs: list = []
+    row = next(r for r in _rows(ctx, fid, res, refs_out=refs) if r["finding_id"] == want)
     entry = next(
         (e for e in res.config.get("rules") or [] if isinstance(e, dict) and e.get("name") == rule),
         {},
@@ -583,9 +797,10 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
         ev, failed = None, True
     chart = _chart(ev)
     try:
+        mask = _flag_mask(ev, frame)[0]
         viol = _violations(ev, frame)
     except Exception:  # noqa: BLE001 - as above
-        viol, failed = None, True
+        viol, mask, failed = None, None, True
     note = None if viol is not None else _no_spans_note(rule_obj, ev, failed)
     conditions = []
     masks = getattr(ev, "masks", None) if ev is not None else None
@@ -603,21 +818,28 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     params = _parameters(rule, dict(entry.get("params") or {}), rule_obj)
 
     row["fact"] = "F1@finding_detail"
-    facts = [finding_fact("F1@finding_detail", row)]
+    facts = [finding_fact("F1@finding_detail", row, fid)]
     text = [cite(facts[0])]
     if viol is not None:
         events = ""
         if viol.get("events") is not None:
             events = f" covering {viol['events']} counted event(s)"
+        # 0.112 (#294): the longest span too, and the figures as fields
+        longest = max((sp["hours"] for sp in viol.get("spans") or []), default=0.0)
+        tail = f", the longest {longest:g} hours" if viol["n_spans"] else ""
         facts.append(
             {
                 "id": "F2@finding_detail",
                 "kind": "evidence_hours",
                 "value": viol["hours"],
+                "unit": "h",
+                "subject": subject(fid, row["equip"], finding=row["finding_id"]),
                 "text": f"The rule flagged {viol['hours']:g} hours{events} ({viol['samples']} "
                 f"of {viol['judged_samples']} judged {viol['judged_basis']}, "
-                f"{viol['share']:.1%}) in {viol['n_spans']} contiguous span(s)",
+                f"{viol['share']:.1%}) in {viol['n_spans']} contiguous span(s){tail}",
                 "share": viol["share"],
+                "n_spans": viol["n_spans"],
+                "longest_span_hours": longest,
             }
         )
         text.append(cite(facts[-1]))
@@ -633,6 +855,10 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                     "id": f"F{n}@finding_detail",
                     "kind": "condition_hours",
                     "value": c["hours"],
+                    "unit": "h",
+                    "subject": subject(
+                        fid, row["equip"], condition=c["name"], finding=row["finding_id"]
+                    ),
                     "text": f"{c['name']}: the rule flagged {c['hours']:g} hours ({c['samples']} "
                     f"of {c['judged_samples']} judged {c['judged_basis']}, {c['share']:.1%})",
                     "share": c["share"],
@@ -652,6 +878,7 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "id": f"F{n}@finding_detail",
                 "kind": "parameters",
                 "value": len(params),
+                "subject": subject(fid, row["equip"], finding=row["finding_id"]),
                 "text": f"{rule} ran with {listed}",
             }
         )
@@ -667,6 +894,19 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
             }
         )
         text.append(cite(facts[-1]))
+    # 0.112 (#294): the spans, the inputs that never move, and what the sensor references say
+    # about this finding, each a fact
+    if viol is not None:
+        facts.extend(_span_facts(fid, row, viol, conditions))
+    flat = flat_roles(frame, _input_roles(rule_obj, rule)) if not is_fleet_id(rule, f.equip) else {}
+    for k, (role, info) in enumerate(sorted(flat.items()), start=1):
+        facts.append(
+            flat_fact(f"L{k}@finding_detail", fid, f.equip, role, info, why=f"{rule} reads it")
+        )
+        text.append(cite(facts[-1]))
+    for fact in _reference_facts(fid, f, row, rule_obj, frame, refs, mask):
+        facts.append(fact)
+        text.append(cite(fact))
     data = {
         "facility_id": fid,
         "finding": row,

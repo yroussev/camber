@@ -193,7 +193,10 @@ def test_a_damaged_facility_does_not_hide_the_others_on_a_stale_catalog(tmp_path
     _poison(st, ["annex"])
     ctx = CallContext(store=st.root, allowed_facilities=frozenset({FID, *OTHERS}))
     rows = {r["facility_id"]: r for r in REG.call("facilities", {}, ctx).data["facilities"]}
-    assert rows["annex"]["unavailable"] == {"retryable": False} and rows["annex"]["start"] is None
+    assert (
+        rows["annex"]["unavailable"] == {"retryable": False, "reason": "unreadable"}
+        and rows["annex"]["start"] is None
+    )
     assert "unavailable" not in rows[FID] and rows[FID]["n_points"] == 18
     assert "unavailable" not in rows["campus"] and rows["campus"]["n_equipment"] == 3
     assert REG.call("points", {"facility_id": "campus"}, ctx).data["count"] == 27

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -47,6 +48,7 @@ _STORE_FILES = (FENCE_DIR, "_facilities.json", "_lock", "_catalog.gen", "_catalo
 _WAIT = 1.0  # seconds a reader waits for a busy writer before it gives up (retryable)
 _POLL = 0.02
 _PID_MAX = 2**31 - 1  # pid_t is 32 bits: a larger pid names no process (#321)
+_PID_TEXT = re.compile(r"[0-9]{1,10}")  # 2**31 - 1 has 10 digits (#322)
 _SWAP_ENDS = (".old", ".ready")  # a partition swap stopped inside its fence leaves one (._swap)
 
 _DEPTH: dict = {}  # (root, fid) -> [owning thread, how many fences it holds there (they nest)]
@@ -140,6 +142,9 @@ def fence(root: str, fid: str):
         held[1] += 1
     try:
         if depth == 0:
+            from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+            confirm_claims()  # 0.112 (#330): a writer whose claim was taken over stops here
             pid = os.getpid()
             _write(root, fid, f"busy {pid} {_started(pid) or '-'} {os.urandom(8).hex()}\n")
         yield
@@ -195,8 +200,9 @@ def _mid_swap(root: str, fid: str) -> bool:
 def _busy(root: str, fid: str, words) -> bool:
     """Whether the writer a fence's ``words`` name is still at work: its process is alive and,
     when the marker records it, started when that writer did (else the pid was reused, #317).
-    A malformed marker, or one whose pid no process can have, names no writer (#321)."""
-    if len(words) not in (3, 4) or words[0] != "busy" or not words[1].isdigit():
+    A malformed marker, or one whose pid no process can have, names no writer (#321): the pid
+    must be 1-10 ASCII digits, checked before ``int()``, which refuses over 4,300 digits (#322)."""
+    if len(words) not in (3, 4) or words[0] != "busy" or not _PID_TEXT.fullmatch(words[1]):
         return False
     from ._leftovers import _process_alive
 

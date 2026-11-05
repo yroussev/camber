@@ -462,7 +462,7 @@ def test_a_second_call_with_an_id_in_progress_is_refused(session):
     at, msg = s.reply()
     assert at - t0 < 0.5 and msg["id"] == 7 and msg["error"]["code"] == -32600
     _, msg = s.reply()
-    assert msg["id"] == 7 and msg["result"]["structuredContent"] == {"slept": True}
+    assert msg["id"] == 7 and msg["result"]["structuredContent"]["slept"] is True
     s.call(7, "pid")  # free again once answered
     assert "pid" in s.reply()[1]["result"]["structuredContent"]
     with pytest.raises(queue.Empty):
@@ -605,7 +605,10 @@ def test_a_dir_name_with_no_valid_pid_never_breaks_the_sweep(tmp_path, monkeypat
     path = _launch.isolate_matplotlib()
     assert path and os.path.isdir(path) and os.path.dirname(path) == str(tmp_path)
     assert os.environ["MPLCONFIGDIR"] == path
+    os.remove(os.path.join(path, _launch._MPL_OWNER))  # the server's lock file (#326)
     os.rmdir(path)
+    while _launch._MPL_LOCKS:
+        os.close(_launch._MPL_LOCKS.pop())
 
 
 def _die_dir(tmp_path, monkeypatch, tokens: int):
@@ -711,6 +714,27 @@ def test_a_worker_keeps_the_memory_its_usual_calls_need(session):
     assert _wait_dead([first], 3.0)
     fresh = _wait_for(lambda: s.note_pids(), 30.0)
     assert fresh and fresh != [first]
+
+
+def test_a_worker_reports_its_own_peak_memory_not_its_parents():
+    # Linux's ru_maxrss keeps the peak of the process that started it across exec: a worker of
+    # a parent that once held 400 MB reported 400 MB as its own, and was never recycled
+    root = os.path.dirname(os.path.dirname(HERE))
+    child = (
+        f"import sys; sys.path.insert(0, {root!r}); "
+        "from camber.mcp._workers import _peak_rss; print(_peak_rss())"
+    )
+    parent = (
+        "import subprocess, sys\n"
+        "big = bytearray(400 << 20)\n"
+        "for i in range(0, len(big), 4096): big[i] = 1\n"
+        "del big\n"
+        f"subprocess.run([sys.executable, '-I', '-c', {child!r}], start_new_session=True)\n"
+    )
+    out = subprocess.run([sys.executable, "-I", "-c", parent], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    peak = int(out.stdout)
+    assert 0 < peak < 300 << 20, peak >> 20
 
 
 def _driver(tmp_path, **kw):

@@ -612,8 +612,10 @@ def test_check_citations_judges_each_sentence(results, site):
     assert compact["verdicts"] == {
         "supported": 2,
         "unknown_citation": 1,
+        "forgotten_citation": 0,  # 0.112 (#294)
         "uncited": 1,
         "unsupported_number": 1,
+        "unsupported_claim": 0,  # 0.112 (#294)
     }
     loose = reg.call(
         "check_citations",
@@ -671,7 +673,8 @@ def test_prompt_renders(name):
     assert "check_citations" in text and "fact id" in text
     named = set(re.findall(r"\b[Cc]all ([a-z_]+) (?:with|for|on)\b", text))
     assert named and named <= caps, named - caps
-    assert text.rstrip().endswith("give the corrected text.")
+    assert text.rstrip().endswith("as the corrected text.")
+    assert "check_citations again on the revised draft" in text  # #332: re-check before giving it
     assert prompt.title and prompt.description
     required = [a.name for a in prompt.arguments if a.required]
     assert required[0] == "facility_id"

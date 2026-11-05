@@ -22,6 +22,8 @@ from ._common import (
     cite,
     facility_config,
     finding_ids,
+    flat_fact,
+    flat_roles,
     is_fleet_id,
     jsonable,
     narrow,
@@ -29,16 +31,22 @@ from ._common import (
     reference_notes_banner,
     rule_names,
     run,
+    subject,
     trust_banner,
     trust_declines,
     window,
     with_rules,
 )
-from ._page import MAX_LIMIT, OFFSET, limit_arg, page
+from ._page import MAX_LIMIT, OFFSET, fits, limit_arg, page
 from ._sanitize import name, plain
 
-#: appendix A facts (declines and data gaps) returned by default (#299)
-_APPENDIX = 20
+#: appendix A facts (declines and data gaps) returned by default (#299; 20 before 0.112, #333)
+_APPENDIX = 5
+#: the most ranked issues returned by default: as many as fit :data:`~._page.RESULT_CHARS`
+#: (0.112, #333; before, the config's top_n, else 8)
+_ISSUES = 8
+#: room left in the budget for the page notices (and their facts), added after the page is chosen
+_NOTICE_ROOM = 1000
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -54,10 +62,11 @@ INPUT_SCHEMA = {
             "type": "integer",
             "minimum": 1,
             "maximum": 200,
-            "description": "issues to return, best ranked first (default: the config's, else 8)",
+            "description": "issues to return, best ranked first (default: as many as fit, up to "
+            f"{_ISSUES})",
         },
         "offset": {**OFFSET, "description": "ranked issues to skip, for the next page"},
-        "limit": limit_arg(_APPENDIX, "the fact index's appendix A (declines, data gaps)"),
+        "limit": limit_arg(_APPENDIX, "appendix A facts (declines, data gaps)"),
     },
 }
 
@@ -118,14 +127,9 @@ _ISSUE = {
 
 _FACT = {
     "type": "object",
-    "required": ["id", "kind", "equip", "text"],
+    "required": ["id", "kind"],
     "additionalProperties": False,
-    "properties": {
-        "id": {"type": "string"},
-        "kind": {"type": "string"},
-        "equip": {"type": "string"},
-        "text": {"type": "string"},
-    },
+    "properties": {"id": {"type": "string"}, "kind": {"type": "string"}},
 }
 
 OUTPUT_SCHEMA = {
@@ -164,13 +168,16 @@ OUTPUT_SCHEMA = {
             "type": "array",
             "items": _FACT,
             "description": "the report's fact index for the KPIs, the appendices and the "
-            "issues returned (ids such as K1@summary-<token>); also in the result's facts",
+            "issues returned (ids such as K1@summary-<token>), in the report's order; each "
+            "fact's text and equipment are in the result's facts (0.112, #333: not repeated here)",
         },
     },
 }
 
 #: ranked issues named in the summary
 _LISTED = 5
+#: points that never move, relied on by the issues returned, given a fact (0.112, #294)
+_FLAT = 50
 
 
 def _options(config: dict, base_dir: str, top_n):
@@ -210,20 +217,11 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         banners.insert(0, notice)
     rep = build_rcx_report(res, options=opts)
     d = rep.to_dict()
-    # 0.111 (#299): top_n is the page of ranked issues returned, with their facts and sections
-    every = {str(i["key"]) for i in d["issues"]}
+    # 0.111 (#299): top_n is the page of ranked issues returned, with their facts and sections;
+    # 0.112 (#333): by default as many of the best ranked as fit a host's tool-output limit
+    ranked = sorted(d["issues"], key=lambda i: int(i["rank"]))
+    every = {str(i["key"]) for i in ranked}
     offset = arguments.get("offset") or 0
-    shown = page(
-        d["issues"],
-        {"limit": max(int(opts.top_n), 1), "offset": offset},
-        default=8,
-        what="issues",
-        order="best ranked first",
-        how=f"call again with offset={offset + max(int(opts.top_n), 1)} or a larger top_n "
-        "(up to 200)",
-        more="kpis count every issue",
-    )
-    left_out = every - {str(i["key"]) for i in shown}
     # appendix A (declines and data gaps) has an entry per rule and equipment: a page of it
     every_fact = rep.facts.facts if rep.facts is not None else []
     appendix = [f.id for f in every_fact if f.id.partition("@")[2] == "appA"]
@@ -234,34 +232,20 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
             default=_APPENDIX,
             what="fact_index appendix A",
             order="as in the report",
-            how=f"call again with a larger limit (up to {MAX_LIMIT})",
+            how=f"call again with limit={min(len(appendix), MAX_LIMIT)} for all of it",
         )
     )
-    left_out |= {"appA"} if len(kept) < len(appendix) else set()
-
-    index = []
-    facts = []
     names = _names_pattern(res, every_fact)
     # 0.111 (#320): "<fleet>" in the report's text is the fleet unless a unit is stored with it
     fleet_own = FLEET not in {str(getattr(r, "equip", "")) for r in getattr(res, "refs", ()) or ()}
-    for f in every_fact:
-        if f.id.partition("@")[2] in left_out and f.id not in kept:
-            continue
-        # 0.111 (#318): the report's fact text names equipment as summaries and finding facts do
-        f_text = names.sub(lambda m: name(m.group(0), own=fleet_own), f.text) if names else f.text
-        index.append({"id": f.id, "kind": f.kind, "equip": f.equip or "", "text": plain(f_text)})
-        facts.append(
-            {
-                "id": f.id,
-                "kind": f.kind,
-                "equip": f.equip or "",
-                "text": f_text,
-                "data": jsonable(f.data),
-            }
-        )
+
     k = d["kpis"]
     declines, floor = trust_declines(res.findings)  # 0.111 (#297)
-    declined = f"; {len(declines)} check(s) declined on untrusted input(s)" if declines else ""
+    declined = (
+        f"; {len(declines)} check(s) declined on untrusted input(s): those checks were not judged"
+        if declines
+        else ""
+    )
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)
@@ -291,69 +275,170 @@ def rcx_report(ctx, arguments: dict) -> CapabilityResult:
         ids = [id_of[id(f)] for f in found if id(f) in id_of and f.rule in rule_set]
         return list(dict.fromkeys(ids))[:20]
 
-    issues = []
-    text = [cite(head)]
-    for i, iss in enumerate(shown, start=2):
-        fact_id = f"F{i}@rcx_report"
-        cost_v = jsonable(iss.get("cost"))
-        cost_v = cost_v if isinstance(cost_v, (int, float)) else None
-        row = {
-            "key": str(iss["key"]),
-            "rank": int(iss["rank"]),
-            "heading": plain(str(iss.get("heading") or iss.get("title") or "")),
-            "title": str(iss.get("title") or ""),
-            "cause": plain(str(iss.get("cause") or "")),
-            "equip": str(iss.get("equip") or ""),
-            "severity": str(iss.get("severity") or ""),
-            "rules": list(dict.fromkeys(str(r) for r in iss.get("rules") or [])),
-            "finding_ids": _ids(str(iss["key"])),
-            "annual_cost_usd": cost_v,
-            "cost_basis_note": plain(str(iss.get("cost_basis_note") or "")),
-            "hours": jsonable(iss.get("hours_union")),
-            "pct_runtime": jsonable(iss.get("pct_runtime")),
-            "confidence": str(iss.get("confidence") or ""),
-            "conditional_on": [str(c) for c in iss.get("conditional_on") or []],
-            "why": [plain(str(w)) for w in iss.get("why") or []],
-            "fact": fact_id,
-        }
-        issues.append(row)
-        money = f"${cost_v:,.0f}/yr" if cost_v else "uncosted"
-        # 0.111 (#297): an issue that rests on a sensor a reference found wrong says so
-        cond = sorted({c.split(" (")[0] for c in row["conditional_on"]})
-        if cond:
-            money += f"; conditional on {', '.join(cond)}"
-        own = any(is_fleet_id(r, row["equip"]) for r in row["rules"])  # 0.111 (#320)
-        facts.append(
-            {
-                "id": fact_id,
-                "kind": "issue",
-                "equip": row["equip"],
-                "value": row["rank"],
-                "text": f"Issue {row['rank']} on {name(row['equip'], own=own)}: "
-                f"{row['heading']} "
-                f"({row['severity']}, confidence {row['confidence']}, {money})",
-                "issue_key": row["key"],
+    def assemble(shown: list) -> tuple:
+        """``(data, text, facts)`` of a page of ``shown`` ranked issues."""
+        left_out = every - {str(i["key"]) for i in shown}
+        left_out |= {"appA"} if len(kept) < len(appendix) else set()
+        index = []
+        facts = []
+        for f in every_fact:
+            if f.id.partition("@")[2] in left_out and f.id not in kept:
+                continue
+            # 0.111 (#318): the report's fact text names equipment as summaries and finding
+            # facts do
+            f_text = (
+                names.sub(lambda m: name(m.group(0), own=fleet_own), f.text) if names else f.text
+            )
+            index.append({"id": f.id, "kind": f.kind})
+            facts.append(
+                {
+                    "id": f.id,
+                    "kind": f.kind,
+                    "equip": f.equip or "",
+                    "facility_id": fid,  # 0.112 (#328): a sentence naming the facility cites it
+                    "text": f_text,
+                    "data": jsonable(f.data),
+                }
+            )
+        issues = []
+        text = [cite(head)]
+        for i, iss in enumerate(shown, start=2):
+            fact_id = f"F{i}@rcx_report"
+            cost_v = jsonable(iss.get("cost"))
+            cost_v = cost_v if isinstance(cost_v, (int, float)) else None
+            row = {
+                "key": str(iss["key"]),
+                "rank": int(iss["rank"]),
+                "heading": plain(str(iss.get("heading") or iss.get("title") or "")),
+                "title": str(iss.get("title") or ""),
+                "cause": plain(str(iss.get("cause") or "")),
+                "equip": str(iss.get("equip") or ""),
+                "severity": str(iss.get("severity") or ""),
+                "rules": list(dict.fromkeys(str(r) for r in iss.get("rules") or [])),
+                "finding_ids": _ids(str(iss["key"])),
+                "annual_cost_usd": cost_v,
+                "cost_basis_note": plain(str(iss.get("cost_basis_note") or "")),
+                "hours": jsonable(iss.get("hours_union")),
+                "pct_runtime": jsonable(iss.get("pct_runtime")),
+                "confidence": str(iss.get("confidence") or ""),
+                "conditional_on": [str(c) for c in iss.get("conditional_on") or []],
+                "why": [plain(str(w)) for w in iss.get("why") or []],
+                "fact": fact_id,
             }
+            issues.append(row)
+            money = f"${cost_v:,.0f}/yr" if cost_v else "uncosted"
+            # 0.111 (#297): an issue that rests on a sensor a reference found wrong says so
+            cond = sorted({c.split(" (")[0] for c in row["conditional_on"]})
+            if cond:
+                money += f"; conditional on {', '.join(cond)}"
+            own = any(is_fleet_id(r, row["equip"]) for r in row["rules"])  # 0.111 (#320)
+            # 0.112 (#294): "Issue 1 of 6", so a numbered ranking can be cited
+            facts.append(
+                {
+                    "id": fact_id,
+                    "kind": "issue",
+                    "equip": row["equip"],
+                    "value": row["rank"],
+                    "rank": row["rank"],
+                    "of": len(d["issues"]),
+                    "subject": subject(fid, row["equip"]),
+                    "text": f"Issue {row['rank']} of {len(d['issues'])} on "
+                    f"{name(row['equip'], own=own)}: "
+                    f"{row['heading']} "
+                    f"({row['severity']}, confidence {row['confidence']}, {money})",
+                    "issue_key": row["key"],
+                }
+            )
+            if i - 1 <= _LISTED:
+                text.append(cite(facts[-1]))
+        facts.insert(0, head)
+        facts.extend(_flat_facts(fid, res, issues, by_key))
+        data = {
+            "facility_id": fid,
+            "title": str(d["title"]),
+            "site": str(d["site"] or ""),
+            "period": [str(p) for p in d["period"]],
+            "from_config": from_caller,
+            "kpis": jsonable(k),
+            "issues": issues,
+            "sections": [
+                {"id": str(s["id"]), "title": str(s["title"])}
+                for s in d["sections"]
+                if str(s["id"]).removeprefix("issue-") not in left_out
+            ],
+            "fact_index": index,
+        }
+        return data, " ".join(text), facts
+
+    if arguments.get("top_n"):
+        size = int(arguments["top_n"])
+    else:  # 0.112 (#333): the most issues, up to 8, whose result fits the default budget
+        size = 1
+        for n in range(min(_ISSUES, max(len(ranked) - offset, 1)), 1, -1):
+            data, _text, facts = assemble(ranked[offset : offset + n])
+            if fits(data, facts, banners, extra=_NOTICE_ROOM):
+                size = n
+                break
+    shown = page(
+        ranked,
+        {"limit": size, "offset": offset},
+        default=size,
+        what="issues",
+        order="best ranked first",
+        how=f"call again with offset={offset + size} for the next page",
+        more="kpis count every issue",
+    )
+    data, text, facts = assemble(shown)
+    return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
+
+
+def _flat_facts(fid: str, res, issues: list, by_key: dict) -> list:
+    """The points that never move over the window and that an issue returned here rests on --
+    an input of one of its findings' rules -- one fact each (0.112, #294): a valve command or a
+    setpoint that never moves can decide the diagnosis while its trust score reads high."""
+    from ..rules.triage import _rule_roles
+
+    registry = getattr(res, "registry", None)
+    rules: dict = {}
+    on: dict = {}  # (equip, role) -> ranks of the issues that read it
+    flat_of: dict = {}
+    for row in issues:
+        iss = by_key.get(row["key"])
+        found = [getattr(iss, "root", None), *(getattr(iss, "members", None) or ())]
+        for f in found:
+            if f is None or registry is None:
+                continue
+            rule, equip = str(getattr(f, "rule", "")), str(getattr(f, "equip", ""))
+            if is_fleet_id(rule, equip):
+                continue
+            if rule not in rules:
+                try:
+                    rules[rule] = registry.get(rule)
+                except KeyError:  # a report check (sensor_drift:<role>), not a rule
+                    rules[rule] = None
+            if rules[rule] is None:
+                continue
+            if equip not in flat_of:
+                frame = res.frame_for(equip) if hasattr(res, "frame_for") else None
+                flat_of[equip] = flat_roles(frame)
+            for role in sorted(_rule_roles(rules, rule) & set(flat_of[equip])):
+                ranks = on.setdefault((equip, role), [])
+                if row["rank"] not in ranks:
+                    ranks.append(row["rank"])
+    out: list = []
+    for (equip, role), ranks in sorted(on.items(), key=lambda kv: (min(kv[1]), kv[0]))[:_FLAT]:
+        which = ", ".join(str(r) for r in sorted(ranks))
+        out.append(
+            flat_fact(
+                f"L{len(out) + 1}@rcx_report",
+                fid,
+                equip,
+                role,
+                flat_of[equip][role],
+                why=f"issue(s) {which} rest on it",
+            )
         )
-        if i - 1 <= _LISTED:
-            text.append(cite(facts[-1]))
-    facts.insert(0, head)
-    data = {
-        "facility_id": fid,
-        "title": str(d["title"]),
-        "site": str(d["site"] or ""),
-        "period": [str(p) for p in d["period"]],
-        "from_config": from_caller,
-        "kpis": jsonable(k),
-        "issues": issues,
-        "sections": [
-            {"id": str(s["id"]), "title": str(s["title"])}
-            for s in d["sections"]
-            if str(s["id"]).removeprefix("issue-") not in left_out
-        ],
-        "fact_index": index,
-    }
-    return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
+    return out
 
 
 def _names_pattern(res, facts):
@@ -382,13 +467,11 @@ CAPABILITIES = (
         title="RCx report (structured)",
         description=(
             "The retro-commissioning (RCx) report of one facility as data: the KPIs (issue "
-            "counts, annual cost, coverage), the top_n ranked issues (cause, equipment, severity,"
-            " rules and the finding ids for finding_detail, cost or why uncosted, hours, "
-            "confidence and its reasons), the section list "
-            "and the report's fact index (K1@summary-<token>, C1@<issue key>-<token>; also in "
-            "facts) for a cited executive summary. No file or charts. Uses the caller's run "
-            "config when there is one. Cost: a full rule run plus the analysis, the slowest tool;"
-            " prefer rule_run for a quick look. Needs facility_id."
+            "counts, annual cost, coverage), a page of the ranked issues (cause, equipment, "
+            "severity, finding ids for finding_detail, cost or why uncosted, hours, confidence "
+            "and why), the section list and the report's fact index, for a cited executive "
+            "summary. Uses the caller's run config when there is one. Cost: a "
+            "full rule run, the slowest tool; prefer rule_run for a quick look. Needs facility_id."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

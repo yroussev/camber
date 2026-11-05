@@ -42,6 +42,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import threading
 import unicodedata
@@ -57,7 +58,7 @@ import pyarrow.dataset as ds
 
 from .._deprecation import deprecated
 from ..model.roles import Role
-from . import _fence
+from . import _fence, _partprov
 from ._leftovers import STAGING_DIR
 from .facilities import FacilityRegistry, require_facility_id
 
@@ -197,7 +198,8 @@ def _canonicalize(table: pa.Table, *, keep_meta=()) -> pa.Table:
     """``table`` in the canonical part layout: the store columns first in a fixed order (any other
     column after them, by name), rows sorted by ``(ts, equip, role, equip_class, value)`` (a stable
     sort, so fully identical rows need no further key), and schema metadata reduced to the layout
-    marker plus the ``keep_meta`` keys."""
+    marker, the dataset provenance (:data:`camber.store._partprov.KEY`, 0.112 #319) and the
+    ``keep_meta`` keys."""
     names = table.column_names
     order = [c for c in _COLUMNS if c in names] + sorted(c for c in names if c not in _COLUMNS)
     table = table.select(order)
@@ -205,7 +207,7 @@ def _canonicalize(table: pa.Table, *, keep_meta=()) -> pa.Table:
     if keys and table.num_rows > 1:
         table = table.sort_by(keys)
     old = table.schema.metadata or {}
-    meta = {k: old[k] for k in keep_meta if k in old}
+    meta = {k: old[k] for k in (*keep_meta, _partprov.KEY) if k in old}
     meta[_LAYOUT_KEY] = _LAYOUT
     return table.replace_schema_metadata(meta)
 
@@ -249,27 +251,52 @@ def _read_part_file(path: str) -> pa.Table:
 
 
 def _partition_signature(fdir: str) -> tuple:
-    """Name, size and mtime of every entry of a facility partition, its year dirs and their
-    month dirs (part files included), plus the partition dir's own mtime: changes on any write,
-    prune or drop, whichever layout the partition uses, and (#312) when a part file is rewritten
-    in place. Stat calls only; ``()`` when the partition cannot be listed."""
+    """Name, size and mtime of every entry of a facility partition, down to the depth the
+    provenance check walks (:data:`camber.store._partprov._MAX_DEPTH`: year and month dirs, part
+    files, and any directory nested below them, #334), plus the partition dir's own mtime:
+    changes on any write, prune or drop, whichever layout the partition uses, and (#312) when a
+    part file is rewritten in place. An entry that cannot be ``stat``-ed or listed (a dangling
+    link, an unreadable directory) is recorded as such and the walk goes on, so the signature
+    changes when it is repaired (#334). Stat calls only; ``()`` when the partition itself cannot
+    be listed."""
 
     def walk(path: str, rel: str, depth: int, out: list) -> None:
-        with os.scandir(path) as it:
-            entries = sorted(it, key=lambda e: e.name)
+        try:
+            with os.scandir(path) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError:
+            if not rel:
+                raise
+            out.append((rel, None, None))  # a directory that cannot be listed
+            return
         for e in entries:
-            st = e.stat()
             name = f"{rel}{e.name}"
+            try:
+                st = e.stat()
+            except OSError:
+                out.append((name, None, None))
+                continue
             out.append((name, st.st_size, st.st_mtime_ns))
-            if depth and e.is_dir():
+            if depth and stat.S_ISDIR(st.st_mode):
                 walk(e.path, name + "/", depth - 1, out)
 
     try:
         sig: list = [os.stat(fdir).st_mtime_ns]
-        walk(fdir, "", 2, sig)
+        walk(fdir, "", _partprov._MAX_DEPTH, sig)
         return tuple(sig)
     except OSError:
         return ()
+
+
+def _fragment_prov(frag):
+    """A part file's dataset provenance value (0.112, #319) from the footer the fragment already
+    read (``None``: unmarked or unreadable -- an unreadable file fails its own read)."""
+    try:
+        if not _partprov.regular(frag.path):  # never open a FIFO named like a part (#314)
+            return None
+        return _partprov.of_metadata(frag.metadata)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _fragment_equips(frag) -> frozenset | None:
@@ -333,11 +360,14 @@ def _require_labels(long) -> None:
                 )
 
 
-def _scratch_store(root: str) -> ParquetStore:
+def _scratch_store(root: str, *, provenance: bytes | None = None) -> ParquetStore:
     """A store whose writes take no lock of their own: an ingest's staging area or a workspace
-    rollup, written only under the lock its caller already holds on the store it belongs to."""
+    rollup, written only under the lock its caller already holds on the store it belongs to.
+    ``provenance`` (a :data:`camber.store._partprov.KEY` value: a catalog dataset's ingest) goes
+    into every part file it writes (0.112, #319)."""
     st = ParquetStore(root)
     st._self_lock = False
+    st._provenance = provenance
     return st
 
 
@@ -388,6 +418,9 @@ class ParquetStore:
         # False only for a scratch store (an ingest's staging area, a workspace rollup) written
         # under a lock its caller already holds on the store it belongs to.
         self._self_lock = True
+        # the dataset provenance every part this store writes carries (0.112, #319): set only on
+        # a catalog dataset's staging store (_scratch_store); a user's own data has none
+        self._provenance: bytes | None = None
 
     def _registry(self) -> FacilityRegistry:
         return FacilityRegistry(self.root, lock_timeout=self.lock_timeout)
@@ -422,12 +455,18 @@ class ParquetStore:
         files (a per-call basename counter avoids clobbering prior writes), so repeated calls
         accumulate. Returns rows written. Holds the store lock (see :meth:`lock`).
         """
+        return self._append(long, facility_id, self._provenance, name=name, **meta)
+
+    def _append(self, long, facility_id: str, provenance, *, name=None, **meta) -> int:
+        """:meth:`write_long` with the parts' dataset provenance (``None``: unmarked)."""
         require_facility_id(facility_id)
         _require_labels(long)
         with self._write_lock():
-            return self._write_long(long, facility_id=facility_id, name=name, **meta)
+            return self._write_long(
+                long, facility_id=facility_id, name=name, _part_prov=provenance, **meta
+            )
 
-    def _write_long(self, long, *, facility_id: str, name=None, **meta) -> int:
+    def _write_long(self, long, *, facility_id: str, name=None, _part_prov=None, **meta) -> int:
         reg = self._registry()
         reg._guard_write(facility_id)  # tombstoned id / case-variant of a known id -> ValueError
         if name is not None or meta:
@@ -440,6 +479,10 @@ class ParquetStore:
         df[_YEAR] = df[_TS].dt.year.astype("int32")
         df[_MONTH] = df[_TS].dt.month.astype("int32")
         table = _canonical_table(df)
+        if _part_prov is not None:  # a catalog dataset's ingest (0.112, #319)
+            table = table.replace_schema_metadata(
+                {**(table.schema.metadata or {}), _partprov.KEY: _part_prov}
+            )
         seq = self._next_seq(facility_id)
         # Written under _staging/ (unseen by readers: pyarrow skips "_" names) and renamed into
         # place file by file, so a concurrent reader never opens a part that is half written.
@@ -447,6 +490,9 @@ class ParquetStore:
         os.makedirs(stage)
         try:
             self._write_parts(table, stage, seq)
+            from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+            confirm_claims()  # 0.112 (#330): still the store's writer
             for dirpath, _dirs, files in os.walk(stage):
                 dst_dir = os.path.join(self.root, os.path.relpath(dirpath, stage))
                 for fname in sorted(files):
@@ -546,7 +592,7 @@ class ParquetStore:
         try:
             with open(p, encoding="utf-8") as fh:
                 data = json.load(fh)
-        except (json.JSONDecodeError, OSError):
+        except (ValueError, OSError, RecursionError):  # not UTF-8 / JSON, or too deep (#329)
             return None
         if not isinstance(data, dict):
             return None
@@ -742,11 +788,13 @@ class ParquetStore:
                     return None
                 full = self._dataset() if full is None else full
                 frags = [
-                    (f, _fragment_equips(f))
+                    (f, _fragment_equips(f), _fragment_prov(f))
                     for f in full.get_fragments(filter=ds.field(_FACILITY) == facility_id)
                 ]
             except Exception:  # noqa: BLE001 - the full-dataset read reports its own error
                 return None
+            # (not recorded as the facility's marks: the discovery skips entries it cannot
+            # resolve, which the up-front check must count, #334)
             entry = (full.schema, full.format, full.filesystem, frags)
             with _FRAG_LOCK:
                 _FRAG_INDEX[key] = (sig, entry)
@@ -755,7 +803,10 @@ class ParquetStore:
                     _FRAG_INDEX.popitem(last=False)
         schema, fmt, fs, frags = entry
         want = set(equips)
-        keep = [f for f, eqs in frags if eqs is None or (eqs & want)]
+        # a served read refuses a facility holding a research-only part (any of its parts, as
+        # the up-front check does), from the footers the index already read (#319)
+        _partprov.check((v for _f, _e, v in frags), facility_id)
+        keep = [f for f, eqs, _v in frags if eqs is None or (eqs & want)]
         return ds.FileSystemDataset(keep, schema=schema, format=fmt, filesystem=fs)
 
     @staticmethod
@@ -858,6 +909,13 @@ class ParquetStore:
             dataset = self._scoped_dataset(facility_id)
             if dataset is _NO_PARTITION:  # no such facility (or a writer just removed it)
                 return pd.DataFrame(columns=empty_cols)
+            if _partprov.is_serving():  # 0.112 (#319): never serve a research-only part
+                if dataset is None:  # a store-wide read: every file it would open
+                    full = self._dataset()
+                    _partprov.check(_fragment_prov(f) for f in full.get_fragments())
+                else:  # the facility's marks, memoized until its partition changes
+                    marks = _partprov.facility_marks(self.root, facility_id)
+                    _partprov.check(marks, facility_id)
             dataset = self._dataset() if dataset is None else dataset
             if _FACILITY not in dataset.schema.names:  # no partition left (every facility dropped)
                 return pd.DataFrame(columns=empty_cols)
@@ -888,6 +946,7 @@ class ParquetStore:
                 raise LookupError  # not a partition name: the plain read below
             for frag in dataset.get_fragments():
                 md = frag.metadata
+                _partprov.check([_partprov.of_metadata(md)], facility_id)  # #319, when served
                 col = md.schema.to_arrow_schema().get_field_index(_TS)
                 if col < 0:
                     raise LookupError
@@ -962,11 +1021,12 @@ class ParquetStore:
         wide.index.name = None
         # dataset provenance travels with the frame, so a report built from it shows the licence
         # (and the research-only banner) even when the caller passes no data_sources
-        from .._provenance import PROVENANCE_ATTR, facility_provenance
+        # (and, #329, a research-only mark its part files carry)
+        from .._provenance import PROVENANCE_ATTR, store_sources
 
-        prov = facility_provenance(self.facilities_meta().get(facility_id, {}), facility_id)
+        prov = store_sources(self.root, facility_id, self.facilities_meta().get(facility_id, {}))
         if prov:
-            wide.attrs[PROVENANCE_ATTR] = [prov]
+            wide.attrs[PROVENANCE_ATTR] = prov
         return wide
 
     # --------------------------------------------------------------- catalog
@@ -1076,7 +1136,9 @@ class ParquetStore:
         total = 0
         with dest._write_lock():
             for s, sub in rolled.groupby(_FACILITY):
-                total += dest.write_long(sub.drop(columns=[_FACILITY]), facility_id=s)
+                # the rollup keeps the dataset provenance of the parts it was built from (#319)
+                prov = _partprov.merge(_partprov.facility_marks(self.root, s))
+                total += dest._append(sub.drop(columns=[_FACILITY]), s, prov)
         return total
 
     def prune(self, *, before_year: int, facility_id=None, reason=None) -> int:
@@ -1172,6 +1234,8 @@ class ParquetStore:
         def _rows(files):
             n = 0
             for f in files:
+                if not _partprov.regular(f):  # a FIFO named like a part is never opened
+                    continue
                 try:
                     n += int(pq.ParquetFile(f).metadata.num_rows)
                 except Exception:  # noqa: BLE001 - an unreadable file counts no rows

@@ -37,11 +37,13 @@ Anything that must write the cache (a download, ``--from-dir``, ``remove``) rais
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import json
 import os
 
 from ..portfolio._lock import LockHeld, default_lock_timeout, exclusive_lock
+from ..portfolio._lock import confirm_claims as _confirm_claims
 
 MANIFEST = "manifest.json"
 ACKS = "acknowledgements.json"
@@ -157,14 +159,23 @@ def read_json(path: str, default):
 
 
 def write_json_atomic(path: str, data) -> None:
-    """Write ``data`` as JSON to ``path`` atomically (tmp file + ``os.replace``)."""
+    """Write ``data`` as JSON to ``path`` atomically (tmp file + ``os.replace``). The cache's
+    claim is confirmed before the tmp file is made and again before the rename, and the tmp file
+    is removed on any failure, so a writer that lost its claim leaves nothing (0.112, #335)."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = f"{path}.tmp-{os.getpid()}"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(tmp, path)
+    _confirm_claims()  # 0.112 (#330, #335): still this cache's writer, before anything is written
+    tmp = f"{path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"  # a pid repeats across containers
+    try:
+        with open(tmp, "x", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, sort_keys=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        _confirm_claims()  # and still it, just before the rename
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def read_manifest(root: str) -> dict:

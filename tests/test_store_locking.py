@@ -133,7 +133,7 @@ def test_every_store_writer_is_refused_while_another_process_holds_the_lock(tmp_
         os.path.relpath(os.path.join(d, f), root)
         for d, _, fs in os.walk(root)
         for f in fs
-        if f != plock.LOCK_FILE
+        if f not in (plock.LOCK_FILE, plock.CLAIM_FILE)  # a killed holder leaves both (#325)
     )
     proc = _hold("store", root)
     try:
@@ -147,7 +147,7 @@ def test_every_store_writer_is_refused_while_another_process_holds_the_lock(tmp_
         os.path.relpath(os.path.join(d, f), root)
         for d, _, fs in os.walk(root)
         for f in fs
-        if f != plock.LOCK_FILE
+        if f not in (plock.LOCK_FILE, plock.CLAIM_FILE)  # a killed holder leaves both (#325)
     )
     assert after == before  # nothing was written or deleted
     WRITERS[op](ParquetStore(root, lock_timeout=0))  # and it works once the holder is gone

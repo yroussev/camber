@@ -544,11 +544,12 @@ def _source_kind(source: dict) -> str:
     return kind
 
 
-def _provenance(meta: dict, facility_id: str) -> dict:
-    """The report-facing provenance of a store facility (see :mod:`camber._provenance`)."""
-    from ._provenance import facility_provenance
+def _provenance(root: str, meta: dict, facility_id: str) -> list:
+    """The report-facing provenance of a store facility, from its registry entry and its part
+    files' marks (see :func:`camber._provenance.store_sources`)."""
+    from ._provenance import store_sources
 
-    return facility_provenance(meta, facility_id)
+    return store_sources(root, facility_id, meta)
 
 
 def _prepare_store(config: dict, base_dir: str) -> _Prepared:
@@ -607,10 +608,8 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
             shared = {Role.OAT: frame[role]}
 
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
-    prov = _provenance(meta, fid)
-    out = _Prepared(
-        site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else [], ctx
-    )
+    prov = _provenance(store.root, meta, fid)
+    out = _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, prov, ctx)
     out.timezone = tzkw["timezone"]
     return out
 
@@ -1428,7 +1427,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     from .mandv import _mvform
     from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.stats import cv_rmse_max_for, fit_stats
-    from .mvrun import baseline_window_check
+    from .mvrun import _ds, baseline_window_check
     from .rules.base import Finding
 
     if entry.get("interval", "daily") != "daily":
@@ -1545,6 +1544,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     "oat_fit_max": sup["fit_max"],
                     "oat_support_lo": sup["support_lo"],
                     "oat_support_hi": sup["support_hi"],
+                    # 0.112 (#333): the baseline window, as the versioned finding gives it
+                    "window": [_ds(w) for w in win],
                     **_mvform.metrics(model),
                 },
                 summary=(
@@ -3103,9 +3104,8 @@ def data_sources(config: dict, *, base_dir: str = ".") -> list:
     from .store import ParquetStore
 
     fid = source.get("facility_id", "")
-    meta = ParquetStore(_path(base_dir, source["store"])).facilities_meta().get(fid, {})
-    prov = _provenance(meta, fid)
-    return [prov] if prov else []
+    store = ParquetStore(_path(base_dir, source["store"]))
+    return _provenance(store.root, store.facilities_meta().get(fid, {}), fid)
 
 
 def drift_store_path(config: dict, *, base_dir: str = ".") -> str:

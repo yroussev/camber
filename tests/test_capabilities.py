@@ -450,7 +450,8 @@ def test_facilities_capability(store):
     assert (rows["annex"]["n_points"], rows["annex"]["n_equipment"]) == (3, 1)
     assert _u(res.text).startswith("2 facilities are visible [F1@facilities].")
     assert "hq is active with 6 points [F3@facilities]." in _u(res.text)
-    assert [_u(f["id"]) for f in res.facts] == ["F1@facilities", "F2@facilities", "F3@facilities"]
+    own = [_u(f["id"]) for f in res.facts if f["kind"] != "notice"]  # 0.112 (#294): + N ids
+    assert own == ["F1@facilities", "F2@facilities", "F3@facilities"]
     assert not res.truncated and len(res.banners) == 1  # the research-only notice only
     json.dumps(res.data)
 

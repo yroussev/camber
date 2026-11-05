@@ -8,7 +8,8 @@ which parts are canonical (read-only, no lock); :func:`normalize` rewrites the o
 
 **What normalize rewrites.** A non-canonical, readable part in a ``year=/month=`` partition of a
 facility that accepts data. Each part is rewritten **in place under its own name**, with the same
-rows (a retention rollup keeps its ``camber.rollup.covers`` key). Names stay because other records
+rows (a retention rollup keeps its ``camber.rollup.covers`` key, and a catalog dataset's part its
+``camber.provenance`` key: 0.112, #319). Names stay because other records
 point at them: a rollup's ``covers`` lists the raw part names it was built from (renaming a raw
 part would make the next rollup of that month count its rows twice), and a part's ``<seq>`` feeds
 ``_next_seq``. Left alone, each with a reason in the report:
@@ -48,7 +49,7 @@ import re
 import shutil
 import uuid
 
-from . import _swap
+from . import _partprov, _swap
 from .facilities import FacilityRegistry, _workspace_of_store, require_facility_id
 from .parquet_store import (
     _COLUMNS,
@@ -125,6 +126,9 @@ def check_part(path: str) -> dict:
         "meta": {},
         "error": None,
     }
+    if not _partprov.regular(path):  # a FIFO named like a part would block its open
+        out["error"] = "not a regular file"
+        return out
     try:
         out["bytes"] = os.path.getsize(path)
         with pq.ParquetFile(path) as f:
@@ -144,7 +148,9 @@ def check_part(path: str) -> dict:
         problems.append(f"camber.layout is {meta[_LAYOUT_KEY]!r}, not {_LAYOUT!r}")
     if _PANDAS_KEY in meta:
         problems.append("pandas metadata")
-    extra = sorted(k for k in meta if k not in (_LAYOUT_KEY, _PANDAS_KEY, _COVERS_KEY))
+    extra = sorted(
+        k for k in meta if k not in (_LAYOUT_KEY, _PANDAS_KEY, _COVERS_KEY, _partprov.KEY)
+    )
     if extra:
         problems.append(
             "other schema metadata: " + ", ".join(k.decode("utf-8", "replace") for k in extra)
@@ -196,7 +202,11 @@ def _targets(root: str):
 
 
 def _parts(sroot: str, facility_id=None):
-    """Every part file of a store: ``(facility_id, year, month or None, directory, name)``."""
+    """Every part file of a store: ``(facility_id, year, month or None, directory, name)``.
+
+    0.112 (#337): found by the provenance check's own walk (:func:`camber.store._partprov.scan`),
+    so a directory that cannot be listed (mode 000 or 0o111, at any level) is skipped here and the
+    walk goes on; :func:`_read_set_rows` lists it as unreadable."""
     if not os.path.isdir(sroot):
         return
     fdirs = sorted(d for d in os.listdir(sroot) if d.startswith(f"{_FACILITY}="))
@@ -207,29 +217,27 @@ def _parts(sroot: str, facility_id=None):
         fpath = os.path.join(sroot, fd)
         if not os.path.isdir(fpath):
             continue
-        for yd in sorted(os.listdir(fpath)):
-            ypath = os.path.join(fpath, yd)
-            if not yd.startswith(f"{_YEAR}=") or not os.path.isdir(ypath):
+        try:
+            files, _unchecked = _partprov.scan(fpath)
+        except OSError:  # the facility directory itself cannot be listed: _read_set_rows says so
+            continue
+        found = []
+        for path, _size, _mtime in files:
+            rel = os.path.relpath(path, fpath).split(os.sep)
+            n = rel[-1]
+            if len(rel) not in (2, 3) or not n.endswith(".parquet"):
+                continue  # outside the year=/month= layout: _read_set_rows lists it
+            yd, md = rel[0], (rel[1] if len(rel) == 3 else None)
+            if not yd.startswith(f"{_YEAR}=") or not (md or f"{_MONTH}=").startswith(f"{_MONTH}="):
                 continue
             try:
                 year = int(yd.split("=", 1)[1])
+                month = int(md.split("=", 1)[1]) if md is not None else None
             except ValueError:
                 continue
-            names = sorted(os.listdir(ypath))
-            for n in names:
-                if _is_part(ypath, n):
-                    yield fid, year, None, ypath, n
-            for md in names:
-                mpath = os.path.join(ypath, md)
-                if not md.startswith(f"{_MONTH}=") or not os.path.isdir(mpath):
-                    continue
-                try:
-                    month = int(md.split("=", 1)[1])
-                except ValueError:
-                    continue
-                for n in sorted(os.listdir(mpath)):
-                    if _is_part(mpath, n):
-                        yield fid, year, month, mpath, n
+            found.append(((yd, md or "", n), (fid, year, month, os.path.dirname(path), n)))
+        for _key, row in sorted(found):  # a year's own files before its months, as listed
+            yield row
 
 
 def _is_part(d: str, n: str) -> bool:
@@ -238,6 +246,70 @@ def _is_part(d: str, n: str) -> bool:
         and not n.startswith(("_", "."))
         and os.path.isfile(os.path.join(d, n))
     )
+
+
+def _read_set_rows(stores, facility_id, seen) -> list:
+    """Report rows for what a store read of a facility opens or meets beyond :func:`_parts`
+    (0.112, #334), with the provenance check's own walk (:func:`camber.store._partprov.scan`, the
+    one definition of a part file): a file at the facility root or nested deeper than the month,
+    one whose name does not end in ``.parquet`` (``x.parquet~``, ``notes.txt``, ``Icon\\r``), and
+    every entry the walk could not check (a dangling symlink, an unreadable directory, files
+    nested too deep), which keeps the facility from being served. ``seen``: the paths
+    :func:`_parts` listed."""
+    rows = []
+    for label, sroot in stores:
+        if not os.path.isdir(sroot):
+            continue
+        rollup_store = label != "store"
+        for fd in sorted(d for d in os.listdir(sroot) if d.startswith(f"{_FACILITY}=")):
+            fid = fd.split("=", 1)[1]
+            fpath = os.path.join(sroot, fd)
+            if (facility_id is not None and fid != facility_id) or not os.path.isdir(fpath):
+                continue
+            try:
+                files, unchecked = _partprov.scan(fpath)
+            except OSError:
+                files, unchecked = [], [(fpath, "the facility directory cannot be listed")]
+            base = {"store": label, "facility_id": fid, "year": None, "month": None}
+            for path, _size, _mtime in files:
+                if path in seen:
+                    continue
+                info = check_part(path)
+                n = os.path.basename(path)
+                where = (
+                    "outside the year=/month= layout"
+                    if n.endswith(".parquet")
+                    else "its name does not end in .parquet"
+                )
+                rows.append(
+                    {
+                        **base,
+                        "path": os.path.relpath(path, sroot).replace(os.sep, "/"),
+                        "origin": part_origin(n, info["meta"], rollup_store=rollup_store),
+                        "canonical": False,
+                        "marker": info["marker"],
+                        "rows": info["rows"],
+                        "bytes": info["bytes"],
+                        "problems": [f"{where}, but the store reads it", *info["problems"]],
+                        "error": info["error"],
+                    }
+                )
+            for path, why in unchecked:
+                rows.append(
+                    {
+                        **base,
+                        "path": os.path.relpath(path, sroot).replace(os.sep, "/"),
+                        "origin": "store",
+                        "canonical": False,
+                        "marker": False,
+                        "rows": None,
+                        "bytes": None,
+                        "problems": [],
+                        "error": f"{why}: not every file could be checked, so the facility is "
+                        "not served by `camber mcp`",
+                    }
+                )
+    return rows
 
 
 def _facility_gate(main: str, ws):
@@ -407,6 +479,12 @@ def verify(root, *, facility_id=None) -> dict:
     (``ValueError``); ``leftovers`` lists what interrupted ingests left (#213; the
     next ingest recovers them) and ``empty_facilities`` the registered facilities with no part
     file in a state that should have some.
+
+    0.112 (#334): ``parts`` also lists every other file a store read of a facility opens (the
+    provenance check's definition of a part file: at the facility root, nested deeper than the
+    month, or not named ``*.parquet``: not canonical, or unreadable when it is not Parquet), and
+    every entry that keeps a facility from being checked in full (a dangling symlink, an
+    unreadable directory, files nested too deep), counted as unreadable.
     """
     from .facilities import _require_store_dir
 
@@ -417,6 +495,8 @@ def verify(root, *, facility_id=None) -> dict:
     if facility_id is not None:
         _require_known_facility(main, stores, facility_id)
     rows, _todo, _skipped = _scan(stores, facility_id, None)
+    seen = {os.path.join(sr, r["path"]) for r in rows for lb, sr in stores if lb == r["store"]}
+    rows += _read_set_rows(stores, facility_id, seen)
     counts = _counts(rows)
     health = _health(main, facility_id)
     stranded = any(x["stranded"] for x in health["leftovers"])
@@ -450,7 +530,7 @@ def _dir_rows(d: str) -> int:
 
     n = 0
     for name in os.listdir(d):
-        if _is_part(d, name):
+        if _is_part(d, name):  # a regular file only: a FIFO named like a part is never opened
             try:
                 n += int(pq.ParquetFile(os.path.join(d, name)).metadata.num_rows)
             except Exception:  # noqa: BLE001 - unreadable: not ours to count or rewrite
@@ -464,7 +544,7 @@ def _same(back, canon) -> bool:
     got = back.schema.metadata or {}
     if got.get(_LAYOUT_KEY) != _LAYOUT or _PANDAS_KEY in got:
         return False
-    if got.get(_COVERS_KEY) != want.get(_COVERS_KEY):
+    if any(got.get(k) != want.get(k) for k in (_COVERS_KEY, _partprov.KEY)):
         return False
     return back.replace_schema_metadata(None).equals(canon.replace_schema_metadata(None))
 
