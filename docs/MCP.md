@@ -128,7 +128,25 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   "besides", "alongside", "and/or", "nor A nor B", "no one of" and "not a single one of" are sets;
   "A/B: x/y", "A vs B: x vs y", a list before the names, "rank ... respectively" and "A's x and
   B's y" are lists in order; "All of A's points" is read with its noun; and more saving words
-  follow the sign ("ran below its baseline", "went down", "consumed less"). Labels are closed sets:
+  follow the sign ("ran below its baseline", "went down", "consumed less"). Since #342: every
+  sentence, cited or not, is screened for a claim of checking or support -- short ("All
+  supported", "Checked", "✅ Supported"), as a status or a lead-in ("Status: all supported",
+  "Checked: ...", "Validated by the data, ..."), by the writer ("I reviewed each rule result"),
+  of the work by any noun ("This triage was checked"), by its evidence ("the cited fact
+  supports") or of the data ("The 2.5% saving was validated by IPMVP methods", unless a cited
+  fact states it) -- and such a sentence fails, never reaches `verified_text` and opens it with
+  the NOTICE; a unit's id written another way ("AHU 1", "AHU–1", "Air handler 1") is that
+  unit's when only one cited id fits (else it fails closed); "A fails X, unlike B", "..., but not
+  B", "(not B)", "Not B but A ...", "A's part, not B's, ...", "A fails X and B passes" (or a
+  comma or dash), "A fails X, but B does not" and "B: no valve leak" read each unit against its
+  own facts; a finding's "conditional on ... warn" and a rule run's summary of another rule's
+  result give no verdict of this finding; a sentence naming a point is read against that point's
+  facts; a site's verdict or negation needs a fact about the whole site; figures said of two
+  dates or of "the third span" are read against the facts that carry that date or number; more
+  stretches of time ("each day of May 2025", "from January to October 2018", "over the past
+  year", a saving's year against its reporting period), coverage words ("covered fully",
+  "logged throughout the window", each unit of a set) and hour words ("at all times", "in each
+  hour", "around the clock") are read. Labels are closed sets:
   the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
   side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
   FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
@@ -165,12 +183,19 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   a set across sentences ("AHU-1 fails it. So does AHU-2."); a plural noun after its verb ("a
   fault on the AHUs"); a comparative with no figure ("more points are suspect than trusted");
   words outside the lists ("survives the re-judge", "lowest trust score", "Both AHUs drift");
-  since #341: a claim of checking in other words ("looked over"); a unit named only by a word
-  with no id ("the AHU"); with "only X", a unit no cited fact is about; "X, not Y" read as Y's
-  cited facts not stating it; a site's verdict said other than as the opening subject; a verdict
-  of one rule in a sentence naming two; a stretch of time in other words ("over the winter") or
-  over two windows; coverage in other words; "runs cold"; a reference named by a word ("the duct
-  logger ... reads high"); "the former ... the latter".
+  since #341 and #342: a claim of checking in other words ("looked over", "matches the data")
+  and a checkmark beside a statement; a unit named only by a word with no id ("the AHU", "the
+  other AHU") or by a number in words ("AHU one"); a point named by a description ("the
+  damper"); with "only X", a unit no cited fact is about; "X, not Y" read as Y's cited facts not
+  stating it; a site said other than as the opening subject or after "on", "at", "for",
+  "across", "of" or "in" ("ds-x: healthy", "is in good shape"); a verdict of one rule in a
+  sentence naming two; a property said with a noun that is no verdict ("... with a leak"); a
+  re-judged ok supporting a bare "has no valve leak"; a stretch of time in other words ("since
+  last year", "since installation", "over the winter") or over two windows; "for weeks" on a
+  window of 14 days or more; coverage in other words ("never offline"); "runs cold"; a reference
+  named by a word ("the duct logger ... reads high"); "the former ... the latter"; possessives
+  joined with "like" ("A's coverage, like B's, is 100.0%"); a second clause that names no unit
+  of its own ("... and it has ...").
   And these fail closed although they can be true: "all", "every" or a completeness word said
   of a noun no cited fact quantifies ("Every rule returned a result" against "5 of them
   returned a result") unless a cited fact counts that label with its total; a list said
@@ -182,11 +207,15 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
   number); a share the fact tells apart by side, trust class or fault condition said without
   one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
-  to", "caused by" or "explained by"; since #341 a sentence naming one unit that gives an
-  unnamed unit's figure ("than the other AHU's 0.68"), "Except for B, all AHUs fail", "A leaks;
-  B does not", a second set with its verb left out and all ids at the end ("The loggers are at
-  19.1% and the AHUs at 100.0%": give each clause its citations), "most" across two facts, and
-  figures said of two dates in one sentence.
+  to", "caused by" or "explained by"; since #341 and #342 a sentence naming one unit that gives
+  an unnamed unit's figure ("than the other AHU's 0.68"), "Except for B, all AHUs fail", "A's
+  part is suspect, but B's is not", a second set with its verb left out and all ids at the end
+  ("The loggers are at 19.1% and the AHUs at 100.0%": give each clause its citations), "The two
+  units share ..." with figures attached to their names, "most" across two facts, a length no
+  fact states ("for three weeks"), "the second half of May", "all winter" on a
+  January-to-December window, a spelling of a unit two cited ids could take, "AHU No. 1", and a
+  verdict on a savings claim worded with a check word ("the claimed 12% is supported by ...":
+  judgment, given after the checked text).
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
