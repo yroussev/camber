@@ -129,3 +129,11 @@ def test_a_header_with_a_figure_names_its_columns(judge):
     assert not _kept(
         judge, f"| Unit | Coverage over 12 points (%) |\n|---|---|\n| AHU-1 | 100.0 [{COV}] |", COV
     )
+
+
+def test_a_yes_cell_reads_any_header(judge):
+    ref = "R1@sensor_trust-c81f17"  # "AHU-1" "supply_air_temp" ... disagrees (warn)
+    head = "| Unit | Agrees with its reference |\n|---|---|\n"
+    assert not _kept(judge, f"{head}| AHU-1's supply_air_temp | yes [{ref}] |", ref)
+    head = "| Unit | Disagrees with its reference |\n|---|---|\n"
+    assert _kept(judge, f"{head}| AHU-1's supply_air_temp | yes [{ref}] |", ref)

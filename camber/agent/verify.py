@@ -317,7 +317,8 @@ _NO_CELL = re.compile(r"(?:no|n|false|✗|✘|❌)", re.I)
 
 
 def _cell_said(first: str, head: str, cell: str):
-    """A table cell read with its column's header, when the header states something: a "yes"
+    """A table cell read with its column's header, when the header states something (any
+    header, for a "yes" or "no" cell: "| AHU-1 | yes |" under "Agrees with its reference"): a "yes"
     cell says the header of the row's first cell ("AHU-1 fails X"), a "no" cell says it is not
     so ("AHU-1: not fails X": the header's claim negated for that unit, supported only when a
     cited fact about the unit states the negation, so a "no" the checker cannot read fails
@@ -326,7 +327,13 @@ def _cell_said(first: str, head: str, cell: str):
     before, with its column's name, #340)."""
     bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
     ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
-    if _states_nothing(head) and not re.search(r"\d|_", head) and not _checking_claim(head):
+    yes_no = _YES_CELL.fullmatch(bare) or _NO_CELL.fullmatch(bare)
+    if (
+        not yes_no  # (0112-cite10) a yes or no says its column's header, whatever it is
+        and _states_nothing(head)
+        and not re.search(r"\d|_", head)
+        and not _checking_claim(head)
+    ):
         return None  # a column's name ("Result", "Status"); a name or a figure in it is a claim
     low = (
         head[:1].lower() + head[1:]

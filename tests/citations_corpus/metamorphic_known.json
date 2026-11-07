@@ -308,7 +308,7 @@
   "header_column x stretch_period x finding_detail": 0,
   "header_column x stretch_period x mv_summary": 0,
   "header_column x stretch_period x rule_run": 0,
-  "header_column x stretch_period x sensor_trust": 1,
+  "header_column x stretch_period x sensor_trust": 0,
   "header_column x swap_point x sensor_trust": 0,
   "header_column x swap_rule x drift": 0,
   "header_column x swap_rule x finding_detail": 0,
