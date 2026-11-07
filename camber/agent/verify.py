@@ -138,8 +138,26 @@ it cites; it does not mean the sentence is true, and a word outside these lists 
     of two dates or of "the third span" are read against the facts that carry them; more time,
     coverage and hour words are read (see CAPABILITY-REGISTRY.md).
 
-Citations count only in the visible text: one inside an HTML comment or tag does not. ``[A, B]``
-and ``[A; B]`` cite both ids (0.112).
+Every region is judged (0.112, PLAN-CITE-EVAL B). The text is folded before it is read: NFKC per
+character (superscripts, subscripts and fractions kept, so "ft²" stays), every hyphen and minus
+sign (U+2010, U+2011, U+2012, U+2212, U+FE63, U+FF0D) as "-", and a dash between a letter and a
+digit as "-" ("AHU–1" is AHU-1), in citation ids too (``[F1@x‑y]`` cites ``F1@x-y``). An HTML
+comment's words are read like prose (only its ``<!--`` and ``-->`` marks are not), and a comment
+whose sentences all fail goes with them. An HTML tag's attribute values that a reader or a later
+reader of the text can be shown (``title``, ``alt``, ``aria-*``, ``data-*``, ``summary``,
+``label``, ``placeholder``, ``content``, ``value``) are read with the sentence the tag is in; a
+link's or image's address, a style or a class is not. A table's header row names its columns,
+also when it holds a figure; a header that states something (a verb, a verdict, a negation, a
+figure, a unit's, rule's or point's name) is judged as a claim with the citations of its rows,
+and a cell is read with its column's header: "yes" says the header of the row's first cell
+("| AHU-1 | yes |" under "Fails X" is "AHU-1 fails X"), "no" says it is not so ("AHU-1: not fails
+X", read as the header's claim negated for that unit: supported only when a cited fact about
+the unit states the negation, otherwise the row fails closed), and a cell without a figure is
+said after its header ("Fails X: twice").
+
+Citations count only in the visible text: one inside an HTML tag's attribute does not (a
+comment's words are visible to the checker, so a citation in one does). ``[A, B]`` and ``[A; B]``
+cite both ids (0.112).
 
 :func:`check` enforces this. In ``strict`` mode it *repairs* the text -- dropping sentences that
 fail and stripping unknown ``[id]`` tokens -- so a partly-hallucinated LLM answer degrades to its
@@ -215,11 +233,10 @@ _NOTICE = re.compile(r"\s*(?:[-*•>]\s+)?(?:\*\*)?NOTICE\s*:(?:\*\*)?\s*(.*?)\s
 _QUOTE_LEAD = re.compile(
     r"\s*(?:(?:\(?\d{1,3}[.)]|[-*•>])\s+)?(?:\*\*)?(?:notice\s*:)?(?:\*\*)?\s*", re.I
 )
-#: what a reader does not see: HTML comments (an unterminated one: to the end), tags,
-#: zero-width marks, and a markdown link's target
-_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
 #: a Markdown table's rule under its header row ("|---|:--:|")
 _TABLE_RULE = re.compile(r"\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{0,}:?\s*\|?\s*")
+#: an HTML tag (read as the attribute values it can show, :func:`_tag_said`), zero-width marks
+#: and a markdown link's target (not read)
 _TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 _INVISIBLE = re.compile("[​-‏⁠-⁤﻿­]")
 _LINK = re.compile(r"(\[[^\[\]]*\])\([^()\s]*(?:\s+\"[^\"]*\")?\)")
@@ -244,28 +261,98 @@ class Grounded:
 
 
 def _visible(text: str) -> str:
-    """``text`` as a reader sees it: without HTML comments and tags, zero-width marks, markdown
-    emphasis and link targets (a citation hidden there does not count)."""
+    """``text`` as the checker reads it: folded (:func:`_fold`), an HTML comment's words without
+    its marks, an HTML tag as the attribute values it can show (:func:`_tag_said`), without
+    zero-width marks, markdown emphasis and link targets (a citation in a tag or a link's
+    target does not count)."""
     s = _INVISIBLE.sub("", str(text or ""))
-    if _proto("B"):  # (prototype B) folded, and a comment's words are read like prose
-        s = _COMMENT_MARK.sub(" ", _fold(s))
-    else:
-        s = _COMMENT.sub(" ", s)
-    s = _TAG.sub(" ", s)
+    s = _COMMENT_MARK.sub(" ", _fold(s))  # a comment's words are read like prose
+    s = _TAG.sub(_tag_said, s)  # a tag's shown attribute values are read too
     return _LINK.sub(r"\1", s).replace("`", "").replace("**", "")
 
 
 def extract_cites(text: str) -> list:
     """The ``[id]`` tokens cited in ``text``, in order, de-duplicated; ``[A, B]`` cites both."""
     seen, out = set(), []
-    if _proto("B"):  # (prototype B) "[F1@x‑y]" with a non-breaking hyphen cites F1@x-y
-        text = _fold(text or "")
+    text = _fold(text or "")  # "[F1@x‑y]" with a non-breaking hyphen cites F1@x-y
     for m in _CITES.finditer(text or ""):
         for cid in _ID_SEP.split(m.group(1).strip()):
             if cid not in seen:
                 seen.add(cid)
                 out.append(cid)
     return out
+
+
+_COMMENT_MARK = re.compile(r"<!--|-->")
+_HYPHENS = dict.fromkeys(map(ord, "‐‑‒−﹣－"), "-")
+
+
+def _fold(s: str) -> str:
+    """``s`` folded before it is read: NFKC per character (superscripts, subscripts and
+    fractions kept: "ft²" is no "ft2"), every hyphen and minus sign as "-", a dash between a
+    letter and a digit as "-" ("AHU–1")."""
+    if s.isascii():
+        return s
+    out = []
+    for ch in s:
+        if ord(ch) < 128:
+            out.append(ch)
+            continue
+        if unicodedata.decomposition(ch).startswith(("<super>", "<sub>", "<fraction>")):
+            out.append(ch)
+        else:
+            out.append(unicodedata.normalize("NFKC", ch))
+    s = "".join(out).translate(_HYPHENS)
+    return re.sub(r"(?<=[A-Za-z])[–—](?=\d)", "-", s)
+
+
+_YES_CELL = re.compile(r"(?:yes|y|true|x|✓|✔️?|✅|☑️?)", re.I)
+_NO_CELL = re.compile(r"(?:no|n|false|✗|✘|❌)", re.I)
+
+
+def _cell_said(first: str, head: str, cell: str):
+    """A table cell read with its column's header, when the header states something: a "yes"
+    cell says the header of the row's first cell ("AHU-1 fails X"), a "no" cell says it is not
+    so ("AHU-1: not fails X": the header's claim negated for that unit, supported only when a
+    cited fact about the unit states the negation, so a "no" the checker cannot read fails
+    closed), any other cell without a figure is said after the header ("Fails X: twice"); None
+    when the header states nothing (it is a column's name) or the cell has a figure (read as
+    before, with its column's name, #340)."""
+    bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
+    ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
+    if _states_nothing(head) and not re.search(r"\d|_", head) and not _checking_claim(head):
+        return None  # a column's name ("Result", "Status"); a name or a figure in it is a claim
+    low = (
+        head[:1].lower() + head[1:]
+        if head[:1].isupper() and not _UNIT_ID.match(head.split()[0])
+        else head
+    )
+    if _YES_CELL.fullmatch(bare):
+        return f"{first} {low} {ids}".strip()
+    if _NO_CELL.fullmatch(bare):
+        return f"{first}: not {low} {ids}".strip()
+    if re.search(r"\d", bare):
+        return None
+    return f"{head}: {cell}"
+
+
+#: the attribute values of an HTML tag that are shown to a reader (or to whatever reads the text
+#: next): read with the sentence the tag is in; an address, a style or a class is not
+_SHOWN_ATTR = re.compile(
+    r"""(?<![\w-])(title|alt|aria-[\w-]+|data-[\w-]+|summary|label|placeholder|content|value)"""
+    r"""\s*=\s*("[^"]*"|'[^']*'|[^\s"'<>=`]+)""",
+    re.I,
+)
+
+
+def _tag_said(m) -> str:
+    """An HTML tag (a match of :data:`_TAG`) as the checker reads it: the values of its shown
+    attributes (:data:`_SHOWN_ATTR`), without citations (one in a tag does not count), or a
+    space."""
+    vals = [v[1:-1] if v[:1] in "\"'" else v for _k, v in _SHOWN_ATTR.findall(m.group(0))]
+    vals = [" ".join(_CITES.sub(" ", v).split()) for v in vals]
+    said = " ".join(v for v in vals if v)
+    return f" {said} " if said else " "
 
 
 # --------------------------------------------------------------------------- segments
@@ -277,8 +364,8 @@ class _Seg:
     end: int
     kind: str  # "sentence" (judged) | "quote" (a fact's own text) | "heading" | "notice" (kept)
     header: tuple = ()  # (a table row's, #340) its table's header cells
-    #: (prototype B) a header row that states something: the citations of its table's rows,
-    #: which it is judged with
+    #: a table's header row that states something: the citations of its table's rows, which
+    #: it is judged with
     table_cites: tuple = ()
 
 
@@ -370,12 +457,13 @@ def _quotes(text: str, masked: str, s0: int, e0: int, quotes: dict) -> list:
 def _segments(text: str, notices=(), quotes=None) -> list:
     """The sentences, headings, known notices and quoted facts of ``text``, as spans of it, in
     order. Lines are split at sentence ends, never inside a quoted fact (``quotes`` maps a fact
-    id to a pattern of its text, :func:`_quoted_rx`); an HTML comment is never split."""
+    id to a pattern of its text, :func:`_quoted_rx`) or an HTML tag; an HTML comment's words are
+    split and judged like prose (only its marks are blanked), and hyphens are folded (the same
+    length) so that a citation with a non-breaking hyphen is one."""
     text = text or ""
-    proto_b = _proto("B")
-    # (prototype B) a comment's words are split and judged like prose: only its marks go
-    hide = _COMMENT_MARK if proto_b else _COMMENT
-    masked = hide.sub(lambda m: " " * len(m.group(0)), text)
+    masked = _COMMENT_MARK.sub(lambda m: " " * len(m.group(0)), text.translate(_HYPHENS))
+    # no sentence end inside a tag: its attribute values are read with the sentence it is in
+    masked = _TAG.sub(lambda m: re.sub(r"\s", "x", m.group(0)), masked)
     masked = "\n".join(_unquoted(line) for line in masked.split("\n"))
     known = {" ".join(str(n).split()) for n in notices or ()}
     out: list = []
@@ -395,28 +483,25 @@ def _segments(text: str, notices=(), quotes=None) -> list:
             line.strip().startswith("|")
             and idx + 1 < len(lines)
             and _TABLE_RULE.fullmatch(lines[idx + 1])
-            and not _CITES.search(text[s0:e0])
-            # (prototype B) a header with a figure names its columns too: each row reads it
-            and (proto_b or not re.search(r"\d", text[s0:e0]))
+            and not _CITES.search(masked[s0:e0])
         ):
-            header = tuple(c.strip() for c in text[s0:e0].strip().strip("|").split("|"))
-            if proto_b:
-                header = tuple(_visible(c).strip() for c in header)
-                said = " ".join(c for c in header if c)
-                if re.search(r"\d|_", said) or not _states_nothing(said):
-                    # (prototype B) a header that states something, or names a unit, is a claim
-                    # of the table: judged with the citations of its rows
-                    rows, j = [], idx + 2
-                    while j < len(lines) and lines[j].strip().startswith("|"):
-                        rows.append(j)
-                        j += 1
-                    at = sum(len(x) + 1 for x in lines[: idx + 2])
-                    cites = []
-                    for j in rows:
-                        cites += extract_cites(text[at : at + len(lines[j])])
-                        at += len(lines[j]) + 1
-                    out.append(_Seg(s0, e0, "sentence", (), tuple(dict.fromkeys(cites))))
-                    continue
+            # a header row names its columns, also with a figure in it: each row reads it
+            header = tuple(_visible(c).strip() for c in text[s0:e0].strip().strip("|").split("|"))
+            said = " ".join(c for c in header if c)
+            if re.search(r"\d|_", said) or not _states_nothing(said):
+                # a header that states something, or names a unit, is a claim of the table:
+                # judged with the citations of its rows
+                rows, j = [], idx + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    rows.append(j)
+                    j += 1
+                at = sum(len(x) + 1 for x in lines[: idx + 2])
+                cites = []
+                for j in rows:
+                    cites += extract_cites(text[at : at + len(lines[j])])
+                    at += len(lines[j]) + 1
+                out.append(_Seg(s0, e0, "sentence", (), tuple(dict.fromkeys(cites))))
+                continue
             out.append(_Seg(s0, e0, "heading"))  # a table's header row names its columns (#340)
             continue
         if header and _TABLE_RULE.fullmatch(line):
@@ -489,10 +574,9 @@ def _table_text(row: str, header: tuple) -> str:
         return row  # "| 5 of 5 | passed |": a count and its verdict, read as it is
     first, parts = cells[0], []
     one = not re.search(r",|\band\b|&|/", first)  # "| A, B | ... |": a list of them
-    proto_b = _proto("B")
     for head, cell in zip(header[1:], cells[1:]):
-        if proto_b and head:
-            said = _proto_cell(first, head, cell)
+        if head:
+            said = _cell_said(first, head, cell)
             if said is not None:
                 parts.append(said)
                 continue
@@ -7652,7 +7736,7 @@ def _judge(
         vis = _visible(sent)
         if seg.header:
             vis = _table_text(vis, seg.header)
-        if seg.table_cites:  # (prototype B) a header row's claim, with its rows' citations
+        if seg.table_cites:  # a header row's claim, with its rows' citations
             cells = [c.strip() for c in vis.strip().strip("|").split("|")]
             vis = " ".join(c for c in cells if c) + " " + "".join(f"[{c}]" for c in seg.table_cites)
         amb: list = []
@@ -8019,7 +8103,7 @@ def _rebuild(text: str, drop, unknown=()) -> str:
                 at += 1
         kept.append(text[at:le])
         new = "".join(kept).rstrip()
-        if _proto("B"):  # (prototype B) a comment whose sentences all went goes too
+        if "<!--" in new:  # a comment whose sentences all went goes too
             new = re.sub(r"[ \t]*<!--\s*-->", "", new).rstrip()
         if not new.strip() or _MARKER.fullmatch(new.strip()):
             removed_last = True
@@ -8050,16 +8134,10 @@ def _strip_ids(text: str, unknown: set) -> str:
 
 
 # --------------------------------------------------------------------------- prototypes
-# 0112-cite-proto (PLAN-CITE-EVAL section 5): three changes of the checker's default, each
-# behind its own switch and OFF unless set, so that with none set the checker is byte-identical
-# to c024906. They are measured by tools/cite_eval (run.py --flags B,C,A), never adopted here.
+# PLAN-CITE-EVAL section 5: changes of the checker's default still behind a switch, OFF unless
+# set. They are measured by tools/cite_eval (run.py --flags C,A). B (every region judged) was
+# the third, and is the default since 0112-cite10 (the segments section above).
 #
-# - CAMBER_CITE_B=1: every region judged. The text is folded (NFKC, but superscripts,
-#   subscripts and fractions kept; every hyphen and minus sign to "-"; "AHU–1" to "AHU-1")
-#   before it is read; an HTML comment's words are read like prose (only its marks go, and a
-#   comment emptied by the repair goes too); a table's header row is its columns' names even
-#   with a figure in it, and a header that states something is read with each row's cell under
-#   it ("| Unit | Fails X |" over "| AHU-1 | yes |" is "AHU-1 fails X").
 # - CAMBER_CITE_C=1: a sentence naming more than one unit passes only if it splits into one
 #   clause per unit, each with a claim of its own, and every clause is supported against its
 #   own unit's facts; otherwise it fails closed ("give each unit its own sentence").
@@ -8067,64 +8145,13 @@ def _strip_ids(text: str, unknown: set) -> str:
 #   sentence must be one the checker reads (_PROTO_READ), a neutral word (_PROTO_NEUTRAL), or
 #   (not with "strict") a word one of the facts it cites uses; otherwise it fails closed.
 
-_PROTO_FLAGS = ("A", "B", "C")
+_PROTO_FLAGS = ("A", "C")
 
 
 def _proto(name: str) -> str:
     """The value of the prototype switch ``CAMBER_CITE_<name>`` ("" when off)."""
     v = os.environ.get(f"CAMBER_CITE_{name}", "")
     return "" if v in ("", "0") else v
-
-
-_COMMENT_MARK = re.compile(r"<!--|-->")
-_HYPHENS = dict.fromkeys(map(ord, "‐‑‒−﹣－"), "-")
-
-
-def _fold(s: str) -> str:
-    """(prototype B) ``s`` folded: NFKC per character (superscripts, subscripts and fractions
-    kept: "ft²" is no "ft2"), every hyphen and minus sign as "-", a dash between a letter and a
-    digit as "-" ("AHU–1")."""
-    if s.isascii():
-        return s
-    out = []
-    for ch in s:
-        if ord(ch) < 128:
-            out.append(ch)
-            continue
-        if unicodedata.decomposition(ch).startswith(("<super>", "<sub>", "<fraction>")):
-            out.append(ch)
-        else:
-            out.append(unicodedata.normalize("NFKC", ch))
-    s = "".join(out).translate(_HYPHENS)
-    return re.sub(r"(?<=[A-Za-z])[–—](?=\d)", "-", s)
-
-
-_YES_CELL = re.compile(r"(?:yes|y|true|x|✓|✔️?|✅|☑️?)", re.I)
-_NO_CELL = re.compile(r"(?:no|n|false|✗|✘|❌)", re.I)
-
-
-def _proto_cell(first: str, head: str, cell: str):
-    """(prototype B) A table cell read with its column's header, when the header states
-    something: a "yes" cell says the header of the row's first cell ("AHU-1 fails X"), a "no"
-    cell says it is not so ("AHU-1: not fails X"), any other cell without a figure is said
-    after the header ("Fails X: twice"); None when the header states nothing (it is a column's
-    name) or the cell has a figure (read as before, with its column's name)."""
-    bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
-    ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
-    if _states_nothing(head) and not re.search(r"\d|_", head) and not _checking_claim(head):
-        return None  # a column's name ("Result", "Status"); a name or a figure in it is a claim
-    low = (
-        head[:1].lower() + head[1:]
-        if head[:1].isupper() and not _UNIT_ID.match(head.split()[0])
-        else head
-    )
-    if _YES_CELL.fullmatch(bare):
-        return f"{first} {low} {ids}".strip()
-    if _NO_CELL.fullmatch(bare):
-        return f"{first}: not {low} {ids}".strip()
-    if re.search(r"\d", bare):
-        return None
-    return f"{head}: {cell}"
 
 
 # ----- C: one clause per unit

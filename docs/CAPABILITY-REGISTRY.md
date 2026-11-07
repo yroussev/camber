@@ -425,8 +425,21 @@ RCx report's prose and every result's own summary go through) matches each sente
 the facts it cites (0.112, #294). It is precise rather than clever, and it fails closed: what it
 cannot match is not supported. **Supported means matched, not proven true.**
 
-- **Citations.** `[F1@x]`, or several in one bracket, `[F1@x, F2@y]` or `[F1@x; F2@y]`. Only
-  visible text counts: a citation in an HTML comment or tag cites nothing. With `per_sentence`
+- **Every region is judged** (0112-cite10). The text is folded first: NFKC (superscripts,
+  subscripts and fractions kept), every hyphen and minus sign (U+2010, U+2011, U+2012, U+2212,
+  U+FE63, U+FF0D) as `-`, and a dash between a letter and a digit as `-` ("AHU–1" is AHU-1), in
+  citation ids too. An HTML comment's words are judged like prose, and a comment whose sentences
+  all fail is removed with them. An HTML tag's shown attribute values (`title`, `alt`, `aria-*`,
+  `data-*`, `summary`, `label`, `placeholder`, `content`, `value`) are read with the sentence
+  the tag is in; an address, a style or a class is not. A table's header row names its columns,
+  also with a figure in it; a header that states something (a verb, verdict, negation, figure,
+  or a unit's, rule's or point's name) is judged as a claim with its rows' citations, and each
+  cell is read with its column's header: "yes" under "Fails X" in AHU-1's row is "AHU-1 fails
+  X", and "no" is "AHU-1: not fails X", the header's claim negated for that unit, supported only
+  when a cited fact about AHU-1 states the negation (a "no" the checker cannot read fails
+  closed).
+- **Citations.** `[F1@x]`, or several in one bracket, `[F1@x, F2@y]` or `[F1@x; F2@y]`. A
+  citation in an HTML tag's attribute or a link's target cites nothing. With `per_sentence`
   (the default) a sentence must cite a fact itself (`uncited` otherwise) and is matched against
   the facts it cites; without it, its figures may match any fact the text cites, and only a
   sentence that cites a fact itself has its claims checked.
@@ -745,7 +758,8 @@ cannot match is not supported. **Supported means matched, not proven true.**
     closed. Figures listed without "respectively" of items in no order ("Both oa_damper points
     are suspect at 0.66 and 0.68") and a range ("(0.68 to 0.70)") need each item to have one of
     them. A table row is read with its header ("| A | -15.6% |" under "| Meter | Avoided energy
-    |" is "A: Avoided energy -15.6% on A"), and a header row is kept and not judged. What the set is said is read with its
+    |" is "A: Avoided energy -15.6% on A"), and a header row that states nothing is kept and not judged (one that
+    states something is a claim, above). What the set is said is read with its
     own clause: "Both AHUs warn ..., but only AHU-1 fails leaking_valve" says only the warn of
     both. "Both" or a number needs that many items so stated, and a set said with no number at
     least two ("Each AHU fails leaking_valve [F2]" and "No AHU has a valve leak [F6]" fail). A

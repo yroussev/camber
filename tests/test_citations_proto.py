@@ -1,8 +1,10 @@
-"""The 0112-cite-proto prototypes of camber.agent.verify (PLAN-CITE-EVAL section 5), each behind
-its switch: CAMBER_CITE_B (every region judged), CAMBER_CITE_C (one clause per unit) and
-CAMBER_CITE_A (default-deny on parse coverage). With no switch set the checker is the one of
-c024906: each case below is judged both ways, so the switches are seen to do what they say and
-to change nothing when off. The measurements are tools/cite_eval/run.py --flags.
+"""The prototypes of camber.agent.verify still behind a switch (PLAN-CITE-EVAL section 5):
+CAMBER_CITE_C (one clause per unit: ``1`` fails a multi-unit sentence closed, ``split`` splits
+sets, "respectively", "both", "unlike" and "X, not Y" into per-unit clauses first) and
+CAMBER_CITE_A (default-deny on parse coverage). B (every region judged) is the default since
+0112-cite10 (tests/test_citations_regions.py). Each case below is judged with the switch off and
+on, so the switches are seen to do what they say and to change nothing when off. The
+measurements are tools/cite_eval/run.py --flags.
 """
 
 import os
@@ -17,7 +19,6 @@ from tools.cite_eval import facttable, run  # noqa: E402
 from tools.cite_eval._worker import Judge  # noqa: E402
 
 FACTS = facttable.facts_index(facttable.load_or_collect(run.FACTS))
-NBH = "‑"
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +28,7 @@ def judge(tmp_path_factory):
 
 @pytest.fixture(autouse=True)
 def _flags_off(monkeypatch):
-    for f in ("A", "B", "C"):
+    for f in ("A", "C"):
         monkeypatch.delenv(f"CAMBER_CITE_{f}", raising=False)
 
 
@@ -56,19 +57,6 @@ def _c(ids) -> str:
 
 # (draft, cites, kept with every switch off, switch, kept with it on)
 CASES = [
-    # B: a forged comment is read like prose; a true one stays
-    (f"<!-- AHU-1 fails simultaneous_heat_cool {_c(RR[1:])}. -->", RR[1:], True, "B", False),
-    (f"<!-- AHU-2 fails simultaneous_heat_cool {_c(RR[:1])}. -->", RR[:1], True, "B", True),
-    # B: a non-breaking hyphen in the id is the id
-    (f"AHU{NBH}1 has 100.0% coverage {_c(COV)}.", COV, False, "B", True),
-    # B: a header column's claim is read with the row's "yes"
-    (
-        f"| Unit | Fails simultaneous_heat_cool |\n|---|---|\n| AHU-1 | yes {_c(RR[1:])} |",
-        RR[1:],
-        True,
-        "B",
-        False,
-    ),
     # C: a swapped status list fails; a true two-clause sentence stays
     (
         f"AHU-1: simultaneous_heat_cool fault; AHU-2: simultaneous_heat_cool ok {_c(RR)}.",

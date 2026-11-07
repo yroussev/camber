@@ -494,6 +494,18 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   DOCKER.md, MCP.md).
 
 ### Changed
+- **`check_citations` judges every region of a text (PLAN-CITE-EVAL B).** The text is folded
+  before it is read (NFKC, every hyphen and minus sign as `-`, "AHU–1" as AHU-1), citation ids
+  too, so `AHU‑1` with a non-breaking hyphen is AHU-1 and `[F1@x‑y]` cites `F1@x-y` (both were
+  misread). An HTML comment's words are judged like prose instead of being copied unread into
+  `verified_text` (a forged `<!-- NOTICE: ... verified -->` passed), and a comment whose
+  sentences all fail is removed. An HTML tag's shown attribute values (`title`, `alt`, `aria-*`,
+  `data-*`, ...) are read with the sentence the tag is in. A table's header row names its
+  columns also with a figure in it, a header that states something is judged as a claim with
+  its rows' citations, and a "yes" or "no" cell is read with its column's header ("| AHU-1 | no
+  |" under "Fails X" is the claim negated for AHU-1, and fails closed unless a cited fact states
+  it). On the generated cases E fell from 13.1% to 2.2% and S from 11.2% to 1.6%; 22 corpus
+  entries that were known gaps now pass.
 - **The changelog's 0.106.0 to 0.109.1 sections are archived** in
   `docs/changelog/changelog-0.106-0.109.md`, linked from the changelog, its index and the docs
   site (#340), so `CHANGELOG.md` stays under the 200 KB render limit.

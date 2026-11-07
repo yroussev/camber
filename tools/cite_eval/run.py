@@ -55,7 +55,9 @@ HISTORY_FIELDS = [
 CORPUS = os.path.join(facttable.REPO, "tests", "citations_corpus")
 
 
-def corpus_results(python: str | None = None, jobs: int = 1, corpus: str = CORPUS) -> dict:
+def corpus_results(
+    python: str | None = None, jobs: int = 1, corpus: str = CORPUS, pythonpath: str | None = None
+) -> dict:
     """Judge every regression-corpus entry: ``{"entries", "met", "xfail_listed",
     "regressions" (listed as passing, not met), "promotable" (listed xfail, met), "rows"}``."""
     import glob
@@ -74,7 +76,7 @@ def corpus_results(python: str | None = None, jobs: int = 1, corpus: str = CORPU
         }
         for e in entries
     ]
-    res = judge(payloads, python, jobs)
+    res = judge(payloads, python, jobs, pythonpath=pythonpath)
     rows = []
     for e in entries:
         r = res.get(e["id"], {})
@@ -85,6 +87,15 @@ def corpus_results(python: str | None = None, jobs: int = 1, corpus: str = CORPU
             met = bool(r.get("grounded")) and all(v == "supported" for v in verdicts)
         else:
             met = not r.get("grounded")
+        if met:  # each labelled sentence too, as tests/test_citations_corpus.py reads them
+            by_text: dict = {}
+            for text, verdict, _why in r.get("sentences", []):
+                by_text.setdefault(_ws(text), verdict)
+            for s in e["expected"].get("sentences", []):
+                got = by_text.get(_ws(s["text"]))
+                if got is None or (got == "supported") != (s["verdict"] == "supported"):
+                    met = False
+                    break
         rows.append(
             {
                 "id": e["id"],
@@ -154,10 +165,19 @@ def payload(case: dict, facts_by_id: dict) -> dict:
     }
 
 
-def judge(payloads: list, python: str | None = None, jobs: int = 1, local: bool = False) -> dict:
+def judge(
+    payloads: list,
+    python: str | None = None,
+    jobs: int = 1,
+    local: bool = False,
+    pythonpath: str | None = None,
+) -> dict:
     """``{key: result}`` for each payload: in this interpreter, or in ``python``'s. ``local``
     with ``python`` (this interpreter): the workers import this checkout's ``camber``
-    (``PYTHONPATH`` is this repository), so a checkout is judged in ``jobs`` processes."""
+    (``PYTHONPATH`` is this repository), so a checkout is judged in ``jobs`` processes;
+    ``pythonpath``: they import that checkout's (another worktree's) instead."""
+    if pythonpath:
+        python, local = python or sys.executable, True
     if python is None and jobs > 1:
         python, local = sys.executable, True
     if python is None:
@@ -180,7 +200,7 @@ def judge(payloads: list, python: str | None = None, jobs: int = 1, local: bool 
                     fh.write(json.dumps(p, ensure_ascii=False) + "\n")
             env = {k2: v for k2, v in os.environ.items() if k2 not in ("PYTHONPATH", "PYTHONHOME")}
             if local:  # this checkout's camber, in another process (the CAMBER_CITE_* flags too)
-                env["PYTHONPATH"] = facttable.REPO
+                env["PYTHONPATH"] = pythonpath or facttable.REPO
                 cmd = [python, os.path.join(HERE, "_worker.py"), src, dst]
             else:
                 # -I: the worker must import that interpreter's camber, never this checkout's
@@ -303,9 +323,13 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--flags",
         default="",
-        help="checker prototypes to switch on (camber.agent.verify, 0112-cite-proto): a comma "
-        "list of B, C, A (or A=strict); each sets CAMBER_CITE_<X>=1 (or its value) for this run "
-        "and its workers",
+        help="checker prototypes to switch on (camber.agent.verify): a comma list of C (or "
+        "C=split), A (or A=strict), and B for a build older than 0112-cite10 (B is the default "
+        "since); each sets CAMBER_CITE_<X>=1 (or its value) for this run and its workers",
+    )
+    ap.add_argument(
+        "--pythonpath",
+        help="judge with the camber of this checkout (another worktree), in --jobs workers",
     )
     ap.add_argument("--label", default="")
     ap.add_argument("--out", help="write the metrics (and per-case results) JSON here")
@@ -319,12 +343,16 @@ def main(argv=None) -> int:
     for f in flags:  # "B", or "A=strict"
         name, _, value = f.partition("=")
         os.environ[f"CAMBER_CITE_{name.strip().upper()}"] = value.strip() or "1"
-    jobs = a.jobs if (python or a.local_jobs) else 1
+    jobs = a.jobs if (python or a.local_jobs or a.pythonpath) else 1
     fb, cases = build_cases(a.facts, a.sample or None, a.seed)
     by_id = facttable.facts_index(fb)
-    results = judge([payload(c, by_id) for c in cases], python, jobs)
+    results = judge([payload(c, by_id) for c in cases], python, jobs, pythonpath=a.pythonpath)
     m = metrics(cases, results)
-    checker = _checker_label(python) + (f" flags={'+'.join(flags)}" if flags else "")
+    checker = (
+        _checker_label(python)
+        + (f" pythonpath={os.path.basename(a.pythonpath.rstrip('/'))}" if a.pythonpath else "")
+        + (f" flags={'+'.join(flags)}" if flags else "")
+    )
     o = m["overall"]
     print(
         f"{checker}: {len(cases)} cases ({o['n_false']} false, {o['n_true']} true); "
@@ -335,7 +363,7 @@ def main(argv=None) -> int:
         print(f"  E {w['E']:.2f} ({w['escapes']}/{w['n_false']})  {w['cell']}")
     cr = None
     if a.corpus_out:
-        cr = corpus_results(python, jobs)
+        cr = corpus_results(python, jobs, pythonpath=a.pythonpath)
         print(
             f"corpus: {cr['entries']} entries, {cr['met']} met; {cr['xfail_listed']} listed xfail, "
             f"{cr['regressions']} listed passing but not met, {cr['promotable']} xfail now met"
