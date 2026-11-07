@@ -515,6 +515,14 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   a skipped rule must cite a fact that says so; and a sentence citing only a caveat that hedges
   ("can read as a heating leak") must hedge too. On the real-host drafts, E fell from 14.3% to
   9.4% with S up 0.4 points.
+- **`check_citations` reads a site, a verdict count, a unit spelling and a parameter as theirs
+  (0112-cite10).** A unit's finding said of the whole site in a heading, after a leading
+  condition, in a bold label or a table row, or as a figure or a rule of the site ("site-a has
+  economizer_high_limit on 43% of those samples") fails; "site-a has 6 warn results" no longer
+  matches a summary's "6 of them returned a result" when it counts "4 warn"; "AHU 3" is read as
+  AHU-3 when a cited fact names AHU-1 only in its text; and "the default warn_pct is 20%" fails
+  when 20 is another listed parameter's value. On the generated cases E fell from 1.9% to 0.7%
+  with S down from 1.5% to 1.3%.
 - **`mv_summary` shows 4 meters a page by default** (was 5), so its default result, now with
   each caveat a fact, still fits a host's 25,000-character tool output.
 - **The changelog's 0.106.0 to 0.109.1 sections are archived** in

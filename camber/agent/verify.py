@@ -5311,7 +5311,13 @@ def _match(q: _Qty, facts: list, claim: bool = False, bound: bool = True, pool=N
             if bound and not (_bound(q, f) and _same_label(q, f)):
                 continue
             return True
-        if q.unit in _VERDICT_UNITS and q.of_noun:  # "one ok result" (#338): 1 result, ok
+        # "one ok result" (#338): 1 result, ok; (0112-cite10) not where the fact counts its
+        # results by verdict ("2 fault, 4 warn"): "6 warn results" is no "6 ... returned a result"
+        if (
+            q.unit in _VERDICT_UNITS
+            and q.of_noun
+            and not any(dict(g.fam).get("verdict") for g in fc.claims.qty)
+        ):
             for f in fc.claims.qty:
                 if (
                     f.unit == q.of_noun
@@ -7132,7 +7138,17 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
             # leak") is read against the facts about the site as a whole: one unit's "no valve
             # leak" or "meets" says nothing of the others
             whole = [fc for fc in facts if not _units(fc) and not fc.item.get("role")]
+            if p.qty:  # (0112-cite10) and its figures too ("site-a: flagged on 43%")
+                return (whole or _SiteOnly(site)), (whole or _SiteOnly(site))
             return facts, whole if whole else _SiteOnly(site)
+        if site and (p.qty or p.rules or _RULE_SAID.search(vis)):
+            # (0112-cite10) a figure or a rule said of a whole site ("site-a has
+            # economizer_high_limit on 43% of those samples" citing one unit's finding): the
+            # facts about the site as a whole
+            whole = [fc for fc in facts if not _units(fc) and not fc.item.get("role")]
+            if p.qty:  # its figures from the site's facts ("72,507" no cited fact gives it)
+                return (whole or _SiteOnly(site)), (whole or facts)
+            return facts, (whole or _SiteOnly(site))
         return facts, facts  # a set its cited facts' items make ("Both AHUs ...") reads them all
     keep = [
         fc
@@ -7146,12 +7162,51 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
     return keep, claim
 
 
+#: (0112-cite10) a rule's name in a sentence (an identifier with an underscore)
+_RULE_SAID = re.compile(r"(?<![\w-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?![\w-])")
+
+
 class _SiteOnly(list):
     """(#342) No cited fact about a whole site, for a sentence that says something of it."""
 
     def __init__(self, site: str):
         super().__init__()
         self.site = site
+
+
+#: (0112-cite10) a parameter and its value as a fact lists it: "warn_pct = 10.0"
+_PARAM_VALUE = re.compile(r"(?<![\w-])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*=\s*([-+]?\d+(?:\.\d+)?)")
+_NUMBER = re.compile(r"(?<![\w.\-@])[-+]?\d+(?:\.\d+)?(?![\w.]\d)")
+
+
+def _param_problems(vis: str, mine: list) -> tuple:
+    """(0112-cite10) ``(reason, why)``: a sentence that names one parameter of a cited fact's
+    list ("warn_pct = 10.0, ..., assumed_min_oa_pct = 20.0") and gives a figure that is another
+    listed parameter's value, not its own ("The default warn_pct ... is 20%"), fails."""
+    values: dict = {}
+    for fc in mine:
+        for name, v in _PARAM_VALUE.findall(fc.said):
+            values.setdefault(name, set()).add(Decimal(v).normalize())
+    if len(values) < 2:
+        return "", []
+    body = _CITES.sub(" ", vis).lower()
+    named = [n for n in values if re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", body)]
+    if len(named) != 1:
+        return "", []
+    own = values[named[0]]
+    others = set().union(*(v for n, v in values.items() if n != named[0]))
+    plain = re.sub(r"(?<![\w-])[a-z][a-z0-9]*(?:_[a-z0-9]+)+", " ", body)
+    for m in _NUMBER.finditer(plain):
+        d = Decimal(m.group(0)).copy_abs().normalize()
+        if d in others and d not in own:
+            return "uncited-number", [
+                f"{m.group(0)}: a cited fact gives it for another parameter, not {named[0]!r}"
+            ]
+    return "", []
+
+
+#: (0112-cite10) words that open a condition before a sentence's subject
+_CONDITION_LEAD = frozenset("if when assuming provided unless once given".split())
 
 
 def _site_subject(p: _Parsed, facts: list, vis: str) -> str:
@@ -7162,6 +7217,14 @@ def _site_subject(p: _Parsed, facts: list, vis: str) -> str:
     facs = {fc.facility for fc in facts} - {""}
     toks, n = p.toks, len(p.toks)
     x = 0
+    # (0112-cite10) a heading's or a list's marks, and a leading condition ("If the trends are
+    # right, site-a fails X"), come before the subject
+    while x < n and toks[x][0] == "sym":
+        x += 1
+    if x < n and toks[x][1].lower() in _CONDITION_LEAD:
+        comma = next((i for i in range(x, n) if toks[i][1] == ","), None)
+        if comma is not None:
+            x = comma + 1
     while x < n and (
         toks[x][1].lower() in _SITE_LEAD or toks[x][1].lower() in ("the", "whole", "this")
     ):
@@ -7880,7 +7943,11 @@ def _judge(
     out = []
     if issued is None:
         issued = issued_names(context.by_id(i) for i in context.ids())
-    spellings = _unit_spellings(_known_names(context))
+    # (0112-cite10) the unit ids of the whole session too: "AHU 3" is AHU-3 when a fact named
+    # AHU-1, even one that names it only in its text
+    spellings = _unit_spellings(
+        set(_known_names(context)) | {n for n in issued if _UNIT_ID.match(n)}
+    )
     for seg in _segments(text, notices, quotes):
         if seg.kind not in ("sentence", "quote"):
             continue
@@ -7927,6 +7994,8 @@ def _judge(
             reason, why = _sentence_problems(vis, mine, own, vocab, num, claims)
             if not reason and own:  # 0112-cite10: a name no fact of the session gave; a note
                 reason, why = _session_problems(vis, mine, vocab, issued)
+            if not reason and own:  # 0112-cite10: a parameter's figure is that parameter's
+                reason, why = _param_problems(vis, mine)
             if not reason and _proto("C"):
                 reason, why = _proto_c(vis, mine, own, vocab, num, context, claims)
             if not reason and _proto("A"):

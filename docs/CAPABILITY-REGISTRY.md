@@ -873,6 +873,17 @@ cannot match is not supported. **Supported means matched, not proven true.**
   citing its `V` fact passes. A sentence that cites only caveats, one of which hedges ("can read
   as a heating leak", "could not be ruled out"), must hedge too or say it is the caveat: "AHU-1
   has a heating leak" citing that caveat fails.
+- **A site, a count, a spelling, a parameter** (0112-cite10). A site said as the subject after
+  a heading's or list's marks or after a leading condition ("## site-a fails X", "If the trends
+  are right, site-a fails X") is read like one that opens the sentence, and a figure or a rule
+  said of a site ("site-a has economizer_high_limit on 43% of those samples") is read against
+  the cited facts about the whole site: one unit's finding supports neither. A count of one
+  verdict ("6 warn results") needs that verdict's count where the cited fact counts results by
+  verdict ("2 fault, 4 warn"), not its count of results. A unit id spelled another way ("AHU 3")
+  is read as an id when any fact of the session names that family, also only in its text, so a
+  unit no cited fact is about fails. A sentence naming one parameter of a cited fact's list
+  ("warn_pct = 10.0, ..., assumed_min_oa_pct = 20.0") fails with another listed parameter's
+  value ("The default warn_pct ... is 20%").
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
