@@ -18,6 +18,7 @@ from ._common import (
     FINDING_ROW,
     by_severity,
     caller_config,
+    caveat_facts,
     check_selection,
     cite,
     finding_fact,
@@ -84,8 +85,9 @@ OUTPUT_SCHEMA = {
 #: config sections an M&V run does not need
 _DROP = ("rules", "drift", "report", "faults", "soo", "ventilation", "topology")
 _LISTED = 10
-#: meters on a page by default, each with all its findings (0.112, #333: every meter before)
-_PAGE = 5
+#: meters on a page by default, each with all its findings (0.112, #333: every meter before;
+#: 0112-cite10: 4, not 5, with each caveat a fact)
+_PAGE = 4
 #: the caveat an mv_savings finding carries when its baseline fails acceptance
 _INFO_ONLY = "this saving is for information only"
 #: the unit of a saving when the run config has no ``units`` block
@@ -304,6 +306,9 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         facts.append(fact)
         if i - 1 <= _LISTED and r["rule"] in ("mv_baseline", "mv_savings", "mv_trigger"):
             text.append(cite(facts[-1]))
+    # 0112-cite10: the findings' caveats (the method a saving defaulted to, the G14 kernel's
+    # band, the days dropped), one fact per caveat with the meters it was given for
+    facts.extend(caveat_facts("mv_summary", rows, fid))
     facts.extend(_claim_facts(fid, arguments.get("claim") or ""))
     data = {
         "facility_id": fid,

@@ -39,6 +39,8 @@ from ._common import (
     jsonable,
     mask_summary,
     narrow,
+    note_facts,
+    parameter_basis_fact,
     reference_conditions,
     reference_findings,
     reference_notes_banner,
@@ -46,6 +48,7 @@ from ._common import (
     rule_names,
     run,
     severity_counts,
+    skipped_fact,
     subject,
     summary_text,
     trust_banner,
@@ -287,6 +290,19 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
+    # 0112-cite10: the caveats of every finding with a fact, the labels and masked samples of
+    # each fault and warn, and the rules skipped for missing inputs, each a fact
+    facts.extend(
+        note_facts(
+            "rule_run",
+            shown[:_FACTS],
+            fid,
+            labels=lambda r: r["severity"] in ("fault", "warn"),
+        )
+    )
+    skipped_named = skipped_fact("K1@rule_run", every_skip, fid)
+    if skipped_named is not None:
+        facts.append(skipped_named)
     banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
@@ -907,6 +923,11 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     for fact in _reference_facts(fid, f, row, rule_obj, frame, refs, mask):
         facts.append(fact)
         text.append(cite(fact))
+    # 0112-cite10: the finding's caveats, labels and masked samples, and its parameters' basis
+    facts.extend(note_facts("finding_detail", [row], fid))
+    basis = parameter_basis_fact("B1@finding_detail", rule, params, row, fid)
+    if basis is not None:
+        facts.append(basis)
     data = {
         "facility_id": fid,
         "finding": row,

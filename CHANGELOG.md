@@ -506,6 +506,17 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   |" under "Fails X" is the claim negated for AHU-1, and fails closed unless a cited fact states
   it). On the generated cases E fell from 13.1% to 2.2% and S from 11.2% to 1.6%; 22 corpus
   entries that were known gaps now pass.
+- **`check_citations` fails a name no fact of the session gave, and a note cited from the
+  wrong fact.** A sentence naming a unit, site or dataset as a slug ("irish-ahu") or a rule
+  that no result of the session named fails closed (the session's fact ledger now keeps the
+  names its facts gave, forgotten facts included, and a worker's view carries them); a rule
+  named with a run's summary must be named by a cited fact ("the condenser_bypass_leak rule was
+  skipped" citing `F1@rule_run` fails); a sentence that says a rule's caveat, masked samples or
+  a skipped rule must cite a fact that says so; and a sentence citing only a caveat that hedges
+  ("can read as a heating leak") must hedge too. On the real-host drafts, E fell from 14.3% to
+  9.4% with S up 0.4 points.
+- **`mv_summary` shows 4 meters a page by default** (was 5), so its default result, now with
+  each caveat a fact, still fits a host's 25,000-character tool output.
 - **The changelog's 0.106.0 to 0.109.1 sections are archived** in
   `docs/changelog/changelog-0.106-0.109.md`, linked from the changelog, its index and the docs
   site (#340), so `CHANGELOG.md` stays under the 200 KB render limit.
@@ -626,6 +637,17 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   <id> --force` writes a well-formed mark, or remove the hand-edited part.
 
 ### Added
+- **A result's notes are facts (0112-cite10).** `rule_run`, `finding_detail` and
+  `mv_summary` issue each caveat their findings carry as a `caveat` fact (`V<n>`, one per rule
+  and caveat text, naming the units it was given for: the leaking_valve rule's fan-heat note, an
+  M&V saving's "no mv.method declared: the SEP default, forecast, was used", the G14 kernel's
+  band); `rule_run` (faults and warnings) and `finding_detail` a finding's labels and masked
+  samples (`M<n>` `finding_labels`: `missed_cause "economizer_not_commanded"`, `oa_cost_airflow
+  "trended supply airflow"`, `n_masked_fan_off 824`); `rule_run` the rules it skipped for
+  missing inputs, by name with what each lacked (`K1` `skipped_rules`); and `finding_detail` the
+  basis of the rule's parameters (`B1` `parameter_basis`). Hosts read these in the result's
+  JSON and cited the nearest fact for them: 31 of the 39 false sentences kept on the real-host
+  baseline were such notes.
 - **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
   block listing its facts, one `[id] text` line each, because hosts such as Claude Desktop show
   the model `content` but not `_meta`; `_meta["camber/facts"]` stays for programmatic clients.

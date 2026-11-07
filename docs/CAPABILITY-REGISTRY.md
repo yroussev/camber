@@ -96,6 +96,10 @@ well as the digits.
 | `R<n>` `reference_comparison` | `sensor_trust` | now with `unit` (also in `data.references` and the summary): the unit CAMBER's rules read the point in, `°F` for a temperature and `%` for a valve, damper or speed (`null`: the point's own units), and the bias, RMSE, samples and overlap as fields |
 | `A<n>` `claimed_figure` | `mv_summary` with `claim` | each figure the caller's claim states, `basis` `claimed`: what the claim says, never a measured result (only the figure and its unit are written, never the claim's words) |
 | `N<n>` `notice` | every capability | each banner of the result, `basis` `notice`, its text exactly the banner's, so a draft that repeats a NOTICE can cite it |
+| `V<n>` `caveat` | `rule_run`, `finding_detail`, `mv_summary` | (0112-cite10) each caveat a rule gives its findings, in the rule's words, one fact per rule and caveat text naming every unit it was given for (`rule`, `finding_ids`, and `equip` with `subject` when there is one unit, else `equips`): the leaking_valve rule's "a heat rise downstream of the coils ... can read as a heating leak", an M&V saving's "no mv.method declared: the SEP default, forecast, was used" or its G14-kernel band note, the days a baseline dropped |
+| `M<n>` `finding_labels` | `rule_run` (fault and warn findings), `finding_detail` | (0112-cite10) a finding's string-valued metrics (`missed_cause "economizer_not_commanded"`, `oa_cost_airflow "trended supply airflow"`, `fan_gate`, a basis or source) and the samples it masked (`n_masked_fan_off 824`), each value quoted |
+| `K1` `skipped_rules` | `rule_run` | (0112-cite10) the rules the run skipped for missing inputs, by name, each with the inputs it lacked and the equipment it was skipped on (`rules` lists them; `F1` counts them), so a draft naming a skipped rule can cite it |
+| `B1` `parameter_basis` | `finding_detail` | (0112-cite10) the basis the rule gives for its parameters' values ("max_starts_per_day: CAMBER judgment: a generic cycling limit ...") |
 
 **Pages** (0.111, #299; sizes 0.112, #333). A list-returning capability returns one page of
 each list by default, sized so that the default result fits a host that gives the model only
@@ -109,7 +113,7 @@ of the whole list. A page that is not the whole list sets `truncated` and adds a
 the next page, not a larger one, which a host may refuse. The default pages: `facilities` 40,
 `points` 200, `coverage` 20 per list (equipment, points, gaps), `sensor_trust` 40 points,
 `rule_run` 12 findings and 12 skipped rules, `drift` 10 per list, `rule_params` 15 rules (7 with
-`detail`), `check_citations` 50 sentences, `dataset_search` 20 datasets, `mv_summary` 5 meters
+`detail`), `check_citations` 50 sentences, `dataset_search` 20 datasets, `mv_summary` 4 meters
 (each with all its findings); `rcx_report` returns as many of the best-ranked issues as fit
 about 22,000 characters, at most 8 (`top_n` sets the page size, `offset` gives the next ones),
 with only their facts and sections, and the first 5 entries of the fact index's appendix A
@@ -855,6 +859,20 @@ cannot match is not supported. **Supported means matched, not proven true.**
   named -- is read only against the cited facts about the whole site: "site-north has no valve
   leak" citing one unit's "no valve leak", and "ds-x meets daily acceptance" citing the M&V
   summary's counts and one meter's "meets", fail.
+- **Names no fact of the session gave, and notes** (0112-cite10). A sentence that cites a fact
+  and names a unit, site or dataset as a slug no fact of the session named ("irish-ahu is
+  licensed ..." when no result named irish-ahu; a slug reads as such a name when one of its
+  words is a class word such as AHU, VAV, chiller, meter, logger, site or ds and another is no
+  generic word: "site-wide", "AHU-level" and "duct-logger" of a cited "duct logger" are not), or
+  a rule no fact of the session named, fails closed. The session's names are those of every
+  fact its ledger recorded (forgotten ones too), or of the facts passed. A rule named with a
+  run's summary (`F1@rule_run`) or skipped rules must be named by a cited fact. A sentence that
+  says a rule's caveat, masked samples or a skipped rule needs a cited fact that says so (a
+  `caveat`, `finding_labels` or `skipped_rules` fact, below, or one whose words say it): "The
+  rule's own caveat says fan heat can read as a leak" citing the leaking_valve finding fails,
+  citing its `V` fact passes. A sentence that cites only caveats, one of which hedges ("can read
+  as a heating leak", "could not be ruled out"), must hedge too or say it is the caveat: "AHU-1
+  has a heating leak" citing that caveat fails.
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a

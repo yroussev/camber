@@ -280,13 +280,13 @@ def test_mv_summary_pages_meters_with_all_their_findings(site):
     ctx = _ctx(site, config=site["mv_cfg"])
     res = REG.call("mv_summary", {"facility_id": MV}, ctx)
     shown = {r["equip"] for r in res.data["findings"]}
-    assert len(shown) == 5 and res.truncated
+    assert len(shown) == 4 and res.truncated  # 0112-cite10: 4 a page
     assert res.data["meters"] == sorted(METERS)  # every meter is named
     assert sum(res.data["counts"].values()) == 2 * len(METERS)  # the counts cover every meter
     notice = next(b for b in res.banners if "'meters' shows" in b)
-    assert "rows 1-5 of 12" in notice and "offset=5" in notice
+    assert "rows 1-4 of 12" in notice and "offset=4" in notice
     assert all(sum(r["equip"] == e for r in res.data["findings"]) == 2 for e in shown)
-    nxt = REG.call("mv_summary", {"facility_id": MV, "offset": 5}, ctx)
+    nxt = REG.call("mv_summary", {"facility_id": MV, "offset": 4}, ctx)
     assert not shown & {r["equip"] for r in nxt.data["findings"]}
 
 
