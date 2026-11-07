@@ -8453,6 +8453,14 @@ _PROTO_ITEM = (
 )
 
 
+#: (C=split) the verbs a clause opens with after its unit: no part's name
+_PROTO_VERBS = (
+    "(?:"
+    + "|".join(sorted({*_PROTO_SINGULAR, *_PROTO_SINGULAR.values(), "is", "was", "never"}))
+    + ")"
+)
+
+
 def _proto_unit_rx(body: str, named: set) -> str:
     """(C=split) A pattern of one of the ``named`` units as ``body`` spells it (quoted or not)."""
     alts = sorted(named, key=lambda n: (-len(n), n))
@@ -8506,10 +8514,22 @@ _PROTO_ONE = (
     ),
     (
         re.compile(
-            r"\b([Tt]he\s+(?:[\w\-\"]+\s+)?)(point|meter|unit|valve|damper|sensor)s\s+"
+            r"\b([Tt]he\s+(?:[\w\-\"]+\s+){0,3})(point|meter|unit|valve|damper|sensor)s\s+"
             r"(on|of|at|for)\b"
         ),
         r"\1\2 \3",
+    ),
+    # "The AHU-1 heat valves read", "AHU-1 is both at 100%", "are each marked"
+    (
+        re.compile(
+            r"(\b[A-Za-z][\w\-]*\d[\w\-]*\s+(?:[a-z][\w\-]*\s+)?)"
+            r"(valve|damper|point|sensor|meter|coil|fan)s\b"
+        ),
+        r"\1\2",
+    ),
+    (
+        re.compile(r"\b(is|are|was|were|has|have|read|reads)\s+(?:both|each|all)\b(?!\s+of)", re.I),
+        r"\1",
     ),
 )
 
@@ -8540,18 +8560,37 @@ def _proto_split(body: str, named: set) -> list | None:
       "B does not P".
     """
     u0 = _proto_unit_rx(body, named)
-    u = rf"(?:{u0}(?:['’]s(?:\s+[\w\-]+)?)?)"
+    u = rf"(?:{u0}(?:['’]s(?:\s+[\w\-]+)?|\s+\"[\w\-]+\")?)"
     flags = re.I | re.S
     text = body.strip().rstrip(".;, ")
+    # "the AHU-1 heat valve and the AHU-2 heat valve": the same words after each unit are its
+    # part ("AHU-1's heat_valve and AHU-2's heat_valve")
+    text = re.sub(
+        rf"(?:\bthe\s+)?(?P<a>{u0})\s+(?P<w>(?!{_PROTO_VERBS}\b)[a-z][\w\-]*(?:\s+[a-z][\w\-]*)?)"
+        rf"\s+(?P<j>and|&)\s+"
+        rf"(?:the\s+)?(?P<b>{u0})\s+(?P=w)\b(?=\s+[A-Za-z])",
+        lambda m: (
+            f"{m.group('a')}'s {m.group('w').replace(' ', '_')} {m.group('j')} "
+            f"{m.group('b')}'s {m.group('w').replace(' ', '_')}"
+        ),
+        text,
+        flags=flags,
+    )
     lab = re.match(r"^\W*(?P<label>[^:|]{2,60}?)\s*:\s*(?P<rest>.+)$", text, flags)
     if lab is not None and not re.search(u0, lab.group("label"), flags):
-        # "Unmet occupied hours: A 81%, B 100%": each unit's piece with the label
+        # "The problem is the two loggers: A and B only have 19.1%": the rest split by these
+        # forms, or "Unmet occupied hours: A 81%, B 100%": each unit's piece with the label
+        sub = _proto_split(lab.group("rest"), named)
+        if sub is not None and not any(isinstance(t, tuple) for t in sub):
+            return sub
         pieces = [
             x.strip() for x in re.split(r"\s*[;,]\s*(?:and\s+)?|\s+and\s+", lab.group("rest"))
         ]
         pieces = [x for x in pieces if x]
         found = [re.findall(u0, x, flags) for x in pieces]
-        if len(pieces) == len(named) and all(len(f) == 1 for f in found):
+        if len(pieces) == len(named) and all(
+            len(f) == 1 and len(x) > len(f[0]) + 2 for f, x in zip(found, pieces)
+        ):
             return [f"{lab.group('label')}: {x}" for x in pieces]
 
     def clean(x: str) -> str:
@@ -8589,7 +8628,8 @@ def _proto_split(body: str, named: set) -> list | None:
         return [(_proto_not(x, f"{x} {pred}", x), f"{x} {pred}") for x in (a, b)]
     item_u = rf"(?:{u}(?:\s*\([^()]*\))?)"
     lst = (
-        rf"(?P<list>{item_u}(?:\s*,\s*{item_u})*\s*,?\s*(?:and|&)\s+{item_u}|"
+        rf"(?P<list>{item_u}(?:\s*,\s*{item_u})*\s*,?\s*(?:and|&)\s+(?:(?:on|at|for|of)\s+)?"
+        rf"{item_u}|"
         rf"{item_u}(?:\s*,\s*{item_u})+(?=\s*[:|]|\s+[a-z]))"
     )
     m = re.match(rf"^\W*of\s+{lst}\s*,\s*(?:only\s+)?(?P<a>{u})\s+(?P<pred>.+)$", text, flags)
