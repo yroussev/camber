@@ -338,12 +338,12 @@ def _facility_names(ctx) -> dict:
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
     from ..agent.verify import (
+        _issued_names,
         _judge,
         _rebuild,
         _states_verdict_or_caveat,
         _visible,
         extract_cites,
-        issued_names,
     )
 
     ledger = getattr(ctx, "ledger", None)
@@ -369,7 +369,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     terms, rules = _terms()
     # 0112-cite10: the names every fact of the session gave (with no ledger, those passed)
     issued = set(ledger.names()) if ledger is not None else set()
-    issued |= issued_names(facts_in)
+    issued |= _issued_names(facts_in)
     judged = _judge(
         draft,
         context,

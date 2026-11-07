@@ -7790,7 +7790,7 @@ _GENERIC_PARTS = frozenset(
 )
 
 
-def issued_names(facts) -> set:
+def _issued_names(facts) -> set:
     """The names the ``facts`` (dicts or :class:`~camber.agent.context.Fact`) give, lower case:
     every slug and identifier in their texts and string fields, and each name field whole (an
     equipment, a facility, a rule, a role) -- what a session's facts have named."""
@@ -7926,7 +7926,7 @@ def _judge(
     order (headings and known notices are not judged; see the module doc). ``aliases`` maps a
     facility's registry name (or id) to its id, ``terms`` are rule, tool and field names (never
     an equipment), ``rules`` the rule names among them (#328). ``issued``: the names every fact
-    of the session gave (:func:`issued_names`; by default those of ``context``'s facts), so a
+    of the session gave (:func:`_issued_names`; by default those of ``context``'s facts), so a
     name no fact gave fails closed (0112-cite10)."""
     text = text or ""
     all_ids = set(context.ids())
@@ -7949,7 +7949,7 @@ def _judge(
             quotes[fid] = rx
     out = []
     if issued is None:
-        issued = issued_names(context.by_id(i) for i in context.ids())
+        issued = _issued_names(context.by_id(i) for i in context.ids())
     # (0112-cite10) the unit ids of the whole session too: "AHU 3" is AHU-3 when a fact named
     # AHU-1, even one that names it only in its text
     spellings = _unit_spellings(

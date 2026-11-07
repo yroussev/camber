@@ -85,7 +85,7 @@ class FactLedger:
     def record(self, facts: Iterable) -> None:
         """Record each fact (a dict with a non-empty string ``id``; anything else is skipped).
         A fact recorded again with the same id replaces the earlier one and counts as new."""
-        from ..agent.verify import issued_names
+        from ..agent.verify import _issued_names
 
         with self._lock:
             for f in facts or ():
@@ -95,7 +95,7 @@ class FactLedger:
                         fact, ensure_ascii=False, separators=(",", ":"), sort_keys=True
                     )
                     self._put(f["id"], text)
-                    self._names |= issued_names([fact])
+                    self._names |= _issued_names([fact])
 
     def names(self) -> frozenset:
         """The names (lower case) the facts recorded here gave, forgotten ones included."""
