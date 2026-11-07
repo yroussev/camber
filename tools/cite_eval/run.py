@@ -2,6 +2,7 @@
 
     python -m tools.cite_eval.run [--sample N] [--seed S] [--python PY | --venv DIR]
                                   [--label NAME] [--out RESULT.json] [--history HISTORY.csv]
+                                  [--corpus-out CORPUS.json]
 
 E = P(a false case is kept with ``grounded: true``) and S = P(a true case is removed), overall
 and per cell (form x operator x capability), per form, per operator and per capability. The
@@ -9,7 +10,9 @@ cases come from :mod:`.forms` over the fact table of :mod:`.facttable` (read fro
 by default the committed ``tests/citations_corpus/generated_facts.json``, so every run judges
 the same cases). With ``--python`` or ``--venv`` the checker of that interpreter judges them
 (a worker process imports only that interpreter's ``camber``): an installed build is
-baselined without touching it. ``--history`` appends one CSV row per run.
+baselined without touching it. ``--corpus-out`` also judges the regression corpus
+(``tests/citations_corpus/*.jsonl``) with that checker: entries met, listed xfail, listed
+passing but not met (regressions) and xfail now met. ``--history`` appends one CSV row per run.
 """
 
 from __future__ import annotations
@@ -43,7 +46,66 @@ HISTORY_FIELDS = [
     "cells_E_over_2pct",
     "worst_cell",
     "worst_cell_E",
+    "corpus_entries",
+    "corpus_met",
+    "corpus_xfail_listed",
+    "corpus_regressions",
+    "corpus_promotable",
 ]
+CORPUS = os.path.join(facttable.REPO, "tests", "citations_corpus")
+
+
+def corpus_results(python: str | None = None, jobs: int = 1, corpus: str = CORPUS) -> dict:
+    """Judge every regression-corpus entry: ``{"entries", "met", "xfail_listed",
+    "regressions" (listed as passing, not met), "promotable" (listed xfail, met), "rows"}``."""
+    import glob
+
+    entries = []
+    for path in sorted(glob.glob(os.path.join(corpus, "*.jsonl"))):
+        with open(path, encoding="utf-8") as fh:
+            entries += [json.loads(line) for line in fh if line.strip()]
+    payloads = [
+        {
+            "key": e["id"],
+            "draft": e["draft"],
+            "facts": e["facts"],
+            "allowed": e.get("allowed", []),
+            "names": e.get("names", {}),
+        }
+        for e in entries
+    ]
+    res = judge(payloads, python, jobs)
+    rows = []
+    for e in entries:
+        r = res.get(e["id"], {})
+        verdicts = [s[1] for s in r.get("sentences", [])]
+        if r.get("error"):
+            met = False
+        elif e["expected"]["draft"] == "supported":
+            met = bool(r.get("grounded")) and all(v == "supported" for v in verdicts)
+        else:
+            met = not r.get("grounded")
+        rows.append(
+            {
+                "id": e["id"],
+                "source": e["source"],
+                "xfail": bool(e.get("xfail")),
+                "gap": e.get("gap"),
+                "finding": e["tags"].get("finding"),
+                "expected": e["expected"]["draft"],
+                "met": met,
+                "grounded": r.get("grounded"),
+                "draft": e["draft"],
+            }
+        )
+    return {
+        "entries": len(rows),
+        "met": sum(r["met"] for r in rows),
+        "xfail_listed": sum(r["xfail"] for r in rows),
+        "regressions": sum(1 for r in rows if not r["xfail"] and not r["met"]),
+        "promotable": sum(1 for r in rows if r["xfail"] and r["met"]),
+        "rows": rows,
+    }
 
 
 def _ws(s: str) -> str:
@@ -223,6 +285,7 @@ def main(argv=None) -> int:
     ap.add_argument("--label", default="")
     ap.add_argument("--out", help="write the metrics (and per-case results) JSON here")
     ap.add_argument("--history", help="append one CSV row here")
+    ap.add_argument("--corpus-out", help="also judge the regression corpus; write it here")
     a = ap.parse_args(argv)
     python = a.python or (os.path.join(a.venv, "bin", "python") if a.venv else None)
     fb, cases = build_cases(a.facts, a.sample or None, a.seed)
@@ -238,6 +301,16 @@ def main(argv=None) -> int:
     )
     for w in m["worst_cells"][:10]:
         print(f"  E {w['E']:.2f} ({w['escapes']}/{w['n_false']})  {w['cell']}")
+    cr = None
+    if a.corpus_out:
+        cr = corpus_results(python, a.jobs)
+        print(
+            f"corpus: {cr['entries']} entries, {cr['met']} met; {cr['xfail_listed']} listed xfail, "
+            f"{cr['regressions']} listed passing but not met, {cr['promotable']} xfail now met"
+        )
+        os.makedirs(os.path.dirname(os.path.abspath(a.corpus_out)), exist_ok=True)
+        with open(a.corpus_out, "w", encoding="utf-8") as fh:
+            json.dump({"checker": checker, **cr}, fh, ensure_ascii=False, indent=1)
     if a.out:
         os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
         per_case = []
@@ -281,6 +354,17 @@ def main(argv=None) -> int:
                     "cells_E_over_2pct": m["n_cells_E_over_2pct"],
                     "worst_cell": worst["cell"],
                     "worst_cell_E": f"{worst['E']:.4f}",
+                    **(
+                        {
+                            "corpus_entries": cr["entries"],
+                            "corpus_met": cr["met"],
+                            "corpus_xfail_listed": cr["xfail_listed"],
+                            "corpus_regressions": cr["regressions"],
+                            "corpus_promotable": cr["promotable"],
+                        }
+                        if cr
+                        else {}
+                    ),
                 }
             )
     return 0
