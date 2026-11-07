@@ -7880,9 +7880,10 @@ def _session_problems(vis: str, mine: list, vocab, issued) -> tuple:
     if not mine:
         return "", []
     for rx, stem, what in _NOTE_WORDS:
-        if rx.search(body) and not any(stem in fc.said or fc.kind == stem for fc in mine):
+        hit = rx.search(body)
+        if hit and not any(stem in fc.said or fc.kind == stem for fc in mine):
             return "unsupported-claim", [
-                f"{rx.search(body).group(0)!r}: no cited fact states {what}; cite the fact of "
+                f"{hit.group(0)!r}: no cited fact states {what}; cite the fact of "
                 "the result that does"
             ]
     if (
@@ -8646,7 +8647,7 @@ def _proto_split(body: str, named: set) -> list | None:
         others = [x for x in subjects if x.lower() != a.lower()]
         if len(subjects) == len(named) and len(others) == len(subjects) - 1:
             pred = m.group("pred").strip()
-            out = [_proto_one(f"{a} {pred}")]
+            out: list = [_proto_one(f"{a} {pred}")]  # a clause, then (denial, what it denies)
             out += [(_proto_not(b, f"{a} {pred}", a), f"{b} {pred}") for b in others]
             return out
     m = re.search(lst, text, flags)
