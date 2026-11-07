@@ -521,7 +521,7 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   economizer_high_limit on 43% of those samples") fails; "site-a has 6 warn results" no longer
   matches a summary's "6 of them returned a result" when it counts "4 warn"; "AHU 3" is read as
   AHU-3 when a cited fact names AHU-1 only in its text; and "the default warn_pct is 20%" fails
-  when 20 is another listed parameter's value. On the generated cases E fell from 1.9% to 0.7%
+  when 20 is another listed parameter's value. On the generated cases E fell from 1.9% to 0.6%
   with S down from 1.5% to 1.3%.
 - **`mv_summary` shows 4 meters a page by default** (was 5), so its default result, now with
   each caveat a fact, still fits a host's 25,000-character tool output.
