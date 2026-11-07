@@ -98,3 +98,29 @@ def test_c_says_why(judge, monkeypatch):
     )
     assert not r["grounded"]
     assert "give each unit its own sentence" in r["sentences"][0][2]
+
+
+# C=split: sets, "respectively", "unlike" and "X, not Y" are written as one clause per unit and
+# each (unit, claim) pair is read against that unit's own facts; C=1 fails them all closed
+OA = ["F4@sensor_trust-c81f17", "F3@sensor_trust-c81f17"]  # AHU-2 0.73, AHU-3 0.72 (suspect)
+REF = ["R1@sensor_trust-c81f17", "R2@sensor_trust-c81f17"]  # AHU-1 disagrees, AHU-2 agrees
+SPLIT = [
+    # (draft, cites, kept with C=split)
+    (f"AHU-2's oa_damper and AHU-3's oa_damper are both suspect {_c(OA)}.", OA, True),
+    (f"AHU-2 and AHU-3 have oa_damper trusts of 0.73 and 0.72, respectively {_c(OA)}.", OA, True),
+    (f"AHU-2 and AHU-3 have oa_damper trusts of 0.72 and 0.73, respectively {_c(OA)}.", OA, False),
+    (f"Unlike AHU-2, AHU-1's supply_air_temp disagrees with its reference {_c(REF)}.", REF, True),
+    (f"Unlike AHU-1, AHU-2's supply_air_temp disagrees with its reference {_c(REF)}.", REF, False),
+    (f"AHU-1's supply_air_temp, not AHU-2's, disagrees with its reference {_c(REF)}.", REF, True),
+    (f"AHU-2's supply_air_temp, not AHU-1's, disagrees with its reference {_c(REF)}.", REF, False),
+    (f"AHU-1 fails simultaneous_heat_cool, not AHU-2 {_c(RR)}.", RR, False),
+]
+
+
+@pytest.mark.parametrize("draft,cites,on", SPLIT)
+def test_c_split(judge, monkeypatch, draft, cites, on):
+    monkeypatch.setenv("CAMBER_CITE_C", "split")
+    assert _kept(judge, draft, cites) is on
+    if on:  # C=1 strips each of these true sentences: it does not split them
+        monkeypatch.setenv("CAMBER_CITE_C", "1")
+        assert _kept(judge, draft, cites) is False
