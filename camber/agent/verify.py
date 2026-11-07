@@ -8111,8 +8111,8 @@ def _proto_cell(first: str, head: str, cell: str):
     name) or the cell has a figure (read as before, with its column's name)."""
     bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
     ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
-    if _states_nothing(head) and not _checking_claim(head):
-        return None
+    if _states_nothing(head) and not re.search(r"\d|_", head) and not _checking_claim(head):
+        return None  # a column's name ("Result", "Status"); a name or a figure in it is a claim
     low = (
         head[:1].lower() + head[1:]
         if head[:1].isupper() and not _UNIT_ID.match(head.split()[0])
