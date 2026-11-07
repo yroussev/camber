@@ -3,7 +3,9 @@
 Each operator returns zero or more mutants of a :class:`~.facttable.Claim`; a mutant keeps the
 original's ``fact_id`` (the sentence still cites the fact the true claim came from). A mutant
 whose :meth:`~.facttable.Claim.key` is another true claim's is dropped: it is true, not false
-(``AHU-2 passes X`` is no mutant of ``AHU-1 passes X`` when AHU-2 passes X too).
+(``AHU-2 passes X`` is no mutant of ``AHU-1 passes X`` when AHU-2 passes X too); so is one a
+unit's own fact implies (a point's coverage when the unit's mean and worst point are that figure,
+0112-cite10: the judge calibration found these labelled false).
 
 The operators (plan section 3): swap the unit, point, rule or site; perturb a figure; °F for
 °C; % for percentage points; flip a sign or a direction; flip a verdict; negate; quantify
@@ -67,6 +69,12 @@ class World:
         self.points = sorted({c.point for c in claims if c.point})
         self.rules = sorted({c.rule for c in claims if c.rule and c.attribute == "verdict"})
         self.sites = sorted({c.site for c in claims if c.site})
+        # (0112-cite10) each unit's mean and worst point coverage, from its equipment fact
+        self.coverage = {
+            c.unit: (float(c.value), float(c.extra["worst"]))
+            for c in claims
+            if c.attribute == "coverage" and c.unit and not c.point and "worst" in (c.extra or {})
+        }
 
     def family(self, unit: str) -> list:
         for fam in (self.units, self.meters, self.datasets):
@@ -75,7 +83,19 @@ class World:
         return []
 
     def true(self, claim) -> bool:
-        return claim.key() in self.keys
+        return claim.key() in self.keys or self.implied(claim)
+
+    def implied(self, claim) -> bool:
+        """(0112-cite10) A point's coverage the unit's own fact implies: when its mean and its
+        worst point are both the claim's figure, every point has it ("every point on AHU-2 has
+        100.0% coverage" of "mean coverage 100.0% ... worst at 100.0%")."""
+        if claim.attribute != "coverage" or not claim.point or not claim.unit:
+            return False
+        cov = self.coverage.get(claim.unit)
+        if cov is None or claim.value is None:
+            return False
+        v = round(float(claim.value), 3)
+        return round(cov[0], 3) == v == round(cov[1], 3) and not (claim.extra or {}).get("period")
 
 
 def _numeric(v) -> bool:

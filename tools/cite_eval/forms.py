@@ -1,7 +1,8 @@
 """The grammar of forms, and the generated cases.
 
 A *form* writes one clause (a single-claim form) or two (a pair form) as a draft: plain,
-bullets, headings, bold labels, table rows, header columns, HTML comments, numbers in words,
+bullets, headings, bold labels, table rows, header columns, HTML comments, HTML tag attributes
+(0112-cite10), numbers in words,
 conditionals, existentials, time spans, coverage words, Unicode and id-spelling variants; and
 for two units, two clauses, contrasts ("but", "but B does not", "unlike", "X, not Y"), status
 lists, parenthetical lists, "respectively", figure lists, sets ("A and B both"), table rows and
@@ -41,6 +42,7 @@ SINGLE_FORMS = (
     "table_row",
     "header_column",
     "html_comment",
+    "html_attr",
     "numbers_in_words",
     "conditional",
     "existential",
@@ -70,6 +72,7 @@ REGION = {
     "table_row": "table",
     "header_column": "table_header",
     "html_comment": "comment",
+    "html_attr": "attribute",
     "table_rows": "table",
     "bullets": "bullet",
 }
@@ -151,6 +154,9 @@ def single(form: str, claim, c: Clause):  # noqa: C901 - one branch per form
         return f"{head}\n|---|---|\n{row}", [head, row], region
     if form == "html_comment":
         s = f"<!-- {c.text} {ids}. -->"
+        return s, [s], region
+    if form == "html_attr":  # (0112-cite10) the claim in a tag's title, the subject shown
+        s = f'<abbr title="{c.text}">{c.subject}</abbr> {ids}.'
         return s, [s], region
     if form == "numbers_in_words":
         if c.integer is None or not c.figure or str(c.integer) not in c.text:

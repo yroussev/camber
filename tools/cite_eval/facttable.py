@@ -344,13 +344,17 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
                 sign=_sign(b),
             )
     elif kind in ("coverage", "equip_coverage", "point_coverage"):
+        extra = {"n_gaps": f.get("n_gaps")}
+        m = re.search(r'worst "[^"]+" at ([\d.]+)%', text)
+        if kind == "equip_coverage" and m:  # every point of the unit has at least this much
+            extra["worst"] = _num(m.group(1))
         add(
             attribute="coverage",
             unit=unit if kind != "coverage" else "",
             point=f.get("role", "") if kind == "point_coverage" else "",
             value=f.get("value"),
             munit="%",
-            extra={"n_gaps": f.get("n_gaps")},
+            extra=extra,
         )
     elif kind == "trust_summary":
         for lab in ("trusted", "suspect", "untrusted"):
