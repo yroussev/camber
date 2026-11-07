@@ -13,6 +13,10 @@ beyond that. A forgotten id is still known to have been issued -- it resolves to
 not to a fact -- for the ``max_forgotten`` most recently forgotten ids (100,000 by default);
 older ones read as never issued. Thread-safe; it pickles (without its lock), so a small
 :meth:`~FactLedger.view` of it can travel to a worker process with a call.
+
+It also keeps the names its facts gave (0112-cite10, :meth:`~FactLedger.names`): every slug and
+identifier of every fact it recorded, forgotten ones included, so ``check_citations`` can fail a
+sentence that names a unit, dataset or rule no fact of the session named. A view carries them.
 """
 
 from __future__ import annotations
@@ -62,6 +66,7 @@ class FactLedger:
         self._facts: OrderedDict = OrderedDict()  # id -> compact JSON of the fact
         self._forgotten: OrderedDict = OrderedDict()  # id -> None
         self._bytes = 0
+        self._names: set = set()  # 0112-cite10: the names its facts gave
         self._lock = threading.Lock()
 
     def __getstate__(self) -> dict:
@@ -71,6 +76,7 @@ class FactLedger:
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        self.__dict__.setdefault("_names", set())
         self._lock = threading.Lock()
 
     def __len__(self) -> int:
@@ -79,13 +85,22 @@ class FactLedger:
     def record(self, facts: Iterable) -> None:
         """Record each fact (a dict with a non-empty string ``id``; anything else is skipped).
         A fact recorded again with the same id replaces the earlier one and counts as new."""
+        from ..agent.verify import issued_names
+
         with self._lock:
             for f in facts or ():
                 if isinstance(f, dict) and isinstance(f.get("id"), str) and f["id"]:
+                    fact = canonical(f)
                     text = json.dumps(
-                        canonical(f), ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                        fact, ensure_ascii=False, separators=(",", ":"), sort_keys=True
                     )
                     self._put(f["id"], text)
+                    self._names |= issued_names([fact])
+
+    def names(self) -> frozenset:
+        """The names (lower case) the facts recorded here gave, forgotten ones included."""
+        with self._lock:
+            return frozenset(self._names)
 
     def _put(self, fid: str, text: str) -> None:
         old = self._facts.pop(fid, None)
@@ -119,6 +134,7 @@ class FactLedger:
         id it holds counts as recently used here, so a fact that is cited stays longest."""
         out = FactLedger(max_bytes=self.max_bytes, max_forgotten=self.max_forgotten)
         with self._lock:
+            out._names = set(self._names)
             for fid in dict.fromkeys(i for i in ids if isinstance(i, str)):
                 text = self._facts.get(fid)
                 if text is not None:

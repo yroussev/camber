@@ -155,6 +155,12 @@ X", read as the header's claim negated for that unit: supported only when a cite
 the unit states the negation, otherwise the row fails closed), and a cell without a figure is
 said after its header ("Fails X: twice").
 
+A sentence that cites a fact and names a unit, site or dataset as a slug ("irish-ahu"), or a
+rule, that no fact of the session named fails closed (0112-cite10; ``issued`` of :func:`_judge`,
+the session ledger's names); a rule named with a run's summary must be named by a cited fact;
+a caveat, masked samples or a skipped rule must be said by a cited fact; and a sentence citing
+only caveats, one of which hedges, must hedge too or say it is the caveat.
+
 Citations count only in the visible text: one inside an HTML tag's attribute does not (a
 comment's words are visible to the checker, so a citation in one does). ``[A, B]`` and ``[A; B]``
 cite both ids (0.112).
@@ -4784,6 +4790,7 @@ class _FactClaims:
         strings = [text.lower(), str(getattr(fact, "equip", "") or "").lower()]
         _strings(data, strings, p)
         self.claims = p
+        self.said = strings[0]  # its text, lower case (0112-cite10: the words of its notes)
         self.hay = "\n".join(strings)
         roles = re.sub(r"[_\-]+", " ", self.hay)
         self.roles = {n for n, _s, f in _ROLE_RX if f.search(roles)}
@@ -6268,7 +6275,9 @@ def _name_problems(p: _Parsed, facts: list, vocab: _Vocab, text: str) -> list:
         return fid is not None and any(fc.names(fid) for fc in facts)
 
     why = [f"{n!r}: no cited fact names it" for n in sorted(p.ids) if not named(n)]
-    if p.rules and any(fc.has_rule for fc in facts):
+    # 0112-cite10: a run's summary or its skipped rules too ("condenser_bypass_leak was skipped"
+    # cites the fact that names it, not the run's count)
+    if p.rules and any(fc.has_rule or fc.kind in _RUN_KINDS for fc in facts):
         why += [
             f"rule {r!r}: no cited fact is about it"
             for r in sorted(p.rules)
@@ -7680,6 +7689,144 @@ def _spell_units(vis: str, spellings: list) -> tuple:
     return "".join(out), amb
 
 
+# --------------------------------------------------------------------------- session names
+# 0112-cite10: a name a sentence gives that no fact of the session gave -- a dataset, site or
+# unit written as a slug ("irish-ahu"), a rule -- fails closed, whatever the sentence cites; and
+# a sentence that says a rule's caveat, a masked sample or a skipped rule cites a fact that says
+# so (the session issues them as facts: caveat, finding_labels, skipped_rules).
+
+#: the facts that sum up a rule run without naming its rules: a rule named with them must be
+#: named by a cited fact
+_RUN_KINDS = frozenset({"rule_run", "skipped_rules"})
+#: a slug-shaped token: words joined by hyphens ("irish-ahu", "site-north", "AHU-3")
+_SLUG = re.compile(r"(?<![\w@.\-])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?![\w\-])")
+#: a token of a name in a fact: a slug or an identifier ("AHU__sat_bias", "condenser_bypass_leak")
+_NAME_TOKEN = re.compile(r"[A-Za-z0-9]+(?:[_\-]+[A-Za-z0-9]+)+")
+#: the words of a slug that make it a unit's, site's or dataset's name ("irish-ahu",
+#: "site-south", "ds-bldg") when another of its words is none of these nor a generic word
+_CLASS_WORDS = frozenset(
+    "ahu ahus rtu rtus vav vavs fcu fcus doas mau chiller chillers boiler boilers plant meter "
+    "meters logger loggers bldg site sites ds".split()
+)
+_GENERIC_PARTS = frozenset(
+    "wide level side based only specific like type style mounted served fed wise related scale "
+    "multi single per non all cross by in on off up out over under the a an of to and or no box "
+    "boxes unit units fan fans coil coils valve valves damper dampers loop loops supply return "
+    "air water hot chilled cold heating cooling data trend trends sensor sensors point points "
+    "zone zones room rooms floor roof wall side level hw chw hhw oa sa ra ma dx co2 g36 vfd "
+    "pump pumps tower towers condenser evaporator primary secondary main sub lead lag standby "
+    "backup new old first second third one two three four duct handheld "
+    "portable reference test spare".split()
+)
+
+
+def issued_names(facts) -> set:
+    """The names the ``facts`` (dicts or :class:`~camber.agent.context.Fact`) give, lower case:
+    every slug and identifier in their texts and string fields, and each name field whole (an
+    equipment, a facility, a rule, a role) -- what a session's facts have named."""
+    out: set = set()
+    for f in facts or ():
+        if isinstance(f, dict):
+            text, data = f.get("text", ""), f
+        elif f is not None:
+            text, data = getattr(f, "text", ""), getattr(f, "data", None) or {}
+            out.add(str(getattr(f, "equip", "") or "").lower())
+        else:
+            continue
+        strings = [str(text or "")]
+        _all_strings(data, strings)
+        for st in strings:
+            low = _fold(st).lower()
+            out.update(m.group(0) for m in _NAME_TOKEN.finditer(low))
+        for key in ("equip", "facility_id", "rule", "role", "finding_id", "meter"):
+            v = data.get(key) if isinstance(data, dict) else None
+            if isinstance(v, str):
+                out.add(" ".join(v.split()).lower())
+    out.discard("")
+    return out
+
+
+def _all_strings(data, out: list, depth: int = 0) -> None:
+    if depth > 8:
+        return
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k != "text":
+                _all_strings(v, out, depth + 1)
+    elif isinstance(data, (list, tuple)):
+        for v in data:
+            _all_strings(v, out, depth + 1)
+    elif isinstance(data, str):
+        out.append(data)
+
+
+def _slug_named(tok: str) -> bool:
+    """Whether a slug reads as the name of a unit, site or dataset ("irish-ahu"): one of its
+    words is a class word and another is neither that nor a generic word ("site-wide", "AHU-level"
+    and "chw-plant" are no names)."""
+    parts = tok.lower().split("-")
+    return any(p in _CLASS_WORDS for p in parts) and any(
+        p not in _CLASS_WORDS and p not in _GENERIC_PARTS and not p.isdigit() for p in parts
+    )
+
+
+#: the words of a note and what a cited fact must say for them (0112-cite10)
+_NOTE_WORDS = (
+    (re.compile(r"\bcaveats?\b", re.I), "caveat", "a rule's caveat"),
+    (re.compile(r"\bmasked\b", re.I), "mask", "masked samples"),
+    (re.compile(r"\bskipped\b", re.I), "skip", "a skipped rule"),
+)
+#: what hedges a clause: a caveat that hedges ("can read as a heating leak", "could not be
+#: ruled out") supports only a sentence that hedges too, or says it is the caveat
+_HEDGE = (
+    r"may|might|could|can|cannot|can['’]t|possibly|possible|perhaps|unless|if|whether|"
+    r"ruled\s+out|rule\s+out|uncertain|assum\w*"
+)
+_FACT_HEDGED = re.compile(rf"\b(?:{_HEDGE})\b", re.I)
+_HEDGED = re.compile(rf"\b(?:caveats?|cautions?|warns?|notes?|{_HEDGE})\b", re.I)
+
+
+def _session_problems(vis: str, mine: list, vocab, issued) -> tuple:
+    """(0112-cite10) ``(reason, why)``: a name the sentence gives that no fact of the session
+    gave (a slug naming a unit, site or dataset, or a rule); a caveat, masked samples or a
+    skipped rule said with no cited fact that says so; a sentence citing only caveats that
+    states as a finding what a caveat hedges."""
+    body = _CITES.sub(" ", vis)
+    known = set(vocab.names) | set(vocab.terms) | set(vocab.aliases.values())
+    why = []
+    for m in _SLUG.finditer(body):
+        tok = m.group(0).lower()
+        if tok in issued or tok in known or not (_slug_named(tok) or _UNIT_ID.fullmatch(tok)):
+            continue
+        spaced = tok.replace("-", " ")
+        if any(spaced in fc.hay for fc in mine):  # "duct-logger" of a fact's "duct logger"
+            continue
+        why.append(f"{m.group(0)!r}: no fact of this session names it")
+    for r in sorted(_parse(vis, vocab).rules):
+        if r not in issued:
+            why.append(f"rule {r!r}: no fact of this session names it")
+    if why:
+        return "unsupported-claim", list(dict.fromkeys(why))
+    if not mine:
+        return "", []
+    for rx, stem, what in _NOTE_WORDS:
+        if rx.search(body) and not any(stem in fc.said or fc.kind == stem for fc in mine):
+            return "unsupported-claim", [
+                f"{rx.search(body).group(0)!r}: no cited fact states {what}; cite the fact of "
+                "the result that does"
+            ]
+    if (
+        all(fc.kind == "caveat" for fc in mine)
+        and any(_FACT_HEDGED.search(fc.said) for fc in mine)
+        and not _HEDGED.search(body)
+    ):
+        return "unsupported-claim", [
+            "the cited caveat hedges what it says: say it is the rule's caveat, or hedge it as "
+            "the caveat does, rather than state it as a finding"
+        ]
+    return "", []
+
+
 @dataclass
 class _Judged:
     """One judged sentence: its span of the text, the ids it cites and the first check it fails
@@ -7703,11 +7850,14 @@ def _judge(
     aliases=None,
     terms=(),
     rules=(),
+    issued=None,
 ) -> list:
     """Every judged sentence of ``text`` against ``context``'s facts, as :class:`_Judged`, in
     order (headings and known notices are not judged; see the module doc). ``aliases`` maps a
     facility's registry name (or id) to its id, ``terms`` are rule, tool and field names (never
-    an equipment), ``rules`` the rule names among them (#328)."""
+    an equipment), ``rules`` the rule names among them (#328). ``issued``: the names every fact
+    of the session gave (:func:`issued_names`; by default those of ``context``'s facts), so a
+    name no fact gave fails closed (0112-cite10)."""
     text = text or ""
     all_ids = set(context.ids())
     vocab = _Vocab(_known_names(context), aliases, terms, rules)
@@ -7728,6 +7878,8 @@ def _judge(
         if rx is not None:
             quotes[fid] = rx
     out = []
+    if issued is None:
+        issued = issued_names(context.by_id(i) for i in context.ids())
     spellings = _unit_spellings(_known_names(context))
     for seg in _segments(text, notices, quotes):
         if seg.kind not in ("sentence", "quote"):
@@ -7773,6 +7925,8 @@ def _judge(
             mine = claims(own)
             num = None if per_sentence else claims(text_cited)
             reason, why = _sentence_problems(vis, mine, own, vocab, num, claims)
+            if not reason and own:  # 0112-cite10: a name no fact of the session gave; a note
+                reason, why = _session_problems(vis, mine, vocab, issued)
             if not reason and _proto("C"):
                 reason, why = _proto_c(vis, mine, own, vocab, num, context, claims)
             if not reason and _proto("A"):
