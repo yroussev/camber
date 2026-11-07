@@ -154,8 +154,12 @@ def payload(case: dict, facts_by_id: dict) -> dict:
     }
 
 
-def judge(payloads: list, python: str | None = None, jobs: int = 1) -> dict:
-    """``{key: result}`` for each payload: in this interpreter, or in ``python``'s."""
+def judge(payloads: list, python: str | None = None, jobs: int = 1, local: bool = False) -> dict:
+    """``{key: result}`` for each payload: in this interpreter, or in ``python``'s. ``local``
+    with ``python`` (this interpreter): the workers import this checkout's ``camber``
+    (``PYTHONPATH`` is this repository), so a checkout is judged in ``jobs`` processes."""
+    if python is None and jobs > 1:
+        python, local = sys.executable, True
     if python is None:
         from ._worker import Judge
 
@@ -175,8 +179,12 @@ def judge(payloads: list, python: str | None = None, jobs: int = 1) -> dict:
                 for p in chunk:
                     fh.write(json.dumps(p, ensure_ascii=False) + "\n")
             env = {k2: v for k2, v in os.environ.items() if k2 not in ("PYTHONPATH", "PYTHONHOME")}
-            # -I: the worker must import that interpreter's camber, never this checkout's
-            cmd = [python, "-I", os.path.join(HERE, "_worker.py"), src, dst]
+            if local:  # this checkout's camber, in another process (the CAMBER_CITE_* flags too)
+                env["PYTHONPATH"] = facttable.REPO
+                cmd = [python, os.path.join(HERE, "_worker.py"), src, dst]
+            else:
+                # -I: the worker must import that interpreter's camber, never this checkout's
+                cmd = [python, "-I", os.path.join(HERE, "_worker.py"), src, dst]
             procs.append((subprocess.Popen(cmd, env=env, cwd=tmp), dst))
         for p, dst in procs:
             if p.wait() != 0:
@@ -281,18 +289,42 @@ def main(argv=None) -> int:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--python", help="judge with this interpreter's camber")
     g.add_argument("--venv", help="judge with this venv's camber (DIR/bin/python)")
-    ap.add_argument("--jobs", type=int, default=4, help="worker processes with --python/--venv")
+    ap.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        help="worker processes with --python/--venv (or with --local-jobs: this checkout)",
+    )
+    ap.add_argument(
+        "--local-jobs",
+        action="store_true",
+        help="judge with this checkout's camber in --jobs worker processes",
+    )
+    ap.add_argument(
+        "--flags",
+        default="",
+        help="checker prototypes to switch on (camber.agent.verify, 0112-cite-proto): a comma "
+        "list of B, C, A (or A=strict); each sets CAMBER_CITE_<X>=1 (or its value) for this run "
+        "and its workers",
+    )
     ap.add_argument("--label", default="")
     ap.add_argument("--out", help="write the metrics (and per-case results) JSON here")
     ap.add_argument("--history", help="append one CSV row here")
     ap.add_argument("--corpus-out", help="also judge the regression corpus; write it here")
     a = ap.parse_args(argv)
     python = a.python or (os.path.join(a.venv, "bin", "python") if a.venv else None)
+    flags = [f.strip() for f in a.flags.split(",") if f.strip()]
+    for f in ("A", "B", "C"):
+        os.environ.pop(f"CAMBER_CITE_{f}", None)
+    for f in flags:  # "B", or "A=strict"
+        name, _, value = f.partition("=")
+        os.environ[f"CAMBER_CITE_{name.strip().upper()}"] = value.strip() or "1"
+    jobs = a.jobs if (python or a.local_jobs) else 1
     fb, cases = build_cases(a.facts, a.sample or None, a.seed)
     by_id = facttable.facts_index(fb)
-    results = judge([payload(c, by_id) for c in cases], python, a.jobs)
+    results = judge([payload(c, by_id) for c in cases], python, jobs)
     m = metrics(cases, results)
-    checker = _checker_label(python)
+    checker = _checker_label(python) + (f" flags={'+'.join(flags)}" if flags else "")
     o = m["overall"]
     print(
         f"{checker}: {len(cases)} cases ({o['n_false']} false, {o['n_true']} true); "
@@ -303,7 +335,7 @@ def main(argv=None) -> int:
         print(f"  E {w['E']:.2f} ({w['escapes']}/{w['n_false']})  {w['cell']}")
     cr = None
     if a.corpus_out:
-        cr = corpus_results(python, a.jobs)
+        cr = corpus_results(python, jobs)
         print(
             f"corpus: {cr['entries']} entries, {cr['met']} met; {cr['xfail_listed']} listed xfail, "
             f"{cr['regressions']} listed passing but not met, {cr['promotable']} xfail now met"

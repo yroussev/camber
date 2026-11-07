@@ -180,7 +180,9 @@ Pure: regex + the fact whitelist, no LLM, no I/O.
 from __future__ import annotations
 
 import calendar
+import os
 import re
+import unicodedata
 from dataclasses import asdict, dataclass, field, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -245,7 +247,10 @@ def _visible(text: str) -> str:
     """``text`` as a reader sees it: without HTML comments and tags, zero-width marks, markdown
     emphasis and link targets (a citation hidden there does not count)."""
     s = _INVISIBLE.sub("", str(text or ""))
-    s = _COMMENT.sub(" ", s)
+    if _proto("B"):  # (prototype B) folded, and a comment's words are read like prose
+        s = _COMMENT_MARK.sub(" ", _fold(s))
+    else:
+        s = _COMMENT.sub(" ", s)
     s = _TAG.sub(" ", s)
     return _LINK.sub(r"\1", s).replace("`", "").replace("**", "")
 
@@ -253,6 +258,8 @@ def _visible(text: str) -> str:
 def extract_cites(text: str) -> list:
     """The ``[id]`` tokens cited in ``text``, in order, de-duplicated; ``[A, B]`` cites both."""
     seen, out = set(), []
+    if _proto("B"):  # (prototype B) "[F1@x‑y]" with a non-breaking hyphen cites F1@x-y
+        text = _fold(text or "")
     for m in _CITES.finditer(text or ""):
         for cid in _ID_SEP.split(m.group(1).strip()):
             if cid not in seen:
@@ -270,6 +277,9 @@ class _Seg:
     end: int
     kind: str  # "sentence" (judged) | "quote" (a fact's own text) | "heading" | "notice" (kept)
     header: tuple = ()  # (a table row's, #340) its table's header cells
+    #: (prototype B) a header row that states something: the citations of its table's rows,
+    #: which it is judged with
+    table_cites: tuple = ()
 
 
 def _ends(text: str, a: int, b: int) -> list:
@@ -362,7 +372,10 @@ def _segments(text: str, notices=(), quotes=None) -> list:
     order. Lines are split at sentence ends, never inside a quoted fact (``quotes`` maps a fact
     id to a pattern of its text, :func:`_quoted_rx`); an HTML comment is never split."""
     text = text or ""
-    masked = _COMMENT.sub(lambda m: " " * len(m.group(0)), text)
+    proto_b = _proto("B")
+    # (prototype B) a comment's words are split and judged like prose: only its marks go
+    hide = _COMMENT_MARK if proto_b else _COMMENT
+    masked = hide.sub(lambda m: " " * len(m.group(0)), text)
     masked = "\n".join(_unquoted(line) for line in masked.split("\n"))
     known = {" ".join(str(n).split()) for n in notices or ()}
     out: list = []
@@ -383,10 +396,28 @@ def _segments(text: str, notices=(), quotes=None) -> list:
             and idx + 1 < len(lines)
             and _TABLE_RULE.fullmatch(lines[idx + 1])
             and not _CITES.search(text[s0:e0])
-            and not re.search(r"\d", text[s0:e0])
+            # (prototype B) a header with a figure names its columns too: each row reads it
+            and (proto_b or not re.search(r"\d", text[s0:e0]))
         ):
-            out.append(_Seg(s0, e0, "heading"))  # a table's header row names its columns (#340)
             header = tuple(c.strip() for c in text[s0:e0].strip().strip("|").split("|"))
+            if proto_b:
+                header = tuple(_visible(c).strip() for c in header)
+                said = " ".join(c for c in header if c)
+                if re.search(r"\d|_", said) or not _states_nothing(said):
+                    # (prototype B) a header that states something, or names a unit, is a claim
+                    # of the table: judged with the citations of its rows
+                    rows, j = [], idx + 2
+                    while j < len(lines) and lines[j].strip().startswith("|"):
+                        rows.append(j)
+                        j += 1
+                    at = sum(len(x) + 1 for x in lines[: idx + 2])
+                    cites = []
+                    for j in rows:
+                        cites += extract_cites(text[at : at + len(lines[j])])
+                        at += len(lines[j]) + 1
+                    out.append(_Seg(s0, e0, "sentence", (), tuple(dict.fromkeys(cites))))
+                    continue
+            out.append(_Seg(s0, e0, "heading"))  # a table's header row names its columns (#340)
             continue
         if header and _TABLE_RULE.fullmatch(line):
             out.append(_Seg(s0, e0, "heading"))
@@ -458,7 +489,13 @@ def _table_text(row: str, header: tuple) -> str:
         return row  # "| 5 of 5 | passed |": a count and its verdict, read as it is
     first, parts = cells[0], []
     one = not re.search(r",|\band\b|&|/", first)  # "| A, B | ... |": a list of them
+    proto_b = _proto("B")
     for head, cell in zip(header[1:], cells[1:]):
+        if proto_b and head:
+            said = _proto_cell(first, head, cell)
+            if said is not None:
+                parts.append(said)
+                continue
         if not re.search(r"\d", _CITES.sub(" ", cell)) or not head:
             parts.append(cell)
             continue
@@ -7615,6 +7652,9 @@ def _judge(
         vis = _visible(sent)
         if seg.header:
             vis = _table_text(vis, seg.header)
+        if seg.table_cites:  # (prototype B) a header row's claim, with its rows' citations
+            cells = [c.strip() for c in vis.strip().strip("|").split("|")]
+            vis = " ".join(c for c in cells if c) + " " + "".join(f"[{c}]" for c in seg.table_cites)
         amb: list = []
         if seg.kind == "sentence":
             vis, amb = _spell_units(vis, spellings)  # (#342) "AHU 1", "Air handler 1": AHU-1
@@ -7649,6 +7689,11 @@ def _judge(
             mine = claims(own)
             num = None if per_sentence else claims(text_cited)
             reason, why = _sentence_problems(vis, mine, own, vocab, num, claims)
+            if not reason and _proto("C"):
+                reason, why = _proto_c(vis, mine, own, vocab, num, context, claims)
+            if not reason and _proto("A"):
+                echo = mine if own else claims(text_cited)
+                reason, why = _proto_a(vis, vocab, echo)
         out.append(_Judged(seg.start, seg.end, sent, own, unknown, reason, why))
     return out
 
@@ -7974,6 +8019,8 @@ def _rebuild(text: str, drop, unknown=()) -> str:
                 at += 1
         kept.append(text[at:le])
         new = "".join(kept).rstrip()
+        if _proto("B"):  # (prototype B) a comment whose sentences all went goes too
+            new = re.sub(r"[ \t]*<!--\s*-->", "", new).rstrip()
         if not new.strip() or _MARKER.fullmatch(new.strip()):
             removed_last = True
             if out and not out[-1].strip() and len(out) == 1:
@@ -8000,6 +8047,297 @@ def _strip_ids(text: str, unknown: set) -> str:
         out = re.sub(r"[ \t]*\x00", "", out)
         out = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", out)
     return out
+
+
+# --------------------------------------------------------------------------- prototypes
+# 0112-cite-proto (PLAN-CITE-EVAL section 5): three changes of the checker's default, each
+# behind its own switch and OFF unless set, so that with none set the checker is byte-identical
+# to c024906. They are measured by tools/cite_eval (run.py --flags B,C,A), never adopted here.
+#
+# - CAMBER_CITE_B=1: every region judged. The text is folded (NFKC, but superscripts,
+#   subscripts and fractions kept; every hyphen and minus sign to "-"; "AHU–1" to "AHU-1")
+#   before it is read; an HTML comment's words are read like prose (only its marks go, and a
+#   comment emptied by the repair goes too); a table's header row is its columns' names even
+#   with a figure in it, and a header that states something is read with each row's cell under
+#   it ("| Unit | Fails X |" over "| AHU-1 | yes |" is "AHU-1 fails X").
+# - CAMBER_CITE_C=1: a sentence naming more than one unit passes only if it splits into one
+#   clause per unit, each with a claim of its own, and every clause is supported against its
+#   own unit's facts; otherwise it fails closed ("give each unit its own sentence").
+# - CAMBER_CITE_A=1 (or "strict"): default-deny on parse coverage. Every content word of a
+#   sentence must be one the checker reads (_PROTO_READ), a neutral word (_PROTO_NEUTRAL), or
+#   (not with "strict") a word one of the facts it cites uses; otherwise it fails closed.
+
+_PROTO_FLAGS = ("A", "B", "C")
+
+
+def _proto(name: str) -> str:
+    """The value of the prototype switch ``CAMBER_CITE_<name>`` ("" when off)."""
+    v = os.environ.get(f"CAMBER_CITE_{name}", "")
+    return "" if v in ("", "0") else v
+
+
+_COMMENT_MARK = re.compile(r"<!--|-->")
+_HYPHENS = dict.fromkeys(map(ord, "‐‑‒−﹣－"), "-")
+
+
+def _fold(s: str) -> str:
+    """(prototype B) ``s`` folded: NFKC per character (superscripts, subscripts and fractions
+    kept: "ft²" is no "ft2"), every hyphen and minus sign as "-", a dash between a letter and a
+    digit as "-" ("AHU–1")."""
+    if s.isascii():
+        return s
+    out = []
+    for ch in s:
+        if ord(ch) < 128:
+            out.append(ch)
+            continue
+        if unicodedata.decomposition(ch).startswith(("<super>", "<sub>", "<fraction>")):
+            out.append(ch)
+        else:
+            out.append(unicodedata.normalize("NFKC", ch))
+    s = "".join(out).translate(_HYPHENS)
+    return re.sub(r"(?<=[A-Za-z])[–—](?=\d)", "-", s)
+
+
+_YES_CELL = re.compile(r"(?:yes|y|true|x|✓|✔️?|✅|☑️?)", re.I)
+_NO_CELL = re.compile(r"(?:no|n|false|✗|✘|❌)", re.I)
+
+
+def _proto_cell(first: str, head: str, cell: str):
+    """(prototype B) A table cell read with its column's header, when the header states
+    something: a "yes" cell says the header of the row's first cell ("AHU-1 fails X"), a "no"
+    cell says it is not so ("AHU-1: not fails X"), any other cell without a figure is said
+    after the header ("Fails X: twice"); None when the header states nothing (it is a column's
+    name) or the cell has a figure (read as before, with its column's name)."""
+    bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
+    ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
+    if _states_nothing(head) and not _checking_claim(head):
+        return None
+    low = (
+        head[:1].lower() + head[1:]
+        if head[:1].isupper() and not _UNIT_ID.match(head.split()[0])
+        else head
+    )
+    if _YES_CELL.fullmatch(bare):
+        return f"{first} {low} {ids}".strip()
+    if _NO_CELL.fullmatch(bare):
+        return f"{first}: not {low} {ids}".strip()
+    if re.search(r"\d", bare):
+        return None
+    return f"{head}: {cell}"
+
+
+# ----- C: one clause per unit
+
+_PROTO_C_SPLIT = re.compile(
+    r"\s*;\s*|,?\s+(?:but|while|whereas|whilst|although|though|yet)\s+|,\s+(?:and\s+)?|\s+and\s+|"
+    r"\s+-{1,2}\s+|\s*[—–]\s*"
+)
+_PROTO_C_WHY = "give each unit its own sentence"
+
+
+def _proto_units(vis: str, vocab, units: set) -> set:
+    """(prototype C) The units a piece of a sentence names: the names it reads that a fact of
+    the context is about, or that are written as a unit's id ("AHU-3")."""
+    p = _parse(vis, vocab)
+    return {n for n in p.ids if n in units or _UNIT_ID.match(n)}
+
+
+def _proto_has_claim(piece: str, vocab) -> bool:
+    """(prototype C) Whether a clause says something of its own: a verb, a verdict, a negation,
+    a figure or a "label: status" after a name."""
+    p = _parse(piece, vocab)
+    words = [t[1].lower() for t in p.toks if t[0] == "word" and not t[1].startswith("QQ")]
+    if p.qty or p.verdicts or p.negs or p.dirs:
+        return True
+    if any(_clause_verb(w) or w in _VERDICT or w in _DIRECTION or _negates(w) for w in words):
+        return True
+    return bool(re.search(r"QQ(?:NAME|TERM)[a-z]+\s*(?:['’]s\s+\S+\s*)?:\s*\S", p.masked))
+
+
+def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tuple:
+    """(prototype C) ``(reason, why)`` for a supported sentence that names more than one unit:
+    supported only when it splits into one clause per unit, each with a claim of its own and
+    each supported against the cited facts about its own unit."""
+    units = {u for fc in claims(list(context.ids())) for u in _units(fc)}
+    named = _proto_units(vis, vocab, units)
+    if len(named) < 2:
+        return "", []
+    fail = [
+        f"it names {len(named)} units ({', '.join(sorted(named))}) and does not split into one "
+        f"clause per unit with a claim of its own: {_PROTO_C_WHY}"
+    ]
+    body = _CITES.sub(" ", vis)
+    cuts, at = [], 0
+    for m in _PROTO_C_SPLIT.finditer(body):
+        seg = body[at : m.start()]
+        if seg.count("(") != seg.count(")") or seg.count('"') % 2:
+            continue
+        cuts.append((at, m.start()))
+        at = m.end()
+    cuts.append((at, len(body)))
+    pieces: list = []  # [text, units]
+    lead = ""
+    for a, b in cuts:
+        x = body[a:b].strip()
+        if not x:
+            continue
+        u = _proto_units(x, vocab, units)
+        if not u:
+            if pieces:
+                pieces[-1][0] = body[pieces[-1][2] : b].strip()
+            else:
+                lead = (lead + " " + x).strip()
+            continue
+        if lead:
+            x, lead = f"{lead} {x}", ""
+        pieces.append([x, u, a])
+    if len(pieces) < 2 or any(len(u) != 1 for _x, u, _a in pieces):
+        return "unsupported-claim", fail
+    texts = _unelide([x for x, _u, _a in pieces])
+    seen: set = set()
+    for text, (_x, u, _a) in zip(texts, pieces):
+        unit = next(iter(u))
+        if unit in seen or not _proto_has_claim(text, vocab):
+            return "unsupported-claim", fail
+        seen.add(unit)
+        others = named - {unit}
+        # its unit's facts: about it, or about no unit and naming it and none of the others
+        # (a rule run's "AHU-2: fault" is no fact about AHU-1); a fact about no unit that names
+        # none (a rule's parameters, a notice) stays
+        ids = [
+            fid
+            for fid, fc in zip(own, mine)
+            if unit in _units(fc)
+            or (
+                not _units(fc)
+                and not any(fc.names(o) for o in others)
+                and (fc.names(unit) or not any(fc.names(n) for n in units))
+            )
+        ]
+        if not any(unit in _units(fc) or fc.names(unit) for fc in claims(ids)):
+            return "unsupported-claim", [
+                f"{unit!r}: no cited fact is about it alone, so its own clause is not "
+                f"supported; {_PROTO_C_WHY}, citing its own facts"
+            ]
+        r, w = _plain_problems(text, claims(ids), ids, vocab, num)
+        if r:
+            return r, [f"(clause about {unit}) " + "; ".join(w)]
+    return "", []
+
+
+# ----- A: default-deny on parse coverage
+
+#: the word lists whose words the checker reads (compares with the cited facts): a word of
+#: one of them is consumed by a recognised construct
+_PROTO_READ_LISTS = (
+    "_VERDICT _ASSURANCE _SUPERLATIVE _BEST _SEVERE _FLIP _VALUE_VERDICT _DIRECTION "
+    "_VALUE_DIRECTION _POLAR _OPPOSITE _QUANT _NEG _HYPO _CLAIM_WORDS _UNITS _DEGREE _NOUNS "
+    "_FAMILY _TRUST_CLASSES _ORDINAL_WORDS _ORDINAL_N _RANKED _COMPLETE _TIME_WORDS _WHEN_NOUNS "
+    "_MONTHS _SEASONS _SITE_WORDS _CUE_BEFORE _CUE_AFTER _CUE_NOUNS _SUBJECT_CUES _CUE_THAN "
+    "_COMPARISONS _SHARE_WORDS _DOWN_WORDS _FALL_WORDS _USE_VERBS _ENERGY _READS _OF_TOTAL "
+    "_LABELS _SETTING _SYNONYM _CHECK_VERDICTS _VERDICT_WORD _ZEROS _ELSEWHERE _COMPLETE_STEMS "
+    "_SHOWS _RESULT_NOUNS _PLACE _SPAN_KEYS"
+).split()
+#: words the checker reads through a phrase or a pattern rather than a list: the point roles,
+#: the sides of a valve, causes, time spans, coverage words and the words of a claim of
+#: checking (every such sentence is screened)
+_PROTO_READ_WORDS = (
+    "supply discharge return mixed outdoor outside air heating heat cooling cool hot chilled "
+    "water valve setpoint set sat rat mat oat hw chw hhw dx reheat preheat steam boiler "
+    "refrigerant accounts account accounted due caused cause because attributable responsible "
+    "results comparable consistent clear fix resolve remove eliminate size magnitude throughout "
+    "whole entire full fully complete continuous continuously uninterrupted unbroken seamless "
+    "coverage covered covers logged recorded trended sampled captured missing gap gaps free "
+    "round year-round checked verified validated supported grounded confirmed substantiated "
+    "vetted audited corroborated certified reviewed approved cleared backed span spans window "
+    "windows respectively"
+).split()
+#: (A) neutral words: they name a thing, join or frame a claim, and state nothing a fact must
+#: support. Explicit, so that the strip budget can be argued word by word.
+_PROTO_NEUTRAL = (
+    # copulas, auxiliaries, light verbs
+    "is are was were be been being has have had having does did do get gets got make makes "
+    "made shows shown show showed appear appears seem seems remain remains stay stays "
+    "look looks become became gives give given said says "
+    # things a sentence is about (the names themselves are read as names)
+    "unit units equipment equip point points sensor sensors rule rules result results value "
+    "values reading readings data trend trends signal signals rule's unit's system systems "
+    "ahu ahus air-handler handler handlers rtu rtus vav vavs fcu fcus meter meters logger "
+    "loggers chiller chillers pump pumps fan fans damper dampers coil coils valves component "
+    "actuator site sites building zone zones space spaces facility facilities "
+    "temperature temp pressure flow humidity position command status state "
+    # framing
+    "overall total summary note notes result according per each respectively currently "
+    "also both either measured observed reported recorded shown listed given found here there "
+    "case cases item items one ones part parts side kind type "
+    # time
+    "today now period periods day days hour hours week weeks month months year years time "
+    "times during between since until from to window"
+).split()
+
+
+def _proto_stems(words) -> frozenset:
+    out = set()
+    for w in words:
+        w = str(w).lower()
+        out.add(w)
+        out.update(_content(w))
+        out.add(_stem(w))
+    return frozenset(out)
+
+
+_PROTO_KNOWN: dict = {}
+
+
+def _proto_known() -> tuple:
+    """(A) ``(read, neutral)`` stems, built once."""
+    if not _PROTO_KNOWN:
+        g = globals()
+        read: list = list(_PROTO_READ_WORDS) + list(_WORD_NUM)
+        for name in _PROTO_READ_LISTS:
+            read += [str(w) for w in g[name]]
+        for a, b in _CAUSAL:
+            read += [a, b]
+        _PROTO_KNOWN["read"] = _proto_stems(w for x in read for w in str(x).split())
+        _PROTO_KNOWN["neutral"] = _proto_stems(_PROTO_NEUTRAL)
+    return _PROTO_KNOWN["read"], _PROTO_KNOWN["neutral"]
+
+
+def _proto_a(vis: str, vocab, facts: list) -> tuple:
+    """(prototype A) ``(reason, why)``: a sentence passes only if every content word is read
+    by the checker, neutral, or (unless ``CAMBER_CITE_A=strict``) used by a cited fact."""
+    read, neutral = _proto_known()
+    echo: set = set()
+    if _proto("A") != "strict":
+        for fc in facts:
+            hay = " ".join([str(getattr(fc, "hay", "") or "")])
+            for w in re.findall(r"[a-z]+", hay.lower()):
+                echo.add(w)
+                echo.add(_stem(w))
+            echo |= set(fc.claims.words)
+    p = _parse(vis, vocab)
+    unread: list = []
+    for kind, raw, _a, _b in p.toks:
+        if kind != "word" or raw.startswith("QQ"):
+            continue
+        for st in _content(raw):
+            if st in read or st in neutral or st in echo:
+                continue
+            if raw.lower() in read or raw.lower() in neutral or raw.lower() in echo:
+                continue
+            unread.append(raw)
+            break
+    if not unread:
+        return "", []
+    said = list(dict.fromkeys(unread))
+    words = ", ".join(repr(w) for w in said)
+    one = len(said) == 1
+    return "unsupported-claim", [
+        f"{words}: the checker does not read {'this word' if one else 'these words'} and no "
+        f"cited fact uses {'it' if one else 'them'}, so the sentence is not supported "
+        "(default-deny); say it in the words of a cited fact, or quote the fact"
+    ]
 
 
 def check(
