@@ -435,6 +435,16 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
         )
     elif kind == "dataset_count":
         add(attribute="count", site="", unit="", value=f.get("value"), label="datasets")
+    elif kind == "caveat" and f.get("of"):
+        # (round 13) a caveat given for some of its rule's results: said of its units only
+        said = text.split(" caveat", 1)[-1].split(": ", 1)[-1]
+        units = list(f.get("equips") or ([f["equip"]] if f.get("equip") else []))
+        add(
+            attribute="caveat",
+            rule=str(f.get("rule", "")),
+            label=said,
+            extra={"units": units, "of": f["of"]},
+        )
     elif kind == "rule_params":
         for m in re.finditer(r"(\w+) = ([-\d.]+) (°F|%|fraction)", text):
             add(

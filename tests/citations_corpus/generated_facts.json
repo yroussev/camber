@@ -2590,6 +2590,40 @@
    "kind": "notice",
    "text": "1 listed finding(s) rest on an input whose configured sensor reference disagrees with it (conditional_on names the comparison): treat each as a possible sensor problem first and check that sensor before acting on the equipment. sensor_trust shows the comparison. 3 ok result(s) below min_severity rest on such an input too and are not listed (a lower min_severity lists them); a pass measured with that input is conditional as well.",
    "value": "notice"
+  },
+  {
+   "equip": "AHU-1",
+   "finding_ids": [
+    "economizer_high_limit@AHU-1"
+   ],
+   "id": "V1@rule_run-54307c",
+   "kind": "caveat",
+   "of": 3,
+   "rule": "economizer_high_limit",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "economizer_high_limit@AHU-1"
+   },
+   "text": "\"AHU-1\" economizer_high_limit caveat (given for 1 of its 3 results): 19 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)",
+   "value": "caveat"
+  },
+  {
+   "equip": "AHU-2",
+   "finding_ids": [
+    "simultaneous_heat_cool@AHU-2"
+   ],
+   "id": "V2@rule_run-54307c",
+   "kind": "caveat",
+   "of": 3,
+   "rule": "simultaneous_heat_cool",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool caveat (given for 1 of its 3 results): dehumidification with reheat could not be ruled out: no cooling-coil leaving temperature, humidity or dew point is trended -- declare the unit's sequence with the rule parameter `dehumidification` (true / false)",
+   "value": "caveat"
   }
  ],
  "sensor_trust": [

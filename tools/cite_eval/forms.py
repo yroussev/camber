@@ -661,8 +661,82 @@ def _their_cases(claims: list, world: World) -> list:
     return out
 
 
+_CITED = re.compile(r"\[([A-Z]+\d+)@[^\]\s]+\]")
+
+
+def _short_id_cases(claims: list) -> list:
+    """(round 13) Each claim's plain sentence with its ids shortened ("[F2]" for
+    "[F2@rule_run-1a2b3c]"): a bare id is no citation, so the sentence is false as cited."""
+    out: list = []
+    for idx, claim in enumerate(claims):
+        c = realise(claim, 0)
+        w = single("plain", claim, c) if c is not None else None
+        if w is None or not _CITED.search(w[0]):
+            continue
+        draft = _CITED.sub(r"[\1]", w[0])
+        cores = [_CITED.sub(r"[\1]", x) for x in w[1]]
+        out.append(
+            _case(
+                draft,
+                cores,
+                w[2],
+                truth="false",
+                form="plain",
+                operator="shorten_id",
+                capability=claim.capability,
+                cites=c.cites,
+                claim=c.text,
+                group=f"c{idx}v0",
+            )
+        )
+    return out
+
+
+_HEDGE_WORDS = re.compile(r"\b(?:may|might|could|can|unless|if|whether|possibly|ruled out)\b")
+
+
+def _caveat_cases(claims: list) -> list:
+    """(round 13) A caveat a rule gave for some of its results, said of the units it names
+    (true) and of the rule as a whole (false: "economizer_high_limit: 19 sample(s) ...")."""
+    out: list = []
+    for claim in claims:
+        if claim.attribute != "caveat":
+            continue
+        units = list((claim.extra or {}).get("units") or [])
+        said = claim.label.rstrip(" .;")
+        cites = (claim.fact_id,)
+        group = _key("caveat", claim.fact_id)
+        named = " and ".join(units)
+        variants = [
+            ("true", "none", f"- On {named}, the {claim.rule} caveat: {said} {cite(*cites)}."),
+            ("true", "none", f"- {named}: {said} {cite(*cites)}."),
+        ]
+        if not _HEDGE_WORDS.search(said):  # a hedge said of the rule reports the caveat
+            variants += [
+                ("false", "overgeneralise", f"- {claim.rule}: {said} {cite(*cites)}."),
+                ("false", "overgeneralise", f"- The {claim.rule} check: {said} {cite(*cites)}."),
+            ]
+        for truth, op, draft in variants:
+            out.append(
+                _case(
+                    draft,
+                    [draft],
+                    "bullet",
+                    truth=truth,
+                    form="caveat_scope",
+                    operator=op,
+                    capability=claim.capability,
+                    cites=list(cites),
+                    claim=said,
+                    group=group,
+                )
+            )
+    return out
+
+
 def _pairs(claims: list, world: World) -> list:
     out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
+    out += _short_id_cases(claims) + _caveat_cases(claims)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):

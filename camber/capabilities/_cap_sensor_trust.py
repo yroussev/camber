@@ -365,6 +365,14 @@ def _reference_sentence(r: dict, fact_id: str) -> str:
     return f"{name(r['equip'])} {name(r['role'])} {what}{bias} [{fact_id}]."
 
 
+def _score(trust: float) -> str:
+    """A trust score as a fact writes it: to 2 places, with the result's own value after it
+    when the rounding hides it (0112-cite13: ``1.00 (0.9977)``, a suspect point that reads as
+    a perfect score to 2 places; hosts quote the 0.9977 from the JSON)."""
+    two = f"{trust:.2f}"
+    return two if float(two) == trust else f"{two} ({trust:g})"
+
+
 def _frac(x) -> float:
     v = jsonable(x)
     return min(max(float(v), 0.0), 1.0) if isinstance(v, (int, float)) else 0.0
@@ -485,13 +493,13 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 "value": r["trust"],
                 # 0.112 (#336): its place in the least-trusted-first list ("the least trusted")
                 "rank": (arguments.get("offset") or 0) + i - 1,
-                "text": f"{name(r['equip'])} {name(r['role'])}: trust {r['trust']:.2f} "
+                "text": f"{name(r['equip'])} {name(r['role'])}: trust {_score(r['trust'])} "
                 f"({r['verdict']}; {why}); coverage {r['coverage']:.0%} of its own span",
             }
         )
         if i - 1 <= _LISTED:
             text.append(
-                f"{name(r['equip'])} {name(r['role'])} scores {r['trust']:.2f} ({r['verdict']}"
+                f"{name(r['equip'])} {name(r['role'])} scores {_score(r['trust'])} ({r['verdict']}"
                 + ("; its configured reference disagrees" if "reference" in why else "")
                 + f") [F{i}@sensor_trust]."
             )

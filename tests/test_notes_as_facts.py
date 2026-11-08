@@ -58,7 +58,8 @@ def test_rule_run_issues_its_caveats_and_labels(facts):
     for f in caveats + labels:
         assert ID.fullmatch(f["id"]), f["id"]
         assert f["rule"] and f["finding_id" if "finding_id" in f else "finding_ids"]
-    assert all(f["id"].startswith("V") and " caveat: " in f["text"] for f in caveats)
+    part = re.compile(r" caveat(?: \(given for \d+ of its \d+ results\))?: ")
+    assert all(f["id"].startswith("V") and part.search(f["text"]) for f in caveats)
     assert all(f["id"].startswith("M") for f in labels)
     # labels only for faults and warnings, each value quoted
     findings = {f["finding_id"]: f for f in _of(facts, "rule_run", "finding")}

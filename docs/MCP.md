@@ -183,6 +183,14 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   "X, not Y", comparatives with each unit's figure, items each with its own citation); one
   that splits no way fails with "give each unit its own sentence", as the tool description
   and the prompts say.
+- **Round 13.** A caveat a rule gave for some of its results says so ("caveat (given for 3 of
+  its 145 results)"), and a sentence citing only such caveats must name a unit it is for or
+  scope itself to some ("its", "these", "3 VAV boxes"): said of the rule as a whole it fails.
+  Fact ids are never shortened: a bare `[F5]` stays `unknown_citation`, and its `why` names the
+  full id the session issued last ("cite the full id, e.g. F5@rule_run-..."). A finding's fact
+  states its true/false flags and null metrics (`fan_gated true`, `null:
+  oa_cost_excess_cool_kbtu`), a point's trust the value its 2-place rounding hides
+  (`1.00 (0.9977)`), and an M&V saving its projected and actual totals.
 - **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
   that says something of the lines under it (a verdict, negation, quantifier, direction or rank
   word: "**What is not fine**", "## Points that never move") and a short label or remark that

@@ -102,6 +102,12 @@ class FactLedger:
         with self._lock:
             return frozenset(self._names)
 
+    def ids(self) -> list:
+        """The ids of the facts held, oldest first (0112-cite13: a bare short id's why names
+        the full id the session issued last with that prefix)."""
+        with self._lock:
+            return list(self._facts)
+
     def _put(self, fid: str, text: str) -> None:
         old = self._facts.pop(fid, None)
         if old is not None:
