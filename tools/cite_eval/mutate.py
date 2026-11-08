@@ -27,6 +27,7 @@ OPERATORS = (
     "temp_unit",
     "pct_pp",
     "sign",
+    "shift_year",
     "verdict",
     "negation",
     "quantifier",
@@ -34,7 +35,9 @@ OPERATORS = (
     "promote_site",
     "inject_check",
 )
-PAIR_OPERATORS = ("swap_pair", "overgeneralise")
+#: (round 11) "flip_comparative": a comparative of two units' figures turned round ("lower"
+#: for "higher", "more trusted" for "more suspect"), the figures kept
+PAIR_OPERATORS = ("swap_pair", "overgeneralise", "flip_comparative")
 
 _PERIODS = (
     "throughout 2026",
@@ -138,6 +141,9 @@ def mutants(claim, op: str, world: World) -> list:  # noqa: C901 - one branch pe
         out = [replace(claim, rule=r) for r in world.rules if r != claim.rule][:3]
     elif op == "swap_site" and claim.site and not claim.unit and claim.attribute != "licence":
         out = [replace(claim, site=s) for s in world.sites if s != claim.site]
+    elif op == "shift_year" and ex.get("year"):
+        # (round 11) the year a header gives the baseline, one year off (header_year only)
+        out = [replace(claim, extra={**ex, "year": str(int(ex["year"]) - 1)})]
     elif op == "perturb_figure" and _numeric(claim.value):
         nv = _perturbed(claim)
         if nv is not None and nv != claim.value:
@@ -210,4 +216,4 @@ def mutants(claim, op: str, world: World) -> list:  # noqa: C901 - one branch pe
             out = [site_claim]
     elif op == "inject_check":
         out = [replace(claim, extra={**ex, "check": chk}) for chk in _CHECKS[:2]]
-    return [m for m in out if op == "inject_check" or not world.true(m)]
+    return [m for m in out if op in ("inject_check", "shift_year") or not world.true(m)]

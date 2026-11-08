@@ -42,6 +42,7 @@ class Clause:
     pred_fig: str = ""  # the predicate with "{}" for the figure (respectively forms)
     neg_pred: str = ""  # the predicate negated (contrasts: "B does not")
     integer: int | None = None  # a whole figure, for numbers in words
+    bare: str = ""  # (round 11) the predicate without its figure ("used more energy than ...")
 
     @property
     def text(self) -> str:
@@ -83,6 +84,8 @@ _VERDICT = {
     "warn": ("warns on {r}", "has a {r} warning", "gets a warn from {r}"),
     "ok": ("passes {r}", "is ok on {r}", "gets an ok from {r}"),
 }
+#: (round 11) a leaking_valve verdict said of the unit's coil: (predicate, its negation)
+_LEAK = {"fault": ("leaks", "does not leak"), "ok": ("does not leak", "leaks")}
 _VERDICT_NEG = {
     "fault": "does not fail {r}",
     "warn": "does not warn on {r}",
@@ -114,7 +117,13 @@ def realise(claim, variant: int = 0) -> Clause | None:  # noqa: C901 - one branc
         pred = _pick(_VERDICT[claim.verdict], variant).format(r=rule)
         neg = _VERDICT_NEG[claim.verdict].format(r=rule)
         status, word, tail = f"{rule} {claim.verdict}", claim.verdict, f"on {rule}"
-        out = Clause(subj, pred, status, word, tail, cites, neg_pred=neg)
+        if rule == "leaking_valve" and claim.verdict in _LEAK and variant % 3 == 2 and not point:
+            # (round 11) the leak said of the coil: "AHU-2's coil leaks" against "no valve leak"
+            pred, neg = _LEAK[claim.verdict]
+            subj = f"{unit}'s coil"
+        past = {"fault": "failed {r}", "warn": "warned on {r}", "ok": "passed {r}"}
+        bare = past[claim.verdict].format(r=rule)  # (round 11) said in the past
+        out = Clause(subj, pred, status, word, tail, cites, neg_pred=neg, bare=bare)
     elif a == "trust":
         opts = ("has a trust of {}", "has trust {}", "scores {} for trust")
         pf = _pick(opts, variant)
@@ -199,7 +208,8 @@ def realise(claim, variant: int = 0) -> Clause | None:  # noqa: C901 - one branc
             opts = ("used {} more than its baseline", "used {} more energy than its baseline")
             fig = _fmt(claim, abs(v))
         pf = _pick(opts, variant)
-        out = Clause(subj, pf.format(fig), f"saving {fig}", fig, "", cites, fig, pf)
+        bare = f"used {'less' if v > 0 else 'more'} energy than its baseline"
+        out = Clause(subj, pf.format(fig), f"saving {fig}", fig, "", cites, fig, pf, bare=bare)
     elif a == "reporting_days":
         pf = "has {} reporting days"
         out = Clause(

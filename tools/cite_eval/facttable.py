@@ -270,6 +270,9 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
     site = _site_of(f, SITE if cap != "mv_summary" else MV_SITE)
     unit = _unit_of(f)
     base = {"fact_id": fid, "capability": cap, "kind": kind, "site": site, "unit": unit}
+    yr = re.search(r"baseline period ((?:19|20)\d\d)-", text)
+    if yr:  # (round 11) the baseline's year, for the header_year form
+        base["extra"] = {"year": yr.group(1)}
     out: list = []
 
     def add(**kw):

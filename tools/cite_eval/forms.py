@@ -29,6 +29,7 @@ import re
 from dataclasses import replace
 
 from .mutate import OPERATORS, World, mutants
+from .realise import _VERDICT as _VERDICT_PREDS
 from .realise import Clause, in_words, realise
 
 NBH = "‑"  # non-breaking hyphen
@@ -50,6 +51,9 @@ SINGLE_FORMS = (
     "coverage_words",
     "unicode_hyphen",
     "id_spelling",
+    "header_year",
+    "header_yes_detail",
+    "header_no_detail",
 )
 PAIR_FORMS = (
     "two_clause",
@@ -64,13 +68,28 @@ PAIR_FORMS = (
     "set_both",
     "table_rows",
     "bullets",
+    # round 11 (C=split by default): the forms its nine corpus strips were written in
+    "most_of",
+    "x_not_y_bare",
+    "unlike_neg",
+    "comma_figure_list",
+    "comparative",
+    "rather_than_as",
+    "unlike_point_after",
+    "cited_items",
 )
+#: (round 11) a set followed by "their ... respectively": made of two claim pairs (_their_cases)
+THEIR_FORM = "set_their_respectively"
 REGION = {
     "bullet": "bullet",
     "heading": "heading",
     "bold_label": "bold",
     "table_row": "table",
     "header_column": "table_header",
+    "header_year": "table_header",
+    "header_yes_detail": "table_header",
+    "header_no_detail": "table_header",
+    "cell_parts": "table",
     "html_comment": "comment",
     "html_attr": "attribute",
     "table_rows": "table",
@@ -151,6 +170,26 @@ def single(form: str, claim, c: Clause):  # noqa: C901 - one branch per form
     if form == "header_column":
         head = f"| Unit | {_cap(c.pred)} |"
         row = f"| {c.subject} | yes {ids} |"
+        return f"{head}\n|---|---|\n{row}", [head, row], region
+    if form == "header_year":  # (round 11) "| Meter | Against the 2024 baseline |"
+        year = (claim.extra or {}).get("year")
+        if not year or claim.attribute not in ("saving", "verdict", "reporting_days"):
+            return None
+        head = f"| Meter | Against the {year} baseline |"
+        row = f"| {c.subject} | {c.pred} {ids} |"
+        return f"{head}\n|---|---|\n{row}", [head, row], region
+    if form in ("header_yes_detail", "header_no_detail"):
+        # (round 11) "| Unit | Passes X? |" with "Yes: 43% of those samples" or, under the
+        # opposite verdict's header, "No: ..."; the detail is a figure the same fact states
+        detail = (claim.extra or {}).get("detail")
+        if claim.attribute != "verdict" or claim.verdict not in _VERDICT_PREDS or not detail:
+            return None
+        if form == "header_yes_detail":
+            head, ans = f"| Unit | {_cap(c.pred)}? |", "Yes"
+        else:
+            opp = "ok" if claim.verdict in ("fault", "warn") else "fault"
+            head, ans = f"| Unit | {_cap(_VERDICT_PREDS[opp][0].format(r=claim.rule))}? |", "No"
+        row = f"| {c.subject} | {ans}: {detail} {ids} |"
         return f"{head}\n|---|---|\n{row}", [head, row], region
     if form == "html_comment":
         s = f"<!-- {c.text} {ids}. -->"
@@ -277,6 +316,58 @@ def pair(form: str, a: Clause, b: Clause, differ: bool, same_value: bool):  # no
         if not same_value:
             return None
         s = f"{a.subject} and {_low(b.subject)} both {_plural(a.pred)} {ids}."
+    elif form == "most_of":
+        if not same_value:
+            return None
+        s = f"Most of {a.subject} and {_low(b.subject)} {_plural(a.pred)} {ids}."
+    elif form == "x_not_y_bare":
+        if not (a.bare and b.bare and a.bare != b.bare):
+            return None
+        s = f"{a.subject}, not {_low(b.subject)}, {a.bare} {ids}."
+    elif form == "unlike_neg":
+        if not differ or not a.neg_pred or a.neg_pred == "moves":
+            return None
+        s = f"{_cap(b.subject)} {a.neg_pred}, unlike {_low(a.subject)} {ids}."
+    elif form == "comma_figure_list":
+        if not (a.pred_fig and a.pred_fig == b.pred_fig and a.figure and b.figure):
+            return None
+        s = f"{a.text}, {_low(b.subject)} {b.figure} {ids}."
+    elif form == "comparative":
+        word = _comparative(a, b)
+        if not word:
+            return None
+        s = f"{a.subject} ({a.figure}) {word} than {_low(b.subject)} ({b.figure}) {ids}."
+    elif form == "rather_than_as":
+        va, _, ta = a.pred.partition(" ")
+        vb, _, tb = b.pred.partition(" ")
+        if not differ or not ta or ta != tb or va == vb or not re.fullmatch(r"[a-z]+s", vb):
+            return None
+        bs = b.subject
+        if "'s " in bs and a.subject.split("'s ", 1)[1:] == bs.split("'s ", 1)[1:]:
+            bs = bs.split("'s ", 1)[0] + "'s"  # "as AHU-2's does"
+        s = f"{a.subject} {a.pred} rather than {_ing(vb)}, as {_low(bs)} does {ids}."
+    elif form == "unlike_point_after":
+        # "AHU-1 supply_air_temp disagrees with its reference, unlike AHU-2's": the point after
+        # the unit without "'s", and the other unit's point said by "B's" alone; full coverage
+        # in words where the figure is 100% (the frozen table has no partial coverage to set
+        # against it, so the coverage side is in the corpus only)
+        ma = re.fullmatch(r"(.+)'s (\S+)", a.subject)
+        mb = re.fullmatch(r"(.+)'s (\S+)", b.subject)
+        if not differ or not (ma and mb and ma.group(2) == mb.group(2)):
+            return None
+        pred = a.pred
+        if _noun(a) == "coverage" and _num(a.figure) == 100.0:
+            pred = "has full coverage"
+        s = f"{ma.group(1)} {ma.group(2)} {pred}, unlike {_low(mb.group(1))}'s {ids}."
+    elif form == "cited_items":
+        # (round 11) "The ones that fail X are A [F1] and B [F2]": each item its own citation
+        if not same_value:
+            return None
+        s = (
+            f"The ones that {_plural(a.pred)} are {a.subject} {cite(*a.cites)} and "
+            f"{_low(b.subject)} {cite(*b.cites)}."
+        )
+        return s, [s], region
     elif form == "table_rows":
         ra = f"| {a.subject} | {a.pred} {cite(*a.cites)} |"
         rb = f"| {b.subject} | {b.pred} {cite(*b.cites)} |"
@@ -288,6 +379,46 @@ def pair(form: str, a: Clause, b: Clause, differ: bool, same_value: bool):  # no
     else:
         return None
     return s, [s], region
+
+
+def _num(fig: str):
+    m = re.match(r"\s*([-+−]?)(\d[\d,]*(?:\.\d+)?)", fig or "")
+    if m is None:
+        return None
+    v = float(m.group(2).replace(",", ""))
+    return -v if m.group(1) in ("-", "−") else v
+
+
+def _comparative(a: Clause, b: Clause) -> str:
+    """(round 11) How ``a``'s figure compares with ``b``'s: "is more suspect" (a trust that is
+    lower), "is more trusted", "has a higher bias", ...; "" when the two do not compare."""
+    noun = _noun(a)
+    x, y = _num(a.figure), _num(b.figure)
+    if not noun or noun != _noun(b) or x is None or y is None or x == y:
+        return ""
+    if noun == "trust":
+        return "is more suspect" if x < y else "is more trusted"
+    return f"has a {'higher' if x > y else 'lower'} {noun}"
+
+
+_FLIP = (("more suspect", "more trusted"), ("higher", "lower"))
+
+
+def _flip_comparative(draft: str) -> str:
+    for x, y in _FLIP:
+        if x in draft:
+            return draft.replace(x, y, 1)
+        if y in draft:
+            return draft.replace(y, x, 1)
+    return draft
+
+
+def _ing(verb: str) -> str:
+    """ "agrees" -> "agreeing", "passes" -> "passing", "fails" -> "failing"."""
+    base = re.sub(r"(?:(?<=ss)|(?<=sh)|(?<=ch)|(?<=x))es$|s$", "", verb)
+    if base.endswith("e") and not base.endswith("ee"):
+        base = base[:-1]
+    return base + "ing"
 
 
 # ----------------------------------------------------------------------------- generation
@@ -347,7 +478,7 @@ def generate(claims: list, *, variants: int = 3) -> list:
     """Every case the forms and operators make of ``claims`` (deterministic order). The
     operators know every claim; the forms write :func:`_thin`'s."""
     world = World(claims)
-    claims = _thin(claims)
+    claims = _thin(_with_details(claims))
     out: list = []
     seen: set = set()
 
@@ -382,9 +513,15 @@ def generate(claims: list, *, variants: int = 3) -> list:
             for op in OPERATORS:
                 for m in mutants(claim, op, world):
                     mc = realise(m, variant)
-                    if mc is None or mc.text == c.text:
+                    if mc is None:
                         continue
-                    for form in forms:
+                    # a year off is said only by the header that gives it (round 11)
+                    op_forms = ("header_year",) if op == "shift_year" else forms
+                    if mc.text == c.text and op != "shift_year":
+                        continue
+                    for form in op_forms:
+                        if form not in forms and variant:
+                            continue
                         w = single(form, m, mc)
                         if w is None:
                             continue
@@ -404,8 +541,128 @@ def generate(claims: list, *, variants: int = 3) -> list:
     return out
 
 
-def _pairs(claims: list, world: World) -> list:
+def _with_details(claims: list) -> list:
+    """(round 11) Each claim with ``extra["detail"]``: a figure its own fact states, as the
+    realiser writes it ("43% of those samples"), for the yes/no-with-details cells."""
+    detail: dict = {}
+    for cl in claims:
+        c = realise(cl, 0)
+        if c is not None and c.figure and cl.attribute in ("share", "hours", "trust", "coverage"):
+            fig = f"{c.figure} of {cl.label}" if cl.attribute == "share" and cl.label else c.figure
+            detail.setdefault(cl.fact_id, fig)
+    return [
+        replace(cl, extra={**(cl.extra or {}), "detail": detail[cl.fact_id]})
+        if cl.fact_id in detail
+        else cl
+        for cl in claims
+    ]
+
+
+def _cell_parts_cases(claims: list, world: World) -> list:
+    """(round 11) A table cell of two parts, each citing its own fact: "| AHU-1's oa_damper |
+    has a trust of 0.73 [F4]; has 100.0% coverage [P14] |". The second part's figure perturbed
+    is the false case."""
+    by_subject: dict = {}
+    for cl in claims:
+        c = realise(cl, 0)
+        if c is not None and c.figure and cl.unit and "@" in cl.fact_id:
+            by_subject.setdefault(c.subject, []).append((cl, c))
     out: list = []
+    for subject, items in sorted(by_subject.items()):
+        items = sorted(items, key=lambda x: (x[0].fact_id, x[1].pred))
+        for i, (a, ca) in enumerate(items):
+            for b, cb in items[i + 1 :]:
+                if a.fact_id == b.fact_id or a.capability == b.capability:
+                    continue
+                head = f"| Unit | {_cap(_noun(ca) or 'value')} and {_noun(cb) or 'value'} |"
+                cap = f"{a.capability}+{b.capability}"
+                group = _key("cell", a.fact_id, b.fact_id, subject)
+                variants = [("true", "none", cb)]
+                for m in mutants(b, "perturb_figure", world)[:1]:
+                    mb = realise(m, 0)
+                    if mb is not None and mb.pred != cb.pred:
+                        variants.append(("false", "perturb_figure", mb))
+                for truth, op, xb in variants:
+                    row = (
+                        f"| {subject} | {ca.pred} {cite(*ca.cites)}; {xb.pred} {cite(*cb.cites)} |"
+                    )
+                    out.append(
+                        _case(
+                            f"{head}\n|---|---|\n{row}",
+                            [row],
+                            "table",
+                            truth=truth,
+                            form="cell_parts",
+                            operator=op,
+                            capability=cap,
+                            cites=[*ca.cites, *cb.cites],
+                            claim=f"{ca.text} | {xb.text}",
+                            group=group,
+                        )
+                    )
+                break  # one pair per claim is enough
+    return out
+
+
+def _their_cases(claims: list, world: World) -> list:
+    """(round 11) "A and B both P, and their N are x and y respectively": a claim true of both
+    units, then a figure pair of the same two; the figures swapped is the false case."""
+    groups = _pair_groups(claims)
+    same: dict = {}  # (unit, unit) -> a claim pair true of both
+    for _gk, ms in sorted(groups.items(), key=lambda kv: str(kv[0])):
+        for c in sorted(ms, key=lambda c: (c.unit, c.fact_id)):
+            for d in sorted(ms, key=lambda c: (c.unit, c.fact_id)):
+                if c.unit < d.unit and not c.point and not d.point:
+                    if world.true(replace(c, unit=d.unit)) and world.true(replace(d, unit=c.unit)):
+                        same.setdefault((c.unit, d.unit), (c, d))
+    out: list = []
+    for _gk, ms in sorted(groups.items(), key=lambda kv: str(kv[0])):
+        ms = sorted(ms, key=lambda c: (c.unit, c.fact_id))
+        for i, a in enumerate(ms):
+            for b in ms[i + 1 :]:
+                if (a.unit, b.unit) not in same or a.value == b.value:
+                    continue
+                c, d = same[(a.unit, b.unit)]
+                ca, cb, cc, cd = (realise(x, 0) for x in (a, b, c, d))
+                if None in (ca, cb, cc, cd) or not (ca.figure and cb.figure):
+                    continue
+                noun = _noun(ca)
+                if not noun or noun != _noun(cb) or c.fact_id in (a.fact_id, b.fact_id):
+                    continue
+                np_ = f"{a.point} {noun}" if a.point and a.point == b.point else noun
+                np_ += "es" if np_.endswith("s") else "s"
+                lead = f"{cc.subject} and {_low(cd.subject)} both {_plural(cc.pred)}"
+                ids = cite(*cc.cites, *cd.cites, *ca.cites, *cb.cites)
+                cap = (
+                    a.capability
+                    if a.capability == c.capability
+                    else f"{c.capability}+{a.capability}"
+                )
+                group = _key("their", c.fact_id, d.fact_id, a.fact_id, b.fact_id)
+                for truth, op, x, y in (
+                    ("true", "none", ca.figure, cb.figure),
+                    ("false", "swap_pair", cb.figure, ca.figure),
+                ):
+                    s = f"{lead}, and their {np_} are {x} and {y} respectively {ids}."
+                    out.append(
+                        _case(
+                            s,
+                            [s],
+                            "plain",
+                            truth=truth,
+                            form=THEIR_FORM,
+                            operator=op,
+                            capability=cap,
+                            cites=[*cc.cites, *cd.cites, *ca.cites, *cb.cites],
+                            claim=f"{cc.text} | {cd.text} | {ca.text} | {cb.text}",
+                            group=group,
+                        )
+                    )
+    return out
+
+
+def _pairs(claims: list, world: World) -> list:
+    out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):
@@ -454,12 +711,32 @@ def _pair_cases(a, b, world: World, gk) -> list:
         if xa is not None and xb is not None:
             xa, xb = replace(xa, cites=ca.cites), replace(xb, cites=cb.cites)
             for form in PAIR_FORMS:
-                if form == "set_both":
+                if form in ("set_both", "most_of"):
                     continue
                 emit(form, xa, xb, "false", "swap_pair", differ, same)
     # one unit's claim said of both
     if differ:
         emit("set_both", ca, cb, "false", "overgeneralise", differ, True)
+        emit("most_of", ca, cb, "false", "overgeneralise", differ, True)
+    # (round 11) the comparative turned round, the figures kept
+    w = pair("comparative", ca, cb, differ, same)
+    if w is not None:
+        flipped = _flip_comparative(w[0])
+        if flipped != w[0]:
+            out.append(
+                _case(
+                    flipped,
+                    [flipped],
+                    w[2],
+                    truth="false",
+                    form="comparative",
+                    operator="flip_comparative",
+                    capability=cap,
+                    cites=[*ca.cites, *cb.cites],
+                    claim=f"{ca.text} | {cb.text}",
+                    group=group,
+                )
+            )
     # the second clause mutated
     for op in ("perturb_figure", "verdict", "negation"):
         for m in mutants(b, op, world)[:1]:
