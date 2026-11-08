@@ -8,6 +8,7 @@ store-backed config built from the facility's stored equipment classes.
 
 from __future__ import annotations
 
+import collections
 from dataclasses import replace
 
 import pandas as pd
@@ -298,6 +299,7 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
             shown[:_FACTS],
             fid,
             labels=lambda r: r["severity"] in ("fault", "warn"),
+            totals=collections.Counter(r["rule"] for r in rows),
         )
     )
     skipped_named = skipped_fact("K1@rule_run", every_skip, fid)

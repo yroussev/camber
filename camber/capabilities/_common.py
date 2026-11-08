@@ -673,6 +673,26 @@ def summary_text(equip: str, summary: str, *, own: bool = False) -> str:
     return prose(summary)
 
 
+#: the most null metrics a finding fact names (the rest are counted)
+_NULLS_NAMED = 6
+
+
+def _metric_flags(metrics: dict) -> str:
+    """What a finding's metrics say beyond its summary that hosts state from the JSON
+    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``) and the
+    metrics it left null (``null: oa_cost_excess_cool_kbtu, ...``). Empty when it
+    has none."""
+    keys = [k for k in sorted(metrics) if not k.startswith("_")]
+    parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
+    nulls = [k for k in keys if metrics[k] is None]
+    if nulls:
+        more = len(nulls) - _NULLS_NAMED
+        parts.append(
+            "null: " + ", ".join(nulls[:_NULLS_NAMED]) + (f" and {more} more" if more > 0 else "")
+        )
+    return "; ".join(parts)
+
+
 def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dict:
     """The fact that cites one finding row; its text names the equipment as a quoted value
     (#291), also where the rule's summary starts with it (``AHU-1: ...``). A finding with
@@ -686,6 +706,9 @@ def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dic
         text = text.rstrip(" .;") + ": this check was not judged"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
+    flags = _metric_flags(row.get("metrics") or {})
+    if flags:
+        text = text.rstrip(" .;") + "; " + flags
     fact = {
         "id": fact_id,
         "kind": "finding",
@@ -715,12 +738,16 @@ _MASKED = "n_masked"
 _LABEL_LEN = 160
 
 
-def caveat_facts(context: str, rows: list, facility_id: str | None = None) -> list:
+def caveat_facts(
+    context: str, rows: list, facility_id: str | None = None, totals: dict | None = None
+) -> list:
     """The facts of the caveats of finding ``rows``, kind ``caveat``, ``V<k>@<context>``: one
     per rule and caveat text, naming every unit it was given for (a caveat a rule gives each of
     its findings is one fact), in the rule's words (``"AHU-1" leaking_valve caveat: judged on
     supply air minus mixed air ...``): what the rule says may make its findings read wrong, or
-    what it left out."""
+    what it left out. ``totals`` (rule: its results on every page): a caveat given for fewer
+    of a rule's results says so, ``(given for 3 of its 145 results)``, and carries ``of`` (the
+    rule's results), so a sentence must name the units it is for (0112-cite13)."""
     groups: dict = {}
     for r in rows:
         for c in r.get("caveats") or []:
@@ -731,14 +758,18 @@ def caveat_facts(context: str, rows: list, facility_id: str | None = None) -> li
     for k, ((rule, caveat), of) in enumerate(groups.items(), start=1):
         units = list(dict.fromkeys(r["equip"] for r in of))
         named = ", ".join(name(u, own=is_fleet_id(rule, u)) for u in units)
+        total = (totals or {}).get(rule) or 0
+        part = f" (given for {len(of)} of its {total} results)" if total > len(of) else ""
         fact = {
             "id": f"V{k}@{context}",
             "kind": "caveat",
             "value": "caveat",  # a word, not a figure a sentence could match
             "rule": rule,
             "finding_ids": [r["finding_id"] for r in of],
-            "text": f"{named} {rule} caveat: {prose(caveat).rstrip(' .;')}",
+            "text": f"{named} {rule} caveat{part}: {prose(caveat).rstrip(' .;')}",
         }
+        if part:
+            fact["of"] = total
         if len(units) == 1:
             fact["equip"] = units[0]
             fact["subject"] = subject(facility_id, units[0], finding=of[0]["finding_id"])
@@ -843,10 +874,12 @@ def parameter_basis_fact(fact_id: str, rule: str, params: list, row: dict, facil
     }
 
 
-def note_facts(context: str, rows: list, facility_id: str | None = None, labels=None) -> list:
-    """The caveat facts of ``rows`` (:func:`caveat_facts`) and the labels facts
+def note_facts(
+    context: str, rows: list, facility_id: str | None = None, labels=None, totals=None
+) -> list:
+    """The caveat facts of ``rows`` (:func:`caveat_facts`, with ``totals``) and the labels facts
     (``M<k>@<context>``, :func:`finding_labels`) of the rows ``labels`` keeps (all when None)."""
-    out = caveat_facts(context, rows, facility_id)
+    out = caveat_facts(context, rows, facility_id, totals)
     m = 0
     for r in rows:
         if labels is None or labels(r):

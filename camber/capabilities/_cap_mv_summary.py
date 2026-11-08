@@ -295,6 +295,10 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
         fact = finding_fact(fact_id, r, fid)
         # 0.111 (#304): a saving says what unit it is in and whether it may be relied on
         if r["rule"] == "mv_savings" and not r["metrics"].get("declined"):
+            # 0112-cite13: the two totals the saving is the difference of, as hosts quote them
+            bp, ra = (r["metrics"].get(k) for k in ("baseline_projected", "reporting_actual"))
+            if isinstance(bp, (int, float)) and isinstance(ra, (int, float)):
+                fact["text"] += f"; baseline projected {bp:,.0f}, reporting actual {ra:,.0f}"
             if not r["metrics"].get("energy_unit"):
                 fact["text"] += f"; energy in {_METER_UNITS}"
             if any(_INFO_ONLY in c for c in r["caveats"]):
