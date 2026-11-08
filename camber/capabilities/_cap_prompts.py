@@ -27,6 +27,7 @@ _CITE_RULES = (
     "Rules for the answer: state only what the tool results say. End every sentence with the "
     "fact id(s) it rests on in square brackets, exactly as the results list them, token "
     "included (for example [F2@rule_run-1a2b3c]; each call's ids carry their own token). "
+    "Never shorten a fact id ([F2] is not a citation): cite each id exactly as issued. "
     "Copy every number exactly as a cited fact states it and state no number "
     "that is not in a fact you cite. Each evidence span, data gap, point's coverage, point "
     "that never moves, rank and notice has a fact of its own: cite that fact when you give "

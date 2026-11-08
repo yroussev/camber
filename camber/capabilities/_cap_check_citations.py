@@ -343,6 +343,19 @@ def _facility_names(ctx) -> dict:
     return out
 
 
+def _unknown_why(cited: str, known) -> str:
+    """Why ``cited`` is an unknown citation; a bare short id (``F5``, no ``@context-token``) is
+    one a host shortened (0112-cite13): the why says to cite the full id, naming the one the
+    session issued last with that prefix (``known``: ids, oldest first) when there is one. A
+    bare id is never accepted."""
+    why = f"{cited} is not a fact of this session"
+    if "@" in cited:
+        return why
+    full = [k for k in known if k.split("@")[0] == cited]
+    eg = full[-1] if full else f"{cited}@rule_run-…"
+    return f"{why}: never shorten a fact id; cite the full id, e.g. {eg}"
+
+
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
     from ..agent.verify import (
@@ -394,10 +407,8 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         unknown = [c for c in j.unknown if c not in forgotten]
         lost = [c for c in j.unknown if c in forgotten]
         if unknown:
-            verdict, why = (
-                "unknown_citation",
-                [f"{c} is not a fact of this session" for c in unknown],
-            )
+            held = [*sorted(known), *(ledger.ids() if ledger is not None else [])]
+            verdict, why = "unknown_citation", [_unknown_why(c, held) for c in unknown]
         elif lost:
             verdict, why = "forgotten_citation", [f"{c} is no longer held" for c in lost]
         else:
@@ -497,7 +508,8 @@ CAPABILITIES = (
             "uncited, unsupported_number (figure, sign, unit or role), unsupported_claim "
             "(name, verdict, negation or direction) or not_judged (a label or heading it does "
             "not read: cite or drop it); failures come with why. "
-            "Give each unit its own sentence. Call it last. Cheap."
+            "Give each unit its own sentence. Never shorten fact ids: cite each id exactly as "
+            "issued. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

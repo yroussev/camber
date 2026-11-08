@@ -1404,6 +1404,9 @@ class _Neg:
     lead: str = ""
     ctx: frozenset = frozenset()
     there: bool = False  # (a sentence's) "there were no flagged hours in the window" (#338)
+    # (0112-cite13, a sentence's) a pro-form "one" stands for the noun the fact names: "not one
+    # tuned for this site", "not a measured one"
+    pro: bool = False
 
 
 @dataclass(frozen=True)
@@ -4287,6 +4290,10 @@ def _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, marks
         else frozenset({head} | ({subject} if subject and not named else set()))
     )
     after = frozenset(s for x in range(k, n) if clause[x] == clause[k] for s in cont[x])
+    pro = not fact and any(
+        words[x] in ("one", "ones") and clause[x] == clause[k]
+        for x in range(k + 1, min(n, scope[-1] + 2))
+    )
     return _Neg(
         words_,
         head,
@@ -4297,6 +4304,7 @@ def _negation(toks, k, cont, clause, words, last_noun, fact, clause_words, marks
         named,
         after,
         frozenset(clause_words(k)),
+        pro=pro,
     )
 
 
@@ -5029,6 +5037,14 @@ class _FactClaims:
         # (#341) the rule it is about, for a sentence that names one rule
         found = str(data.get("finding_id") or subj.get("finding") or "")
         self.rule = str(data.get("rule") or found.split("@")[0] or "").lower()
+        # (0112-cite13) a caveat given for some of its rule's results: the units it names
+        part = data.get("of") if self.kind == "caveat" else None
+        units = data.get("equips") or ([data["equip"]] if data.get("equip") else [])
+        self.part_of = (
+            (int(part), tuple(str(u) for u in units))
+            if isinstance(part, int) and not isinstance(part, bool) and units
+            else None
+        )
         self.windows = _windows(data, text)  # (#341) the stretches of time it covers
         # (#342) its baseline period's: a saving is for its reporting period, not its baseline's
         self.base_windows = set(
@@ -5813,7 +5829,12 @@ def _says_too(n: _Neg, f: _Neg, names=frozenset()) -> bool:
             if b == "or"
             for w in (a, c)
         }
-        if not (alts and alts & n.clause and own - alts <= n.clause):
+        alt = bool(alts and alts & n.clause)
+        missing = (own - alts if alt else own) - n.clause
+        # (0112-cite13) "not one tuned for this site" of "not a config tuned for ...": the
+        # pro-form "one" stands for one word of the fact's, and the rest are the sentence's
+        pro = n.pro and len(missing) == 1 and bool(own - missing) and n.head in f.words
+        if missing and not pro:
             return False
     if names is not None and f.named and f.subject and f.subject.lower() not in names:
         # "measured_fan_heat_f not set" is about that setting, not what the fact is about: the
@@ -8080,6 +8101,49 @@ _FACT_HEDGED = re.compile(rf"\b(?:{_HEDGE})\b", re.I)
 _HEDGED = re.compile(rf"\b(?:caveats?|cautions?|warns?|notes?|{_HEDGE})\b", re.I)
 
 
+#: what scopes a sentence to some units without naming them: a pronoun or determiner that
+#: points back ("its caveat", "these boxes"), or a part ("some", "a few", "3 VAV boxes")
+_SCOPED = re.compile(r"\b(?:its|their|these|those|them|each|some|several|few|certain)\b", re.I)
+#: "3 VAV boxes", "three of the boxes": a count of the units, read against the caveat's
+_SCOPED_N = re.compile(
+    r"\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+(?:of\s+(?:the\s+)?)?[a-z]", re.I
+)
+_N_WORDS = {w: i for i, w in enumerate("two three four five six seven eight nine ten".split(), 2)}
+
+
+def _caveat_scope(body: str, mine: list) -> list:
+    """(0112-cite13) A caveat a rule gave for some of its results (``part_of``: the rule's
+    results, the units it names) is about those units, not the rule as a whole: a sentence
+    citing only such caveats that states it (not one that reports the caveat, "the caveat
+    says", or hedges) must name one of their units, or scope itself to some ("its", "these",
+    "3 VAV boxes"); "Reheat penalty: not evaluated" citing a caveat of 3 of 145 results says
+    it of the whole rule."""
+    parts = [fc for fc in mine if getattr(fc, "part_of", None)]
+    if not parts or len(parts) != len(mine) or _HEDGED.search(body):
+        return []  # "the rule's caveat says ...", "can read as a leak": the caveat, reported
+    low = body.lower()
+    for fc in parts:
+        of, units = fc.part_of
+        if any(u.lower() in low or u.lower().replace("_", " ") in low for u in units):
+            return []
+    if _SCOPED.search(body):
+        return []
+    said = {
+        int(n) if n.isdigit() else _N_WORDS[n.lower()]
+        for n in _SCOPED_N.findall(body)
+        if n.isdigit() or n.lower() in _N_WORDS
+    }
+    if any(len(fc.part_of[1]) > 1 and len(fc.part_of[1]) in said for fc in parts):
+        return []
+    fc = parts[0]
+    of, units = fc.part_of
+    listed = ", ".join(units[:3]) + (f" and {len(units) - 3} more" if len(units) > 3 else "")
+    return [
+        f"the cited caveat is given for {len(units)} of its rule's {of} results ({listed}), "
+        "not the whole rule: name the units it is for"
+    ]
+
+
 def _session_problems(vis: str, mine: list, vocab, issued) -> tuple:
     """(0112-cite10) ``(reason, why)``: a name the sentence gives that no fact of the session
     gave (a slug naming a unit, site or dataset, or a rule); a caveat, masked samples or a
@@ -8110,6 +8174,9 @@ def _session_problems(vis: str, mine: list, vocab, issued) -> tuple:
                 f"{hit.group(0)!r}: no cited fact states {what}; cite the fact of "
                 "the result that does"
             ]
+    scoped = _caveat_scope(body, mine)
+    if scoped:
+        return "unsupported-claim", scoped
     if (
         all(fc.kind == "caveat" for fc in mine)
         and any(_FACT_HEDGED.search(fc.said) for fc in mine)
