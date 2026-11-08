@@ -456,9 +456,31 @@ _CHART_WORDS = {
     "multitrend": "a multi-trend of {roles} over the analysis window, with the {label} spans "
     "shaded",
     "oat_scatter": "a scatter of {roles} against outdoor-air temperature",
-    "diagnostic": "a diagnostic scatter ({template}) with the violating samples marked",
+    # round 11: a diagnostic scatter's fact names its axes ("of oa_fraction_pct (outdoor-air
+    # fraction, y) against oat (outdoor-air temperature, x)")
+    "diagnostic": "a diagnostic scatter ({template}) of {y} against {x}, with the violating "
+    "samples marked",
     "carpet": "a carpet plot (hour of day by date) of {roles}",
 }
+
+
+#: round 11: the words of a diagnostic scatter's axis, beside its role or column
+_AXIS_WORDS = {
+    "oat": "outdoor-air temperature",
+    "oa_fraction_pct": "outdoor-air fraction",
+    "oa_damper_frac": "outdoor-air damper position",
+    "mixed_air_temp": "mixed-air temperature",
+    "supply_air_temp": "supply-air temperature",
+    "return_air_temp": "return-air temperature",
+}
+
+
+def _axis_words(role: str, axis: str) -> str:
+    """``"oat (outdoor-air temperature, x)"``: a scatter axis as its chart fact names it."""
+    if not role:
+        return f"the {axis} axis"
+    words = _AXIS_WORDS.get(role) or role.replace("_", " ")
+    return f"{role} ({words}, {axis})" if words != role else f"{role} ({axis})"
 
 
 def _chart(ev) -> dict | None:
@@ -470,8 +492,11 @@ def _chart(ev) -> dict | None:
     roles = [str(jsonable(r)) for r in plotted]
     renderer = str(ev.renderer)
     template = getattr(ev.template, "name", None) if ev.template is not None else None
+    axes = [roles[0], roles[1]] if renderer == "diagnostic" and len(roles) == 2 else ["", ""]
     words = _CHART_WORDS.get(renderer, "a {renderer} chart of {roles}").format(
         roles=", ".join(roles) or "the rule's inputs",
+        x=_axis_words(axes[0], "x"),
+        y=_axis_words(axes[1], "y"),
         label=ev.label or "violation",
         template=template or "the rule's template",
         renderer=renderer,

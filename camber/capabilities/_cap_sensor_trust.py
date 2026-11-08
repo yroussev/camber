@@ -370,6 +370,16 @@ def _frac(x) -> float:
     return min(max(float(v), 0.0), 1.0) if isinstance(v, (int, float)) else 0.0
 
 
+def _selection_words(equips, roles) -> str:
+    """The points a call judged, as its facts say them: "points", "supply_air_temp points",
+    "points on AHU-1", "supply_air_temp or mixed_air_temp points on AHU-1, AHU-2" (round 11:
+    the role and equipment filter is in the fact, not "matching points")."""
+    words = f"{' or '.join(str(r) for r in roles)} points" if roles else "points"
+    if equips:
+        words += f" on {', '.join(str(e) for e in equips)}"
+    return words
+
+
 def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     """Trust scores per point of one allowed facility, least trusted first."""
     fid = arguments["facility_id"]
@@ -441,8 +451,9 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     counts = {k: sum(1 for r in rows if r["verdict"] == k) for k in ("trusted", "suspect")}
     counts["untrusted"] = sum(1 for r in rows if r["verdict"] == "untrusted")
     counts["below_floor"] = sum(1 for r in rows if r["below_floor"])
-    # 0.111 (#320): a selection's count is not the facility's
-    points = "matching points" if want_eq or want_roles else "points"
+    # 0.111 (#320): a selection's count is not the facility's; 0112-cite10 (round 11): it says
+    # the selection ("4 supply_air_temp points", "6 points on AHU-1"), not "matching points"
+    points = _selection_words(want_eq, want_roles)
     facts = [
         {
             "id": "F1@sensor_trust",
@@ -456,7 +467,8 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         }
     ]
     text = [
-        f"Of {len(rows)} {points} on {fid}, {counts['below_floor']} are below the trust floor "
+        f"Of {len(rows)} {points} {'at' if want_eq else 'on'} {fid}, {counts['below_floor']} are "
+        f"below the trust floor "
         f"{floor:g} [F1@sensor_trust]."
     ]
     shown = page(rows, arguments, default=_PAGE, what="points", order="least trusted first")

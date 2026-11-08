@@ -381,12 +381,16 @@ def test_a_fact_names_the_conditional_results_not_listed(bias):
     assert not [f for f in every.facts if f["kind"] == "conditional_not_listed"]
 
 
-def test_sensor_trust_says_matching_points_for_a_selection(bias):
+def test_sensor_trust_says_the_selection(bias):
     ctx, fid = bias
     every = REG.call("sensor_trust", {"facility_id": fid}, ctx)
     one = REG.call("sensor_trust", {"facility_id": fid, "equips": ["AHU__sat_bias"]}, ctx)
-    assert " matching points on " in one.text and " matching points judged" in one.facts[0]["text"]
-    assert " matching points" not in every.text
+    # round 11: the selection is said, not "matching points"
+    assert " points on AHU__sat_bias at " in one.text
+    assert " points on AHU__sat_bias judged" in one.facts[0]["text"]
+    assert " matching points" not in every.text and " points on AHU" not in every.text
+    roles = REG.call("sensor_trust", {"facility_id": fid, "roles": ["supply_air_temp"]}, ctx)
+    assert " supply_air_temp points judged" in roles.facts[0]["text"]
 
 
 # ------------------------------------------------------------- 7. basis and redaction

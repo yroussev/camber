@@ -100,6 +100,8 @@ well as the digits.
 | `M<n>` `finding_labels` | `rule_run` (fault and warn findings), `finding_detail` | (0112-cite10) a finding's string-valued metrics (`missed_cause "economizer_not_commanded"`, `oa_cost_airflow "trended supply airflow"`, `fan_gate`, a basis or source) and the samples it masked (`n_masked_fan_off 824`), each value quoted |
 | `K1` `skipped_rules` | `rule_run` | (0112-cite10) the rules the run skipped for missing inputs, by name, each with the inputs it lacked and the equipment it was skipped on (`rules` lists them; `F1` counts them), so a draft naming a skipped rule can cite it |
 | `B1` `parameter_basis` | `finding_detail` | (0112-cite10) the basis the rule gives for its parameters' values ("max_starts_per_day: CAMBER judgment: a generic cycling limit ...") |
+| `F1` `trust_summary` | `sensor_trust` | (round 11) the points it judged by the call's own filter: "4 supply_air_temp points judged", "6 points on AHU-1 judged" (was "matching points"), so a draft that says which points were judged can cite it |
+| `F<n>` evidence chart | `finding_detail` | (round 11) a diagnostic scatter's axes by role and in words: "of oa_fraction_pct (outdoor-air fraction, y) against oat (outdoor-air temperature, x)" |
 
 **Pages** (0.111, #299; sizes 0.112, #333). A list-returning capability returns one page of
 each list by default, sized so that the default result fits a host that gives the model only
