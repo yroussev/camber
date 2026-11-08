@@ -546,7 +546,7 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   `verified_text` leaves them out (a heading's line is marked "(heading not checked)"). Pure
   structure is no unit: blank lines, separators, table rules and column headers, greetings, and
   headings, lead-ins and list-item titles that only name a topic. The tool description and the
-  prompts say to put such text in a cited sentence. On the 300 + 50 real-host drafts, 180 + 43
+  prompts say to put such text in a cited sentence. On the 300 + 50 real-host drafts, 173 + 43
   units became `not_judged` (68 + 12 of them true, all uncited; 1 + 0 false); cited strips
   are unchanged, and the one false unit was an escape.
 - **`check_citations` reads more of what hosts write (round 11).** A year before a period's

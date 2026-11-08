@@ -901,7 +901,8 @@ cannot match is not supported. **Supported means matched, not proven true.**
     `Best regards`); a table rule and a header row that only names its columns. "Only names a
     topic" means no verdict, direction, polar or negation word, no quantifier ("all", "each",
     "both", "none", "only", "most"), no rank or severity word, outside what follows a
-    hypothetical ("can", "if"); "saving" and "savings" name a topic.
+    hypothetical ("can", "if"), and not inside a name (`**AHU__healthy**` names a unit); "saving"
+    and "savings" name a topic.
   - *Not judged* (verdict `not_judged`, never a pass): every other such heading or label -- a
     heading with one of those words (`**What is not fine**`, `## Points that never move`,
     `**Meters with a baseline that fails G14:**`), and a short label or remark that cites

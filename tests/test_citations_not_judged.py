@@ -185,6 +185,9 @@ def test_the_tool_description_and_the_prompts_say_what_not_judged_is():
     [
         "## Sensor trust",
         "**AHU-1 details**",
+        "**AHU__healthy**",  # a verdict word inside a name is the name's
+        '## AHU-1 triage: "AHU__ok_unit"',
+        "Here's the Slack message:",
         "# AHU-1 triage",
         "## Savings claim check",
         "How far the inputs can be trusted:",
@@ -195,6 +198,7 @@ def test_the_tool_description_and_the_prompts_say_what_not_judged_is():
         "Hello,",
         "Hi team,",
         "Dear [Owner],",
+        "Dear Building Owner,",
         "**Q1.",
     ],
 )

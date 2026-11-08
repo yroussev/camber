@@ -631,7 +631,7 @@ _NOT_CHECKED = "(heading not checked)"
 #: a greeting or a sign-off, alone on its line ("Hello,", "Best regards", "Dear [Owner],")
 _GREETING = re.compile(
     r"(?:(?:hi|hello|hey|dear|good\s+(?:morning|afternoon|evening))(?:\s+(?:all|team|everyone|"
-    r"folks|there|\[[^\[\]]{1,30}\]|[A-Z][a-z]{1,20}))?|(?:best|kind|warm)?\s*regards|best|"
+    r"folks|there|\[[^\[\]]{1,30}\]|[A-Z][a-z]{1,20})){0,3}|(?:best|kind|warm)?\s*regards|best|"
     r"cheers|thanks|thank\s+you|sincerely|many\s+thanks)\s*[,.!]?",
     re.I,
 )
@@ -667,7 +667,9 @@ def _topic_only(line: str) -> bool:
     body = _unheaded(line)
     if not body or body == _NOT_CHECKED:
         return True
-    words = [w.lower() for w in re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?", _QUOTED.sub(" ", body))]
+    # a name says nothing of itself: "AHU__healthy", "RTU__d3_stuck_000", "AHU-1", a quoted one
+    named = re.sub(r"\S*_\S*|\S*[A-Za-z]-?\d\S*", " ", _QUOTED.sub(" ", body))
+    words = [w.lower() for w in re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?", named)]
     for i, w in enumerate(words):
         if w in _TOPIC_NOUNS or any(x in _HYPO for x in words[:i]):
             continue  # "## Savings claim check"; "How far the inputs can be trusted:" asks
@@ -706,7 +708,11 @@ def _bare(piece: str, title: bool = False) -> bool:
     # a step's number is a list marker in words ("- **Stop 1, "PLANT__left_on":**"); any other
     # figure is a claim
     bare = re.sub(r"(?<![\w-])(?:q|step|stop|part|section)\s*\d{1,3}\b", " ", lead, flags=re.I)
-    if not short or _LABEL_SAYS.search(lead) or re.search(r"\d", _QUOTED.sub(" ", bare)):
+    if (
+        not short
+        or (title and _LABEL_SAYS.search(lead))
+        or re.search(r"\d", _QUOTED.sub(" ", bare))
+    ):
         return False
     return _topic_only(lead)
 
