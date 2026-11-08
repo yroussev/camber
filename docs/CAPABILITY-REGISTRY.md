@@ -981,7 +981,9 @@ logger on AHU-1 reads high"); a paraphrase of a leak ("passing water through a s
 list given as "the former ... the latter"; possessives joined with "like" or "as well as" ("A's
 coverage, like B's, is 100.0%"); "flat while AHU-2's modulates" (a word outside the lists); the
 second of two clauses that names no unit of its own (a pronoun: "... and it has a trust of
-0.66") is the first clause's. And these fail closed although they can be true: a sentence that
+0.66") is the first clause's; a heading that only names a unit ("**AHU-1 details**") does not
+scope the items under it, so an item that names no unit is read against its own cited facts and
+one about another unit passes under it (round 13, `gap:heading-scope`). And these fail closed although they can be true: a sentence that
 names one unit and gives an unnamed unit's figure ("lower than the other AHU's 0.68": name
 both); "Overall coverage is quoted over the whole window" with no share of it; "Except for B,
 all AHUs fail"; "A's part is suspect, but B's is not" (a possessive left with its verb left

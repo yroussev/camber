@@ -537,6 +537,25 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   with "give each unit its own sentence", which the tool description and the prompts now say.
   On the generated cases (10,517, round 11) E fell from 0.94% to 0.00% and S from 4.3% to 0.8%
   against 6c4354b; no cell is above 2% (was 46); 41 corpus entries that were known gaps pass.
+- **Facts state what hosts quote from the result (round 13).** A point's trust fact gives the
+  value its 2-place rounding hides (`trust 1.00 (0.9977)`, a suspect point that read as a perfect
+  score); a finding's fact gives its true/false flags and the metrics it left null (`fan_gated
+  true`, `null: oa_cost_excess_cool_kbtu, ...`, at most six named); an M&V saving's fact gives
+  its baseline-projected and reporting-actual totals; and a caveat given for some of a rule's
+  results says so (`caveat (given for 3 of its 145 results)`). On the real-host drafts these
+  were claims true in the tool JSON that no fact stated, so a judge read them as false.
+- **`check_citations` scopes a caveat to its units, and ids are never shortened (round 13).** A
+  sentence citing only caveats given for some of a rule's results, that states the caveat as a
+  fact of the rule ("Reheat penalty: not evaluated, ..."), fails unless it names a unit the
+  caveat is for or scopes itself to some ("its", "these", "3 VAV boxes"); one that reports the
+  caveat ("the rule's caveat says", "can read as a leak") is read as before. A bare short id
+  (`[F5]`) stays `unknown_citation`, and its `why` now names the full id the session issued last
+  ("cite the full id, e.g. F5@rule_run-..."); the tool description and the prompt rules say never
+  to shorten an id. A pro-form "one" in a negation stands for the fact's noun ("not one tuned for
+  this site" of "not a config tuned for ...", "not a measured one"). On the 50 round-10 drafts
+  cited strips fell from 50 to 47 of 537 with no new escape; the generated cases add 111 (bare
+  ids and caveat scope), with 0 escapes. A heading that only names a unit does not scope the
+  items under it yet (`gap:heading-scope`, a strict-xfail corpus entry).
 - **`check_citations` reports text it does not read as `not_judged`, never as a pass
   (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
   quantifier, direction or rank word) and a short label or remark that cites nothing ("That
