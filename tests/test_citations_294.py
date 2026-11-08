@@ -377,6 +377,7 @@ def test_verified_text_removes_only_the_failing_sentences():
         "unsupported_number": 3,
         "unsupported_claim": 0,
         "forgotten_citation": 0,
+        "not_judged": 0,
     }
     # the list item with an unknown id stated a verdict ("has a fault"): its removal is said
     assert data["verified_text"] == (

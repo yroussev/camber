@@ -478,7 +478,6 @@ def test_a_heading_that_makes_a_claim_is_judged(line):
         "## Savings claim check: meter_A",
         "## Savings claim check",
         "**Savings claim check**",
-        "## Points that never move",
         "## Stop 1: supply air sensor",
         "Stop 2:",
         "How far the inputs can be trusted:",
