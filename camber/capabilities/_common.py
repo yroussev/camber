@@ -701,6 +701,162 @@ def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dic
     return fact
 
 
+# --------------------------------------------------------------------------- notes as facts
+# 0112-cite10: what a result's JSON says beyond its facts -- a finding's caveats, its labels
+# (the string-valued metrics, such as a missed cause or an airflow source) and the samples it
+# masked, the rules a run skipped for missing inputs and the basis of a rule's parameters --
+# each issued as a fact of its own. Hosts read the whole result and cited the nearest fact for
+# these (the real-host baseline of PLAN-CITE-EVAL: 31 of 39 kept false sentences), so a sentence
+# stating one now has a fact that states it to cite, and is checked against that fact.
+
+#: the metrics of a finding counted as masked samples (``n_masked_fan_off``, ...)
+_MASKED = "n_masked"
+#: the longest label value a labels fact gives in full
+_LABEL_LEN = 160
+
+
+def caveat_facts(context: str, rows: list, facility_id: str | None = None) -> list:
+    """The facts of the caveats of finding ``rows``, kind ``caveat``, ``V<k>@<context>``: one
+    per rule and caveat text, naming every unit it was given for (a caveat a rule gives each of
+    its findings is one fact), in the rule's words (``"AHU-1" leaking_valve caveat: judged on
+    supply air minus mixed air ...``): what the rule says may make its findings read wrong, or
+    what it left out."""
+    groups: dict = {}
+    for r in rows:
+        for c in r.get("caveats") or []:
+            c = " ".join(str(c).split())
+            if c:
+                groups.setdefault((r["rule"], c), []).append(r)
+    out = []
+    for k, ((rule, caveat), of) in enumerate(groups.items(), start=1):
+        units = list(dict.fromkeys(r["equip"] for r in of))
+        named = ", ".join(name(u, own=is_fleet_id(rule, u)) for u in units)
+        fact = {
+            "id": f"V{k}@{context}",
+            "kind": "caveat",
+            "value": "caveat",  # a word, not a figure a sentence could match
+            "rule": rule,
+            "finding_ids": [r["finding_id"] for r in of],
+            "text": f"{named} {rule} caveat: {prose(caveat).rstrip(' .;')}",
+        }
+        if len(units) == 1:
+            fact["equip"] = units[0]
+            fact["subject"] = subject(facility_id, units[0], finding=of[0]["finding_id"])
+        else:
+            fact["equips"] = units
+        out.append(fact)
+    return out
+
+
+def finding_labels(fact_id: str, row: dict, facility_id: str | None = None) -> dict | None:
+    """The fact of a finding row's labels, kind ``finding_labels`` (None when it has none): its
+    string-valued metrics (``missed_cause``, ``oa_cost_airflow``, ``fan_gate``, an M&V
+    ``method`` or ``kernel``) and the samples it masked (``n_masked_*``), each as ``key
+    "value"`` (a value is quoted: it may name a zone or a point from the data)."""
+    metrics = row.get("metrics") or {}
+    labels = [
+        f"{k} {name(v, limit=_LABEL_LEN)}"
+        for k, v in sorted(metrics.items())
+        if isinstance(v, str) and v.strip() and not k.startswith("_")
+    ]
+    masked = [
+        f"{k} {v:g}"
+        for k, v in sorted(metrics.items())
+        if k.startswith(_MASKED) and isinstance(v, (int, float)) and not isinstance(v, bool)
+    ]
+    if not labels and not masked:
+        return None
+    equip = row["equip"]
+    own = is_fleet_id(row["rule"], equip)
+    parts = []
+    if labels:
+        parts.append("labels: " + "; ".join(labels))
+    if masked:
+        parts.append("samples masked: " + "; ".join(masked))
+    return {
+        "id": fact_id,
+        "kind": "finding_labels",
+        "value": "labels",
+        "rule": row["rule"],
+        "equip": equip,
+        "finding_id": row["finding_id"],
+        "subject": subject(facility_id, equip, finding=row["finding_id"]),
+        "text": f"{name(equip, own=own)} {row['rule']} " + "; ".join(parts),
+    }
+
+
+#: the skipped rules a skipped-rules fact names (the rest are counted)
+_SKIPS_NAMED = 20
+
+
+def skipped_fact(fact_id: str, skips: list, facility_id: str) -> dict | None:
+    """The fact naming the rules a run skipped for missing inputs, kind ``skipped_rules`` (None
+    when it skipped none): per rule, the inputs it lacked and the equipment it was skipped on
+    (``skips``: ``{"rule", "equip", "reason", "missing"}`` rows, every page)."""
+    if not skips:
+        return None
+    per: dict = {}
+    for s in skips:
+        k = (s["rule"], tuple(s.get("missing") or ()))
+        per.setdefault(k, []).append(s.get("equip") or "")
+    named = []
+    for (rule, missing), equips in sorted(per.items())[:_SKIPS_NAMED]:
+        units = [e for e in equips if e]
+        on = ""
+        if units:
+            listed = ", ".join(name(e) for e in units[:5])
+            more = f" and {len(units) - 5} more" if len(units) > 5 else ""
+            on = f" on {listed}{more}"
+        lacks = f" (missing {', '.join(prose(m) for m in missing)})" if missing else ""
+        named.append(f"{rule}{on}{lacks}")
+    more = f"; and {len(per) - _SKIPS_NAMED} more" if len(per) > _SKIPS_NAMED else ""
+    rules = sorted({s["rule"] for s in skips})
+    return {
+        "id": fact_id,
+        "kind": "skipped_rules",
+        "facility_id": facility_id,
+        "value": len(rules),
+        "rules": rules,
+        "text": f"{len(rules)} rule(s) skipped for missing inputs on {facility_id}, so not "
+        f"judged: {'; '.join(named)}{more}",
+    }
+
+
+def parameter_basis_fact(fact_id: str, rule: str, params: list, row: dict, facility_id=None):
+    """The fact of the basis a rule gives for its parameters' values, kind
+    ``parameter_basis`` (None when none gives one): ``max_starts_per_day: CAMBER judgment: a
+    generic cycling limit ...``."""
+    said = [
+        f"{p['name']}: {prose(' '.join(str(p['basis']).split())).rstrip(' .;')}"
+        for p in params
+        if isinstance(p.get("basis"), str) and p["basis"].strip()
+    ]
+    if not said:
+        return None
+    return {
+        "id": fact_id,
+        "kind": "parameter_basis",
+        "value": "basis",
+        "rule": rule,
+        "subject": subject(facility_id, row["equip"], finding=row["finding_id"]),
+        "text": f"{rule} parameter basis: " + "; ".join(said),
+    }
+
+
+def note_facts(context: str, rows: list, facility_id: str | None = None, labels=None) -> list:
+    """The caveat facts of ``rows`` (:func:`caveat_facts`) and the labels facts
+    (``M<k>@<context>``, :func:`finding_labels`) of the rows ``labels`` keeps (all when None)."""
+    out = caveat_facts(context, rows, facility_id)
+    m = 0
+    for r in rows:
+        if labels is None or labels(r):
+            fact = finding_labels(f"M{m + 1}@{context}", r, facility_id)
+            if fact is not None:
+                m += 1
+                out.append(fact)
+    return out
+
+
 # --------------------------------------------------------------------------- structured facts
 # 0.112 (#294): a fact added for a figure a model is asked to state carries it as fields too --
 # ``value`` with its ``unit``, the ``subject`` it is about (facility, equipment, point) and, where

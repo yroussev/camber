@@ -499,7 +499,8 @@ def test_a_set_said_to_leak(form, right):
 @pytest.mark.parametrize(
     "text, right",
     [
-        (f"AHU-2's damper leaks {_c(LEAK2)}.", True),  # another part: not read
+        # round 11: a leak needs a cited fact that states one (another part was not read)
+        (f"AHU-2's damper leaks {_c(LEAK2)}.", False),
         (f"AHU-1 leaks {_c(LEAK1, LEAK2)}.", True),  # AHU-2's "no valve leak" is not AHU-1's
         (f"AHU-2 has no valve leak {_c(LEAK2)}.", True),
         (f"AHU-2 leaks {_c(LEAK1, LEAK2)}.", False),

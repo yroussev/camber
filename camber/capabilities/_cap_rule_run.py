@@ -39,6 +39,8 @@ from ._common import (
     jsonable,
     mask_summary,
     narrow,
+    note_facts,
+    parameter_basis_fact,
     reference_conditions,
     reference_findings,
     reference_notes_banner,
@@ -46,6 +48,7 @@ from ._common import (
     rule_names,
     run,
     severity_counts,
+    skipped_fact,
     subject,
     summary_text,
     trust_banner,
@@ -287,6 +290,19 @@ def rule_run(ctx, arguments: dict) -> CapabilityResult:
         facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
+    # 0112-cite10: the caveats of every finding with a fact, the labels and masked samples of
+    # each fault and warn, and the rules skipped for missing inputs, each a fact
+    facts.extend(
+        note_facts(
+            "rule_run",
+            shown[:_FACTS],
+            fid,
+            labels=lambda r: r["severity"] in ("fault", "warn"),
+        )
+    )
+    skipped_named = skipped_fact("K1@rule_run", every_skip, fid)
+    if skipped_named is not None:
+        facts.append(skipped_named)
     banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
@@ -440,9 +456,31 @@ _CHART_WORDS = {
     "multitrend": "a multi-trend of {roles} over the analysis window, with the {label} spans "
     "shaded",
     "oat_scatter": "a scatter of {roles} against outdoor-air temperature",
-    "diagnostic": "a diagnostic scatter ({template}) with the violating samples marked",
+    # round 11: a diagnostic scatter's fact names its axes ("of oa_fraction_pct (outdoor-air
+    # fraction, y) against oat (outdoor-air temperature, x)")
+    "diagnostic": "a diagnostic scatter ({template}) of {y} against {x}, with the violating "
+    "samples marked",
     "carpet": "a carpet plot (hour of day by date) of {roles}",
 }
+
+
+#: round 11: the words of a diagnostic scatter's axis, beside its role or column
+_AXIS_WORDS = {
+    "oat": "outdoor-air temperature",
+    "oa_fraction_pct": "outdoor-air fraction",
+    "oa_damper_frac": "outdoor-air damper position",
+    "mixed_air_temp": "mixed-air temperature",
+    "supply_air_temp": "supply-air temperature",
+    "return_air_temp": "return-air temperature",
+}
+
+
+def _axis_words(role: str, axis: str) -> str:
+    """``"oat (outdoor-air temperature, x)"``: a scatter axis as its chart fact names it."""
+    if not role:
+        return f"the {axis} axis"
+    words = _AXIS_WORDS.get(role) or role.replace("_", " ")
+    return f"{role} ({words}, {axis})" if words != role else f"{role} ({axis})"
 
 
 def _chart(ev) -> dict | None:
@@ -454,8 +492,11 @@ def _chart(ev) -> dict | None:
     roles = [str(jsonable(r)) for r in plotted]
     renderer = str(ev.renderer)
     template = getattr(ev.template, "name", None) if ev.template is not None else None
+    axes = [roles[0], roles[1]] if renderer == "diagnostic" and len(roles) == 2 else ["", ""]
     words = _CHART_WORDS.get(renderer, "a {renderer} chart of {roles}").format(
         roles=", ".join(roles) or "the rule's inputs",
+        x=_axis_words(axes[0], "x"),
+        y=_axis_words(axes[1], "y"),
         label=ev.label or "violation",
         template=template or "the rule's template",
         renderer=renderer,
@@ -907,6 +948,11 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     for fact in _reference_facts(fid, f, row, rule_obj, frame, refs, mask):
         facts.append(fact)
         text.append(cite(fact))
+    # 0112-cite10: the finding's caveats, labels and masked samples, and its parameters' basis
+    facts.extend(note_facts("finding_detail", [row], fid))
+    basis = parameter_basis_fact("B1@finding_detail", rule, params, row, fid)
+    if basis is not None:
+        facts.append(basis)
     data = {
         "facility_id": fid,
         "finding": row,

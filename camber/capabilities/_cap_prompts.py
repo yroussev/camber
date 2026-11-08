@@ -38,7 +38,9 @@ _CITE_RULES = (
     "verdict, negation or assurance word (passes, fails, not, never, none, all, verified, "
     "clean, real, confident) only as a fact you cite does: check_citations compares them both "
     "ways. Say 'both', 'each' or 'all' of several equipment or points only citing a fact about "
-    "each one. Quote a name from the data in double quotes. If a call is refused (not_allowed, "
+    "each one. Give each unit its own sentence: one that names several units and cannot be "
+    "read as one clause per unit, each against that unit's facts, fails. Quote a name from the "
+    "data in double quotes. If a call is refused (not_allowed, "
     "refused_licence), say so and stop; do not work around it."
 )
 

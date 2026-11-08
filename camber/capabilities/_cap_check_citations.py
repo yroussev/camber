@@ -337,7 +337,14 @@ def _facility_names(ctx) -> dict:
 
 def check_citations(ctx, arguments: dict) -> CapabilityResult:
     """Per-sentence citation verdicts for a drafted text."""
-    from ..agent.verify import _judge, _rebuild, _states_verdict_or_caveat, _visible, extract_cites
+    from ..agent.verify import (
+        _issued_names,
+        _judge,
+        _rebuild,
+        _states_verdict_or_caveat,
+        _visible,
+        extract_cites,
+    )
 
     ledger = getattr(ctx, "ledger", None)
     if ledger is not None:
@@ -360,6 +367,9 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
     notices = [f.text for f in context.facts if f.kind == "notice"]
     notices.append(REMOVED[len("NOTICE: ") :])
     terms, rules = _terms()
+    # 0112-cite10: the names every fact of the session gave (with no ledger, those passed)
+    issued = set(ledger.names()) if ledger is not None else set()
+    issued |= _issued_names(facts_in)
     judged = _judge(
         draft,
         context,
@@ -368,6 +378,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         aliases=_facility_names(ctx),
         terms=terms,
         rules=rules,
+        issued=issued,
     )
     sentences = []
     for i, j in enumerate(judged):
@@ -461,8 +472,8 @@ CAPABILITIES = (
             "in this session's facts. A sentence is supported, unknown_citation (not of "
             "this session), forgotten_citation (rerun that tool), "
             "uncited, unsupported_number (figure, sign, unit or role) or unsupported_claim "
-            "(name, verdict, negation or direction); failures come with why. Call it last. "
-            "Cheap."
+            "(name, verdict, negation or direction); failures come with why. Give each unit "
+            "its own sentence. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

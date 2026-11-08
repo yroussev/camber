@@ -215,11 +215,14 @@ def test_a_claim_no_cited_fact_makes_is_unsupported(text):
 
 def test_a_citation_hidden_in_markup_cites_nothing():
     for text in (
-        f"Saves 46% <!-- [{f2}] -->.",
         f'Saves 46% <span title="[{f2}]"></span>.',
-        f"Saves 46% <!-- [{f2}]",
+        f'Saves 46% <img alt="[{f2}]">.',
     ):
         assert _verdict(text) == "uncited-sentence", text
+    # 0112-cite10 (B): a comment's words are read like prose, its citations included, so the
+    # sentence is judged against the fact it cites there ("saves" is no claim of f2's)
+    for text in (f"Saves 46% <!-- [{f2}] -->.", f"Saves 46% <!-- [{f2}]"):
+        assert _verdict(text) == "unsupported-claim", text
     assert _verdict(f"Saves 46% <!-- note --> [{f2}].") == "unsupported-claim"  # "saves"
     assert extract_cites(f"[{f2}, {f3}; F9@x]") == [f2, f3, "F9@x"]
 

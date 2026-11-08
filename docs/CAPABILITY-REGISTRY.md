@@ -96,6 +96,12 @@ well as the digits.
 | `R<n>` `reference_comparison` | `sensor_trust` | now with `unit` (also in `data.references` and the summary): the unit CAMBER's rules read the point in, `°F` for a temperature and `%` for a valve, damper or speed (`null`: the point's own units), and the bias, RMSE, samples and overlap as fields |
 | `A<n>` `claimed_figure` | `mv_summary` with `claim` | each figure the caller's claim states, `basis` `claimed`: what the claim says, never a measured result (only the figure and its unit are written, never the claim's words) |
 | `N<n>` `notice` | every capability | each banner of the result, `basis` `notice`, its text exactly the banner's, so a draft that repeats a NOTICE can cite it |
+| `V<n>` `caveat` | `rule_run`, `finding_detail`, `mv_summary` | (0112-cite10) each caveat a rule gives its findings, in the rule's words, one fact per rule and caveat text naming every unit it was given for (`rule`, `finding_ids`, and `equip` with `subject` when there is one unit, else `equips`): the leaking_valve rule's "a heat rise downstream of the coils ... can read as a heating leak", an M&V saving's "no mv.method declared: the SEP default, forecast, was used" or its G14-kernel band note, the days a baseline dropped |
+| `M<n>` `finding_labels` | `rule_run` (fault and warn findings), `finding_detail` | (0112-cite10) a finding's string-valued metrics (`missed_cause "economizer_not_commanded"`, `oa_cost_airflow "trended supply airflow"`, `fan_gate`, a basis or source) and the samples it masked (`n_masked_fan_off 824`), each value quoted |
+| `K1` `skipped_rules` | `rule_run` | (0112-cite10) the rules the run skipped for missing inputs, by name, each with the inputs it lacked and the equipment it was skipped on (`rules` lists them; `F1` counts them), so a draft naming a skipped rule can cite it |
+| `B1` `parameter_basis` | `finding_detail` | (0112-cite10) the basis the rule gives for its parameters' values ("max_starts_per_day: CAMBER judgment: a generic cycling limit ...") |
+| `F1` `trust_summary` | `sensor_trust` | (round 11) the points it judged by the call's own filter: "4 supply_air_temp points judged", "6 points on AHU-1 judged" (was "matching points"), so a draft that says which points were judged can cite it |
+| `F<n>` evidence chart | `finding_detail` | (round 11) a diagnostic scatter's axes by role and in words: "of oa_fraction_pct (outdoor-air fraction, y) against oat (outdoor-air temperature, x)" |
 
 **Pages** (0.111, #299; sizes 0.112, #333). A list-returning capability returns one page of
 each list by default, sized so that the default result fits a host that gives the model only
@@ -109,7 +115,7 @@ of the whole list. A page that is not the whole list sets `truncated` and adds a
 the next page, not a larger one, which a host may refuse. The default pages: `facilities` 40,
 `points` 200, `coverage` 20 per list (equipment, points, gaps), `sensor_trust` 40 points,
 `rule_run` 12 findings and 12 skipped rules, `drift` 10 per list, `rule_params` 15 rules (7 with
-`detail`), `check_citations` 50 sentences, `dataset_search` 20 datasets, `mv_summary` 5 meters
+`detail`), `check_citations` 50 sentences, `dataset_search` 20 datasets, `mv_summary` 4 meters
 (each with all its findings); `rcx_report` returns as many of the best-ranked issues as fit
 about 22,000 characters, at most 8 (`top_n` sets the page size, `offset` gives the next ones),
 with only their facts and sections, and the first 5 entries of the fact index's appendix A
@@ -425,8 +431,21 @@ RCx report's prose and every result's own summary go through) matches each sente
 the facts it cites (0.112, #294). It is precise rather than clever, and it fails closed: what it
 cannot match is not supported. **Supported means matched, not proven true.**
 
-- **Citations.** `[F1@x]`, or several in one bracket, `[F1@x, F2@y]` or `[F1@x; F2@y]`. Only
-  visible text counts: a citation in an HTML comment or tag cites nothing. With `per_sentence`
+- **Every region is judged** (0112-cite10). The text is folded first: NFKC (superscripts,
+  subscripts and fractions kept), every hyphen and minus sign (U+2010, U+2011, U+2012, U+2212,
+  U+FE63, U+FF0D) as `-`, and a dash between a letter and a digit as `-` ("AHU–1" is AHU-1), in
+  citation ids too. An HTML comment's words are judged like prose, and a comment whose sentences
+  all fail is removed with them. An HTML tag's shown attribute values (`title`, `alt`, `aria-*`,
+  `data-*`, `summary`, `label`, `placeholder`, `content`, `value`) are read with the sentence
+  the tag is in; an address, a style or a class is not. A table's header row names its columns,
+  also with a figure in it; a header that states something (a verb, verdict, negation, figure,
+  or a unit's, rule's or point's name) is judged as a claim with its rows' citations, and each
+  cell is read with its column's header: "yes" under "Fails X" in AHU-1's row is "AHU-1 fails
+  X", and "no" is "AHU-1: not fails X", the header's claim negated for that unit, supported only
+  when a cited fact about AHU-1 states the negation (a "no" the checker cannot read fails
+  closed).
+- **Citations.** `[F1@x]`, or several in one bracket, `[F1@x, F2@y]` or `[F1@x; F2@y]`. A
+  citation in an HTML tag's attribute or a link's target cites nothing. With `per_sentence`
   (the default) a sentence must cite a fact itself (`uncited` otherwise) and is matched against
   the facts it cites; without it, its figures may match any fact the text cites, and only a
   sentence that cites a fact itself has its claims checked.
@@ -745,7 +764,8 @@ cannot match is not supported. **Supported means matched, not proven true.**
     closed. Figures listed without "respectively" of items in no order ("Both oa_damper points
     are suspect at 0.66 and 0.68") and a range ("(0.68 to 0.70)") need each item to have one of
     them. A table row is read with its header ("| A | -15.6% |" under "| Meter | Avoided energy
-    |" is "A: Avoided energy -15.6% on A"), and a header row is kept and not judged. What the set is said is read with its
+    |" is "A: Avoided energy -15.6% on A"), and a header row that states nothing is kept and not judged (one that
+    states something is a claim, above). What the set is said is read with its
     own clause: "Both AHUs warn ..., but only AHU-1 fails leaking_valve" says only the warn of
     both. "Both" or a number needs that many items so stated, and a set said with no number at
     least two ("Each AHU fails leaking_valve [F2]" and "No AHU has a valve leak [F6]" fail). A
@@ -841,6 +861,31 @@ cannot match is not supported. **Supported means matched, not proven true.**
   named -- is read only against the cited facts about the whole site: "site-north has no valve
   leak" citing one unit's "no valve leak", and "ds-x meets daily acceptance" citing the M&V
   summary's counts and one meter's "meets", fail.
+- **Names no fact of the session gave, and notes** (0112-cite10). A sentence that cites a fact
+  and names a unit, site or dataset as a slug no fact of the session named ("irish-ahu is
+  licensed ..." when no result named irish-ahu; a slug reads as such a name when one of its
+  words is a class word such as AHU, VAV, chiller, meter, logger, site or ds and another is no
+  generic word: "site-wide", "AHU-level" and "duct-logger" of a cited "duct logger" are not), or
+  a rule no fact of the session named, fails closed. The session's names are those of every
+  fact its ledger recorded (forgotten ones too), or of the facts passed. A rule named with a
+  run's summary (`F1@rule_run`) or skipped rules must be named by a cited fact. A sentence that
+  says a rule's caveat, masked samples or a skipped rule needs a cited fact that says so (a
+  `caveat`, `finding_labels` or `skipped_rules` fact, below, or one whose words say it): "The
+  rule's own caveat says fan heat can read as a leak" citing the leaking_valve finding fails,
+  citing its `V` fact passes. A sentence that cites only caveats, one of which hedges ("can read
+  as a heating leak", "could not be ruled out"), must hedge too or say it is the caveat: "AHU-1
+  has a heating leak" citing that caveat fails.
+- **A site, a count, a spelling, a parameter** (0112-cite10). A site said as the subject after
+  a heading's or list's marks or after a leading condition ("## site-a fails X", "If the trends
+  are right, site-a fails X") is read like one that opens the sentence, and a figure or a rule
+  said of a site ("site-a has economizer_high_limit on 43% of those samples") is read against
+  the cited facts about the whole site: one unit's finding supports neither. A count of one
+  verdict ("6 warn results") needs that verdict's count where the cited fact counts results by
+  verdict ("2 fault, 4 warn"), not its count of results. A unit id spelled another way ("AHU 3")
+  is read as an id when any fact of the session names that family, also only in its text, so a
+  unit no cited fact is about fails. A sentence naming one parameter of a cited fact's list
+  ("warn_pct = 10.0, ..., assumed_min_oa_pct = 20.0") fails with another listed parameter's
+  value ("The default warn_pct ... is 20%").
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
   label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
@@ -868,6 +913,18 @@ cannot match is not supported. **Supported means matched, not proven true.**
   text says less than the draft and is not the complete answer." and a banner says so: without
   them the text can read as more certain than the draft. Checking that text again keeps the line
   and does not judge it.
+
+**One clause per unit** (PLAN-CITE-EVAL C, the default since round 11). A sentence that names
+more than one unit is written as one clause per unit, and each clause is checked against that
+unit's own cited facts: a set ("A and B both P", "A plus B", "A/B", "A, as well as B,", "None of
+A, B P"), "most of" a set (more than half of its clauses must hold), a list of figures in order
+with or without "respectively", "their ... respectively" after a set, a figure list after a
+comma ("A and B ran 100%, C 42%"), "unlike", "X, not Y", "rather than", "A P rather than
+Q-ing, as B does", a comparative with each unit's figure (the comparison must hold of the two
+figures), and items that each carry their own citation. A denied clause ("not B") is read
+against B's facts: a figure or a verdict they give otherwise confirms it, one that states it
+fails the sentence. A sentence that splits no way fails closed with "give each unit its own
+sentence".
 
 What it does not check: whether a claim is true beyond what the cited facts state, the meaning
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
@@ -919,8 +976,7 @@ the words above ("Every AHU has a new actuator" citing a fact about each AHU: th
 is the set's, its predicate a word outside the lists); a list said "respectively" of groups
 ("The AHUs and the loggers have 100% and 19.1% respectively": each item needs one of the
 figures); a range given for a set ("(100% to 100%)") is not checked to hold each item's figure;
-a "respectively" in a later clause that names the set only by a pronoun ("A and B have flat
-valves, and their biases are +0.0 and +3.0 respectively"); words outside the lists said of a
+words outside the lists said of a
 set or an item ("Both AHUs drift", "Both heat valves modulate"); a counted thing after its verb, or later in its clause, with no quantifier ("the window
 covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in other
 words than the cited fact's ("the 8 hours precede the window"); a cause after a bare
