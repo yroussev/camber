@@ -144,7 +144,7 @@ capability cannot cut a list and leave the flag false.
 | `dataset_search` | optional `query`, `kind`, `labeled`, `licence`, `limit`, `offset` | catalog metadata: id, title, kind, licence, access, commercial use, fault labels, equipment, download size, what it is good for | cheap |
 | `dataset_entry` | `dataset_id` | one catalog entry's metadata: summary, publisher, citation, DOIs, licence and access reason, subsets, suggested rules, known issues and data issues | cheap |
 | `rule_params` | optional `rules`, `query`, `detail` | the rules and opt-in drift detectors (`run_with`: `rule_run` for a rule, `drift` for a detector, which `rule_run` refuses), the equipment families each is written for, and their tunable parameters with defaults, units, ranges and (with `detail`) basis and calibration advice | cheap |
-| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings, list markers and blank lines kept, opening with a `NOTICE:` line when a removed sentence gave a verdict, a negation or a caveat. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
+| `check_citations` | `text`; optional `facts`, `per_sentence`, `detail` | the counts per verdict (`supported`, `unknown_citation`, `forgotten_citation`, `uncited`, `unsupported_number`, `unsupported_claim`, `not_judged`, and `n_not_judged`) of a drafted text's sentences against the facts this server issued to the session (see below), the sentences that fail, each with `why`, and the `provenance` of the facts (`issued` or `unverified`); with `detail`, every sentence and `verified_text`: the draft with the unsupported sentences removed, its lines, headings, list markers and blank lines kept, opening with a `NOTICE:` line when a removed sentence gave a verdict, a negation or a caveat. See [Where a cited fact comes from](#where-a-cited-fact-comes-from) for what `supported` means | cheap |
 
 **Which config a run uses.** `rule_run`, `finding_detail`, `rcx_report` and `drift` use the
 caller's run config when it names the facility -- its rules, parameters, mapping, topology and
@@ -888,10 +888,33 @@ cannot match is not supported. **Supported means matched, not proven true.**
   value ("The default warn_pct ... is 20%").
 - **Headings and notices.** Every line that states something is judged, a `#` heading, a bold
   line and a short lead-in ending in a colon included (0.112, #328). A heading or a short list
-  label that states nothing -- no citation, figure, date, negation, assurance word, verb (a
-  verdict verb such as "passed" included) outside a relative clause, or advice -- such as `# AHU-1 triage`, `Findings:`, `## Points
-  that never move`, `## Savings claim check` or `1. Sensor offset.` is kept and not judged. A
-  `NOTICE:` line (`Notice:` or bold too) repeating the text of a `notice` fact among the facts
+  label that states nothing by those lists -- no citation, figure, date, negation, assurance
+  word, verb (a verdict verb such as "passed" included) outside a relative clause, or advice --
+  is not read as a sentence, and since 0112-cite12 it is either structure or **not judged**:
+  - *Structure* (no unit, kept as it is): a heading that only names a topic (`# AHU-1 triage`,
+    `Findings:`, `## Savings claim check`, `How far the inputs can be trusted:`); a lead-in
+    ending in a colon of at most six words that only names a topic, a step's number allowed
+    (`- **Chiller staging:**`, `- **Stop 1, "AHU-1":**`);
+    the title of a list item that a sentence follows on its line, at most four words, no
+    figure, colon or pronoun (`1. Sensor offset. The supply-air sensor ...`); a separator, a
+    lone table pipe or list marker, a numbering (`**Q1.`), a greeting or a sign-off (`Hello,`,
+    `Best regards`); a table rule and a header row that only names its columns. "Only names a
+    topic" means no verdict, direction, polar or negation word, no quantifier ("all", "each",
+    "both", "none", "only", "most"), no rank or severity word, outside what follows a
+    hypothetical ("can", "if"); "saving" and "savings" name a topic.
+  - *Not judged* (verdict `not_judged`, never a pass): every other such heading or label -- a
+    heading with one of those words (`**What is not fine**`, `## Points that never move`,
+    `**Meters with a baseline that fails G14:**`), and a short label or remark that cites
+    nothing (`That matches the claim.`, `- AHU-1 leaking_valve: FAULT.`, `- **Coverage:**
+    They're identical.`, `| AHU-1 | OK |`). Its `why` says what it is; `n_not_judged` counts
+    them, `grounded` is false, and `verified_text` leaves it out: a label goes like a failing
+    sentence (inside a table row, only its words, so the row keeps its cells), and a heading's
+    line becomes `(heading not checked)` with the heading's marks, so the lines under it keep
+    their section (checking that text again reads the mark as structure). A cited heading or
+    label is judged like any sentence. Only `check_citations` reports not-judged units; the
+    Python `check()` (template and RCx prose) still keeps them unread.
+
+  A `NOTICE:` line (`Notice:` or bold too) repeating the text of a `notice` fact among the facts
   (passed in `facts`, or cited) is kept and not judged; any other `NOTICE:` line is judged like
   a sentence. "in." after a figure or
   before "w.c.", "vs." and "e.g." do not end a sentence, nor does a full stop inside a quoted
