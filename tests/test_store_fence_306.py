@@ -249,7 +249,15 @@ def test_readers_during_repeated_forced_reingests_never_get_a_wrong_answer(store
     ]
     for t in threads:
         t.start()
+    # long enough to see both sides, whatever the runner's speed (a slow one under coverage
+    # read only 3 unchanged answers in a fixed 1.5 s)
+    end = time.monotonic() + 60
     time.sleep(1.5)
+    while time.monotonic() < end:
+        with lock:
+            if stats["swaps"] >= 5 and stats["same"] >= 5:
+                break
+        time.sleep(0.1)
     stop.set()
     for t in threads:
         t.join(60)

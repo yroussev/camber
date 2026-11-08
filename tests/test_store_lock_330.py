@@ -234,11 +234,17 @@ def test_a_live_claim_of_this_kernel_is_not_taken_over_when_flock_excludes_nothi
     second must still wait for the first's claim, not take it over as dead."""
     root = str(tmp_path)
     path = os.path.join(root, _lock.CLAIM_FILE)
+    rec = {**_here(sleeper.pid), "host": "here", "since": "x", "token": "t"}
     with open(path, "w") as fh:
-        json.dump({**_here(sleeper.pid), "host": "here", "since": "x", "token": "t"}, fh)
+        json.dump(rec, fh)
     with pytest.raises(StoreLocked) as ei:
         with store_lock(root, timeout=0.3):
-            pytest.fail("took over the claim of a live process")
+            # seen once on a CI runner, not reproduced: say why the claim looked gone
+            pytest.fail(
+                "took over the claim of a live process: "
+                f"poll={sleeper.poll()} state={_lock.process_state(rec)} "
+                f"started={rec['started']!r} now={_started(sleeper.pid)!r}"
+            )
     assert "on this system" in str(ei.value) and "does not enforce" in str(ei.value)
     assert json.loads(open(path).read())["token"] == "t"
     # once that process has exited, the claim is taken over at once
