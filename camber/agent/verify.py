@@ -8123,9 +8123,14 @@ _LEAK_DENIED = re.compile(
     r"looks?|reads?\s+as|appears?|seems?|suggests?)\b",
     re.I,
 )
-#: a cited fact that states a leak: a leaking_valve fault or warn, or a leak share above 0%
+#: a cited fact that states a leak: a leaking_valve fault or warn, a leak share above 0%, or a
+#: fact whose own text says the unit leaks ("valve leaks 3 F"), not denied
 _LEAK_FACT = re.compile(
     r"leaking_valve\s*\((?:fault|warn)|(?:HW|CHW)-leak\s+(?!0(?:\.0+)?\s*%)\d", re.I
+)
+#: a fact's own words for a leak; a caveat's ("a coil that leaks can read as ...") never count
+_LEAK_FACT_SAYS = re.compile(
+    r"(?<!\bno\s)(?<!\bnot\s)(?<![\w\-])(?:leaks|leaked|is\s+leaking)(?![\w\-])", re.I
 )
 
 
@@ -8139,6 +8144,12 @@ def _leak_problems(vis: str, facts: list) -> tuple:
     if m is None or _LEAK_DENIED.search(body[: m.end()].split(",")[-1]):
         return "", []
     if any(_LEAK_FACT.search(str(getattr(fc, "hay", "") or "")) for fc in facts):
+        return "", []
+    if any(
+        getattr(fc, "kind", "") != "caveat"
+        and _LEAK_FACT_SAYS.search(str(getattr(fc, "said", "") or ""))
+        for fc in facts
+    ):
         return "", []
     return "unsupported-claim", [
         f"{' '.join(m.group(0).split())!r}: no cited fact states a leak (a leaking_valve fault "
