@@ -914,6 +914,18 @@ cannot match is not supported. **Supported means matched, not proven true.**
   them the text can read as more certain than the draft. Checking that text again keeps the line
   and does not judge it.
 
+**One clause per unit** (PLAN-CITE-EVAL C, the default since round 11). A sentence that names
+more than one unit is written as one clause per unit, and each clause is checked against that
+unit's own cited facts: a set ("A and B both P", "A plus B", "A/B", "A, as well as B,", "None of
+A, B P"), "most of" a set (more than half of its clauses must hold), a list of figures in order
+with or without "respectively", "their ... respectively" after a set, a figure list after a
+comma ("A and B ran 100%, C 42%"), "unlike", "X, not Y", "rather than", "A P rather than
+Q-ing, as B does", a comparative with each unit's figure (the comparison must hold of the two
+figures), and items that each carry their own citation. A denied clause ("not B") is read
+against B's facts: a figure or a verdict they give otherwise confirms it, one that states it
+fails the sentence. A sentence that splits no way fails closed with "give each unit its own
+sentence".
+
 What it does not check: whether a claim is true beyond what the cited facts state, the meaning
 of a sentence's words beyond the ones above (a paraphrase with none of them matches, and a word
 outside these lists is not read), an equipment name with no digit or underscore that no fact
@@ -964,8 +976,7 @@ the words above ("Every AHU has a new actuator" citing a fact about each AHU: th
 is the set's, its predicate a word outside the lists); a list said "respectively" of groups
 ("The AHUs and the loggers have 100% and 19.1% respectively": each item needs one of the
 figures); a range given for a set ("(100% to 100%)") is not checked to hold each item's figure;
-a "respectively" in a later clause that names the set only by a pronoun ("A and B have flat
-valves, and their biases are +0.0 and +3.0 respectively"); words outside the lists said of a
+words outside the lists said of a
 set or an item ("Both AHUs drift", "Both heat valves modulate"); a counted thing after its verb, or later in its clause, with no quantifier ("the window
 covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in other
 words than the cited fact's ("the 8 hours precede the window"); a cause after a bare

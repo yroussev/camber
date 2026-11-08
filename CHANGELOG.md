@@ -523,6 +523,36 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   AHU-3 when a cited fact names AHU-1 only in its text; and "the default warn_pct is 20%" fails
   when 20 is another listed parameter's value. On the generated cases E fell from 1.9% to 0.6%
   with S down from 1.5% to 1.3%.
+- **`check_citations` reads a sentence that names several units one unit at a time (PLAN-CITE-EVAL
+  C, round 11; was `CAMBER_CITE_C=split`, the switch is gone).** Such a sentence is written as
+  one clause per unit and each clause is checked against that unit's own facts: a set ("A and B
+  both P", "A plus B", "A/B", "A, as well as B,", "A (like B)", "None of A, B P"), "most of"
+  (more than half must hold), lists of figures in order with or without "respectively", "their
+  ... respectively" after a set, a figure list after a comma ("A and B ran 100%, C 42%"),
+  "unlike", "X, not Y", "but not", "rather than", "in contrast to", "A P rather than Q-ing, as
+  B does", comparatives with each unit's figure ("A's oa_damper (0.66) is more suspect than
+  B's (0.68)": the comparison must hold), and items that each carry their own citation. A
+  denied clause is read against the denied unit's facts (a past verb, "has no X" and a
+  contradicted direction or coverage included). A sentence that splits no way fails closed
+  with "give each unit its own sentence", which the tool description and the prompts now say.
+  On the generated cases (10,517, round 11) E fell from 0.94% to 0.00% and S from 4.3% to 0.8%
+  against 6c4354b; no cell is above 2% (was 46); 41 corpus entries that were known gaps pass.
+- **`check_citations` reads more of what hosts write (round 11).** A year before a period's
+  noun is a year ("2016 baseline fit", "2017 avoided energy", and never a unit's number in
+  "Meter 2016"); a header's year is the header row's claim, so a row reads its column without
+  it; a column that asks ("Baseline passes G14?") states nothing itself, and its "Yes: ..." or
+  "No: R2 0.62, ..." cells are the answer with details, the "No" negated at the header's verb;
+  a cell of parts that each cite their own fact is read as it is; "tracks its reference" is
+  "agrees with" it; a leak said of a unit ("AHU-2's coil leaks") needs a cited fact that states
+  one, so another rule's fault or a leaking_valve "ok" no longer supports it, and "AHU-1's coil
+  does not leak" is supported by its leaking_valve "ok"; and a unit excluded by "unlike" is read
+  against its own facts only. On the round-10 real-host drafts the cited true sentences removed
+  fell from 11.7% to 9.3% (all true sentences: 27.9% to 26.0%) with the same escapes.
+- **`sensor_trust` and the evidence chart say what they judged (round 11).** The trust summary
+  `F1` names the call's filter ("4 supply_air_temp points judged", "6 points on AHU-1 judged",
+  was "4 matching points"), and a diagnostic scatter's chart fact names its axes ("of
+  oa_fraction_pct (outdoor-air fraction, y) against oat (outdoor-air temperature, x)"), so a
+  draft that says which points or axes can cite them.
 - **`mv_summary` shows 4 meters a page by default** (was 5), so its default result, now with
   each caveat a fact, still fits a host's 25,000-character tool output.
 - **The changelog's 0.106.0 to 0.109.1 sections are archived** in

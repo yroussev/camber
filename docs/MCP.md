@@ -178,6 +178,11 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   A unit's fact said of the whole site (in a heading, after a condition, as a figure or a rule
   of the site), a count of one verdict a summary does not give, and a parameter's figure that
   is another parameter's value fail too.
+- **One clause per unit** (round 11): a sentence naming several units is read as one clause
+  per unit, each against that unit's own facts (sets, "most of", lists of figures, "unlike",
+  "X, not Y", comparatives with each unit's figure, items each with its own citation); one
+  that splits no way fails with "give each unit its own sentence", as the tool description
+  and the prompts say.
 - **What it does not check** (the full list is in CAPABILITY-REGISTRY.md). These pass when
   their figures and names match, so they can be wrong and still be marked supported:
   a counted thing named after its verb or later in its clause with no quantifier ("the window
