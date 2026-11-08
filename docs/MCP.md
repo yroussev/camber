@@ -183,6 +183,19 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   "X, not Y", comparatives with each unit's figure, items each with its own citation); one
   that splits no way fails with "give each unit its own sentence", as the tool description
   and the prompts say.
+- **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
+  that says something of the lines under it (a verdict, negation, quantifier, direction or rank
+  word: "**What is not fine**", "## Points that never move") and a short label or remark that
+  cites nothing ("That matches the claim.", "- AHU-1 leaking_valve: FAULT.", "- **Coverage:**
+  They're identical.") each get a sentence entry with the verdict `not_judged` and a `why`;
+  the result counts them (`n_not_judged`, `verdicts.not_judged`), `grounded` is false and
+  `verified_text` leaves them out (a heading's place is marked "(heading not checked)", so the
+  lines under it keep their section). Pure structure is no unit at all: blank lines, table
+  rules and header rows that only name columns, separators, list markers, greetings and
+  sign-offs, a heading that only names a topic ("## Sensor trust", "**AHU-1 details**") and a
+  lead-in or list-item title that only names one ("- **Chiller staging:**", "1. Sensor
+  offset. ..."). To keep such text, say it in a sentence that cites its fact (a cited heading
+  or label is judged like any sentence).
 - **What it does not check** (the full list is in CAPABILITY-REGISTRY.md). These pass when
   their figures and names match, so they can be wrong and still be marked supported:
   a counted thing named after its verb or later in its clause with no quantifier ("the window

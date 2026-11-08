@@ -21,6 +21,10 @@ repeating the text of a ``notice`` fact among the facts is kept and not judged; 
 text quoted word for word with its own id (a notice's ``N`` id too) is one supported sentence.
 Every result's fact and summary say that it covers only the text passed (:data:`SCOPE`, #338):
 a text reworded after a passing check is not checked until it is checked again.
+A heading or label that could state something and is not read (a heading with a verdict,
+negation or quantifier word, a short remark citing nothing) is ``not_judged``, never a pass
+(0112-cite12): it is counted in ``n_not_judged``, makes ``grounded`` false and is left out of
+``verified_text`` (a heading's line marked :data:`camber.agent.verify._NOT_CHECKED`).
 ``verified_text`` keeps the draft's lines, headings, list markers and blank lines (#322); when
 it drops a sentence that gave a verdict, a negation or a caveat, it opens with :data:`REMOVED`
 and the result says so (#328), so a stripped answer never reads as more certain than the draft.
@@ -44,6 +48,7 @@ _VERDICTS = (
     "uncited",
     "unsupported_number",
     "unsupported_claim",
+    "not_judged",
 )
 #: sentences (and cited ids) per page by default (#299)
 _PAGE = 50
@@ -129,6 +134,7 @@ OUTPUT_SCHEMA = {
         "grounded",
         "n_sentences",
         "n_supported",
+        "n_not_judged",
         "verdicts",
         "sentences",
         "cited",
@@ -139,6 +145,7 @@ OUTPUT_SCHEMA = {
         "grounded": {"type": "boolean", "description": "every sentence is supported"},
         "n_sentences": {"type": "integer", "minimum": 0},
         "n_supported": {"type": "integer", "minimum": 0},
+        "n_not_judged": {"type": "integer", "minimum": 0},
         "verdicts": {
             "type": "object",
             "required": list(_VERDICTS),
@@ -264,6 +271,7 @@ _VERDICT_OF = {
     "uncited-sentence": "uncited",
     "uncited-number": "unsupported_number",
     "unsupported-claim": "unsupported_claim",
+    "not-judged": "not_judged",
 }
 
 
@@ -379,6 +387,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         terms=terms,
         rules=rules,
         issued=issued,
+        unread=True,  # a heading or label it does not read is not_judged, never a pass
     )
     sentences = []
     for i, j in enumerate(judged):
@@ -413,6 +422,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         "grounded": n_ok == len(sentences),
         "n_sentences": len(sentences),
         "n_supported": n_ok,
+        "n_not_judged": bad["not_judged"],
         "verdicts": bad,
         "sentences": page(listed, arguments, default=_PAGE, what="sentences", order="in order"),
         "cited": page(cited, arguments, default=_PAGE, what="cited", order="in order"),
@@ -437,7 +447,14 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
                 else ""
             )
             + f"{bad['uncited']} cite nothing, {bad['unsupported_number']} state a figure no "
-            f"cited fact carries and {bad['unsupported_claim']} make a claim no cited fact makes. "
+            f"cited fact carries and {bad['unsupported_claim']} make a claim no cited fact makes"
+            + (
+                f"; {bad['not_judged']} heading(s) or label(s) were not judged (not read, so "
+                "not supported) and are left out of verified_text"
+                if bad["not_judged"]
+                else ""
+            )
+            + ". "
             + SCOPE,
         }
     ]
@@ -447,6 +464,12 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         banners.append(
             "Some cited facts are no longer held by the server (it keeps a bounded number per "
             "session): run the tools that gave them again and cite the new ids."
+        )
+    if bad["not_judged"]:
+        banners.append(
+            f"{bad['not_judged']} heading(s) or label(s) were not judged: the checker does not "
+            "read them, so they are not supported and verified_text leaves them out (a heading "
+            "is marked). Put what each says in a sentence that cites its fact, or remove it."
         )
     if n_ok < len(sentences):
         banners.append(
@@ -471,9 +494,10 @@ CAPABILITIES = (
             "Check your draft before showing it: pass the text only; each [id] is looked up "
             "in this session's facts. A sentence is supported, unknown_citation (not of "
             "this session), forgotten_citation (rerun that tool), "
-            "uncited, unsupported_number (figure, sign, unit or role) or unsupported_claim "
-            "(name, verdict, negation or direction); failures come with why. Give each unit "
-            "its own sentence. Call it last. Cheap."
+            "uncited, unsupported_number (figure, sign, unit or role), unsupported_claim "
+            "(name, verdict, negation or direction) or not_judged (a label or heading it does "
+            "not read: cite or drop it); failures come with why. "
+            "Give each unit its own sentence. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

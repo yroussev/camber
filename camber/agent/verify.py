@@ -180,11 +180,19 @@ sentence's figures may trace to any fact the text cites, and only a sentence tha
 itself has its names, verdicts, directions and negations checked (against the facts it cites).
 
 Every line that makes a claim is judged, a heading, a bold line or a lead-in ending in a colon
-included (0.112, #328). A heading or label that states nothing -- no citation, figure, date,
-negation, assurance word, verb outside a relative clause or advice, such as ``# AHU-1
-triage``, ``Findings:``, ``## Points that never move`` or ``1. Sensor offset.`` -- is kept and
-not judged. A ``NOTICE:`` line (``Notice:`` or bold too) repeating one of the ``notices`` passed
-in (a server's own banners) is kept and not judged either.
+included (0.112, #328). A heading or label that states nothing by those lists -- no citation,
+figure, date, negation, assurance word, verb outside a relative clause or advice -- is not read
+as a sentence (0112-cite12): it is structure (kept, no unit) when it only names a topic (``#
+AHU-1 triage``, ``Findings:``, ``- **Chiller staging:**``, the title ``1. Sensor offset.`` that
+a sentence follows) or is markup, a separator, a numbering, a greeting or a sign-off; any other
+-- a heading with a verdict, negation, quantifier, direction or rank word (``## Points that
+never move``), a short remark or label citing nothing (``That matches the claim.``, ``- AHU-1:
+FAULT.``) -- is *not judged*: :func:`_judge` with ``unread`` (check_citations) lists it with
+the reason ``not-judged``, never a pass, and :func:`_rebuild` leaves it out (a heading's line
+becomes :data:`_NOT_CHECKED`, so the lines under it keep their section).
+:func:`check` does not ask for them and keeps them unread. A ``NOTICE:`` line (``Notice:`` or
+bold too) repeating one of the ``notices`` passed in (a server's own banners) is kept and not
+judged either.
 
 A fact's own text quoted word for word and cited with that fact's id is the server's words, and
 supported as one sentence however many sentences, verdicts, negations or caveats it holds (#328
@@ -402,11 +410,15 @@ def _tag_said(m) -> str:
 class _Seg:
     start: int
     end: int
-    kind: str  # "sentence" (judged) | "quote" (a fact's own text) | "heading" | "notice" (kept)
+    #: "sentence" (judged) | "quote" (a fact's own text) | "heading" (structure: kept, no unit)
+    #: | "notice" (kept) | "unread" (text that could state something and is not read: a
+    #: heading or a label, reported not_judged by check_citations)
+    kind: str
     header: tuple = ()  # (a table row's, #340) its table's header cells
     #: a table's header row that states something: the citations of its table's rows, which
     #: it is judged with
     table_cites: tuple = ()
+    what: str = ""  # (an "unread" one's) "heading" or "label"
 
 
 def _ends(text: str, a: int, b: int) -> list:
@@ -554,7 +566,13 @@ def _segments(text: str, notices=(), quotes=None) -> list:
             out.append(_Seg(s0, e0, "notice"))
             continue
         if _HEADING.fullmatch(line) and _is_heading(text[s0:e0]):
-            out.append(_Seg(s0, e0, "heading"))
+            # (not judged) a heading is structure only when it names a topic; one with a
+            # verdict, negation, quantifier, direction or rank word says it of what follows
+            unread = not _topic_only(text[s0:e0])
+            out.append(_Seg(s0, e0, "unread" if unread else "heading", what="heading"))
+            continue
+        if _HEADING.fullmatch(line) and _unheaded(text[s0:e0]) == _NOT_CHECKED:
+            out.append(_Seg(s0, e0, "heading"))  # the mark of a heading left out (not judged)
             continue
         quoted = _quotes(text, masked, s0, e0, quotes) if quotes else []
         ends = _ends(masked, s0, e0)
@@ -589,14 +607,126 @@ def _segments(text: str, notices=(), quotes=None) -> list:
             lead = None
         if lead is not None:
             merged.append([lead, e0])
-        for a, b in merged:
-            # a short label that states nothing ("1. Sensor offset.") is kept, not judged
+        for i, (a, b) in enumerate(merged):
+            # a short label that states nothing ("1. Sensor offset.") is not judged: structure
+            # when it is no more than markup, a greeting or a lead-in naming a topic ("- **Data
+            # caveats:**"), otherwise text that is not read ("unread": reported not_judged)
+            what = ""
             if a in starts:
                 kind = "quote"
+            elif not _is_label(text[a:b]):
+                kind = "sentence"
+            elif _bare(text[a:b], i == 0 < len(merged) - 1 and line.lstrip()[:1] != "|"):
+                kind = "heading"
             else:
-                kind = "heading" if _is_label(text[a:b]) else "sentence"
-            out.append(_Seg(a, b, kind, header if kind == "sentence" else ()))
+                kind, what = "unread", "label"
+                a, b = _cell_span(text, a, b, s0, e0)
+            out.append(_Seg(a, b, kind, header if kind == "sentence" else (), what=what))
     return out
+
+
+#: what ``verified_text`` shows in place of a heading it left out because it is not judged: a
+#: heading that states something says it of the lines under it, so they keep their section
+_NOT_CHECKED = "(heading not checked)"
+#: a greeting or a sign-off, alone on its line ("Hello,", "Best regards", "Dear [Owner],")
+_GREETING = re.compile(
+    r"(?:(?:hi|hello|hey|dear|good\s+(?:morning|afternoon|evening))(?:\s+(?:all|team|everyone|"
+    r"folks|there|\[[^\[\]]{1,30}\]|[A-Z][a-z]{1,20})){0,3}|(?:best|kind|warm)?\s*regards|best|"
+    r"cheers|thanks|thank\s+you|sincerely|many\s+thanks)\s*[,.!]?",
+    re.I,
+)
+#: a numbering alone ("Q1.", "Step 2:"): a list marker in words
+_NUMBERING = re.compile(r"(?:q|step|part|section)\s*\d{1,3}[.:)]?", re.I)
+#: words that make a heading say something of the lines under it (not judged): a quantifier,
+#: a rank or "only"; verdict, direction, polar and negation words are read from their lists
+_HEADING_SAYS = frozenset("all every each both none no only most majority any".split())
+#: a direction word that is the name of a topic in a heading ("## Savings claim check")
+_TOPIC_NOUNS = frozenset("saving savings".split())
+#: what makes a label a sentence rather than a title: a pronoun or a contraction ("They're
+#: identical.", "That matches the claim.")
+_LABEL_SAYS = re.compile(
+    r"(?<![\w'’])(?:it|its|they|them|their|this|that|these|those|there|here|i|we|you|he|she)"
+    r"(?![\w'’])|['’](?:s|re|m|d|ll|ve|t)\b|n['’]t\b",
+    re.I,
+)
+
+
+def _unheaded(line: str) -> str:
+    """A heading's or a label's words without its markup: ``#``, emphasis, list markers and a
+    closing colon."""
+    body = _visible(line).strip().lstrip("#").strip().strip("*_").strip()
+    return _unlisted(body).strip().strip("*_").strip().rstrip(":").strip()
+
+
+def _topic_only(line: str) -> bool:
+    """(not judged) Whether a heading that states nothing (:func:`_is_heading`) only names a
+    topic ("## Sensor trust", "**AHU-1 details**", "Here's the Slack message:"), so that it is
+    structure; a heading with a verdict, negation, quantifier, direction, polar or rank word
+    ("**Flat-lined points that were still rated trusted**", "## Points that never move",
+    "**What is not fine**") says it of the lines under it and is not judged."""
+    body = _unheaded(line)
+    if not body or body == _NOT_CHECKED:
+        return True
+    # a name says nothing of itself: "AHU__healthy", "RTU__d3_stuck_000", "AHU-1", a quoted one
+    named = re.sub(r"\S*_\S*|\S*[A-Za-z]-?\d\S*", " ", _QUOTED.sub(" ", body))
+    words = [w.lower() for w in re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?", named)]
+    for i, w in enumerate(words):
+        if w in _TOPIC_NOUNS or any(x in _HYPO for x in words[:i]):
+            continue  # "## Savings claim check"; "How far the inputs can be trusted:" asks
+        if (
+            w in _VERDICT
+            or w in _DIRECTION
+            or w in _POLAR
+            or w in _NEG
+            or _negates(w)
+            or w in _HEADING_SAYS
+            or w in _SUPERLATIVE
+            or w in _SEVERE
+        ):
+            return False
+    return True
+
+
+def _bare(piece: str, title: bool = False) -> bool:
+    """(not judged) Whether a label (:func:`_is_label`) is structure: no letter or digit (a
+    separator, a lone table pipe), a greeting or a sign-off, a numbering ("Q1."), or one that
+    only names a topic (:func:`_topic_only`, no pronoun or contraction) and is a lead-in ending
+    in a colon ("- **Chiller staging:**") or, with ``title``, the title of a list item that a
+    sentence follows on its line ("1. Sensor offset. The supply-air sensor ...")."""
+    vis = _visible(piece).strip()
+    if not re.search(r"[A-Za-z0-9]", vis):
+        return True
+    body = _unlisted(vis).strip().strip("*_").strip()
+    if _GREETING.fullmatch(body) or _NUMBERING.fullmatch(body):
+        return True
+    lead = body.rstrip().rstrip("*_").rstrip()
+    words = lead.rstrip(".:").rstrip("*_").rstrip().split()
+    if lead.endswith(":"):
+        short = len(words) <= 6
+    else:  # a title: a few words, no figure, no lead-in of its own ("AHU-1: Fully covered.")
+        short = title and len(words) <= 4 and ":" not in lead
+    # a step's number is a list marker in words ("- **Stop 1, "PLANT__left_on":**"); any other
+    # figure is a claim
+    bare = re.sub(r"(?<![\w-])(?:q|step|stop|part|section)\s*\d{1,3}\b", " ", lead, flags=re.I)
+    if (
+        not short
+        or (title and _LABEL_SAYS.search(lead))
+        or re.search(r"\d", _QUOTED.sub(" ", bare))
+    ):
+        return False
+    return _topic_only(lead)
+
+
+def _cell_span(text: str, a: int, b: int, s0: int, e0: int) -> tuple:
+    """A piece of a table row (``text[s0:e0]``) without the cell pipes at its ends, so that
+    leaving it out keeps the row's cells; a whole row or a piece of prose is as it is."""
+    if (a, b) == (s0, e0) or not text[s0:e0].lstrip().startswith("|"):
+        return a, b
+    while a < b and text[a] in "| \t":
+        a += 1
+    while b > a and text[b - 1] in "| \t":
+        b -= 1
+    return a, b
 
 
 #: the things a table column may count ("| Faults |", "| Points |"): its figure is that many
@@ -8002,8 +8132,11 @@ class _Judged:
     text: str
     cited: list  # known ids it cites (visible citations only)
     unknown: list  # ids it cites that are not in the context
-    reason: str  # "" | "uncited-sentence" | "uncited-number" | "unsupported-claim"
+    #: "" | "uncited-sentence" | "uncited-number" | "unsupported-claim" | "not-judged"
+    reason: str
     why: list
+    #: (a not-judged heading's) what verified_text shows in its place (:data:`_NOT_CHECKED`)
+    mark: str = ""
 
 
 def _judge(
@@ -8016,13 +8149,16 @@ def _judge(
     terms=(),
     rules=(),
     issued=None,
+    unread=False,
 ) -> list:
     """Every judged sentence of ``text`` against ``context``'s facts, as :class:`_Judged`, in
     order (headings and known notices are not judged; see the module doc). ``aliases`` maps a
     facility's registry name (or id) to its id, ``terms`` are rule, tool and field names (never
     an equipment), ``rules`` the rule names among them (#328). ``issued``: the names every fact
     of the session gave (:func:`_issued_names`; by default those of ``context``'s facts), so a
-    name no fact gave fails closed (0112-cite10)."""
+    name no fact gave fails closed (0112-cite10). ``unread`` (check_citations): each heading or
+    label that could state something and is not read is listed too, with the reason
+    ``not-judged`` (a not-judged unit is never a pass); without it they are skipped."""
     text = text or ""
     all_ids = set(context.ids())
     vocab = _Vocab(_known_names(context), aliases, terms, rules)
@@ -8051,6 +8187,9 @@ def _judge(
         set(_known_names(context)) | {n for n in issued if _UNIT_ID.match(n)}
     )
     for seg in _segments(text, notices, quotes):
+        if seg.kind == "unread" and unread:
+            out.append(_unread(text, seg))
+            continue
         if seg.kind not in ("sentence", "quote"):
             continue
         sent = text[seg.start : seg.end]
@@ -8109,6 +8248,32 @@ def _judge(
                 reason, why = _proto_a(vis, vocab, echo)
         out.append(_Judged(seg.start, seg.end, sent, own, unknown, reason, why))
     return out
+
+
+def _unread(text: str, seg: _Seg) -> _Judged:
+    """A heading or a label that is not read (``seg.kind == "unread"``), as a not-judged unit:
+    what it is and why it was not judged; a heading's :data:`_NOT_CHECKED` mark."""
+    sent = text[seg.start : seg.end]
+    if seg.what == "heading":
+        why = (
+            "a heading that says something of the lines under it (a verdict, negation, "
+            "quantifier, direction or rank word); headings are not judged, so it is left out "
+            "(verified_text marks where it was): state it in a sentence that cites its fact, "
+            "cite its fact in the heading, or name only the topic"
+        )
+        lead = re.match(
+            r"[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\(?\d{1,3}[.)]|[-*•>])[ \t]+)?(?:\*\*|__)?", sent
+        )
+        tail = re.search(r"(?:\*\*|__)?:?(?:\*\*|__)?[ \t]*\Z", sent)
+        mark = (lead.group(0) if lead else "") + _NOT_CHECKED + (tail.group(0) if tail else "")
+    else:
+        why = (
+            "a short label or remark that cites nothing and is read as no sentence (labels are "
+            "not judged), so it is left out: make it a sentence that cites the fact it rests "
+            "on, or remove it"
+        )
+        mark = ""
+    return _Judged(seg.start, seg.end, sent, [], [], "not-judged", [why], mark)
 
 
 #: (round 11) a leak said of a unit, not denied or hedged: "AHU-1's coil leaks", "AHU-1 is
@@ -8446,6 +8611,7 @@ def _rebuild(text: str, drop, unknown=()) -> str:
     markers: a removed sentence that opened a list item leaves its marker to the next one); a
     line whose sentences all went is removed, with a blank line it would double."""
     text = text or ""
+    marks = {(j.start, j.end): getattr(j, "mark", "") for j in drop}
     gone = sorted((j.start, j.end) for j in drop)
     unknown = set(unknown)
     out: list = []
@@ -8457,13 +8623,22 @@ def _rebuild(text: str, drop, unknown=()) -> str:
         cuts = []
         while g < len(gone) and gone[g][0] < le + 1:
             a, b = gone[g]
+            mark = marks.get((a, b), "")
             m = _MARKER.match(text, a)
+            if mark:  # (not judged) a heading left out: its mark keeps its section
+                out.append(mark)
+                g += 1
+                cuts.append((ls, le + 1))
+                continue
             if m is not None and not text[ls:a].strip():  # keep "1." for what follows
                 a = m.end()
                 while a < b and text[a] in " \t":
                     a += 1
             cuts.append((a, b))
             g += 1
+        if cuts and cuts[-1] == (ls, le + 1):
+            removed_last = False
+            continue
         if not cuts:
             if not line.strip() and removed_last and out and not out[-1].strip():
                 continue  # the blank line after a removed one would double

@@ -280,8 +280,9 @@ def test_the_tool_list_is_shorter():
     size = len(json.dumps(tools, separators=(",", ":"), ensure_ascii=False))
     # 48 KB in 0.110.0, 44.6 KB in 0.111.0; 0.112 adds the claim, unit and reason fields (45.0
     # KB) and declares the facts and notices of structuredContent in every output schema (#331:
-    # 127 bytes a tool; an outputSchema is a document of its own, so a $ref cannot share one)
-    assert size < 48_000, size
+    # 127 bytes a tool; an outputSchema is a document of its own, so a $ref cannot share one);
+    # 0112-cite12: check_citations' not_judged verdict and n_not_judged count (47.9 to 48.1 KB)
+    assert size < 48_500, size
     for t in tools:
         assert "$schema" not in t["inputSchema"] and "$schema" not in t["outputSchema"]
         assert "title" not in t["annotations"] and t["title"]

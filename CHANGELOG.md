@@ -537,6 +537,18 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   with "give each unit its own sentence", which the tool description and the prompts now say.
   On the generated cases (10,517, round 11) E fell from 0.94% to 0.00% and S from 4.3% to 0.8%
   against 6c4354b; no cell is above 2% (was 46); 41 corpus entries that were known gaps pass.
+- **`check_citations` reports text it does not read as `not_judged`, never as a pass
+  (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
+  quantifier, direction or rank word) and a short label or remark that cites nothing ("That
+  matches the claim.", "- AHU-1 leaking_valve: FAULT.") used to be copied into `verified_text`
+  unread, so they counted as passes. Each is now a sentence entry with the new verdict
+  `not_judged` and a `why`; the result counts them in `n_not_judged`, `grounded` is false, and
+  `verified_text` leaves them out (a heading's line is marked "(heading not checked)"). Pure
+  structure is no unit: blank lines, separators, table rules and column headers, greetings, and
+  headings, lead-ins and list-item titles that only name a topic. The tool description and the
+  prompts say to put such text in a cited sentence. On the 300 + 50 real-host drafts, 173 + 43
+  units became `not_judged` (68 + 12 of them true, all uncited; 1 + 0 false); cited strips
+  are unchanged, and the one false unit was an escape.
 - **`check_citations` reads more of what hosts write (round 11).** A year before a period's
   noun is a year ("2016 baseline fit", "2017 avoided energy", and never a unit's number in
   "Meter 2016"); a header's year is the header row's claim, so a row reads its column without

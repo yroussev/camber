@@ -39,9 +39,11 @@ _CITE_RULES = (
     "clean, real, confident) only as a fact you cite does: check_citations compares them both "
     "ways. Say 'both', 'each' or 'all' of several equipment or points only citing a fact about "
     "each one. Give each unit its own sentence: one that names several units and cannot be "
-    "read as one clause per unit, each against that unit's facts, fails. Quote a name from the "
-    "data in double quotes. If a call is refused (not_allowed, "
-    "refused_licence), say so and stop; do not work around it."
+    "read as one clause per unit, each against that unit's facts, fails. A heading or short "
+    "label that gives a verdict, negation or quantifier, and a short remark without a citation "
+    "('That matches.', '- AHU-1: OK.'), is not judged and is left out: say it in a sentence "
+    "that cites its fact. Quote a name from the data in double quotes. If a call is refused "
+    "(not_allowed, refused_licence), say so and stop; do not work around it."
 )
 
 _FINISH = (
