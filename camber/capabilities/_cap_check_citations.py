@@ -472,8 +472,8 @@ CAPABILITIES = (
             "in this session's facts. A sentence is supported, unknown_citation (not of "
             "this session), forgotten_citation (rerun that tool), "
             "uncited, unsupported_number (figure, sign, unit or role) or unsupported_claim "
-            "(name, verdict, negation or direction); failures come with why. Call it last. "
-            "Cheap."
+            "(name, verdict, negation or direction); failures come with why. Give each unit "
+            "its own sentence. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

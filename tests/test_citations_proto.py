@@ -1,10 +1,8 @@
-"""The prototypes of camber.agent.verify still behind a switch (PLAN-CITE-EVAL section 5):
-CAMBER_CITE_C (one clause per unit: ``1`` fails a multi-unit sentence closed, ``split`` splits
-sets, "respectively", "both", "unlike" and "X, not Y" into per-unit clauses first) and
-CAMBER_CITE_A (default-deny on parse coverage). B (every region judged) is the default since
-0112-cite10 (tests/test_citations_regions.py). Each case below is judged with the switch off and
-on, so the switches are seen to do what they say and to change nothing when off. The
-measurements are tools/cite_eval/run.py --flags.
+"""The prototype of camber.agent.verify still behind a switch (PLAN-CITE-EVAL section 5):
+CAMBER_CITE_A (default-deny on parse coverage), judged with the switch off and on. B (every
+region judged) is the default since 0112-cite10 (tests/test_citations_regions.py) and C (one
+clause per unit, formerly ``CAMBER_CITE_C=split``) since round 11: its cases are below, judged
+by the default checker. The measurements are tools/cite_eval/run.py (--flags A).
 """
 
 import os
@@ -55,23 +53,8 @@ def _c(ids) -> str:
     return " ".join(f"[{i}]" for i in ids)
 
 
-# (draft, cites, kept with every switch off, switch, kept with it on)
+# (draft, cites, kept with the switch off, switch, kept with it on)
 CASES = [
-    # C: a swapped status list fails; a true two-clause sentence stays
-    (
-        f"AHU-1: simultaneous_heat_cool fault; AHU-2: simultaneous_heat_cool ok {_c(RR)}.",
-        RR,
-        True,
-        "C",
-        False,
-    ),
-    (
-        f"AHU-2 fails simultaneous_heat_cool and AHU-1 passes simultaneous_heat_cool {_c(RR)}.",
-        RR,
-        True,
-        "C",
-        True,
-    ),
     # A: a word the checker does not read and no cited fact uses fails closed
     (f"AHU-1 has 100.0% coverage {_c(COV)}.", COV, True, "A", True),
     (f"AHU-1 has a pristine 100.0% coverage {_c(COV)}.", COV, True, "A", False),
@@ -85,12 +68,21 @@ def test_switch(judge, monkeypatch, draft, cites, off, flag, on):
     assert _kept(judge, draft, cites) is on
 
 
-def test_c_says_why(judge, monkeypatch):
-    monkeypatch.setenv("CAMBER_CITE_C", "1")
+def test_c_switch_is_gone(judge, monkeypatch):
+    """C is the default: the old switch changes nothing, whatever its value."""
+    draft = f"AHU-1: simultaneous_heat_cool fault; AHU-2: simultaneous_heat_cool ok {_c(RR)}."
+    for v in ("", "0", "1", "split"):
+        monkeypatch.setenv("CAMBER_CITE_C", v)
+        assert _kept(judge, draft, RR) is False  # the swapped status list fails
+        ok = f"AHU-2 fails simultaneous_heat_cool and AHU-1 passes simultaneous_heat_cool {_c(RR)}."
+        assert _kept(judge, ok, RR) is True
+
+
+def test_c_says_why(judge):
     r = judge(
         {
             "key": "k",
-            "draft": f"AHU-1 and AHU-2 both fail simultaneous_heat_cool {_c(RR)}.",
+            "draft": f"AHU-1 or AHU-2 maybe fails simultaneous_heat_cool {_c(RR)}.",
             "facts": [FACTS[c] for c in RR],
             "allowed": list(facttable.ALLOWED),
             "names": dict(facttable.REGISTRY_NAMES),
@@ -100,12 +92,12 @@ def test_c_says_why(judge, monkeypatch):
     assert "give each unit its own sentence" in r["sentences"][0][2]
 
 
-# C=split: sets, "respectively", "unlike" and "X, not Y" are written as one clause per unit and
-# each (unit, claim) pair is read against that unit's own facts; C=1 fails them all closed
+# C: sets, "respectively", "unlike" and "X, not Y" are written as one clause per unit and each
+# (unit, claim) pair is read against that unit's own facts
 OA = ["F4@sensor_trust-c81f17", "F3@sensor_trust-c81f17"]  # AHU-2 0.73, AHU-3 0.72 (suspect)
 REF = ["R1@sensor_trust-c81f17", "R2@sensor_trust-c81f17"]  # AHU-1 disagrees, AHU-2 agrees
 SPLIT = [
-    # (draft, cites, kept with C=split)
+    # (draft, cites, kept)
     (f"AHU-2's oa_damper and AHU-3's oa_damper are both suspect {_c(OA)}.", OA, True),
     (f"AHU-2 and AHU-3 have oa_damper trusts of 0.73 and 0.72, respectively {_c(OA)}.", OA, True),
     (f"AHU-2 and AHU-3 have oa_damper trusts of 0.72 and 0.73, respectively {_c(OA)}.", OA, False),
@@ -118,9 +110,5 @@ SPLIT = [
 
 
 @pytest.mark.parametrize("draft,cites,on", SPLIT)
-def test_c_split(judge, monkeypatch, draft, cites, on):
-    monkeypatch.setenv("CAMBER_CITE_C", "split")
+def test_c_split(judge, draft, cites, on):
     assert _kept(judge, draft, cites) is on
-    if on:  # C=1 strips each of these true sentences: it does not split them
-        monkeypatch.setenv("CAMBER_CITE_C", "1")
-        assert _kept(judge, draft, cites) is False

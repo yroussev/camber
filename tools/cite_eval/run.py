@@ -323,9 +323,10 @@ def main(argv=None) -> int:
     ap.add_argument(
         "--flags",
         default="",
-        help="checker prototypes to switch on (camber.agent.verify): a comma list of C (or "
-        "C=split), A (or A=strict), and B for a build older than 0112-cite10 (B is the default "
-        "since); each sets CAMBER_CITE_<X>=1 (or its value) for this run and its workers",
+        help="checker prototypes to switch on (camber.agent.verify): a comma list of A (or "
+        "A=strict), and B or C (C=split) for a build older than 0112-cite10 or round 11 (B and "
+        "C are the default since); each sets CAMBER_CITE_<X>=1 (or its value) for this run and "
+        "its workers",
     )
     ap.add_argument(
         "--pythonpath",

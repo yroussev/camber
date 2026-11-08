@@ -316,6 +316,24 @@ _YES_CELL = re.compile(r"(?:yes|y|true|x|✓|✔️?|✅|☑️?)", re.I)
 _NO_CELL = re.compile(r"(?:no|n|false|✗|✘|❌)", re.I)
 
 
+def _header_negated(head: str) -> str:
+    """(round 11) A header's claim denied at its verb: "baseline passes G14" -> "baseline does
+    not pass G14", "is suspect" -> "is not suspect"; "not <header>" when it has no verb."""
+    words = head.split()
+    for i, w in enumerate(words):
+        low = w.lower()
+        if low in ("is", "are", "was", "were"):
+            return " ".join([*words[: i + 1], "not", *words[i + 1 :]])
+        if low in ("has", "have"):
+            return " ".join([*words[:i], "does not have", *words[i + 1 :]])
+        if low in _STATING or low in _VERDICT:
+            base = re.sub(r"(?:(?<=ss)|(?<=sh)|(?<=ch)|(?<=x))es$|s$", "", low)
+            if base == low and not low.endswith("s"):
+                continue  # "fault", "ok": a verdict word, not a verb
+            return " ".join([*words[:i], "does not", base, *words[i + 1 :]])
+    return f"not {head}"
+
+
 def _cell_said(first: str, head: str, cell: str):
     """A table cell read with its column's header, when the header states something (any
     header, for a "yes" or "no" cell: "| AHU-1 | yes |" under "Agrees with its reference"): a "yes"
@@ -327,6 +345,15 @@ def _cell_said(first: str, head: str, cell: str):
     before, with its column's name, #340)."""
     bare = _CITES.sub(" ", cell).strip().rstrip(".").strip()
     ids = " ".join(m.group(0) for m in _CITES.finditer(cell))
+    # (round 11) "Yes: R2 0.81" / "No: R2 0.62, CV(RMSE) 38.1%": the answer, then its details
+    detail = re.fullmatch(r"(yes|no)\s*[:;,(\u2013\u2014-]\s*(.+?)\)?", bare, re.I)
+    if detail is not None and not _states_nothing(head.rstrip("?")):
+        low = head.rstrip("?").strip()
+        low = low[:1].lower() + low[1:] if low[:1].isupper() and not _UNIT_ID.match(low) else low
+        what = detail.group(2).strip()
+        if detail.group(1).lower() == "yes":
+            return f"{first} {low}, {what} {ids}".strip()
+        return f"{first}: {_header_negated(low)}, {what} {ids}".strip()
     yes_no = _YES_CELL.fullmatch(bare) or _NO_CELL.fullmatch(bare)
     if (
         not yes_no  # (0112-cite10) a yes or no says its column's header, whatever it is
@@ -500,7 +527,9 @@ def _segments(text: str, notices=(), quotes=None) -> list:
         ):
             # a header row names its columns, also with a figure in it: each row reads it
             header = tuple(_visible(c).strip() for c in text[s0:e0].strip().strip("|").split("|"))
-            said = " ".join(c for c in header if c)
+            # (round 11) a column that asks ("Baseline passes G14?") states nothing: its rows'
+            # answers say it, each of its own unit
+            said = " ".join(c for c in header if c and not c.endswith("?"))
             if re.search(r"\d|_", said) or not _states_nothing(said):
                 # a header that states something, or names a unit, is a claim of the table:
                 # judged with the citations of its rows
@@ -587,6 +616,15 @@ def _table_text(row: str, header: tuple) -> str:
         return row  # "| 5 of 5 | passed |": a count and its verdict, read as it is
     first, parts = cells[0], []
     one = not re.search(r",|\band\b|&|/", first)  # "| A, B | ... |": a list of them
+    # (round 11) a header's year ("2017 avoided energy") is the header row's claim, judged with
+    # all its rows' citations: a row reads the column without it, so a cell citing the baseline
+    # fit is not asked for the reporting year
+    header = tuple(
+        h
+        if h.endswith("?")  # a column that asks is judged in its rows only, its year too
+        else " ".join(re.sub(r"(?<![\w.\-])(?:19|20)\d\d(?![\w.\-%])", " ", h).split())
+        for h in header
+    )
     for head, cell in zip(header[1:], cells[1:]):
         if head:
             said = _cell_said(first, head, cell)
@@ -594,6 +632,12 @@ def _table_text(row: str, header: tuple) -> str:
                 parts.append(said)
                 continue
         if not re.search(r"\d", _CITES.sub(" ", cell)) or not head:
+            parts.append(cell)
+            continue
+        if re.search(r"\]\s*[^\s\[\]|][^\[\]]*\[", cell):
+            # (round 11) a cell of its own parts, each citing its facts ("Baseline fails G14
+            # (R2 0.62) [F2]; avoided energy -15.8% [F3]"): read as it is, the header row's
+            # claim judged with its rows' citations apart
             parts.append(cell)
             continue
         words = re.findall(r"[a-z]+", head.lower())
@@ -2543,6 +2587,13 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
         ):
             # "reads warm", "reads cold": a reading's direction in other words (#341)
             pol = {"warm": "high", "hot": "high", "cold": "low", "cool": "low"}.get(w)
+        if (
+            pol is None
+            and not fact
+            and w in ("track", "tracks", "tracked", "tracking")
+            and "reference" in words[k + 1 : k + 4]
+        ):
+            pol = "agrees"  # (round 11) "tracks its reference": it agrees with it
         if pol is not None:
             p.polar.add(pol)
             pol_at.append((k, pol))
@@ -4381,6 +4432,15 @@ def _quantity(toks: list, i: int, value: Decimal, raw: str):
             and toks[k][1].lower() in _NOUNS
         ):
             unit = ""  # "the 2016 baseline": a year naming one thing, not 2016 of them (#336)
+        elif (
+            raw.isdigit()
+            and len(raw) == 4
+            and 1900 <= int(raw) <= 2100
+            and not sign
+            and k < len(toks)
+            and toks[k][1].lower() in _YEAR_NOUNS
+        ):
+            unit = ""  # (round 11) "2016 baseline fit", "2017 avoided energy": a period's year
     base = ""
     if unit == "%" and k < len(toks) and toks[k][1].lower() == "of":
         base = _scan_noun(toks, k + 1, of=True)
@@ -4405,6 +4465,12 @@ _UNIT_NOUN_WORDS = {u: {u, u + "s"} for u in ("fault", "warn", "info", "ok")}
 
 #: what stands before a year that names one thing ("the 2016 baseline", "its 2017 period")
 _YEAR_BEFORE = frozenset("the a an its their this that each every".split())
+#: (round 11) what a year names wherever it stands: a period or what is measured over one
+#: ("2016 baseline fit", "2017 avoided energy", "2017 use"), never a count of them
+_YEAR_NOUNS = frozenset(
+    "baseline reporting energy use usage consumption saving savings avoided period year fit "
+    "model data weather".split()
+)
 
 
 def _label_list(toks: list, i: int) -> bool:
@@ -6399,6 +6465,10 @@ def _claim_problems(
             if {"up": "down", "down": "up"}[d[4:]] not in dirs:
                 why.append(f"no {words[d[4:]]}: no cited fact states the opposite")
             continue
+        opp = {"up": "down", "down": "up"}.get(d, "")
+        if opp and opp in dirs:  # (round 11) the opposite stated: a denial of it is confirmed (C)
+            why.append(f"{words[d]}: the cited facts say {words[opp]}")
+            continue
         why.append(f"{words[d]}: no cited fact states it")
     polar = set().union(*(fc.claims.polar for fc in facts))
     why += [
@@ -6453,7 +6523,15 @@ def _claim_problems(
     read = _read_quant(p, facts)
     several = " (a claim about all of several facts is not read: say it of each)" * (len(facts) > 1)
     done = set()
+    # (round 11) "Most of A, B and C P": a set of named units, read unit by unit (C)
+    most_set = len(p.ids & {u for fc in facts for u in _units(fc)}) >= 2 and bool(
+        re.search(
+            r"\bmost\s+of\s+(?!the\s+(?:time|hours?|samples?|days?|window)\b)", text or "", re.I
+        )
+    )
     for qc, key, said, pool in p.quant_of:
+        if qc == "most" and most_set:
+            continue
         if key and (said_so(qc, key, pool) or key in by_set or (qc, key) in read):
             continue
         if key and qc == "all" and key in _SPAN_KEYS:
@@ -6548,6 +6626,12 @@ def _claim_problems(
             continue
         if n.kind == "zero" and n.head in ("fault", "warn") and own & {"ok", "info"}:
             continue  # "no fault" of a finding the cited fact judges ok
+        if n.head == _stem("leak") and any(
+            re.search(rf'"{re.escape(u)}"\s+leaking_valve\s*\((?:ok|passed)\)', fc.said)
+            for fc in facts
+            for u in p.ids
+        ):
+            continue  # (round 11) "AHU-1's coil does not leak": its leaking_valve result is ok
         if (n.head == "gap" or (n.kind in ("zero", "np") and "gap" in set(n.words))) and any(
             fc.full and not fc.own_span for fc in facts
         ):
@@ -6620,7 +6704,7 @@ def _claim_problems(
                 f.head in stated
                 and f.kind in ("np", "verbal")
                 and need - {f.head} <= _COMPONENTS
-                and not (stated & _COMPONENTS) - need
+                and not (stated & _COMPONENTS) - need - _LEAK_PARTS.get(f.head, frozenset())
                 and fc.item.get("equip")
                 and (not named_eq or (one_unit and fc.item["equip"].lower() in named_eq))
                 and f.head not in aff
@@ -6633,6 +6717,11 @@ def _claim_problems(
                     "states the opposite"
                 )
     return why
+
+
+#: (round 11) the parts a leak is said of: the leaking_valve rule's "no valve leak" denies a
+#: coil leak too ("AHU-2's coil leaks"), since the valve leaks through its coil
+_LEAK_PARTS = {_stem("leak"): frozenset(_stem(w) for w in ("valve", "coil"))}
 
 
 def _count_problems(p: _Parsed, facts: list) -> list:
@@ -7348,7 +7437,10 @@ def _sentence_problems(vis: str, mine: list, own: list, vocab, num, claims) -> t
                         f"'not {name}': no cited fact is about {name!r} to say it is not so of it"
                     ]
                 continue
-            r, w = _plain_problems(text, mine, own, vocab, num)
+            # (round 11) what the excluded unit's own cited facts state, not another unit's
+            # ("B does not pass X, unlike A": A's "not pass" is not B's fault)
+            ids = [fc.id for fc in about]
+            r, w = _plain_problems(text, about, ids, vocab, num)
             if not r:
                 what = (
                     f"'only': a cited fact states it of {name!r} too"
@@ -7743,6 +7835,8 @@ def _spell_units(vis: str, spellings: list) -> tuple:
         if m.start() < at:
             continue
         said = m.group(0)
+        if re.fullmatch(r"(?:19|20)\d\d", m.group(1)):
+            continue  # (round 11) "Meter 2016 baseline": a year, never a unit's number
         got = ids.get(int(m.group(1)), set())
         if said.lower() in {g.lower() for g in got}:
             continue
@@ -7965,7 +8059,9 @@ def _judge(
             vis = _table_text(vis, seg.header)
         if seg.table_cites:  # a header row's claim, with its rows' citations
             cells = [c.strip() for c in vis.strip().strip("|").split("|")]
-            vis = " ".join(c for c in cells if c) + " " + "".join(f"[{c}]" for c in seg.table_cites)
+            # (round 11) a column that asks states nothing: its rows' answers say it
+            cells = [c for c in cells if c and not c.endswith("?")]
+            vis = " ".join(cells) + " " + "".join(f"[{c}]" for c in seg.table_cites)
         amb: list = []
         if seg.kind == "sentence":
             vis, amb = _spell_units(vis, spellings)  # (#342) "AHU 1", "Air handler 1": AHU-1
@@ -8004,13 +8100,50 @@ def _judge(
                 reason, why = _session_problems(vis, mine, vocab, issued)
             if not reason and own:  # 0112-cite10: a parameter's figure is that parameter's
                 reason, why = _param_problems(vis, mine)
-            if not reason and _proto("C"):
+            if not reason and own:  # round 11: a leak said of a unit is a leaking_valve one
+                reason, why = _leak_problems(vis, mine)
+            if not reason:  # round 11: one clause per unit (C=split) is the default
                 reason, why = _proto_c(vis, mine, own, vocab, num, context, claims)
             if not reason and _proto("A"):
                 echo = mine if own else claims(text_cited)
                 reason, why = _proto_a(vis, vocab, echo)
         out.append(_Judged(seg.start, seg.end, sent, own, unknown, reason, why))
     return out
+
+
+#: (round 11) a leak said of a unit, not denied or hedged: "AHU-1's coil leaks", "AHU-1 is
+#: leaking", "has a heating-valve leak", "a leaking valve on AHU-1"
+_LEAK_SAID = re.compile(
+    r"(?<![\w\-])(?:leaks|leaked|(?:is|was|are|were)\s+leaking|has\s+(?:an?\s+)?(?:[\w\-]+\s+){0,2}leak|"
+    r"an?\s+leaking\s+(?:valve|coil))(?![\w\-])",
+    re.I,
+)
+_LEAK_DENIED = re.compile(
+    r"\b(?:no|not|never|without|nor|neither|none|n't|cannot|can|could|may|might|would|if|whether|"
+    r"looks?|reads?\s+as|appears?|seems?|suggests?)\b",
+    re.I,
+)
+#: a cited fact that states a leak: a leaking_valve fault or warn, or a leak share above 0%
+_LEAK_FACT = re.compile(
+    r"leaking_valve\s*\((?:fault|warn)|(?:HW|CHW)-leak\s+(?!0(?:\.0+)?\s*%)\d", re.I
+)
+
+
+def _leak_problems(vis: str, facts: list) -> tuple:
+    """(round 11) ``(reason, why)``: a leak said of a unit ("AHU-1's coil leaks") needs a cited
+    fact that states one, a leaking_valve fault or warn or a leak share above 0%; any fault of
+    another rule is no leak. A denied or hedged leak ("does not leak", "can read as a leak")
+    is read by the negations."""
+    body = _CITES.sub(" ", vis)
+    m = _LEAK_SAID.search(body)
+    if m is None or _LEAK_DENIED.search(body[: m.end()].split(",")[-1]):
+        return "", []
+    if any(_LEAK_FACT.search(str(getattr(fc, "hay", "") or "")) for fc in facts):
+        return "", []
+    return "unsupported-claim", [
+        f"{' '.join(m.group(0).split())!r}: no cited fact states a leak (a leaking_valve fault "
+        "or warn, or a leak share above 0%)"
+    ]
 
 
 #: (#341) the words that say a text, or a part of it, was checked: only check_citations' own
@@ -8365,20 +8498,22 @@ def _strip_ids(text: str, unknown: set) -> str:
 
 
 # --------------------------------------------------------------------------- prototypes
-# PLAN-CITE-EVAL section 5: changes of the checker's default still behind a switch, OFF unless
-# set. They are measured by tools/cite_eval (run.py --flags C,A). B (every region judged) was
-# the third, and is the default since 0112-cite10 (the segments section above).
+# PLAN-CITE-EVAL section 5: changes of the checker's default, measured by tools/cite_eval. B
+# (every region judged) is the default since 0112-cite10 (the segments section above), and C
+# (one clause per unit, "C=split") since round 11; A is still behind a switch, OFF unless set
+# (run.py --flags A).
 #
-# - CAMBER_CITE_C=1: a sentence naming more than one unit passes only if it splits into one
-#   clause per unit, each with a claim of its own, and every clause is supported against its
-#   own unit's facts; otherwise it fails closed ("give each unit its own sentence").
-#   CAMBER_CITE_C=split first writes a set ("A and B both P"), "respectively", "unlike" and
-#   "X, not Y" as one clause per unit (_proto_split), then checks each (unit, claim) pair alike.
+# - C (the default; the CAMBER_CITE_C switch is gone): a sentence naming more than one unit is
+#   written as one clause per unit (_proto_split: a set "A and B both P", "most of", lists of
+#   figures with or without "respectively", "their ... respectively", a figure list after a
+#   comma, "unlike", "X, not Y", "rather than", comparatives with each unit's figure ...), and
+#   every (unit, claim) pair is checked against its own unit's facts; a sentence that splits
+#   no way fails closed ("give each unit its own sentence").
 # - CAMBER_CITE_A=1 (or "strict"): default-deny on parse coverage. Every content word of a
 #   sentence must be one the checker reads (_PROTO_READ), a neutral word (_PROTO_NEUTRAL), or
 #   (not with "strict") a word one of the facts it cites uses; otherwise it fails closed.
 
-_PROTO_FLAGS = ("A", "C")
+_PROTO_FLAGS = ("A",)
 
 
 def _proto(name: str) -> str:
@@ -8451,13 +8586,14 @@ _PROTO_SINGULAR = {
     "sit": "sits",
     "use": "uses",
     "lack": "lacks",
+    "rank": "ranks",
     "exceed": "exceeds",
     "remain": "remains",
 }
 #: (C=split) one item of a list said "respectively": a figure with its unit, or one word
 _PROTO_ITEM = (
-    r"[-+−]?\d[\d,.]*\s?(?:%|°\s?[FC]|percentage\s+points|hours?|h|kWh|days?|samples?|"
-    r"points?)?|[A-Za-z][\w\-]*"
+    r"[-+−]?\d[\d,.]*(?:\s?(?:%|°\s?[FC]|percentage\s+points|hours?|h|kWh|days?|samples?|"
+    r"points?)\b|%)?|[A-Za-z][\w\-]*"
 )
 
 
@@ -8475,6 +8611,116 @@ def _proto_unit_rx(body: str, named: set) -> str:
     return r"(?:\"?(?<![\w\-])(?:" + "|".join(re.escape(n) for n in alts) + r")(?![\w\-])\"?)"
 
 
+def _proto_clean(x: str) -> str:
+    """(C=split) a unit as a clause names it, without its quotes."""
+    return x.replace('"', "").strip()
+
+
+#: (C=split, round 11) the words that join two units into a set ("A plus B", "A, as well as
+#: B,", "A (like B)"), and that end a clause with another unit of the same ("..., and likewise
+#: B", "; the same goes for B")
+_PROTO_JOIN = (
+    r"\s*(?:/|\+|;|&)\s*|\s+(?:plus|and/or|and\s+also|along\s+with|alongside|in\s+addition\s+to|"
+    r"as\s+well\s+as)\s+|\s*,\s*(?:and\s+also|as\s+well\s+as|besides|along\s+with)\s+|"
+    r"\s+and,\s+likewise,\s+|\s+-{1,2}\s+(?:like|as\s+well\s+as|and)\s+|"
+    r"\s*\(\s*(?:and|as\s+well\s+as|like|plus)\s+"
+)
+_PROTO_SAME_END = (
+    r"\s*(?:,\s*and\s+likewise|,\s*likewise|;\s*the\s+same\s+(?:goes|is\s+true)\s+for|,\s*as\s+does|"
+    r",\s*and\s+so\s+does|,\s*as\s+is|,\s*and\s+so\s+is)\s+"
+)
+
+
+def _proto_norm(text: str, u: str, flags) -> str:
+    """(C=split, round 11) A sentence's set and contrast words in the forms the split reads:
+    "A plus B", "A/B", "A; B", "A, as well as B,", "A (like B)" and "A -- like B --" are "A and
+    B"; "A P, and likewise B" and "A P; the same goes for B" are "A and B P"; "A but not B P"
+    is "A, not B, P"; "A vs B" and figures "x/y" or "x vs y" are "A and B", "x and y"; "A, B
+    -- P" is "A, B: P"; "A and B differ: ..." loses its lead."""
+    pair = re.compile(
+        rf"(?P<a>{u})(?P<j>{_PROTO_JOIN})(?P<b>{u})(?P<close>\s*\)|\s*,(?=\s)|\s+-{{1,2}}(?=\s))?",
+        flags,
+    )
+
+    def join(m) -> str:
+        j, close = m.group("j"), m.group("close") or ""
+        opened = "(" in j
+        if opened != (")" in close):
+            return m.group(0)  # "(and B" without its ")": not this form
+        if close.strip() == "," and not re.match(r"\s*,", j):
+            return m.group(0)  # "A plus B, C ...": a comma of a list, not a closing one
+        return f"{m.group('a')} and {m.group('b')}"
+
+    for _ in range(3):
+        new = pair.sub(join, text)
+        if new == text:
+            break
+        text = new
+    m = re.match(rf"^(?P<a>\W*{u})\s+(?P<pred>.+?){_PROTO_SAME_END}(?P<b>{u})\W*$", text, flags)
+    if m is not None:
+        text = f"{m.group('a')} and {m.group('b')} {m.group('pred')}"
+    text = re.sub(
+        rf"^(?P<a>\W*{u})\s+(?:but|and)\s+not\s+(?P<b>{u})\s+",
+        r"\g<a>, not \g<b>, ",
+        text,
+        flags=flags,
+    )
+    m = re.match(
+        rf"^(?P<a>\W*{u})\s+(?:rather\s+than|instead\s+of)\s+(?P<b>{u})\s+(?P<pred>.+)$",
+        text,
+        flags,
+    )
+    if m is not None:
+        text = f"{m.group('a')}, not {m.group('b')}, {m.group('pred')}"
+    text = re.sub(
+        rf"(?P<a>{u})\s+(?:vs\.?|versus)\s+(?P<b>{u})", r"\g<a> and \g<b>", text, flags=flags
+    )
+    fig = _PROTO_FIG
+    text = re.sub(
+        rf"(?P<x>{fig})\s*(?:/|\s(?:vs\.?|versus)\s)\s*(?P<y>{fig})",
+        r"\g<x> and \g<y>",
+        text,
+        flags=flags,
+    )
+    text = re.sub(rf"^(?P<l>\W*{u}(?:\s*,\s*{u})+)\s+-{{1,2}}\s+", r"\g<l>: ", text, flags=flags)
+    text = re.sub(
+        rf"^\W*{u}(?:\s*(?:,|and)\s*{u})+\s+(?:differ|are\s+different|disagree)\s*:\s*",
+        "",
+        text,
+        flags=flags,
+    )
+    return text
+
+
+class _Most(str):
+    """(C=split) a clause of a "most of" set: more than half of them must be supported."""
+
+
+#: (C=split) a figure as a list item or a comparison gives it
+_PROTO_FIG = (
+    r"[-+−]?\d[\d,]*(?:\.\d+)?\s?(?:%|°\s?[FC]\b|percentage\s+points\b|hours?\b|h\b|kWh\b)?"
+)
+_PROTO_FIG_RX = re.compile(r"(?<![\w.])" + _PROTO_FIG)
+#: (C=split) the comparatives read off two figures, and the words that turn them round ("more
+#: suspect" is the lower trust)
+_PROTO_MORE = frozenset("more higher greater larger bigger better".split())
+_PROTO_LESS = frozenset("less lower smaller fewer worse".split())
+_PROTO_INVERSE = frozenset("suspect untrusted unreliable doubtful questionable".split())
+
+
+def _proto_num(fig: str):
+    m = re.match(r"\s*([-+−]?)(\d[\d,]*(?:\.\d+)?)", fig)
+    if m is None:
+        return None
+    v = float(m.group(2).replace(",", ""))
+    return -v if m.group(1) in ("-", "−") else v
+
+
+def _proto_fig_unit(fig: str) -> str:
+    """(C=split) a figure's measurement unit as written ("%", "°F", "" ...)."""
+    return re.sub(r"[\s\d,.+\-−]", "", fig).lower()
+
+
 def _proto_singular(pred: str) -> str:
     w = pred.split(" ", 1)
     if w[0].lower() in ("never", "also", "still", "always", "now", "only") and len(w) > 1:
@@ -8486,18 +8732,75 @@ def _proto_singular(pred: str) -> str:
 def _proto_not(subject: str, clause: str, other: str) -> str:
     """(C=split) ``subject``'s clause that it is not so, from the other unit's ``clause``
     (whose subject is ``other``): "B does not fail X", "B is not suspect", "B's point does not
-    have a bias of +3.0 °F"."""
+    have a bias of +3.0 °F", "B did not use more energy" (a verb in the past); a negative
+    clause denied is the positive one: "B has a valve leak" of "A has no valve leak", "B is
+    suspect" of "A is not suspect", "B fails X" of "A does not fail X"."""
     rest = clause.strip()
     if rest.lower().startswith(other.lower()):
         rest = rest[len(other) :].strip()
+    m = re.match(r"(?i)(is|are|was|were)\s+not\s+(.+)$", rest)
+    if m is not None:
+        return f"{subject} {m.group(1).lower()} {m.group(2)}".strip()
+    m = re.match(r"(?i)(?:has|have|had)\s+no\s+(.+)$", rest)
+    if m is not None:
+        return f"{subject} has a {m.group(1)}".strip()
+    m = re.match(r"(?i)(?:does|do|did)\s+not\s+([a-z]+)\b\s*(.*)$", rest)
+    if m is not None:
+        return f"{subject} {_proto_third(m.group(1).lower())} {m.group(2)}".strip()
+    m = re.match(r"(?i)never\s+([a-z]+)\b\s*(.*)$", rest)
+    if m is not None:
+        return f"{subject} {_proto_third(_proto_base(m.group(1).lower()))} {m.group(2)}".strip()
     verb, _, tail = rest.partition(" ")
     low = verb.lower()
     if low in ("is", "are", "was", "were"):
         return f"{subject} {low} not {tail}".strip()
     if low in ("has", "have", "had"):
         return f"{subject} does not have {tail}".strip()
-    base = re.sub(r"(?:(?<=ss)|(?<=sh)|(?<=ch)|(?<=x))es$|s$", "", low)
-    return f"{subject} does not {base} {tail}".strip()
+    if low in _PROTO_PAST or (low.endswith("ed") and len(low) > 4):
+        return f"{subject} did not {_proto_base(low)} {tail}".strip()
+    return f"{subject} does not {_proto_base(low)} {tail}".strip()
+
+
+#: (C=split) past verbs whose base is not the past with "ed" taken off
+_PROTO_PAST = {
+    "used": "use",
+    "saved": "save",
+    "ran": "run",
+    "made": "make",
+    "gave": "give",
+    "rose": "rise",
+    "fell": "fall",
+    "read": "read",
+    "had": "have",
+    "exceeded": "exceed",
+    "scored": "score",
+    "stored": "store",
+    "moved": "move",
+    "agreed": "agree",
+    "disagreed": "disagree",
+}
+
+
+def _proto_base(verb: str) -> str:
+    """(C=split) a verb's base form: "fails", "passes", "used", "failed" -> "fail", "pass",
+    "use", "fail"."""
+    if verb in _PROTO_PAST:
+        return _PROTO_PAST[verb]
+    if verb.endswith("ed") and len(verb) > 4:
+        return verb[:-2]
+    return re.sub(r"(?:(?<=ss)|(?<=sh)|(?<=ch)|(?<=x))es$|s$", "", verb)
+
+
+def _proto_third(base: str) -> str:
+    """(C=split) a base verb as its unit's clause says it: "fail" -> "fails", "pass" ->
+    "passes", "have" -> "has"."""
+    if base == "have":
+        return "has"
+    if base in ("do", "go"):
+        return base + "es"
+    if re.search(r"(?:ss|sh|ch|x)$", base):
+        return base + "es"
+    return base + "s"
 
 
 #: (C=split) what a clause of one unit keeps of a set's words: "Both oa_damper points" is "the
@@ -8568,7 +8871,11 @@ def _proto_split(body: str, named: set) -> list | None:
       "B does not P".
     """
     u0 = _proto_unit_rx(body, named)
-    u = rf"(?:{u0}(?:['’]s(?:\s+[\w\-]+)?|\s+\"[\w\-]+\")?)"
+    # a unit with its point: "A's oa_damper", 'A "supply_air_temp"', "A supply_air_temp"
+    u = (
+        rf"(?:{u0}(?:['’]s(?:\s+[\w\-]+)?|\s+\"[\w\-]+\"|"
+        rf"\s+(?!{_PROTO_VERBS}\b)[a-z][a-z0-9]*(?:_[a-z0-9]+)+)?)"
+    )
     flags = re.I | re.S
     text = body.strip().rstrip(".;, ")
     # "the AHU-1 heat valve and the AHU-2 heat valve": the same words after each unit are its
@@ -8584,6 +8891,22 @@ def _proto_split(body: str, named: set) -> list | None:
         text,
         flags=flags,
     )
+    text = _proto_norm(text, u, flags)
+    m = re.match(
+        rf"^\W*(?:none|not\s+one|neither)\s+of\s+(?P<list>{u}(?:\s*(?:,|and|or)\s*{u})+)\s+"
+        rf"(?P<pred>.+)$",
+        text,
+        flags,
+    )
+    if m is None:
+        m = re.match(
+            rf"^\W*n(?:or|either)\s+(?P<list>{u}\s+nor\s+{u})\s+(?P<pred>.+)$", text, flags
+        )
+    if m is not None:  # (round 11) "None of A, B and C P", "Nor A nor B P": each does not P
+        xs = [_proto_clean(x) for x in re.findall(u, m.group("list"), flags)]
+        if len(xs) == len(named):
+            pred = m.group("pred").strip()
+            return [(_proto_not(x, f"{x} {pred}", x), f"{x} {pred}") for x in xs]
     lab = re.match(r"^\W*(?P<label>[^:|]{2,60}?)\s*:\s*(?P<rest>.+)$", text, flags)
     if lab is not None and not re.search(u0, lab.group("label"), flags):
         # "The problem is the two loggers: A and B only have 19.1%": the rest split by these
@@ -8604,14 +8927,100 @@ def _proto_split(body: str, named: set) -> list | None:
     def clean(x: str) -> str:
         return x.replace('"', "").strip()
 
+    def own(a: str, b: str) -> str:
+        """B's part as A's is said: "B's" after "A's oa_damper" or "A supply_air_temp" is "B's
+        oa_damper" ("B's supply_air_temp")."""
+        noun = re.search(r"(?:['’]s)?\s+([\w\-]+)$", a)
+        if b.endswith(("'s", "’s")) and noun is not None:
+            return f"{b} {noun.group(1)}"
+        return b
+
     def deny(a: str, b: str, pred: str):
         a, b = clean(a), clean(b)
-        noun = re.search(r"['’]s\s+([\w\-]+)$", a)
-        if b.endswith(("'s", "’s")) and noun is not None:
-            b = f"{b} {noun.group(1)}"
+        b = own(a, b)
         return [_proto_one(f"{a} {pred}"), (_proto_not(b, f"{a} {pred}", a), f"{b} {pred}")]
 
-    contrast = r"(?:unlike|in\s+comparison\s+(?:to|with)|compared\s+(?:to|with))"
+    # (round 11) "A, B and C ran X 100% of the hours, D 42%": the figures after a comma are
+    # the first clause's with their own unit and figure ("D ran X 42% of the hours")
+    peeled = list(
+        re.finditer(
+            rf"\s*,\s*(?:and\s+)?(?P<u>{u})\s+(?P<f>{_PROTO_FIG})(?=\s*(?:,|$))", text, flags
+        )
+    )
+    if peeled and peeled[-1].end() == len(text):
+        first = peeled[0].start()
+        chain = [x for x in peeled if x.start() >= first]
+        # the items must follow each other to the end
+        ok = all(chain[i].end() == chain[i + 1].start() for i in range(len(chain) - 1))
+        head = text[:first]
+        tails = [(clean(x.group("u")), x.group("f")) for x in chain]
+        head_units = {n for n in named if re.search(_proto_unit_rx(head, {n}), head, flags)}
+        figs = list(re.finditer(_PROTO_FIG_RX, head))
+        if ok and head_units and len(figs) == 1 and len(head_units) + len(tails) == len(named):
+            sub = _proto_split(head, head_units) if len(head_units) > 1 else [head]
+            if sub is not None and all(isinstance(t, str) for t in sub):
+                head_m = re.match(rf"^\W*(?P<s>{u})\s+", sub[0], flags)
+                fig = list(re.finditer(_PROTO_FIG_RX, sub[0]))
+                rest = sub[0][head_m.end() :] if head_m is not None else ""
+                f0 = next(iter(re.finditer(_PROTO_FIG_RX, rest)), None)
+                # the first clause says what its figure is of ("ran X 100% of the hours"), not
+                # a bare "A 81%" (a status list, read as one)
+                if f0 is not None and len(fig) == 1 and re.search(r"[A-Za-z]", rest[: f0.start()]):
+                    out_t = list(sub)
+                    for unit, f in tails:
+                        if _proto_fig_unit(f) != _proto_fig_unit(f0.group(0)):
+                            return None
+                        out_t.append(f"{unit} {rest[: f0.start()]}{f}{rest[f0.end() :]}")
+                    return [_proto_one(t) for t in out_t]
+
+    # (round 11) "Most of A, B and C P": a set of which more than half must hold
+    m = re.match(r"^\W*most\s+of\s+(?P<rest>.+)$", text, flags)
+    if m is not None:
+        sub = _proto_split(m.group("rest"), named)
+        if sub is None or not all(isinstance(t, str) for t in sub):
+            return None
+        return [_Most(t) for t in sub]
+
+    # (round 11) "A's oa_damper (0.66) is more suspect than B's (0.68)": each unit's figure,
+    # and the comparison read off the two figures (one that does not hold fails closed)
+    m = re.match(
+        rf"^\W*(?P<a>{u}(?:\s+[a-z][\w\-]*)?)\s*\(\s*(?P<x>{_PROTO_FIG})\s*\)\s+"
+        r"(?:is|was|has|reads|scores|sits)"
+        rf"\s+(?:a\s+)?(?P<cmp>{'|'.join(_PROTO_MORE | _PROTO_LESS)})\b"
+        rf"(?P<adj>(?:\s+(?!than\b)[\w\-]+){{0,2}})\s+than\s+(?P<b>{u})\s*\(\s*(?P<y>{_PROTO_FIG})"
+        r"\s*\)\W*$",
+        text,
+        flags,
+    )
+    if m is not None:
+        x, y = _proto_num(m.group("x")), _proto_num(m.group("y"))
+        up = m.group("cmp").lower() in _PROTO_MORE
+        if set(m.group("adj").lower().split()) & _PROTO_INVERSE:
+            up = not up
+        if x is None or y is None or x == y or (x > y) != up:
+            return None
+        a, b = clean(m.group("a")), clean(m.group("b"))
+        b = own(a, b)
+        return [f"{a} reads {m.group('x')}", f"{b} reads {m.group('y')}"]
+
+    # (round 11) "A's point disagrees with its reference rather than agreeing, as B's does":
+    # "A's point disagrees with its reference", "B's point agrees with its reference"
+    m = re.match(
+        rf"^\W*(?P<a>{u})\s+(?P<v1>[a-z]+)\s+(?P<obj>.+?)\s*,?\s+rather\s+than\s+"
+        rf"(?P<v2>[a-z]+)ing\s*,?\s+(?:as|like)\s+(?P<b>{u})\s+(?:does|did|do)\W*$",
+        text,
+        flags,
+    )
+    if m is not None:
+        a, b = clean(m.group("a")), clean(m.group("b"))
+        b = own(a, b)
+        obj = m.group("obj").strip()
+        return [f"{a} {m.group('v1')} {obj}", f"{b} {_proto_third(m.group('v2').lower())} {obj}"]
+
+    contrast = (
+        r"(?:unlike|in\s+comparison\s+(?:to|with)|compared\s+(?:to|with)|in\s+contrast\s+(?:to|with)|"
+        r"as\s+opposed\s+to)"
+    )
     for rx in (
         rf"^\W*{contrast}\s+(?P<b>{u})\s*,\s*(?P<a>{u})\s+(?P<pred>.+)$",
         rf"^\W*(?P<a>{u})\s+(?P<pred>.+?)\s*,?\s+{contrast}\s+(?P<b>{u})\W*$",
@@ -8634,6 +9043,8 @@ def _proto_split(body: str, named: set) -> list | None:
     if m is not None:
         a, b, pred = clean(m.group("a")), clean(m.group("b")), m.group("pred").strip()
         return [(_proto_not(x, f"{x} {pred}", x), f"{x} {pred}") for x in (a, b)]
+    if re.search(r"(?:,\s+and|;)\s+their\b", text, re.I):
+        return None  # (round 11) "A and B P, and their N are x and y respectively": by clause
     item_u = rf"(?:{u}(?:\s*\([^()]*\))?)"
     lst = (
         rf"(?P<list>{item_u}(?:\s*,\s*{item_u})*\s*,?\s*(?:and|&)\s+(?:(?:on|at|for|of)\s+)?"
@@ -8695,7 +9106,7 @@ def _proto_split(body: str, named: set) -> list | None:
             if where == "after":
                 clause = f"{lead}{x} {_proto_singular(p2.strip()) if at_start else p2.strip()}"
             else:
-                clause = f"{p2}{x} {after.strip()}"
+                clause = f"{p2}{x} {_proto_singular(after.strip())}"
             out.append(_proto_one(clause))
         return out
     if at_start:
@@ -8706,11 +9117,12 @@ def _proto_split(body: str, named: set) -> list | None:
 
 
 def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tuple:
-    """(prototype C) ``(reason, why)`` for a supported sentence that names more than one unit:
-    supported only when it splits into one clause per unit, each with a claim of its own and
-    each supported against the cited facts about its own unit. ``CAMBER_CITE_C=split`` first
-    writes a set, "respectively", "unlike" and "X, not Y" as one clause per unit
-    (:func:`_proto_split`); a sentence that splits neither way fails closed."""
+    """(C, the default since round 11) ``(reason, why)`` for a supported sentence that names
+    more than one unit: supported only when it splits into one clause per unit, each with a
+    claim of its own and each supported against the cited facts about its own unit. The forms
+    of :func:`_proto_split` are tried first, then the clauses joined by ";", "but", ", and" ...
+    each split by the forms in turn; a sentence that splits no way fails closed ("give each
+    unit its own sentence")."""
     units = {u for fc in claims(list(context.ids())) for u in _units(fc)}
     named = _proto_units(vis, vocab, units)
     if len(named) < 2:
@@ -8720,19 +9132,29 @@ def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tu
         f"clause per unit with a claim of its own: {_PROTO_C_WHY}"
     ]
     body = _CITES.sub(" ", vis)
-    pairs = None  # [(clause, {unit})]
+    u0 = _proto_unit_rx(body, named)
+    # (round 11) "A and B differ: A P and B Q": the clauses after the lead
+    body = re.sub(
+        rf"^\W*{u0}(?:\s*(?:,|and)\s*{u0})+\s+(?:differ|are\s+different|disagree)\s*:\s*",
+        "",
+        body,
+        flags=re.I,
+    )
+    pairs = _proto_cited_items(vis, vocab, units)  # [(clause, {unit})]
     denies: dict = {}  # (C=split) a denial -> what it denies
-    if _proto("C") == "split":
-        split = _proto_split(body, named)
-        if split is not None:
-            for t in split:
-                if isinstance(t, tuple):
-                    denies[t[0]] = t[1]
-            split = [t[0] if isinstance(t, tuple) else t for t in split]
-            pairs = [(t, _proto_units(t, vocab, units)) for t in split]
-            if any(len(x) != 1 for _t, x in pairs):
-                pairs = None
-    if pairs is None and _proto("C") == "split":
+    most: set = set()  # (C=split) the clauses of a "most of" set
+    split = _proto_split(body, named) if pairs is None else None
+    if split is not None:
+        for t in split:
+            if isinstance(t, tuple):
+                denies[t[0]] = t[1]
+            elif isinstance(t, _Most):
+                most.add(str(t))
+        split = [t[0] if isinstance(t, tuple) else str(t) for t in split]
+        pairs = [(t, _proto_units(t, vocab, units)) for t in split]
+        if any(len(x) != 1 for _t, x in pairs):
+            pairs = None
+    if pairs is None:
         # clauses joined by ";", "but", "while", ", and" or a dash, each split by the forms
         coarse: list = []
         for x in _PROTO_C_COARSE.split(body):
@@ -8740,6 +9162,20 @@ def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tu
             if not x:
                 continue
             u = _proto_units(x, vocab, units)
+            if not u and coarse:
+                # (round 11) "..., and their biases are +3.0 and +0.0 respectively": the
+                # units before it, in order, each with its item
+                order = [n for _t, us in coarse for n in sorted(us, key=body.lower().find)]
+                before = []
+                for n in dict.fromkeys(order):  # as the sentence spells it
+                    sp = re.search(_proto_unit_rx(body, {n}), body, re.I)
+                    before.append(sp.group(0).strip('"') if sp else n)
+                their = _proto_their(x, before)
+                if their is None:
+                    coarse = []
+                    break
+                coarse += [(t, _proto_units(t, vocab, units)) for t in their]
+                continue
             if len(u) == 1:
                 coarse.append((_proto_one(x), u))
                 continue
@@ -8751,7 +9187,9 @@ def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tu
                 if isinstance(t, tuple):
                     denies[t[0]] = t[1]
                     t = t[0]
-                coarse.append((t, _proto_units(t, vocab, units)))
+                elif isinstance(t, _Most):
+                    most.add(str(t))
+                coarse.append((str(t), _proto_units(t, vocab, units)))
         if len(coarse) > 1 and all(len(x) == 1 for _t, x in coarse):
             texts = _unelide([t for t, _u in coarse])
             pairs = [(t, x) for t, (_t, x) in zip(texts, coarse)]
@@ -8780,29 +9218,36 @@ def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tu
             if lead:
                 x, lead = f"{lead} {x}", ""
             pieces.append([x, u, a])
-        if _proto("C") == "split":  # a piece naming more units is split by the forms in turn
-            more: list = []
-            for x, u, a in pieces:
-                sub = _proto_split(x, u) if len(u) > 1 else None
-                if sub is None:
-                    more.append([x, u, a])
-                    continue
-                for t in sub:
-                    if isinstance(t, tuple):
-                        denies[t[0]] = t[1]
-                        t = t[0]
-                    more.append([t, _proto_units(t, vocab, units), a])
-            pieces = [[_proto_one(x), u, a] for x, u, a in more]
+        more: list = []
+        for x, u, a in pieces:
+            sub = _proto_split(x, u) if len(u) > 1 else None
+            if sub is None:
+                more.append([x, u, a])
+                continue
+            for t in sub:
+                if isinstance(t, tuple):
+                    denies[t[0]] = t[1]
+                    t = t[0]
+                more.append([t, _proto_units(t, vocab, units), a])
+        pieces = [[_proto_one(x), u, a] for x, u, a in more]
         if len(pieces) < 2 or any(len(u) != 1 for _x, u, _a in pieces):
             return "unsupported-claim", fail
         texts = _unelide([x for x, _u, _a in pieces])
         pairs = [(t, u) for t, (_x, u, _a) in zip(texts, pieces)]
     seen: set = set()
+    most_n, most_ok = 0, 0  # (C=split) "most of": its clauses, and those supported
+    most_why: list = []
+    if {next(iter(u)) for _t, u in pairs} != set(named):
+        return "unsupported-claim", fail  # every unit it names has a clause of its own
     for text, u in pairs:
         unit = next(iter(u))
-        if unit in seen or not _proto_has_claim(text, vocab):
+        # (round 11) a unit may have more than one clause ("A and B have flat valves, and their
+        # biases are +3.0 and +0.0 respectively"), each its own
+        if (unit, text) in seen or not _proto_has_claim(text, vocab):
             return "unsupported-claim", fail
-        seen.add(unit)
+        seen.add((unit, text))
+        if text in most:
+            most_n += 1
         others = named - {unit}
         # its unit's facts: about it, or about no unit and naming it and none of the others
         # (a rule run's "AHU-2: fault" is no fact about AHU-1); a fact about no unit that names
@@ -8833,10 +9278,96 @@ def _proto_c(vis: str, mine: list, own: list, vocab, num, context, claims) -> tu
                 return "unsupported-claim", [f"(clause about {unit}) a cited fact states it of it"]
             if r == "uncited-number" or any("the cited facts say" in x for x in w):
                 continue
+            if any("no cited fact gives a coverage of 100%" in x for x in w) and any(
+                _PROTO_PART_COVERAGE.search(fc.said) for fc in claims(ids)
+            ):
+                continue  # (round 11) "full coverage, unlike B's": B's fact gives less
         r, w = _plain_problems(text, claims(ids), ids, vocab, num)
+        if r and text in most:
+            most_why.append(f"(clause about {unit}) " + "; ".join(w))
+            continue
+        if text in most:
+            most_ok += 1
         if r:
             return r, [f"(clause about {unit}) " + "; ".join(w)]
+    if most_n and most_ok * 2 <= most_n:
+        return "unsupported-claim", [
+            f"'most of': {most_ok} of the {most_n} units' clauses are supported, not more than "
+            "half; " + "; ".join(most_why)
+        ]
     return "", []
+
+
+def _proto_cited_items(vis: str, vocab, units: set) -> list | None:
+    """(C, round 11) A sentence whose items each carry their own citation ("The suspect ones
+    are the AHU-1 OA damper [F2], the AHU-2 OA damper [F3] and the AHU-1 supply air temp
+    [F4]"): one clause per item, the lead before the first item said with each ("The suspect
+    ones are the AHU-2 OA damper"); None when the citations are not between the items."""
+    cites = list(_CITES.finditer(vis))
+    if len(cites) < 2:
+        return None
+    chunks, at = [], 0
+    for m in cites:
+        chunk = vis[at : m.start()]
+        at = m.end()
+        if chunk.strip(" \t,;"):
+            chunks.append(chunk)
+    if vis[at:].strip(" \t.;,!*_)"):
+        return None  # words after the last citation: not a list of cited items
+    if len(chunks) < 2:
+        return None
+    first = chunks[0]
+    u0 = _proto_units(first, vocab, units)
+    if len(u0) != 1:
+        return None
+    hit = re.search(_proto_unit_rx(first, u0), first, re.I)
+    if hit is None:
+        return None
+    lead = first[: hit.start()]
+    lead = re.sub(r"(?i)\bthe\s*$", "", lead).rstrip()
+    out = [(" ".join(first.split()), u0)]
+    for chunk in chunks[1:]:
+        item = re.sub(r"(?i)^[\s,;]*(?:and\s+|&\s*|or\s+)?", "", chunk).strip()
+        u = _proto_units(item, vocab, units)
+        if len(u) != 1 or not item:
+            return None
+        word = re.match(r"\w+", item)
+        if re.match(_proto_unit_rx(item, u) + r"|the\b", item, re.I):
+            if lead:  # the lead said with the item ("..., the AHU-2 OA damper")
+                item = f"{lead} {item}"
+        elif word and re.search(rf"\b{re.escape(word.group(0))}\s*$", lead, re.I):
+            # "... on AHU-1 [L1] and on AHU-2 [L3]": the lead up to its own "on"
+            item = f"{lead[: -len(word.group(0))].rstrip()} {item}"
+        else:
+            return None  # not an item of the same list: the forms read it
+        out.append((" ".join(item.split()), u))
+    return out
+
+
+#: (C=split) a coverage below 100% in a fact's text
+_PROTO_PART_COVERAGE = re.compile(r"coverage\s+(?:of\s+)?(?!100(?:\.0+)?\s*%)\d+(?:\.\d+)?\s*%")
+
+
+def _proto_their(piece: str, before: list) -> list | None:
+    """(C=split) "their "supply_air_temp" biases are +3.0 and +0.0 respectively", said after a
+    set of the units ``before`` (in order): one clause per unit, "A's supply_air_temp bias is
+    +3.0"; None when it is not that form or the items are not one per unit."""
+    m = re.match(
+        r"^\W*their\s+(?P<noun>.+?)\s+(?:are|were|read)\s+(?P<items>.+?)\s*,?\s+respectively\W*$",
+        piece,
+        re.I,
+    )
+    if m is None or len(before) < 2:
+        return None
+    items = [x.strip() for x in re.split(r"\s*,\s*(?:and\s+)?|\s+(?:and|&)\s+", m.group("items"))]
+    items = [x for x in items if x]
+    if len(items) != len(before):
+        return None
+    words = m.group("noun").replace('"', "").split()
+    last = words[-1]
+    last = last[:-2] if last.endswith("ses") else last[:-1] if last.endswith("s") else last
+    noun = " ".join([*words[:-1], last])
+    return [f"{n}'s {noun} is {x}" for n, x in zip(before, items)]
 
 
 # ----- A: default-deny on parse coverage
