@@ -10,6 +10,7 @@ import datetime as _dt
 import enum
 import math
 import os
+import re
 from functools import lru_cache
 
 import numpy as np
@@ -677,13 +678,67 @@ def summary_text(equip: str, summary: str, *, own: bool = False) -> str:
 _NULLS_NAMED = 6
 
 
+#: the most energy or cost totals a finding fact names (the rest are counted)
+_TOTALS_NAMED = 4
+#: a metric's last word that makes it an energy or cost total, and that total's unit
+_TOTAL_UNITS = {
+    "kbtu": "kBtu",
+    "mmbtu": "MMBtu",
+    "btu": "Btu",
+    "kwh": "kWh",
+    "mwh": "MWh",
+    "therm": "therms",
+    "therms": "therms",
+    "usd": "$",
+}
+
+
+def _total_figure(v: float, unit: str) -> str:
+    """A total as a fact writes it: whole, with thousands separators, from 100 up (``6,182``),
+    else to 2 places (``14.25``); a dollar figure with its sign before the ``$``."""
+    size = f"{abs(v):,.0f}" if abs(v) >= 100 else f"{round(abs(v), 2):g}"
+    sign = "-" if v < 0 and size.strip("0.,") else ""
+    return f"{sign}${size}" if unit == "$" else f"{sign}{size} {unit}"
+
+
+def _metric_totals(metrics: dict) -> str:
+    """The energy and cost totals of a finding's metrics (0112-cite14), which hosts quote from
+    the JSON: ``totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu, ...``. Each
+    metric whose last word is an energy or cost unit (not a rate: no ``per``), with its other
+    words, so a sentence must say which total it gives ("cooling", not "heating"). At most
+    :data:`_TOTALS_NAMED`, then "and N more". Empty when there is none."""
+    said = []
+    for k in sorted(metrics):
+        v = metrics[k]
+        words = str(k).split("_")
+        unit = _TOTAL_UNITS.get(words[-1])
+        if (
+            unit is None
+            or "per" in words
+            or len(words) < 2
+            or str(k).startswith("_")
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float, np.integer, np.floating))
+            or not math.isfinite(float(v))
+        ):
+            continue
+        said.append(f"{k} ({' '.join(words[:-1])}) {_total_figure(float(v), unit)}")
+    if not said:
+        return ""
+    more = len(said) - _TOTALS_NAMED
+    return "totals: " + ", ".join(said[:_TOTALS_NAMED]) + (f" and {more} more" if more > 0 else "")
+
+
 def _metric_flags(metrics: dict) -> str:
     """What a finding's metrics say beyond its summary that hosts state from the JSON
-    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``) and the
-    metrics it left null (``null: oa_cost_excess_cool_kbtu, ...``). Empty when it
-    has none."""
+    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), its
+    energy and cost totals (:func:`_metric_totals`, 0112-cite14) and the metrics it left null
+    (``null: oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
     keys = [k for k in sorted(metrics) if not k.startswith("_")]
     parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
+    totals = _metric_totals(metrics)
+    if totals:
+        parts.append(totals)
     nulls = [k for k in keys if metrics[k] is None]
     if nulls:
         more = len(nulls) - _NULLS_NAMED
@@ -851,6 +906,70 @@ def skipped_fact(fact_id: str, skips: list, facility_id: str) -> dict | None:
         "text": f"{len(rules)} rule(s) skipped for missing inputs on {facility_id}, so not "
         f"judged: {'; '.join(named)}{more}",
     }
+
+
+#: the most parameter conditions a rule's inputs fact names (the rest are counted)
+_CONDITIONS_NAMED = 4
+#: a parameter note's sentence that says when its parameter applies ("Needs CHW flow and
+#: temperatures.", "Used only when a fan speed is trended.")
+_CONDITION = re.compile(r"(?:Needs|Requires|Used only (?:when|with|if)|Applies only|Only with)\b")
+#: a sentence that denies (left out: a fact's "not" or "no" would support a sentence denying
+#: something of the data, as round 13 measured for "not computed")
+_DENIES = re.compile(r"\b(?:no|not|never|none|nothing|without|unless|cannot)\b|n't\b", re.I)
+
+
+def _listed(items: list, last: str = "and") -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {last} {items[-1]}"
+
+
+def rule_inputs_fact(
+    fact_id: str, rule: str, rule_obj, params: list, facility_id=None, row=None
+) -> dict | None:
+    """The fact of what ``rule`` reads and when its parameters apply, kind ``rule_inputs``
+    (0112-cite14; None when it says nothing): the inputs it needs (``roles_required``, each
+    ``roles_any_of`` group), those it reads when mapped (``roles_optional``) and the conditions
+    its parameter notes give in a positive sentence (``low_load_pct: needs CHW flow and
+    temperatures``). ``params``: the rule's documented parameters (``name``, ``note``)."""
+    from ..model.entities import roles_any_of
+
+    def slug(r) -> str:
+        return str(getattr(r, "value", r))
+
+    need = [slug(r) for r in getattr(rule_obj, "roles_required", ()) or ()]
+    read = [slug(r) for r in getattr(rule_obj, "roles_optional", ()) or () if slug(r) not in need]
+    groups = [[slug(r) for r in g] for g in roles_any_of(rule_obj)] if rule_obj is not None else []
+    conds: dict = {}
+    for p in params or ():
+        for sent in re.split(r"(?<=[.;])\s+", str(p.get("note") or "")):
+            sent = " ".join(sent.split()).rstrip(" .;")
+            if _CONDITION.match(sent) and not _DENIES.search(sent):
+                conds.setdefault(prose(sent[0].lower() + sent[1:]), []).append(str(p["name"]))
+    parts = []
+    if need:
+        parts.append("needs " + _listed(need))
+    parts += ["needs one of " + _listed(g, "or") for g in groups if g]
+    if read:
+        parts.append("reads " + _listed(read) + " when mapped")
+    said = [f"{', '.join(names)}: {c}" for c, names in conds.items()]
+    if said:
+        more = len(said) - _CONDITIONS_NAMED
+        parts.append(
+            "parameter conditions: "
+            + "; ".join(said[:_CONDITIONS_NAMED])
+            + (f"; and {more} more" if more > 0 else "")
+        )
+    if not parts:
+        return None
+    fact: dict = {
+        "id": fact_id,
+        "kind": "rule_inputs",
+        "value": "inputs",  # a word, not a figure a sentence could match
+        "rule": rule,
+        "text": f"{rule} inputs: " + "; ".join(parts),
+    }
+    if row is not None:
+        fact["subject"] = subject(facility_id, row["equip"], finding=row["finding_id"])
+    return fact
 
 
 def parameter_basis_fact(fact_id: str, rule: str, params: list, row: dict, facility_id=None):

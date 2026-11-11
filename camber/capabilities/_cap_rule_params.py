@@ -9,7 +9,7 @@ import re
 from functools import lru_cache
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import cite, jsonable
+from ._common import cite, jsonable, rule_inputs_fact
 from ._page import OFFSET, page
 from ._sanitize import plain
 
@@ -214,8 +214,29 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
         )
         if named and i - 1 <= 10:
             text.append(cite(facts[-1]))
+    if detail:  # 0112-cite14: what each rule reads and when its parameters apply
+        for k, r in enumerate(rows[:200], start=1):
+            inputs = rule_inputs_fact(
+                f"I{k}@rule_params", r["rule"], _rule_obj(r["rule"]), r["params"]
+            )
+            if inputs is not None:
+                facts.append(inputs)
     data = {"count": matched, "rules": rows}
     return CapabilityResult(data=data, text=" ".join(text), facts=facts)
+
+
+def _rule_obj(name: str):
+    """A built-in rule at its defaults (what it reads), or None (a drift detector, a rule that
+    cannot be built without its site inputs)."""
+    from ..rules.builtin import rule_factories
+
+    made = rule_factories().get(name)
+    if made is None:
+        return None
+    try:
+        return made[0](**made[1])
+    except Exception:  # noqa: BLE001 - a rule's inputs help a host cite, never fail the call
+        return None
 
 
 CAPABILITIES = (

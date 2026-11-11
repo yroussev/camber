@@ -328,6 +328,14 @@ def _reference_fact(fact_id: str, r: dict, fid: str | None = None) -> dict:
             f"; bias {with_unit(b, r['unit'], '+.1f')} is the median of the point minus the "
             f"reference, so the point reads {reads} against it"
         )
+        if r["rmse"] is not None and r["unit"]:
+            # 0112-cite14: the RMSE in the point's unit too, listed with the bias so a figure
+            # says which of the two it is
+            sign = (
+                f"; bias {with_unit(b, r['unit'], '+.1f')}, RMSE "
+                f"{with_unit(round(r['rmse'], 1), r['unit'], '.1f')}: the bias is the median of "
+                f"the point minus the reference, so the point reads {reads} against it"
+            )
     span = (
         f" from {r['overlap_start']} to {r['overlap_end']}"
         if r["overlap_start"] and r["overlap_end"]

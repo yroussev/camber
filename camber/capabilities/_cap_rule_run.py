@@ -46,6 +46,7 @@ from ._common import (
     reference_findings,
     reference_notes_banner,
     role_unit,
+    rule_inputs_fact,
     rule_names,
     run,
     severity_counts,
@@ -582,6 +583,16 @@ def _no_spans_note(rule_obj, ev, failed: bool) -> str:
     )
 
 
+def _param_notes(rule: str) -> list:
+    """``rule``'s documented parameters with their notes (``[]`` for an undocumented rule)."""
+    from ..rules.param_docs import describe
+
+    try:
+        return describe(rule)["params"]
+    except KeyError:
+        return []
+
+
 def _parameters(rule: str, entry_params: dict, rule_obj=None) -> list:
     from ..rules.param_docs import describe
 
@@ -955,6 +966,11 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
     basis = parameter_basis_fact("B1@finding_detail", rule, params, row, fid)
     if basis is not None:
         facts.append(basis)
+    # 0112-cite14: what the rule reads and when its parameters apply, which hosts quoted from
+    # rule_params' notes with no fact stating it
+    inputs = rule_inputs_fact("I1@finding_detail", rule, rule_obj, _param_notes(rule), fid, row)
+    if inputs is not None:
+        facts.append(inputs)
     data = {
         "facility_id": fid,
         "finding": row,
