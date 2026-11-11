@@ -199,6 +199,20 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   an input must cite a fact that says it is needed; "followed by" / "preceded by" need both
   things' dated facts. Dates without a year or with the month named ("5/12", "12 May 2025",
   "11-08 03:00"), "13 h" and "starts 0.1 times/day" are read as they mean.
+- **Round 15.** A finding's fact lists its thresholds and limits (`thresholds: warn
+  threshold 40% (warn_pct_threshold), warn gap floor 1 °F (warn_gap_floor_f)`);
+  `dataset_entry` issues a fact of what the dataset is good for (`F3@dataset_entry`); the
+  `sensor_trust` summary says how its view reads the points (`report view: operating-state-aware,
+  duct points judged with the fan on ...`). A figure compared with a bound in one sentence
+  ("0.4% is above the 30% tier") must stand in that relation; a position in a band ("outside
+  the stated band", "within its uncertainty") needs a cited estimate ± uncertainty and must
+  agree with it; "positive" / "negative" must be the figure's sign; "reads under its reference"
+  is its low. What CAMBER itself does, said of a view, rule, check, the tool or the config ("the
+  report view, which judges points in their operating state"), and where a figure came from,
+  must be in a cited fact's words; a time zone needs a fact that gives one; a threshold said
+  with another threshold's words fails; "both faults are on AHU-1" needs every cited fault
+  there; a denial a fact makes of a counted part ("5 saving(s) ... not a verified saving") is
+  not one of all of them.
 - **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
   that says something of the lines under it (a verdict, negation, quantifier, direction or rank
   word: "**What is not fine**", "## Points that never move") and a short label or remark that

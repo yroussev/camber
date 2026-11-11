@@ -580,6 +580,32 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   with 0 escapes. A rule said to need an input only one of its parameters needs is still kept
   (`gap:needs-scope`), and a total quoted to the JSON's 3 places is stripped
   (`gap:total-precision`): both strict-xfail corpus entries.
+- **Facts state a finding's thresholds, a dataset's uses and a trust view's reading (round
+  15).** A finding's fact lists its thresholds and limits from its metrics, each with its words
+  just before its figure (`thresholds: warn threshold 40% (warn_pct_threshold), warn gap floor
+  1 °F (warn_gap_floor_f)`; a count or share against one, such as `n_above_limit`, is not
+  listed); `dataset_entry` issues `F3@dataset_entry`, what the entry says the dataset is good
+  for; the `sensor_trust` summary says how its view reads the points (`rules view: as the rule
+  runner reads its inputs`, `report view: operating-state-aware, duct points judged with the fan
+  on and plant points while their equipment runs`). On the real-host drafts these were claims
+  true in the tool JSON or the tool description that no fact stated.
+- **`check_citations` checks relations, bands, signs and what CAMBER does (round 15).** A figure
+  compared with another in one sentence ("CV(RMSE) 0.4% is above the 30% tier", "trust 0.70,
+  below the floor 0.5", "38.1% > 30%") must stand in that relation, "not" turning it round; a
+  position in a band ("outside the stated band", "within its uncertainty", "the uncertainty is
+  larger than the saving", "indistinguishable from zero") needs a cited estimate ± uncertainty
+  and must agree with it; "positive" / "negative" said of a saving, bias, drift or slope must be
+  the cited figure's sign; "reads under / over its reference" is its low / high. What CAMBER
+  itself does, said of a view, rule, check, the tool, the model or the config ("the report view,
+  which judges points in their operating state", "the tool defaulted to the forecast method"),
+  and where a figure came from ("came from the trended supply airflow"), must be in a cited
+  fact's words; a time zone or clock ("the site wall clock", "UTC") needs a fact that gives one;
+  a figure said as one threshold with another's words ("the fault threshold is 40%" of "warn
+  threshold 40%") fails; "both faults are on AHU-1" needs every cited fault there; and a denial a
+  fact makes of a counted part ("5 saving(s) ... not a verified saving") supports no "none of the
+  savings". Eight first-corpus strict-xfail entries are now met and promoted; the generated cases
+  add 797 with 0 escapes. Open, as strict-xfail corpus entries: `gap:compare-unstated`,
+  `gap:set-scope-unlisted` and `gap:method-paraphrase`.
 - **`check_citations` reports text it does not read as `not_judged`, never as a pass
   (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
   quantifier, direction or rank word) and a short label or remark that cites nothing ("That

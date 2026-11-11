@@ -1001,7 +1001,16 @@ two cited ids could take; "AHU No. 1" (the sentence ends at "No."); a verdict on
 worded with a check word ("the claimed 23.8% is supported by the measured saving": judgment,
 give it after the checked text); a total quoted to more places than its fact gives ("6,182.372
 kBtu" of "6,182 kBtu", round 14, `gap:total-precision`); "It was followed by the 16 h gap" whose
-"it" is another sentence's (round 14: an order needs both things' dated facts cited).
+"it" is another sentence's (round 14: an order needs both things' dated facts cited); a method
+said in other words than its fact's ("gated on fan status" of `fan_gated true`, round 15,
+`gap:method-paraphrase`: every word of what CAMBER is said to do must be a cited fact's). And
+these pass and can be wrong (round 15): two labelled figures of one fact compared with no figure
+given ("the CHW valve was open less than the HHW valve" of "CHW 85%, HHW 27%",
+`gap:compare-unstated`); "each AHU" or "every unit" said of a set the cited facts list only in
+part (`gap:set-scope-unlisted`); a comparison of a figure with a bound that the sentence words
+without a verb or comma between ("3 °F above the setpoint" is read as a difference); a band
+position said of a figure from another sentence ("That is outside the band" is read against the
+cited estimate itself).
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier
