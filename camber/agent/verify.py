@@ -2751,11 +2751,31 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
                 if clause[x] != clause[k]:
                     break
                 fig = q_at.get(x)
+                if fig is not None and fig.sign == "±":
+                    fig = None  # (0112-cite15) "its ± 125 band": the band, not the estimate
+                    continue
                 if fig is not None:
                     d = "up" if fig.sign == "-" and d == "down" else d
                     if not fact and not (k and words[k - 1] in ("negative", "minus")):
                         p.signed_dirs.append((x, k))  # its sign gives it, item by item (#340)
                     break
+            if fig is None and d == "down":
+                # (0112-cite15) "its avoided energy is negative": the sign said after it
+                later = [words[x] for x in range(k + 1, min(n, k + 8)) if clause[x] == clause[k]]
+                if "negative" in later:
+                    d = "up"
+            if (
+                fig is None
+                and d == "down"
+                and w.startswith("avoid")
+                and nxt == "energy"
+                and k
+                and (
+                    words[k - 1] in ("its", "the", "their", "this", "that", "of", "whose")
+                    or (words[k - 1] == "s" and k > 1 and toks[k - 2][1] in "'’")
+                )
+            ):
+                d = "down?"  # (0112-cite15) "its avoided energy": the measure named, as a saving
             if (
                 fig is None
                 and d == "down"
@@ -2813,6 +2833,21 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
         ):
             # "reads warm", "reads cold": a reading's direction in other words (#341)
             pol = {"warm": "high", "hot": "high", "cold": "low", "cool": "low"}.get(w)
+        if not fact and w in ("above", "over", "below", "under") and k:
+            # (0112-cite15) "reads under its reference", "reads 3.0 °F below it": a reading's
+            # high or low, with only its figure and unit between
+            x = k - 1
+            while x >= 0 and (toks[x][0] in ("num", "sym") or words[x] in _UNITS):
+                x -= 1
+            if (
+                x >= 0
+                and words[x] in ("read", "reads", "reading", "biased")
+                and (
+                    "referenc" in {_stem(v) for v in words[k + 1 : k + 5]}
+                    or words[k + 1 : k + 2] in (["it"], ["them"])
+                )
+            ):
+                pol = "high" if w in ("above", "over") else "low"
         if (
             pol is None
             and not fact
@@ -5710,6 +5745,623 @@ def _input_problems(vis: str, facts: list) -> list:
     return why
 
 
+# --------------------------------------------------------------------------- (0112-cite15)
+# A figure compared with a bound, a position in a band, a sign said in a word, and what CAMBER
+# itself does: each must agree with the figures and the words of the cited facts.
+
+#: a figure compared with another in one clause ("0.4% is above the 30% limit", "trust 0.70,
+#: below the floor 0.5", "38.1% exceeds 30%", "R2 0.62 < 0.75"): +1 more, -1 less
+_REL_PREP = {
+    "above": 1,
+    "over": 1,
+    "beyond": 1,
+    "past": 1,
+    "below": -1,
+    "under": -1,
+    "beneath": -1,
+}
+_REL_VERB = {
+    **_words("exceeds exceed exceeded exceeding tops topped surpasses surpassed", 1),
+    ">": 1,
+    "≥": 1,
+    "<": -1,
+    "≤": -1,
+}
+_REL_THAN = {
+    **_words("greater higher larger more bigger wider", 1),
+    **_words("less lower smaller fewer narrower", -1),
+}
+#: what may stand between a figure and its comparison ("0.4% is well below", "0.70, which is
+#: above"): a verb of being or reading, an adverb of degree, a comma or an opening bracket
+_REL_COPULA = frozenset(
+    "is was are were be been being sits sat lies lay falls fell stays stayed remains remained "
+    "comes came , ( — – which".split()
+)
+_REL_LINK = _REL_COPULA | frozenset(
+    "does do did still well far just slightly comfortably safely clearly much way significantly "
+    "substantially considerably also now already thus so therefore it".split()
+)
+#: the units of a measure (not of a count of things): a figure compared with a bare figure
+_MEASURES = frozenset(_UNITS.values())
+#: what makes the figure after it a count of things ("all 12", "these 5")
+_REL_COUNTED = frozenset("all each both only these those none every".split())
+#: what ends the words between a comparison and the figure it compares with
+_REL_STOP = frozenset(
+    "and or but when while because if for during since until whereas so then than at in on "
+    "by from to".split()
+)
+
+
+def _unit_tok(t) -> bool:
+    """A token of a figure's unit ("%", "°", "F", "kWh", "hours")."""
+    return (t[0] == "sym" and t[1] in "%°$") or (
+        t[0] == "word" and (t[1].lower() in _UNITS or t[1].lower() in _DEGREE)
+    )
+
+
+def _relation_problems(p: _Parsed) -> tuple:
+    """(0112-cite15) ``(why, held)``: a figure the sentence compares with another figure of its
+    own ("CV(RMSE) 0.4% is above the 30% limit", "trust 0.70 is below the floor 0.5", "38.1% >
+    30%") must stand in that relation to it. A figure right before "above" or "below" with
+    nothing between ("3 °F above the setpoint", "50 hours above 65 °F") is a difference or a
+    condition, not compared, and so is a share ("66% of run hours below 40%") or a count of
+    things against a measure ("11 points are below the 0.5 floor"); "not" turns the comparison
+    round. ``held``: the tokens of the "above" / "below" whose comparison holds, which the
+    figures settle (a cited fact's own "below" is not its opposite)."""
+    toks, n = p.toks, len(p.toks)
+    at = {q.at: q for q in p.qty}
+    why: list = []
+    held: set = set()
+    for c in range(1, n):
+        kind, tok, _a, _b = toks[c]
+        w = tok.lower()
+        if w in _REL_PREP and kind == "word":
+            how, right, linked = _REL_PREP[w], c + 1, True
+        elif w in _REL_VERB:
+            how, right, linked = _REL_VERB[w], c + 1, False
+        elif kind == "word" and w in _REL_THAN and c + 1 < n and toks[c + 1][1].lower() == "than":
+            how, right, linked = _REL_THAN[w], c + 2, True
+        else:
+            continue
+        if toks[c - 1][1].lower() in ("or", "and", "at", "to", "from", "the"):
+            continue  # "40% or above", "at or below", "from below": a bound, not a comparison
+        x, neg, link, appositive = c - 1, False, False, False
+        while x >= 0 and (
+            toks[x][1].lower() in _REL_LINK or (toks[x][0] == "word" and _negates(toks[x][1]))
+        ):
+            neg = neg or _negates(toks[x][1].lower())
+            link = link or toks[x][1].lower() in _REL_COPULA
+            appositive = appositive or toks[x][1].lower() in (",", "(", "—", "–", "which")
+            x -= 1
+        if linked and not link:
+            continue
+        units, x0 = 0, x
+        while x >= 0 and toks[x][0] != "num" and _unit_tok(toks[x]) and units < 2:
+            x, units = x - 1, units + 1
+        if x not in at and link:
+            # "0.4% CV(RMSE) is greater than ...": a measure's name between it and its verb
+            x, gap = x0, 0
+            while (
+                x >= 0
+                and toks[x][0] != "num"
+                and gap < 6
+                and (toks[x][0] == "word" or toks[x][1] in "()'’")
+            ):
+                x, gap = x - 1, gap + 1
+            while x >= 0 and toks[x][0] != "num" and _unit_tok(toks[x]):
+                x -= 1
+            if x in at and at[x].unit and at[x].unit not in _MEASURES:
+                x = -1  # "11 points ... are below": a count of things, not a measure
+        left = at.get(x)
+        if left is None or left.sign == "±" or left.year:
+            continue
+        if x and toks[x - 1][1].lower() in _REL_COUNTED:
+            continue  # "all 12 are below the trust floor 0.5": a count of things, not a measure
+        if left.base and kind == "word" and w in _REL_PREP and not appositive:
+            continue  # "66% of run hours were below 40%": the hours are below, not the share
+        y, gap = right, 0
+        while (
+            y < n
+            and y not in at
+            and gap < 6
+            and (toks[y][0] == "word" or toks[y][1] in "()")
+            and toks[y][1].lower() not in _REL_STOP
+            and not _negates(toks[y][1].lower())
+        ):
+            y, gap = y + 1, gap + 1
+        other = at.get(y)
+        if other is None or other.sign == "±" or other.year or other.base:
+            continue
+        if left.unit != other.unit and not (
+            (left.unit or other.unit) in _MEASURES and not (left.unit and other.unit)
+        ):
+            continue  # another unit, or a count of things against a measure
+        lv = -left.value if left.sign == "-" else left.value
+        rv = -other.value if other.sign == "-" else other.value
+        holds = lv == rv or (lv > rv) == (how > 0)
+        if neg:
+            holds = lv == rv or not holds
+        if not holds:
+            said = _span_text(p, x, y)
+            why.append(
+                f"{' '.join(said.split())!r}: the figures it compares state the opposite "
+                f"({left.show()} against {other.show()})"
+            )
+        else:
+            held.add(c)
+    return why, held
+
+
+#: (0112-cite15) a position said in a band: "inside its ± 125 band", "within the uncertainty",
+#: "outside the stated band", "within a margin of error of ± 61,282", "within the noise"
+_BAND_NOUN = (
+    r"(?:(?:uncertainty|confidence|error|prediction|savings?)\s+(?:band|interval|range|bars?)|"
+    r"uncertainty|band|margin(?:\s+of\s+error)?|error\s+(?:bars?|margin)|noise|"
+    r"±\s*[\d,]+(?:\.\d+)?)"
+)
+_BAND_AT = re.compile(
+    r"\b(?P<neg>(?:not|never)\s+(?:\w+\s+)?|n['’]t\s+(?:\w+\s+)?)?"
+    r"(?P<pos>inside|within|outside|beyond|in|out\s+of)\s+"
+    r"(?:(?:the|its|their|this|that|a|an|stated|reported|given|own|whole|full|quoted|wide|"
+    r"narrow|\d+\s*%|of)\s+){0,4}"
+    rf"(?P<noun>{_BAND_NOUN})(?![\w-])",
+    re.I,
+)
+#: "the uncertainty is larger than the saving" (inside), "the saving exceeds its band" (outside)
+_BAND_CMP = re.compile(
+    r"\b(?P<a>uncertainty|band|margin|saving|savings|avoided\s+energy|estimate|effect|change)\b"
+    r"[^.;:\[]{0,40}?\b(?P<cmp>larger|bigger|greater|wider|smaller|less|narrower|exceeds?|"
+    r"exceeded)\b(?:\s+than)?[^.;:\[]{0,25}?\b(?P<b>uncertainty|band|margin|saving|savings|"
+    r"avoided\s+energy|estimate|effect|change)\b",
+    re.I,
+)
+#: "distinguishable from zero" (outside), "indistinguishable from zero" (inside)
+_BAND_ZERO = re.compile(
+    r"\b(?P<neg>(?:not|n['’]t|hardly|barely)\s+)?(?P<w>in)?distinguishable\s+from\s+(?:zero|0|"
+    r"nothing|no\s+(?:saving|change))\b",
+    re.I,
+)
+#: a fact's estimate and its band: "avoided energy 10,399 (10.0%) ± 161 at 90%"
+_FACT_BAND = re.compile(
+    r"(?P<x>[-+]?\d[\d,]*(?:\.\d+)?)(?:\s*\((?P<pct>[-+]?\d+(?:\.\d+)?)%\))?\s*±\s*"
+    r"(?P<u>\d[\d,]*(?:\.\d+)?)(?:\s*\((?P<upct>\d+(?:\.\d+)?)%\))?"
+    r"(?:\s+at\s+(?P<conf>\d+(?:\.\d+)?)%)?"
+)
+_BAND_FIG = re.compile(r"(?<![\w.\-@/])(?P<s>[-+−])?(?P<v>\d[\d,]*(?:\.\d+)?)(?P<pc>\s*%)?")
+_BAND_STRONG = frozenset(("band", "uncertainty", "margin", "noise", "interval", "bar", "bars"))
+
+
+def _dec(s: str) -> Decimal:
+    return Decimal(s.replace(",", "").replace("−", "-"))
+
+
+def _band_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) A position said in a band ("outside the stated band", "within its
+    uncertainty", "the uncertainty is larger than the saving", "indistinguishable from zero")
+    needs a cited fact that gives the band (an estimate ± its uncertainty), and must agree with
+    it: a figure of the sentence's own that is not the band's (a change it supposes) is inside
+    when it lies within the estimate ± the uncertainty; with none, it is the estimate that is
+    inside when the uncertainty is at least its size (zero lies in the band)."""
+    text = _CITES.sub(" ", vis)
+    said: list = []  # (as written, inside?)
+    for m in _BAND_AT.finditer(text):
+        noun = m.group("noun").lower()
+        if m.group("pos").lower() == "in" and not re.search(r"\b(?:band|interval)\b", noun):
+            continue
+        if noun.startswith("±") or set(re.findall(r"[a-z]+", noun)) & _BAND_STRONG:
+            inside = m.group("pos").lower() in ("inside", "within", "in")
+            said.append((m.group(0), inside != bool(m.group("neg"))))
+    for m in _BAND_CMP.finditer(text):
+        a, b = m.group("a").lower(), m.group("b").lower()
+        band_a = a in ("uncertainty", "band", "margin")
+        band_b = b in ("uncertainty", "band", "margin")
+        if band_a == band_b:
+            continue
+        more = m.group("cmp").lower() in ("larger", "bigger", "greater", "wider", "exceed")
+        more = more or m.group("cmp").lower() in ("exceeds", "exceeded")
+        said.append((m.group(0), more == band_a))  # the band larger: the estimate inside it
+    for m in _BAND_ZERO.finditer(text):
+        inside = bool(m.group("w")) != bool(m.group("neg"))
+        said.append((m.group(0), inside))
+    if not said:
+        return []
+    bands = []
+    for fc in facts:
+        for m in _FACT_BAND.finditer(fc.said):
+            try:
+                bands.append(
+                    (
+                        _dec(m.group("x")),
+                        _dec(m.group("u")),
+                        {
+                            abs(_dec(v))
+                            for v in (m.group("x"), m.group("pct"), m.group("u"), m.group("upct"))
+                            if v
+                        }
+                        | ({_dec(m.group("conf"))} if m.group("conf") else set()),
+                    )
+                )
+            except InvalidOperation:
+                continue
+    why: list = []
+    if not bands:
+        for words, _inside in said[:1]:
+            why.append(
+                f"{' '.join(words.split())!r}: no cited fact gives the band (an estimate ± its "
+                "uncertainty) to place it in"
+            )
+        return why
+    own = set().union(*(b[2] for b in bands))
+    figs = []
+    for m in _BAND_FIG.finditer(_other_dates(text)):
+        if m.group("pc"):
+            continue  # a share ("a 5% rise") is not the energy the band is in
+        try:
+            v = _dec(m.group("v"))
+        except InvalidOperation:
+            continue
+        if abs(v) in own or (len(m.group("v")) == 4 and 1900 <= v <= 2100):
+            continue
+        figs.append(-v if (m.group("s") or "") in "-−" and m.group("s") else v)
+    if re.search(r"\bzero\b", text, re.I):
+        figs.append(Decimal(0))
+    for words, inside in said:
+        for x, u, _own in bands:
+            if figs:
+                ok = all((abs(f - x) <= u) == inside for f in figs)
+            else:
+                ok = (abs(x) <= u) == inside
+            if not ok:
+                why.append(
+                    f"{' '.join(words.split())!r}: the cited band ({x} ± {u}) places it "
+                    f"{'outside' if inside else 'inside'}"
+                )
+                break
+    return why
+
+
+#: (0112-cite15) a finding fact's thresholds: "thresholds: warn gap floor 1 °F
+#: (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)"
+_FACT_THRESHOLD = re.compile(
+    r"(?P<label>[a-z][a-z ]*?) (?P<v>-?\d+(?:\.\d+)?)\s?(?P<u>%|°f|°c|kw|gpm|psi|cfm|inwc|h|min)?"
+    r" \((?P<k>[a-z0-9_]+)\)"
+)
+#: a sentence's figure said with the words of a threshold ("the 40% warn threshold", "the fault
+#: threshold is 40%"): the figure, then the words around it in its clause
+_SAID_FIG = re.compile(
+    r"(?<![\w.\-@])(?P<v>-?\d+(?:\.\d+)?)\s?(?P<u>%|°\s?[fc]\b|kw\b|gpm\b|psi\b|cfm\b|"
+    r"inwc\b|h\b|hours?\b|min\b)?",
+    re.I,
+)
+_THRESHOLD_KIND = frozenset(("threshold", "thresholds", "floor", "limit", "level", "trigger"))
+#: the words that tell one threshold of a rule from another
+_THRESHOLD_TELL = frozenset(("warn", "warning", "fault", "high", "low", "gap", "run"))
+
+
+def _threshold_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) A figure said as one of a rule's thresholds ("the fault threshold is 40%",
+    "the 40% warn threshold") against a finding fact that lists its thresholds ("warn threshold
+    40% (warn_pct_threshold), warn gap floor 1 °F"): the threshold with that figure must carry
+    the words that tell it (warn or fault, high or low, gap), and a threshold the sentence names
+    in full must have that figure."""
+    entries = []
+    for fc in facts:
+        said = fc.said.split("thresholds: ", 1)
+        if len(said) < 2:
+            continue
+        for m in _FACT_THRESHOLD.finditer(said[1].split("; ", 1)[0]):
+            unit = (m.group("u") or "").replace("hours", "h")
+            words = m.group("label").split()
+            entries.append((frozenset(words), Decimal(m.group("v")), unit, " ".join(words)))
+    if not entries:
+        return []
+    text = _CITES.sub(" ", vis)
+    why: list = []
+    for clause in re.split(r"[;:.!?,()\[\]—–]", text):
+        low = clause.lower()
+        for m in _SAID_FIG.finditer(low):
+            before = re.findall(r"[a-z']+", low[: m.start()])[-5:]
+            after = re.findall(r"[a-z']+", low[m.end() :])[:3]
+            near = {w.split("'")[0] for w in before + after}
+            if not near & _THRESHOLD_KIND:
+                continue
+            v = Decimal(m.group("v"))
+            unit = re.sub(r"[\s°]", "", (m.group("u") or "").lower())
+            unit = {"f": "°f", "c": "°c", "hour": "h", "hours": "h"}.get(unit, unit)
+            same = [e for e in entries if e[1] == v and (not unit or e[2] == unit)]
+            tell = {"warn" if w == "warning" else w for w in near & _THRESHOLD_TELL}
+            if same and not any(tell <= e[0] for e in same):
+                why.append(
+                    f"{m.group(0).strip()!r}: a cited fact gives it as the {same[0][3]}, not a "
+                    f"{' '.join(sorted(tell))} one"
+                )
+                continue
+            named = [e for e in entries if e[0] <= near and (e[1] != v or (unit and e[2] != unit))]
+            if named and not same:
+                continue  # a figure no cited fact gives: the number rules say so
+            if named and not any(e[0] <= near for e in same):
+                e = named[0]
+                why.append(f"{m.group(0).strip()!r}: a cited fact gives the {e[3]} as {e[1]}{e[2]}")
+    return why
+
+
+#: (0112-cite15) a sign said in a word of a figure the facts give: "the saving is negative", "a
+#: positive bias"
+_SIGN_NOUNS = {
+    "saving": "avoided energy",
+    "savings": "avoided energy",
+    "avoided energy": "avoided energy",
+    "bias": "bias",
+    "offset": "bias",
+    "drift": "drift",
+    "slope": "slope",
+    "trend": "slope",
+}
+_SIGN_NOUN = r"(?:savings?|avoided\s+energy|bias|offset|drift|slope|trend)"
+_SIGN_AT = re.compile(
+    rf"\b(?P<pre>positive|negative)\s+(?:\w+\s+)?(?P<n1>{_SIGN_NOUN})\b|"
+    rf"\b(?P<n2>{_SIGN_NOUN})\b(?:\s+\w+){{0,4}}?\s+"
+    r"(?:is|was|are|were|comes?\s+out|came\s+out|reads?|stays?|remains?)\s+(?:\w+\s+)?"
+    r"(?P<post>positive|negative)\b",
+    re.I,
+)
+
+
+def _sign_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) "The saving is negative", "a positive bias", "the slope is negative": a
+    sign said in a word of a figure a cited fact gives with its sign ("avoided energy 10,399",
+    "bias +3.0", "slope +0.00 F/F") must be that figure's sign (a figure of zero has neither);
+    under "if" or "when" it is no claim."""
+    text = _CITES.sub(" ", vis)
+    why: list = []
+    for m in _SIGN_AT.finditer(text):
+        before = re.findall(r"[a-z']+", text[: m.start()].lower())[-6:]
+        if set(before) & {"if", "when", "whenever", "unless", "means", "mean"}:
+            continue
+        noun = " ".join((m.group("n1") or m.group("n2")).lower().split())
+        key = _SIGN_NOUNS.get(noun, noun)
+        want = (m.group("pre") or m.group("post")).lower()
+        signs = set()
+        rx = rf"\b{re.escape(key)}\s+(?:of\s+)?([-+−]?)(\d[\d,]*(?:\.\d+)?)"
+        for fc in facts:
+            for f in re.finditer(rx, fc.said):
+                v = _dec(f.group(2))
+                signs.add(("negative" if f.group(1) in ("-", "−") else "positive") if v else "zero")
+        if signs and want not in signs:
+            why.append(f"{' '.join(m.group(0).split())!r}: the cited facts give it the other sign")
+    return why
+
+
+#: (0112-cite15) where a counted set of findings is said to be: "both faults are on AHU-1",
+#: "all the warns are at AHU-2 and AHU-3", "the only fault is on AHU-1"
+_SET_AT = re.compile(
+    r"\b(?P<q>both|all(?:\s+of)?(?:\s+the)?|every|each(?:\s+of\s+the)?|the\s+only|the|its|"
+    r"their)\s+(?:(?P<n>\d+|two|three|four|five|six|seven|eight|nine|ten)\s+)?"
+    r"(?P<v>faults?|warns?|warnings?|findings?)\s+(?:\w+\s+){0,2}?(?:are|were|is|was|sits?|lies?|"
+    r"falls?|occurs?|occurred)\s+(?:all\s+|both\s+|only\s+)?(?:on|at|in|for|from)\s+"
+    r"(?P<names>[^.;:()\[\]]+)",
+    re.I,
+)
+_SET_N = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+_SET_N.update({"nine": 9, "ten": 10, "both": 2, "the only": 1})
+
+
+def _located_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) A set of findings said to be on some units ("both faults are on AHU-1",
+    "all the warns are on AHU-2 and AHU-3", "the only fault is on AHU-1"): every cited finding
+    of that verdict must be on one of the named units, and the cited findings must be as many
+    as the set says ("both": two)."""
+    text = _CITES.sub(" ", vis)
+    why: list = []
+    for m in _SET_AT.finditer(text):
+        verb = m.group("v").lower()
+        verdicts = (
+            {"fault"}
+            if verb.startswith("fault")
+            else ({"warn"} if verb.startswith("warn") else {"fault", "warn"})
+        )
+        q = " ".join(m.group("q").lower().split())
+        many = m.group("n") or q
+        n = int(many) if str(many).isdigit() else _SET_N.get(str(many).lower())
+        if q in ("the", "its", "their") and n is None and not verb.endswith("s"):
+            continue  # "the fault is on AHU-1": one finding, read as any other
+        found = [
+            fc
+            for fc in facts
+            if fc.kind == "finding" and fc.own & {_VALUE_VERDICT.get(v, v) for v in verdicts}
+        ]
+        if not found:
+            continue
+        names = re.split(r"\s*(?:,|\band\b|\bor\b|&)\s*", m.group("names").strip())
+        names = [x.strip().strip('"').lower() for x in names if x.strip()]
+        names = [x.split()[0] for x in names if x]
+        units = {str(fc.item.get("equip") or "").lower() for fc in found}
+        off = sorted(u for u in units if u and not any(u == x or u in x for x in names))
+        if off:
+            why.append(f"{' '.join(m.group(0).split())!r}: a cited fact gives one on {off[0]!r}")
+        elif n is not None and len(found) < n:
+            why.append(
+                f"{' '.join(m.group(0).split())!r}: the cited facts place {len(found)} of them"
+            )
+    return why
+
+
+#: (0112-cite15) what CAMBER itself does, said of one of its parts: "the report view, which
+#: judges points in their operating state", "the tool defaulted to the forecast method", "the
+#: rule recommends declaring full-load power", "the airflow came from the trended airflow"
+_METHOD_SUBJECT = (
+    r"(?:camber|(?:the|its|this|that|each|every|camber['’]s)\s+(?:[a-z0-9&_'’-]+\s+){0,2}?"
+    r"(?:view|tool|server|rule|rules|check|checker|analysis|model|"
+    r"method|capability|detector|config|configuration|run\s+config|kernel|scoring|score|report|"
+    r"engine|runner|algorithm|logic|test|screen))"
+)
+_METHOD_VERB = (
+    r"(?:judges|judged|scores|scored|compares|compared|uses|used|looks\s+at|looked\s+at|"
+    r"looks\s+for|considers|considered|treats|treated|excludes|excluded|ignores|ignored|"
+    r"measures|measured|models|modell?ed|weights|weighted|accounts\s+for|accounted\s+for|"
+    r"adjusts|adjusted|filters|filtered|normali[sz]es|normali[sz]ed|evaluates|evaluated|"
+    r"assesses|assessed|applies|applied|gates|gated|masks|masked|supplies|supplied|computes|"
+    r"computed|calculates|calculated|derives|derived|estimates|estimated|assumes|assumed|"
+    r"recommends|recommended|defaults\s+to|defaulted\s+to|relies\s+on|relied\s+on|draws\s+on|"
+    r"is\s+based\s+on|was\s+based\s+on|bases\s+(?:it|them)\s+on|takes|took|"
+    # the base forms, after "can", "does", "will" ("the config can supply the airflow")
+    r"judge|score|compare|use|look\s+at|look\s+for|consider|treat|exclude|ignore|measure|"
+    r"model|weight|account\s+for|adjust|filter|normali[sz]e|evaluate|assess|apply|gate|mask|"
+    r"supply|compute|calculate|derive|estimate|assume|recommend|default\s+to|rely\s+on|"
+    r"draw\s+on|take)"
+)
+_METHOD_RX = re.compile(
+    rf"\b(?P<subj>{_METHOD_SUBJECT})\b(?:\s*,?\s*(?:which|that)\b)?\s*(?:\w+ly\s+)?"
+    r"(?:(?:only|also|always|then|first|instead|can|could|will|would|does|did|should|must|is|"
+    r"was|are|were|gets|got)\s+)?(?:(?:only|also|always|then|first)\s+)?"
+    rf"(?P<verb>{_METHOD_VERB})\b(?P<obj>[^.;:,()\[\]!?—–]*)",
+    re.I,
+)
+#: provenance said of anything: "the airflow came from the trended supply airflow"
+_SOURCE_RX = re.compile(
+    r"\b(?P<verb>(?:came|comes|come|was\s+taken|is\s+taken|were\s+taken|was\s+derived|is\s+"
+    r"derived|were\s+derived|was\s+computed|is\s+computed|was\s+estimated|is\s+estimated)\s+"
+    r"from)\b(?P<obj>[^.;:,()\[\]!?—–]*)",
+    re.I,
+)
+_METHOD_END = re.compile(
+    r"\b(?:because|since|so|but|although|though|whereas|until|"
+    r"and\s+(?:gave|gives|give|found|finds|flagged|flags|returned|returns|reported|reports|"
+    r"shows|showed|is|was|are|were))\b",
+    re.I,
+)
+#: words of a method's object that say nothing of what it is
+_METHOD_GENERIC = _NEEDS_GENERIC_STEMS | frozenset(
+    _stem(w)
+    for w in (
+        "way ways how what whether like same other just whole entire any every each "
+        "own either neither based such than very much more most less least first last "
+        "instead rather there here then once again too thing things kind sort part parts "
+        "unit units equipment item items result results figure figures number numbers "
+        "time times period window run against toward towards across within between through "
+        "along among upon onto up down off per via into onto itself themselves missing "
+        "observed recorded actual "
+        "when whenever "
+        "while if unless where whether".split()
+    )
+)
+#: words of a method's object that are its verbs ("checks for", "looks at"): not what it reads
+_METHOD_VERBS = frozenset(
+    _stem(w)
+    for w in (
+        "check checks checked look looks looked flag flags flagged judge judges judged read "
+        "reads compare compares compared use uses used".split()
+    )
+)
+
+
+#: words a fact and a sentence spell two ways
+_METHOD_SAME = {"outside": "outdoor", "configuration": "config", "configured": "config"}
+
+
+def _method_words(text: str) -> str:
+    """``text`` lower case, with the words of :data:`_METHOD_SAME` written one way."""
+    return re.sub(r"[a-z]+", lambda m: _METHOD_SAME.get(m.group(0), m.group(0)), str(text).lower())
+
+
+def _abbrev_closure(words: set) -> set:
+    """``words`` with each abbreviation whose words are all there, and each abbreviation's
+    words, until nothing more is added ("supply_air_temp": temp, temperatur, sat)."""
+    out = set(words)
+    while True:
+        more = {a for a, spelled in _NEEDS_ABBREV.items() if set(spelled) <= out}
+        more |= {w for a, spelled in _NEEDS_ABBREV.items() if a in out for w in spelled}
+        if more <= out:
+            return out
+        out |= more
+
+
+#: (0112-cite15) a time zone said of the data: "timestamps are on the site wall clock", "in UTC"
+_ZONE_SAID = re.compile(
+    r"\b(?:wall[\s-]+clock|local\s+(?:standard\s+)?time|utc|gmt|time[\s-]*zones?|"
+    r"daylight[\s-]+saving|dst)\b",
+    re.I,
+)
+_ZONE_FACT = re.compile(r"\b(?:clock|utc|gmt|time[\s-]*zones?|timezone|dst|daylight|local time)\b")
+
+
+def _zone_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) A time zone or clock said of the data ("Timestamps are on the site wall
+    clock", "the trends are in UTC") needs a cited fact that names one."""
+    m = _ZONE_SAID.search(_CITES.sub(" ", vis))
+    if m is None or any(_ZONE_FACT.search(str(getattr(fc, "hay", ""))) for fc in facts):
+        return []
+    return [f"{m.group(0)!r}: no cited fact gives the data's time zone or clock"]
+
+
+#: (0112-cite15) a fact's negation said of a counted part: "5 saving(s) rest on a baseline that
+#: does not meet G14 acceptance: ..., not a verified saving"
+_PART_COUNT = re.compile(r"\b(?P<n>\d+) (?P<noun>[a-z]+)\(s\)")
+_NONE_SAID = (
+    r"\b(?:no|none\s+of\s+the|not\s+a\s+single|not\s+one|not\s+any|never\s+a)\s+(?:[\w-]+\s+)?"
+)
+
+
+def _part_negation_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) "The M&V results give no verified saving for the site" against "5 saving(s)
+    ... not a verified saving": a cited fact that denies something of a counted part of its
+    things ("5 saving(s)") supports no denial of all of them; the sentence must give the count or
+    say which ("these", "those", "the 5")."""
+    text = _CITES.sub(" ", vis)
+    if re.search(r"\d|\b(?:these|those|such|them|they)\b", text, re.I):
+        return []
+    why: list = []
+    for fc in facts:
+        for m in _PART_COUNT.finditer(fc.said):
+            noun = m.group("noun")
+            denied = re.search(rf"\b(?:not|no)\s+(?:an?\s+)?(?:[\w-]+\s+)?{noun}", fc.said)
+            if denied is None:
+                continue
+            said = re.search(_NONE_SAID + rf"{noun}s?\b", text, re.I)
+            if said is not None:
+                why.append(
+                    f"{' '.join(said.group(0).split())!r}: a cited fact says it of "
+                    f"{m.group('n')} {noun}(s), not of every one"
+                )
+                return why
+    return why
+
+
+def _method_problems(vis: str, facts: list) -> list:
+    """(0112-cite15) What CAMBER itself does, said of one of its parts (a view, a rule, a check,
+    the tool, the model, the config: "the report view, which judges points in their operating
+    state", "the tool defaulted to the forecast method", "the rule recommends declaring
+    full-load power"), or where a figure came from ("the airflow came from the trended supply
+    airflow"): every word of what it does or uses must be a word of a cited fact (its text and
+    fields; a role id's parts and an abbreviation's words count). A negation of it is read the
+    same way."""
+    text = _CITES.sub(" ", vis)
+    hits = [(m.group("verb"), m.group("obj")) for m in _METHOD_RX.finditer(text)]
+    hits += [(m.group("verb"), m.group("obj")) for m in _SOURCE_RX.finditer(text)]
+    if not hits:
+        return []
+    have: set = set()
+    for fc in facts:
+        have |= _input_words(_method_words(fc.hay))
+    have = _abbrev_closure(have)
+    why: list = []
+    for verb, obj in hits:
+        end = _METHOD_END.search(obj)
+        thing = obj[: end.start()] if end else obj
+        thing = _method_words(thing)
+        words = [w for w in re.findall(r"[a-z][a-z0-9]*", thing.lower().replace("_", " "))]
+        said = _abbrev_closure(_input_words(" ".join(words))) - _METHOD_GENERIC - _METHOD_VERBS
+        said -= {x for x in said if x in _NEEDS_ABBREV and set(_NEEDS_ABBREV[x]) <= have}
+        said -= {
+            w for x, spelled in _NEEDS_ABBREV.items() if x in have and x in said for w in spelled
+        }
+        missing = sorted(x for x in said if not x.isdigit() and x not in have and len(x) > 1)
+        if missing:
+            phrase = " ".join(f"{verb} {thing}".split())
+            why.append(f"{phrase!r}: no cited fact says so ({missing[0]!r})")
+    return why
+
+
 def _strings(data, out: list, p: _Parsed, key: str = "", depth: int = 0) -> None:
     """The string values of ``data`` into ``out`` (lower case), and the dates of its non-name
     fields into ``p``."""
@@ -5764,6 +6416,8 @@ def _bound(q: _Qty, f: _Qty) -> bool:
     with ``f`` is of ("the cooling valve leaked on 86%" against "HW-leak 86% / CHW-leak 0%")."""
     if q.total or not f.sib:
         return True
+    if q.sign == "±" and f.sign == "±":
+        return True  # (0112-cite15) "avoided energy ± 125": the band of the estimate it follows
     for seg in (q.pre, q.post):
         seg = seg - _GENERIC  # "returned 6 results": a word that says nothing of the thing (#340)
         own, other = seg & f.label, seg & f.sib
@@ -6887,7 +7541,7 @@ def _claim_problems(
     for d in sorted(p.dirs - dirs):
         if d == "down?":  # "the savings result", "this saving is ...": a saving named (#339)
             if "down" not in dirs and not any(
-                x.startswith("sav") for fc in facts for x in fc.claims.words
+                x.startswith(("sav", "avoid")) for fc in facts for x in fc.claims.words
             ):
                 why.append(f"{words['down']}: no cited fact states it")
             continue
@@ -7785,6 +8439,21 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     if not own:  # without per_sentence, a sentence that cites nothing makes no claim
         return "", []
     kept = [fid for fid, fc in zip(own, mine) if any(fc is g for g in cl)]
+    # (0112-cite15) a comparison of two of its own figures that holds settles its "above" or
+    # "below": it is not the opposite of a cited fact's "below the trust floor"
+    rel, held = _relation_problems(p)
+    if held:
+        said = {p.toks[k][1].lower() for k in held}
+        p.negs = [
+            n
+            for n in p.negs
+            if not (n.kind == "verbal" and set(re.findall(r"[a-z]+", n.raw.lower())) & said)
+        ]
+        for c in {_POLAR[p.toks[k][1].lower()] for k in held if p.toks[k][1].lower() in _POLAR}:
+            at = [k for k, t in enumerate(p.toks) if _POLAR.get(t[1].lower()) == c]
+            if set(at) <= held:
+                p.polar.discard(c)
+                p.polar_aff.discard(c)
     why = _claim_problems(p, cl, vocab, vis, _bound_words(vis, kept, vocab))
     why += _respectively_problems(p, mine)
     why += _site_problems(p, cl)
@@ -7792,6 +8461,9 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     why += _coverage_problems(vis, cl, p)
     why += _input_problems(vis, cl)
     why += _order_problems(vis, cl)
+    why += rel + _band_problems(vis, cl) + _sign_problems(vis, cl) + _located_problems(vis, cl)
+    why += _threshold_problems(vis, cl) + _zone_problems(vis, cl) + _part_negation_problems(vis, cl)
+    why += _method_problems(vis, cl)
     return ("unsupported-claim" if why else ""), why
 
 
