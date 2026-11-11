@@ -734,9 +734,196 @@ def _caveat_cases(claims: list) -> list:
     return out
 
 
+#: (round 14) the other unit a total could be given in
+_OTHER_ENERGY = {"kBtu": "kWh", "kWh": "kBtu", "MMBtu": "kBtu", "Btu": "kBtu", "MWh": "kWh"}
+
+
+def _total_fig(value, munit: str, sign: str = "") -> str:
+    v = float(value)
+    size = f"{v:,.0f}" if v >= 100 else f"{round(v, 2):g}"
+    return f"{sign}${size}" if munit == "$" else f"{sign}{size} {munit}"
+
+
+def _total_cases(claims: list) -> list:
+    """(round 14) A finding's energy or cost total, said with what it is a total of: true as
+    the fact gives it, false with another figure, another unit, or the figure of another total
+    the fact lists (the cooling total said as the heating one)."""
+    out: list = []
+    totals = [c for c in claims if c.attribute == "total"]
+    for claim in totals:
+        cites = (claim.fact_id,)
+        group = _key("total", claim.fact_id, claim.label)
+        side = " ".join(w for w in claim.label.split() if w not in ("oa", "cost"))
+        fig = _total_fig(claim.value, claim.munit, claim.sign)
+        variants = [
+            ("true", "none", f"{claim.unit}'s {claim.label} total is {fig} {cite(*cites)}."),
+            (
+                "true",
+                "none",
+                f"On {claim.unit}, {claim.rule} gives {side} of {fig} {cite(*cites)}.",
+            ),
+        ]
+        bumped = float(claim.value) * 1.1 + 1
+        variants.append(
+            (
+                "false",
+                "perturb_figure",
+                f"{claim.unit}'s {claim.label} total is "
+                f"{_total_fig(bumped, claim.munit, claim.sign)} {cite(*cites)}.",
+            )
+        )
+        if claim.munit in _OTHER_ENERGY:
+            other = _total_fig(claim.value, _OTHER_ENERGY[claim.munit], claim.sign)
+            variants.append(
+                (
+                    "false",
+                    "swap_munit",
+                    f"{claim.unit}'s {claim.label} total is {other} {cite(*cites)}.",
+                )
+            )
+        for sib in totals:
+            if (
+                sib.fact_id == claim.fact_id
+                and sib.label != claim.label
+                and sib.munit == claim.munit
+                and float(sib.value) != float(claim.value)
+            ):
+                wrong = _total_fig(sib.value, sib.munit, sib.sign)
+                variants.append(
+                    (
+                        "false",
+                        "swap_item",
+                        f"On {claim.unit}, {claim.rule} gives {side} of {wrong} {cite(*cites)}.",
+                    )
+                )
+        for truth, op, draft in variants:
+            out.append(
+                _case(
+                    draft,
+                    [draft],
+                    "plain",
+                    truth=truth,
+                    form="total",
+                    operator=op,
+                    capability=claim.capability,
+                    cites=list(cites),
+                    claim=f"{claim.label} {fig}",
+                    group=group,
+                )
+            )
+    return out
+
+
+#: (round 14) inputs no rule of the fact table reads
+_NOT_READ = ("condenser_water_temp", "zone_co2", "duct_static_pressure")
+
+
+def _input_cases(claims: list) -> list:
+    """(round 14) What a rule needs, from its inputs fact: true for an input it needs (by its id
+    and in words), false for one it only reads when mapped, or one it does not read at all."""
+    out: list = []
+    by_fact: dict = {}
+    for c in claims:
+        if c.attribute in ("input_needs", "input_reads"):
+            by_fact.setdefault(c.fact_id, []).append(c)
+    for fact_id, cs in sorted(by_fact.items()):
+        rule = cs[0].rule
+        need = [c.label for c in cs if c.attribute == "input_needs"]
+        read = [c.label for c in cs if c.attribute == "input_reads"]
+        cites = (fact_id,)
+        variants = []
+        for role in need:
+            variants += [
+                ("true", "none", f"{rule} needs {role} {cite(*cites)}."),
+                (
+                    "true",
+                    "none",
+                    f"The {rule} rule needs the {role.replace('_', ' ')} {cite(*cites)}.",
+                ),
+            ]
+        for role in read[:4]:
+            variants += [
+                ("true", "none", f"{rule} reads {role} when it is mapped {cite(*cites)}."),
+                ("false", "optional_as_need", f"{rule} needs {role} {cite(*cites)}."),
+                (
+                    "false",
+                    "optional_as_need",
+                    f"The {rule} rule needs the {role.replace('_', ' ')} {cite(*cites)}.",
+                ),
+            ]
+        for role in _NOT_READ:
+            if role not in need + read:
+                variants.append(("false", "inject_input", f"{rule} needs {role} {cite(*cites)}."))
+        for truth, op, draft in variants:
+            out.append(
+                _case(
+                    draft,
+                    [draft],
+                    "plain",
+                    truth=truth,
+                    form="rule_inputs",
+                    operator=op,
+                    capability=cs[0].capability,
+                    cites=list(cites),
+                    claim=draft,
+                    group=_key("inputs", fact_id),
+                )
+            )
+    return out
+
+
+def _rmse_cases(claims: list) -> list:
+    """(round 14) A reference comparison's RMSE in the point's unit: true as the fact gives
+    it, false with another figure or the other temperature unit, and false said as the bias
+    where the fact's bias is another figure."""
+    out: list = []
+    bias = {(c.fact_id, c.point): c for c in claims if c.attribute == "rmse_bias"}
+    for claim in (c for c in claims if c.attribute == "rmse"):
+        cites = (claim.fact_id,)
+        fig = f"{float(claim.value):.1f} {claim.munit}"
+        other = "°C" if claim.munit == "°F" else "°F"
+        subj = f"{claim.unit}'s {claim.point}"
+        variants = [
+            ("true", "none", f"{subj} has an RMSE of {fig} against its reference {cite(*cites)}."),
+            ("true", "none", f"{subj}'s RMSE against its reference is {fig} {cite(*cites)}."),
+            (
+                "false",
+                "perturb_figure",
+                f"{subj} has an RMSE of {float(claim.value) + 1.2:.1f} {claim.munit} against its "
+                f"reference {cite(*cites)}.",
+            ),
+            (
+                "false",
+                "temp_unit",
+                f"{subj} has an RMSE of {float(claim.value):.1f} {other} against its reference "
+                f"{cite(*cites)}.",
+            ),
+        ]
+        b = bias.get((claim.fact_id, claim.point))
+        if b is not None and abs(float(b.value)) != float(claim.value):
+            variants.append(("false", "swap_item", f"{subj} has a bias of {fig} {cite(*cites)}."))
+        for truth, op, draft in variants:
+            out.append(
+                _case(
+                    draft,
+                    [draft],
+                    "plain",
+                    truth=truth,
+                    form="rmse",
+                    operator=op,
+                    capability=claim.capability,
+                    cites=list(cites),
+                    claim=f"RMSE {fig}",
+                    group=_key("rmse", claim.fact_id),
+                )
+            )
+    return out
+
+
 def _pairs(claims: list, world: World) -> list:
     out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
     out += _short_id_cases(claims) + _caveat_cases(claims)
+    out += _total_cases(claims) + _input_cases(claims) + _rmse_cases(claims)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):

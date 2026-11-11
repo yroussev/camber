@@ -146,6 +146,27 @@ def collect(root: str) -> dict:
     return out
 
 
+def collect_totals(root: str) -> list:
+    """(round 14) The finding facts that give energy totals (``totals: oa_cost_excess_cool_kbtu
+    (oa cost excess cool) ... kBtu``): the synthetic site with ``AHU-1``'s supply airflow trended
+    (5,000 cfm while its fan runs), so the outdoor-air rules price its excess outdoor air; a real
+    ``rule_run`` call. Appended once to the frozen fact table, as ``rule_run`` facts."""
+    from camber.capabilities import CallContext, default_registry
+    from camber.capabilities._ledger import canonical
+    from camber.model.roles import Role
+
+    st, configs = _store(root)
+    frame = st.read_role_frame(facility_id=SITE, equip="AHU-1")
+    fan = frame[Role.SUPPLY_FAN_STATUS] if Role.SUPPLY_FAN_STATUS in frame else 1.0
+    frame[Role.AIRFLOW] = 5000.0 * (fan > 0)
+    st.write_role_frame(frame, facility_id=SITE, equip="AHU-1", equip_class="AHU")
+    st.points()
+    ctx = CallContext(store=st.root, allowed_facilities=frozenset(ALLOWED), config=configs)
+    args = {"facility_id": SITE, "rules": ["outdoor_air_fraction", "economizer_high_limit"]}
+    facts = default_registry().call("rule_run", args, ctx).facts
+    return [canonical(f) for f in facts if f.get("kind") == "finding" and "; totals: " in f["text"]]
+
+
 def load_or_collect(cache: str | None = None, root: str | None = None) -> dict:
     """:func:`collect`'s facts, read from ``cache`` when it exists, else collected under
     ``root`` (a temporary directory when none) and written to ``cache``."""
@@ -297,6 +318,21 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
                 munit="%",
                 label=m.group(2),
             )
+        # (round 14) its energy and cost totals: "totals: key (words) 6,182 kBtu, ..."
+        totals = text.split("; totals: ", 1)[1].split("; ", 1)[0] if "; totals: " in text else ""
+        for m in re.finditer(
+            r"(\w+) \(([a-z0-9 ]+)\) (-?)(\$?)([\d,.]+)(?: (kBtu|MMBtu|Btu|kWh|MWh|therms))?",
+            totals,
+        ):
+            add(
+                attribute="total",
+                rule=rule,
+                value=_num(m.group(5)),
+                munit=m.group(6) or "$",
+                sign=m.group(3),
+                label=m.group(2),
+                extra={"key": m.group(1), "shown": m.group(0).split(") ", 1)[1]},
+            )
     elif kind == "conditional_not_listed":
         for m in re.finditer(r'"([^"]+)" (\w+) \((ok|warn|fault)\)', text):
             add(attribute="verdict", unit=m.group(1), rule=m.group(2), verdict=m.group(3))
@@ -326,6 +362,15 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
             window=(_day(f.get("start")), _day(f.get("end"))),
             extra={"n_samples": f.get("n_samples")},
         )
+    elif kind == "reference_comparison" and re.search(r", RMSE [\d.]+ ?(?:°F|°C):", text):
+        # (round 14) a comparison listing its RMSE with its bias (appended to the frozen table
+        # for the rmse cases only: its other claims are the frozen comparisons' own)
+        sub = f.get("subject") or {}
+        point = str(f.get("role") or sub.get("role") or "")
+        m = re.search(r"bias ([-+]?[\d.]+) ?(°F|°C), RMSE ([\d.]+) ?(°F|°C):", text)
+        if m:
+            add(attribute="rmse", point=point, value=_num(m.group(3)), munit=m.group(4))
+            add(attribute="rmse_bias", point=point, value=_num(m.group(1)), munit=m.group(2))
     elif kind == "reference_comparison":
         sub = f.get("subject") or {}
         add(
@@ -435,6 +480,16 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
         )
     elif kind == "dataset_count":
         add(attribute="count", site="", unit="", value=f.get("value"), label="datasets")
+    elif kind == "rule_inputs":
+        # (round 14) what a rule needs and what it reads when mapped
+        rule = str(f.get("rule", ""))
+        for part in text.split(": ", 1)[-1].split("; "):
+            m = re.match(r"(needs(?: one of)?|reads) (.+?)( when mapped)?$", part)
+            if m is None:
+                continue
+            what = "reads" if m.group(1) == "reads" else "needs"
+            for role in re.split(r", | and | or ", m.group(2)):
+                add(attribute=f"input_{what}", rule=rule, label=role.strip())
     elif kind == "caveat" and f.get("of"):
         # (round 13) a caveat given for some of its rule's results: said of its units only
         said = text.split(" caveat", 1)[-1].split(": ", 1)[-1]

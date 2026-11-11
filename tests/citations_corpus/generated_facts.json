@@ -1187,6 +1187,54 @@
    "kind": "notice",
    "text": "1 listed finding(s) rest on an input whose configured sensor reference disagrees with it (conditional_on names the comparison): treat each as a possible sensor problem first and check that sensor before acting on the equipment. sensor_trust shows the comparison.",
    "value": "notice"
+  },
+  {
+   "id": "I1@finding_detail-4ecd59",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "economizer_high_limit",
+   "text": "economizer_high_limit inputs: needs oa_damper and oat; reads mixed_air_temp, return_air_temp, oa_airflow, airflow, supply_fan_status and supply_fan_speed when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "economizer_high_limit@AHU-1"
+   }
+  },
+  {
+   "id": "I1@finding_detail-95ce3b",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "simultaneous_heat_cool",
+   "text": "simultaneous_heat_cool inputs: needs heat_valve and cool_valve; reads oat, return_air_temp, oa_damper, occupancy, warmup, cooldown, cool_coil_leaving_temp, supply_air_temp, outdoor_rh, return_air_humidity, supply_fan_status and supply_fan_speed when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   }
+  },
+  {
+   "id": "I1@finding_detail-aaf1aa",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "outdoor_air_fraction",
+   "text": "outdoor_air_fraction inputs: needs mixed_air_temp and return_air_temp; reads oat, oa_damper, supply_fan_status, supply_fan_speed, airflow and occupancy when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "outdoor_air_fraction@AHU-1"
+   }
+  },
+  {
+   "id": "I1@finding_detail-b34055",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "supply_air_reset",
+   "text": "supply_air_reset inputs: needs supply_air_temp; reads cool_valve, oat, occupancy, warmup, cooldown, supply_fan_status, supply_fan_speed, airflow, supply_air_temp_sp and sat_reset_requests when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "supply_air_reset@AHU-1"
+   }
   }
  ],
  "mv_summary": [
@@ -2397,6 +2445,20 @@
    "rule": "leaking_valve",
    "text": "leaking_valve (rule, run with rule_run) defaults: fan_heat_f = 2.0 °F, delta_thr_f = 3.0 °F, valve_closed_thr = 5.0 % of valve stroke, coil_sensor_fan_heat = False flag, measured_fan_heat_f not set by default, cool_delta_thr_f not set by default, occupied_only = False flag, judge_heating_on_supply_air = True flag",
    "value": 8
+  },
+  {
+   "id": "I1@rule_params-390ae2",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "economizer_high_limit",
+   "text": "economizer_high_limit inputs: needs oa_damper and oat; reads mixed_air_temp, return_air_temp, oa_airflow, airflow, supply_fan_status and supply_fan_speed when mapped"
+  },
+  {
+   "id": "I2@rule_params-390ae2",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "leaking_valve",
+   "text": "leaking_valve inputs: needs cool_valve, mixed_air_temp and supply_air_temp; reads heat_valve, heat_coil_leaving_temp, cool_coil_leaving_temp, supply_fan_status and supply_fan_speed when mapped"
   }
  ],
  "rule_run": [
@@ -2624,6 +2686,45 @@
    },
    "text": "\"AHU-2\" simultaneous_heat_cool caveat (given for 1 of its 3 results): dehumidification with reheat could not be ruled out: no cooling-coil leaving temperature, humidity or dew point is trended -- declare the unit's sequence with the rule parameter `dehumidification` (true / false)",
    "value": "caveat"
+  },
+  {
+   "id": "F2@rule_run-834d22",
+   "kind": "finding",
+   "value": "fault",
+   "rule": "economizer_high_limit",
+   "equip": "AHU-1",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out); oa_cost_flagged true; totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 715 kBtu, oa_cost_excess_heat_kbtu (oa cost excess heat) 0 kBtu",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": "trended supply airflow",
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": 715.199,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": 0.0,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "facility_id": "site-a"
   }
  ],
  "sensor_trust": [
@@ -2746,6 +2847,46 @@
    "unit": "°F",
    "value": "ok",
    "verdict": "ok"
+  },
+  {
+   "id": "R3@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "equip": "AHU-1",
+   "role": "supply_air_temp",
+   "value": "warn",
+   "verdict": "warn",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "role": "supply_air_temp"
+   },
+   "bias": 3.0,
+   "unit": "°F",
+   "rmse": 3.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-1\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" disagrees (warn): the point is suspect, and a finding that rests on it is conditional on this sensor: AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0; bias +3.0 °F, RMSE 3.0 °F: the bias is the median of the point minus the reference, so the point reads high against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
+  },
+  {
+   "id": "R4@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "equip": "AHU-2",
+   "role": "supply_air_temp",
+   "value": "ok",
+   "verdict": "ok",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "role": "supply_air_temp"
+   },
+   "bias": 0.0,
+   "unit": "°F",
+   "rmse": 0.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-2\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" agrees within the comparison's thresholds (passed): AHU-2 supply_air_temp: bias +0.0, drift not evaluated, RMSE 0.0, r=1.00 over 504 samples / 21 days -- tracks reference; bias +0.0 °F, RMSE 0.0 °F: the bias is the median of the point minus the reference, so the point reads neither high nor low against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
   }
  ]
 }
