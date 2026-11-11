@@ -556,6 +556,30 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   cited strips fell from 50 to 47 of 537 with no new escape; the generated cases add 111 (bare
   ids and caveat scope), with 0 escapes. A heading that only names a unit does not scope the
   items under it yet (`gap:heading-scope`, a strict-xfail corpus entry).
+- **Facts state a finding's totals, a rule's inputs and an RMSE's unit (round 14).** A
+  finding's fact gives its energy and cost totals with what each totals (`totals:
+  oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu, ...`, at most four named; a rate
+  such as `_btu_per_cfm` is not a total), so a sentence must say which total it gives.
+  `finding_detail` issues an inputs fact for the rule (`I1@finding_detail`: what it needs, what
+  it reads when mapped, and the conditions its parameter notes state in a positive sentence,
+  `low_load_pct: needs CHW flow and temperatures`), and so does `rule_params` with `detail` for
+  each rule on the page (`I<k>@rule_params`). A reference comparison's fact lists its RMSE in
+  the point's unit with its bias (`bias +3.0 °F, RMSE 3.0 °F: the bias is ...`). On the
+  real-host drafts these were claims true in the tool JSON that no fact stated.
+- **`check_citations` reads more of what naive drafts write (round 14).** A rule, metric or
+  check said to need an input ("the low-load figure needs CHW flow") needs a cited fact that
+  says it is needed, in those words or the input's id ("reads ... when mapped" is no need);
+  advice ("needs an inspection") and asides ("you would need") are not read. "Followed by" and
+  "preceded by" need both things' dated facts cited, in that order. Read as they mean: a date
+  without a year or with the month named ("5/12 to 6/1", "12 May 2025", "11-08 03:00", carried
+  by a cited fact's date of that month and day), "13 h", "starts 0.1 times/day" (the fact's
+  starts), a figure compared "against a threshold", a threshold listed with results ("66% of
+  run hrs below 40%"), "running" as "run", and a possessive before a share's noun. On the 50
+  round-10 drafts cited strips fell from 47 to 38 of 537 (naive drafts 26 to 20 of 116) with
+  no new escape; the generated cases add 474 (totals, inputs, RMSE and the new facts' own),
+  with 0 escapes. A rule said to need an input only one of its parameters needs is still kept
+  (`gap:needs-scope`), and a total quoted to the JSON's 3 places is stripped
+  (`gap:total-precision`): both strict-xfail corpus entries.
 - **`check_citations` reports text it does not read as `not_judged`, never as a pass
   (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
   quantifier, direction or rank word) and a short label or remark that cites nothing ("That

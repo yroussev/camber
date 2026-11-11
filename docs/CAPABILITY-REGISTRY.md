@@ -983,8 +983,12 @@ coverage, like B's, is 100.0%"); "flat while AHU-2's modulates" (a word outside 
 second of two clauses that names no unit of its own (a pronoun: "... and it has a trust of
 0.66") is the first clause's; a heading that only names a unit ("**AHU-1 details**") does not
 scope the items under it, so an item that names no unit is read against its own cited facts and
-one about another unit passes under it (round 13, `gap:heading-scope`). And these fail closed although they can be true: a sentence that
-names one unit and gives an unnamed unit's figure ("lower than the other AHU's 0.68": name
+one about another unit passes under it (round 13, `gap:heading-scope`); a rule said to need an
+input that only one of its parameters needs ("chiller_staging needs CHW flow" of "low_load_pct:
+needs CHW flow"), or a metric said to need one another metric needs, is kept (round 14,
+`gap:needs-scope`); a date without a year ("5/12") is carried by a cited fact's date of that
+month and day in any year (round 14). And these fail closed although they can be true: a
+sentence that names one unit and gives an unnamed unit's figure ("lower than the other AHU's 0.68": name
 both); "Overall coverage is quoted over the whole window" with no share of it; "Except for B,
 all AHUs fail"; "A's part is suspect, but B's is not" (a possessive left with its verb left
 out); "The loggers are at 19.1% and the AHUs at 100.0%" with all ids at the end (a second set
@@ -995,7 +999,9 @@ citing a count of 5 and a total of 8); a length the facts do not state ("for thr
 "all winter" on a January-to-December window (a winter spans two years); a spelling of a unit
 two cited ids could take; "AHU No. 1" (the sentence ends at "No."); a verdict on a savings claim
 worded with a check word ("the claimed 23.8% is supported by the measured saving": judgment,
-give it after the checked text).
+give it after the checked text); a total quoted to more places than its fact gives ("6,182.372
+kBtu" of "6,182 kBtu", round 14, `gap:total-precision`); "It was followed by the 16 h gap" whose
+"it" is another sentence's (round 14: an order needs both things' dated facts cited).
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier

@@ -191,6 +191,14 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   states its true/false flags and null metrics (`fan_gated true`, `null:
   oa_cost_excess_cool_kbtu`), a point's trust the value its 2-place rounding hides
   (`1.00 (0.9977)`), and an M&V saving its projected and actual totals.
+- **Round 14.** A finding's fact gives its energy and cost totals with what each totals
+  (`totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu`); `finding_detail` (and
+  `rule_params` with `detail`) issues an inputs fact for the rule (`I1@finding_detail`: what it
+  needs, what it reads when mapped, and its parameters' conditions); a reference comparison
+  lists its RMSE in the point's unit with its bias. A sentence saying a rule or a figure needs
+  an input must cite a fact that says it is needed; "followed by" / "preceded by" need both
+  things' dated facts. Dates without a year or with the month named ("5/12", "12 May 2025",
+  "11-08 03:00"), "13 h" and "starts 0.1 times/day" are read as they mean.
 - **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
   that says something of the lines under it (a verdict, negation, quantifier, direction or rank
   word: "**What is not fine**", "## Points that never move") and a short label or remark that
