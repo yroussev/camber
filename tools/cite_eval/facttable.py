@@ -167,6 +167,36 @@ def collect_totals(root: str) -> list:
     return [canonical(f) for f in facts if f.get("kind") == "finding" and "; totals: " in f["text"]]
 
 
+def collect_r15(root: str) -> dict:
+    """(round 15) The facts the round-15 cases read, appended once to the frozen fact table:
+    the trust summary of a ``view="report"`` call (it says how the view reads the points), the
+    finding facts of a ``min_severity="ok"`` rule run that list their thresholds (``thresholds:
+    warn gap floor 2 °F (warn_gap_floor_f), ...``), and the dataset entry's "good for" fact,
+    re-tokened to the frozen ``dataset_entry`` call. ``{capability: [fact, ...]}``."""
+    from camber.capabilities import CallContext, default_registry
+    from camber.capabilities._ledger import canonical
+
+    st, configs = _store(root)
+    ctx = CallContext(store=st.root, allowed_facilities=frozenset(ALLOWED), config=configs)
+    reg = default_registry()
+    out: dict = {}
+    facts = reg.call("sensor_trust", {"facility_id": SITE, "view": "report"}, ctx).facts
+    out["sensor_trust"] = [canonical(f) for f in facts if f.get("kind") == "trust_summary"]
+    facts = reg.call("rule_run", {"facility_id": SITE, "min_severity": "ok"}, ctx).facts
+    # AHU-2's economizer_high_limit ok is left out: no fact of the table states it, and it would
+    # make true some frozen cases' false mutants ("AHU-2 passes economizer_high_limit")
+    out["rule_run"] = [
+        canonical(f)
+        for f in facts
+        if f.get("kind") == "finding"
+        and "; thresholds: " in f["text"]
+        and not (f.get("equip") == "AHU-2" and f.get("rule") == "economizer_high_limit")
+    ]
+    facts = reg.call("dataset_entry", {"dataset_id": "at-30bldg-sensors"}, ctx).facts
+    out["dataset_entry"] = [canonical(f) for f in facts if f.get("kind") == "dataset_uses"]
+    return out
+
+
 def load_or_collect(cache: str | None = None, root: str | None = None) -> dict:
     """:func:`collect`'s facts, read from ``cache`` when it exists, else collected under
     ``root`` (a temporary directory when none) and written to ``cache``."""
@@ -333,7 +363,40 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
                 label=m.group(2),
                 extra={"key": m.group(1), "shown": m.group(0).split(") ", 1)[1]},
             )
-    elif kind == "conditional_not_listed":
+    if kind == "finding" and cap == "mv_summary":
+        # (round 15) a saving's band: its estimate and the uncertainty around it
+        m = re.search(r"avoided energy ([-\d,.]+) \(([-\d.]+)%\) ± ([\d,.]+)", text)
+        if m:
+            add(
+                attribute="band",
+                rule=str(f.get("rule") or ""),
+                value=_num(m.group(1)),
+                extra={"u": _num(m.group(3)), "pct": _num(m.group(2))},
+            )
+        # (round 15) a baseline's CV(RMSE) and the tier it is held to
+        m = re.search(r"CV\(RMSE\) ([\d.]+)% over .*?the (\d+)% daily CV\(RMSE\) tier", text)
+        if m:
+            add(
+                attribute="cv_tier",
+                rule=str(f.get("rule") or ""),
+                value=_num(m.group(1)),
+                munit="%",
+                extra={"tier": _num(m.group(2))},
+            )
+    if kind == "finding" and "; thresholds: " in text:
+        # (round 15) the thresholds a finding lists: "warn gap floor 2 °F (warn_gap_floor_f)"
+        rule = f.get("rule") or _rule_of_finding(f.get("finding_id", ""))
+        listed = text.split("; thresholds: ", 1)[1].split("; ", 1)[0]
+        for m in re.finditer(r"([a-z][a-z ]*?) (-?[\d.]+) ?(%|°F|°C|kW|h)? \((\w+)\)", listed):
+            add(
+                attribute="threshold",
+                rule=rule,
+                value=_num(m.group(2)),
+                munit=m.group(3) or "",
+                label=m.group(1).strip(),
+                extra={"key": m.group(4)},
+            )
+    if kind == "conditional_not_listed":
         for m in re.finditer(r'"([^"]+)" (\w+) \((ok|warn|fault)\)', text):
             add(attribute="verdict", unit=m.group(1), rule=m.group(2), verdict=m.group(3))
     elif kind == "condition_hours":
@@ -405,6 +468,23 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
             extra=extra,
         )
     elif kind == "trust_summary":
+        m = re.search(r"\((rules|report) view[:)]", text)
+        floor = re.search(r"below the trust floor ([\d.]+)", text)
+        if m:  # (round 15) the view it reads with, and its floor
+            add(
+                attribute="view",
+                unit="",
+                label=m.group(1),
+                value=_num(floor.group(1)) if floor else None,
+                extra={
+                    "counts": {
+                        lab: int(x.group(1))
+                        for lab in ("trusted", "suspect")
+                        for x in [re.search(rf"(\d+) {lab}\b", text)]
+                        if x
+                    }
+                },
+            )
         for lab in ("trusted", "suspect", "untrusted"):
             m = re.search(rf"(\d+) {lab}\b", text)
             if m:

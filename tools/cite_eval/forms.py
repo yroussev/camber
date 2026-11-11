@@ -920,10 +920,344 @@ def _rmse_cases(claims: list) -> list:
     return out
 
 
+def _r15_case(draft, truth, form, op, cap, cites, claim, group):
+    return _case(
+        draft,
+        [draft],
+        "plain",
+        truth=truth,
+        form=form,
+        operator=op,
+        capability=cap,
+        cites=list(cites),
+        claim=claim,
+        group=group,
+    )
+
+
+def _band_cases(claims: list) -> list:
+    """(round 15) A saving's position against its band (estimate ± uncertainty): inside when
+    the uncertainty is at least the estimate's size. True as the band places it, false the
+    other way round; false when the cited fact gives no band (a baseline fact)."""
+    out: list = []
+    base = {c.unit: c for c in claims if c.attribute == "cv_tier"}
+    for c in (c for c in claims if c.attribute == "band"):
+        x, u = float(c.value), float(c.extra["u"])
+        inside = abs(x) <= u
+        cites = (c.fact_id,)
+        fig = f"{x:,.0f}"
+        said = {
+            True: [
+                f"{c.unit}'s avoided energy of {fig} is within its uncertainty band "
+                f"{cite(*cites)}.",
+                f"{c.unit}'s avoided energy lies inside its ± {u:,.0f} band {cite(*cites)}.",
+                f"That is within the stated band {cite(*cites)}.",
+                f"{c.unit}'s uncertainty is larger than its avoided energy {cite(*cites)}.",
+            ],
+            False: [
+                f"{c.unit}'s avoided energy of {fig} is outside its uncertainty band "
+                f"{cite(*cites)}.",
+                f"{c.unit}'s avoided energy lies outside its ± {u:,.0f} band {cite(*cites)}.",
+                f"That is outside the stated band {cite(*cites)}.",
+                f"{c.unit}'s avoided energy is larger than its uncertainty {cite(*cites)}.",
+            ],
+        }
+        g = _key("band", c.fact_id)
+        for where, drafts in said.items():
+            for d in drafts:
+                truth = "true" if where == inside else "false"
+                out.append(
+                    _r15_case(
+                        d,
+                        truth,
+                        "band",
+                        "none" if truth == "true" else "flip_band",
+                        c.capability,
+                        cites,
+                        d,
+                        g,
+                    )
+                )
+        b = base.get(c.unit)
+        if b is not None:  # a fact with no band places nothing in one
+            d = f"{c.unit}'s result is within its uncertainty band {cite(b.fact_id)}."
+            out.append(_r15_case(d, "false", "band", "no_band", c.capability, (b.fact_id,), d, g))
+    return out
+
+
+def _bound_cases(claims: list) -> list:
+    """(round 15) A figure compared with a bound in one sentence: a baseline's CV(RMSE) with
+    its tier, a point's trust with the trust floor (its summary cited too). True in the
+    figures' order, false with the comparison turned round or negated wrongly."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "cv_tier"):
+        v, t = float(c.value), float(c.extra["tier"])
+        lo = v < t
+        cites = (c.fact_id,)
+        fv, ft = f"{v:g}%", f"{t:g}%"
+        g = _key("bound", c.fact_id)
+        rows = [
+            (lo, f"{c.unit}'s CV(RMSE) of {fv} is below the {ft} tier"),
+            (not lo, f"{c.unit}'s CV(RMSE) of {fv} is above the {ft} tier"),
+            (not lo, f"{c.unit}'s CV(RMSE) of {fv} exceeds the {ft} tier"),
+            (lo, f"{c.unit}'s CV(RMSE) is {fv}, well under the {ft} tier"),
+            (lo, f"{c.unit}'s CV(RMSE) of {fv} is less than the {ft} tier"),
+            (not lo, f"{c.unit}'s CV(RMSE) of {fv} is greater than the {ft} tier"),
+            (lo, f"{c.unit}'s CV(RMSE) of {fv} is not above the {ft} tier"),
+            (not lo, f"{c.unit}'s CV(RMSE) {fv} > {ft}"),
+        ]
+        for ok, d in rows:
+            d = f"{d} {cite(*cites)}."
+            out.append(
+                _r15_case(
+                    d,
+                    "true" if ok else "false",
+                    "bound_compare",
+                    "none" if ok else "flip_compare",
+                    c.capability,
+                    cites,
+                    d,
+                    g,
+                )
+            )
+    views = {c.fact_id.split("@")[1]: c for c in claims if c.attribute == "view" and c.value}
+    for c in (c for c in claims if c.attribute == "trust" and c.point):
+        v = views.get(c.fact_id.split("@")[1])
+        if v is None:
+            continue
+        hi = float(c.value) > float(v.value)
+        cites = (c.fact_id, v.fact_id)
+        g = _key("bound", c.fact_id)
+        fig = f"{float(c.value):.2f}"
+        rows = [
+            (hi, f"{c.unit}'s {c.point} has a trust of {fig}, above the trust floor {v.value:g}"),
+            (
+                not hi,
+                f"{c.unit}'s {c.point} has a trust of {fig}, below the trust floor {v.value:g}",
+            ),
+            (hi, f"The {fig} trust of {c.unit}'s {c.point} is not below the {v.value:g} floor"),
+            (not hi, f"The {fig} trust of {c.unit}'s {c.point} is not above the {v.value:g} floor"),
+        ]
+        for ok, d in rows:
+            d = f"{d} {cite(*cites)}."
+            out.append(
+                _r15_case(
+                    d,
+                    "true" if ok else "false",
+                    "bound_compare",
+                    "none" if ok else "flip_compare",
+                    c.capability,
+                    cites,
+                    d,
+                    g,
+                )
+            )
+    return out
+
+
+def _sign_cases(claims: list) -> list:
+    """(round 15) A sign said in a word: a saving's (from its band claim) and a reference
+    bias's; a figure of zero has neither sign."""
+    out: list = []
+    for c in claims:
+        if c.attribute == "band":
+            v, noun = float(c.value), "avoided energy"
+        elif c.attribute == "bias":
+            v, noun = float(c.value) * (-1 if c.sign == "-" else 1), "bias"
+        else:
+            continue
+        subj = f"{c.unit}'s {c.point} {noun}" if c.point else f"{c.unit}'s {noun}"
+        g = _key("sign", c.fact_id, noun)
+        for word in ("positive", "negative"):
+            ok = (v > 0 and word == "positive") or (v < 0 and word == "negative")
+            d = f"{subj} is {word} {cite(c.fact_id)}."
+            out.append(
+                _r15_case(
+                    d,
+                    "true" if ok else "false",
+                    "sign_word",
+                    "none" if ok else "flip_sign",
+                    c.capability,
+                    (c.fact_id,),
+                    d,
+                    g,
+                )
+            )
+    return out
+
+
+def _reads_cases(claims: list) -> list:
+    """(round 15) A reading's side of its reference said with "over", "under", "above" or
+    "below" ("reads under its reference"): the side the comparison gives."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "reference" and c.label):
+        high = c.label == "reads high"
+        g = _key("reads", c.fact_id)
+        for word in ("over", "above", "under", "below"):
+            ok = (word in ("over", "above")) == high
+            d = f"{c.unit}'s {c.point} reads {word} its reference {cite(c.fact_id)}."
+            out.append(
+                _r15_case(
+                    d,
+                    "true" if ok else "false",
+                    "reads_side",
+                    "none" if ok else "flip_side",
+                    c.capability,
+                    (c.fact_id,),
+                    d,
+                    g,
+                )
+            )
+    return out
+
+
+def _method_cases(claims: list) -> list:
+    """(round 15) What CAMBER itself does, said of a view or the tool: true as the trust
+    summary says how its view reads the points, false where no cited fact says so (the
+    operating state of the rules view, a point's own history)."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "view"):
+        n = c.extra["counts"].get("trusted")
+        cites = (c.fact_id,)
+        g = _key("method", c.fact_id)
+        rows = [
+            (True, f"The {c.label} view gave {n} trusted points"),
+            (
+                c.label == "report",
+                f"The {c.label} view, which judges points in their operating state, gave {n} "
+                "trusted points",
+            ),
+            (c.label == "report", f"The {c.label} view judges duct points with the fan on"),
+            (
+                False,
+                f"The {c.label} view, which judges each point against its own history, gave "
+                f"{n} trusted points",
+            ),
+            (
+                False,
+                f"CAMBER scores each point against its manufacturer's tolerance, and {n} are "
+                "trusted",
+            ),
+            (False, f"The {c.label} view excludes points with stale timestamps"),
+        ]
+        for ok, d in rows:
+            d = f"{d} {cite(*cites)}."
+            out.append(
+                _r15_case(
+                    d,
+                    "true" if ok else "false",
+                    "method",
+                    "none" if ok else "inject_method",
+                    c.capability,
+                    cites,
+                    d,
+                    g,
+                )
+            )
+    return out
+
+
+def _threshold_cases(claims: list) -> list:
+    """(round 15) A finding's thresholds, said with their words: true as listed, false with
+    another threshold's figure, the other level (warn for fault), or a figure off."""
+    out: list = []
+    by_fact: dict = {}
+    for c in claims:
+        if c.attribute == "threshold":
+            by_fact.setdefault(c.fact_id, []).append(c)
+    for fid, cs in sorted(by_fact.items()):
+        for c in cs:
+            fig = f"{c.value:g}%" if c.munit == "%" else f"{c.value:g} {c.munit}".strip()
+            cites = (fid,)
+            g = _key("threshold", fid, c.label)
+            rows = [(True, f"{c.rule}'s {c.label} on {c.unit} is {fig}")]
+            bumped = f"{c.value + 5:g}%" if c.munit == "%" else f"{c.value + 5:g} {c.munit}"
+            rows.append((False, f"{c.rule}'s {c.label} on {c.unit} is {bumped.strip()}"))
+            other = c.label.replace("warn", "fault") if "warn" in c.label else ""
+            if other:
+                rows.append((False, f"{c.rule}'s {other} on {c.unit} is {fig}"))
+            for sib in cs:
+                if sib.label != c.label and (sib.value, sib.munit) != (c.value, c.munit):
+                    sf = f"{sib.value:g}%" if sib.munit == "%" else f"{sib.value:g} {sib.munit}"
+                    rows.append((False, f"{c.rule}'s {c.label} on {c.unit} is {sf.strip()}"))
+            for ok, d in rows:
+                d = f"{d} {cite(*cites)}."
+                out.append(
+                    _r15_case(
+                        d,
+                        "true" if ok else "false",
+                        "threshold",
+                        "none" if ok else "swap_threshold",
+                        c.capability,
+                        cites,
+                        d,
+                        g,
+                    )
+                )
+    return out
+
+
+def _located_cases(claims: list) -> list:
+    """(round 15) Where a set of findings is said to be ("both faults are on AHU-1"): false
+    when a cited finding of that verdict is on another unit; true for the only one."""
+    out: list = []
+    found: dict = {}
+    for c in claims:
+        if c.attribute == "verdict" and c.capability == "rule_run" and c.unit:
+            found.setdefault((c.fact_id.split("@")[1], c.verdict), []).append(c)
+    for (_tok, verdict), cs in sorted(found.items()):
+        if verdict not in ("fault", "warn"):
+            continue
+        units = sorted({c.unit for c in cs})
+        cites = tuple(c.fact_id for c in cs)
+        g = _key("located", *cites)
+        if len(cs) == 1:
+            d = f"The only {verdict} is on {units[0]} {cite(*cites)}."
+            out.append(_r15_case(d, "true", "located", "none", "rule_run", cites, d, g))
+            continue
+        if len(units) > 1:
+            for u in units:
+                d = f"All the {verdict}s are on {u} {cite(*cites)}."
+                out.append(_r15_case(d, "false", "located", "narrow_set", "rule_run", cites, d, g))
+                if len(cs) == 2:
+                    d = f"Both {verdict}s are on {u} {cite(*cites)}."
+                    out.append(
+                        _r15_case(d, "false", "located", "narrow_set", "rule_run", cites, d, g)
+                    )
+    return out
+
+
+def _zone_cases(claims: list) -> list:
+    """(round 15) A time zone said of the data: no fact of the table gives one."""
+    out: list = []
+    for c in claims:
+        if c.capability == "facilities" and c.attribute == "state":
+            for d in (
+                f"{c.site}'s timestamps are on the site wall clock {cite(c.fact_id)}.",
+                f"{c.site}'s data is in UTC {cite(c.fact_id)}.",
+            ):
+                out.append(
+                    _r15_case(
+                        d,
+                        "false",
+                        "time_zone",
+                        "inject_zone",
+                        c.capability,
+                        (c.fact_id,),
+                        d,
+                        _key("zone", c.fact_id),
+                    )
+                )
+    return out
+
+
 def _pairs(claims: list, world: World) -> list:
     out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
     out += _short_id_cases(claims) + _caveat_cases(claims)
     out += _total_cases(claims) + _input_cases(claims) + _rmse_cases(claims)
+    out += _band_cases(claims) + _bound_cases(claims) + _sign_cases(claims)
+    out += _reads_cases(claims) + _method_cases(claims) + _threshold_cases(claims)
+    out += _located_cases(claims) + _zone_cases(claims)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):

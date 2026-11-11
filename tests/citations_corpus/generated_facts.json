@@ -396,6 +396,13 @@
    "kind": "notice",
    "text": "Research-only dataset: its licence or terms forbid commercial use or derivatives, so this server refuses any facility ingested from it. Use it only under its licence, outside this assistant.",
    "value": "notice"
+  },
+  {
+   "dataset_id": "at-30bldg-sensors",
+   "id": "F3@dataset_entry-a824c5",
+   "kind": "dataset_uses",
+   "text": "at-30bldg-sensors is good for: sensor health on a real historian export: placeholders, clamps, saturation, gaps; change-of-value logs and sample-and-hold resampling; why point-type inference cannot lean on names (the ids are anonymised)",
+   "value": 3
   }
  ],
  "dataset_search": [
@@ -2725,6 +2732,75 @@
     "oa_cost_observed_h": 504.0
    },
    "facility_id": "site-a"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "F2@rule_run-888c71",
+   "kind": "finding",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "rule": "economizer_high_limit",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out); oa_cost_flagged true; thresholds: high limit 68 °F (high_limit_f); null: oa_cost_airflow, oa_cost_excess_cool_kbtu, oa_cost_excess_heat_kbtu",
+   "value": "fault"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset_compliance@AHU-1",
+   "id": "F10@rule_run-888c71",
+   "kind": "finding",
+   "metrics": {
+    "actual_sat_median": 55.1,
+    "fan_gate": "fan status",
+    "mean_above_gap_f": -1.19,
+    "mean_abs_error_f": 1.36,
+    "mean_gap_f": 1.01,
+    "n": 165,
+    "n_gated": 165,
+    "n_warm": 139,
+    "occupancy_gate": "assumed schedule (weekdays 07-18)",
+    "pct_above_target": 0.0,
+    "pct_below_target": 23.0,
+    "reset_source": "g36_default",
+    "target_median": 55.0,
+    "target_source": "g36",
+    "track_gap_f": 5.0,
+    "tracks_target": true,
+    "warn_gap_floor_f": 2.0,
+    "warn_pct_threshold": 40.0
+   },
+   "rule": "supply_air_reset_compliance",
+   "text": "\"AHU-1\" supply_air_reset_compliance (ok): \"AHU-1\": SAT median 55.1°F vs G36 target 55.0°F; below target 23% of hours (mean gap +1.0°F) -- tracks the G36 reset target; conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1; tracks_target true; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
+   "value": "ok"
   }
  ],
  "sensor_trust": [
@@ -2887,6 +2963,14 @@
    "overlap_start": "2026-03-02 00:00:00",
    "overlap_end": "2026-03-22 23:00:00",
    "text": "\"AHU-2\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" agrees within the comparison's thresholds (passed): AHU-2 supply_air_temp: bias +0.0, drift not evaluated, RMSE 0.0, r=1.00 over 504 samples / 21 days -- tracks reference; bias +0.0 °F, RMSE 0.0 °F: the bias is the median of the point minus the reference, so the point reads neither high nor low against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
+  },
+  {
+   "facility_id": "site-a",
+   "id": "F1@sensor_trust-6420d0",
+   "kind": "trust_summary",
+   "min_trust": 0.5,
+   "text": "site-a: 27 points judged (report view: operating-state-aware, duct points judged with the fan on and plant points while their equipment runs): 23 trusted, 4 suspect, 0 untrusted; 0 below the trust floor 0.5",
+   "value": 0
   }
  ]
 }
