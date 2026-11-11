@@ -120,10 +120,12 @@ def test_a_read_between_the_two_renames_is_retryable(store, monkeypatch):
     assert not present  # the facility really was absent at that moment
     assert isinstance(read.get("error"), StoreReadError), read  # not an empty frame
     assert read["error"].retryable and read["error"].facility_id == FID
-    for out in (points, listing):
-        e = out.get("error")
-        assert isinstance(e, CapabilityError) and e.code == "unavailable", out
-        assert e.data == {"retryable": True, "facility_id": FID}
+    e = points.get("error")
+    assert isinstance(e, CapabilityError) and e.code == "unavailable", points
+    assert e.data == {"retryable": True, "facility_id": FID}
+    # the listing marks the facility instead of failing as a whole (#322)
+    (row,) = listing["value"].data["facilities"]
+    assert row["unavailable"] == {"retryable": True, "reason": "being_replaced"}
     # once the swap is done, the same calls answer normally
     assert len(reader.read_long(facility_id=FID)) > 0
     assert REG.call("points", {"facility_id": FID}, _ctx(store)).data
@@ -162,10 +164,14 @@ def test_a_call_a_swap_overlapped_is_unavailable(store, monkeypatch, name):
 
     monkeypatch.setattr(ParquetStore, "points", points_then_swap)
     args = {} if name == "facilities" else {"facility_id": FID}
-    with pytest.raises(CapabilityError) as ei:
-        REG.call(name, args, _ctx(store))
-    assert ei.value.code == "unavailable"
-    assert ei.value.data == {"retryable": True, "facility_id": FID}
+    if name == "facilities":  # the listing marks the facility instead of failing (#322)
+        (row,) = REG.call(name, args, _ctx(store)).data["facilities"]
+        assert row["unavailable"] == {"retryable": True, "reason": "being_replaced"}
+    else:
+        with pytest.raises(CapabilityError) as ei:
+            REG.call(name, args, _ctx(store))
+        assert ei.value.code == "unavailable"
+        assert ei.value.data == {"retryable": True, "facility_id": FID}
     assert REG.call(name, args, _ctx(store)).data  # and a retry answers
 
 
@@ -219,11 +225,19 @@ def test_readers_during_repeated_forced_reingests_never_get_a_wrong_answer(store
             n, a = calls[i % len(calls)]
             i += 1
             try:
-                got, err = _norm(REG.call(n, a, _ctx(store))), None
+                res, err = REG.call(n, a, _ctx(store)), None
+                got = _norm(res)
             except CapabilityError as e:
-                got, err = None, e
+                res, got, err = None, None, e
+            # the listing marks a facility being replaced instead of failing (#322)
+            marked = res is not None and n == "facilities"
+            marked = marked and all(
+                (r.get("unavailable") or {}).get("retryable") for r in res.data["facilities"]
+            )
             with lock:
-                if err is not None and err.code == "unavailable" and err.data.get("retryable"):
+                if marked or (
+                    err is not None and err.code == "unavailable" and err.data.get("retryable")
+                ):
                     stats["unavailable"] += 1
                 elif err is None and got == base[n]:
                     stats["same"] += 1
@@ -235,7 +249,15 @@ def test_readers_during_repeated_forced_reingests_never_get_a_wrong_answer(store
     ]
     for t in threads:
         t.start()
+    # long enough to see both sides, whatever the runner's speed (a slow one under coverage
+    # read only 3 unchanged answers in a fixed 1.5 s)
+    end = time.monotonic() + 60
     time.sleep(1.5)
+    while time.monotonic() < end:
+        with lock:
+            if stats["swaps"] >= 5 and stats["same"] >= 5:
+                break
+        time.sleep(0.1)
     stop.set()
     for t in threads:
         t.join(60)

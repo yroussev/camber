@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+
+from ..store import _fence
 from ..store.parquet_store import StoreReadError
 from . import Capability, CapabilityResult
 from ._page import OFFSET, limit_arg, page
@@ -25,15 +28,24 @@ _ROW = {
             "type": "object",
             "required": ["retryable"],
             "additionalProperties": False,
-            "properties": {"retryable": {"type": "boolean"}},
+            "properties": {
+                "retryable": {"type": "boolean"},
+                "reason": {
+                    "enum": ["being_replaced", "unreadable"],
+                    "description": "being_replaced: a writer (an ingest, prune or removal, or "
+                    "one killed mid-swap that the store's next writer finishes) is replacing "
+                    "its data, retry later; unreadable: a stored file could not be read",
+                },
+            },
             "description": "present when the facility's stored data could not be read for this "
-            "listing (start and end are then null); retryable: a retry will likely succeed",
+            "listing (start, end and the counts are then null / 0); retryable: a retry will "
+            "likely succeed",
         },
     },
 }
 
 #: facilities per page by default (#299)
-_PAGE = 100
+_PAGE = 40  # 100 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -61,6 +73,14 @@ OUTPUT_SCHEMA = {
 
 #: per-facility sentences in the summary; the rest are in ``data``
 _LISTED = 10
+#: withheld facility ids a notice names (0.112, #333); the rest are counted
+_NAMED = 20
+
+
+def _ids(fids: list) -> str:
+    """``a, b and 2 more``: the first :data:`_NAMED` of ``fids``."""
+    more = len(fids) - _NAMED
+    return ", ".join(fids[:_NAMED]) + (f" and {more} more" if more > 0 else "")
 
 
 def _state(state: str) -> str:
@@ -68,6 +88,11 @@ def _state(state: str) -> str:
     from ..portfolio._states import STATES
 
     return state if state in STATES else name(state)
+
+
+def _why(row: dict):
+    """Why ``row``'s facility is unavailable (``reason``), or ``None`` when it is not."""
+    return (row.get("unavailable") or {}).get("reason")
 
 
 def _span(store, fid: str) -> tuple:
@@ -83,33 +108,60 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
 
     A facility is listed only when :func:`camber._servable.refusal` clears it (0.111, #290): the
     registry read here is the fail-closed one, so a damaged registry lists nothing.
+
+    Each facility is read under its own write fence (the capability is ``fences_itself``): one
+    a writer is replacing, or that a killed writer left mid-swap, is listed as unavailable
+    instead of failing the whole listing (#322). The fences are taken first, before the
+    registry is read, with one wait for all, and checked again after each facility is read.
     """
     from .._provenance import facility_timezone
     from .._servable import read_registry, refusal
 
     store = open_store(ctx)
+    fences: dict = {}
+    deadline = time.monotonic() + _fence._WAIT
+    for fid in sorted(ctx.allowed_facilities):
+        try:
+            wait = max(0.0, deadline - time.monotonic())
+            fences[fid] = _fence.snapshot(store.root, [fid], wait=wait)
+        except StoreReadError:
+            fences[fid] = None  # a writer is still at work on it
     registry = read_registry(store.root)
     meta = registry[0]
     known = set(store.facilities()) | set(meta)
-    rows, withheld, unverified = [], 0, 0
+    # a facility whose partition a killed writer left mid-swap has no directory (#322)
+    known |= {
+        f
+        for f in ctx.allowed_facilities
+        if f not in known and _fence._safe(f) and _fence._mid_swap(store.root, f)
+    }
+    rows, withheld, unverified = [], [], []
     for fid in sorted(f for f in ctx.allowed_facilities if f in known):
         m = meta.get(fid) or {}
         why = refusal(fid, store.root, registry)
         if why is not None:
             if why[0] == "research_only":
-                withheld += 1
+                withheld.append(fid)
             else:
-                unverified += 1
+                unverified.append(fid)
             continue
         # this facility's catalog entry and file statistics only, never its rows (#293); one
         # facility's damaged file must not hide the others (#301)
         broken, n_points, n_equipment, start, end = None, 0, 0, None, None
-        try:
-            n_points = len(store.points(facility_id=fid))
-            n_equipment = len(store.equipment(facility_id=fid).get(fid) or {})
-            start, end = _span(store, fid)
-        except StoreReadError as e:
-            start, end, broken = None, None, {"retryable": bool(e.retryable)}
+        snap = fences[fid]
+        if snap is None:
+            broken = {"retryable": True, "reason": "being_replaced"}
+        else:
+            try:
+                n_points = len(store.points(facility_id=fid))
+                n_equipment = len(store.equipment(facility_id=fid).get(fid) or {})
+                start, end = _span(store, fid)
+            except StoreReadError as e:
+                broken = {"retryable": bool(e.retryable), "reason": "unreadable"}
+            if broken is None and _fence.changed(store.root, snap) is not None:
+                broken = {"retryable": True, "reason": "being_replaced"}
+        if broken:
+            n_points, n_equipment, start, end = 0, 0, None, None
         rows.append(
             {
                 "facility_id": fid,
@@ -134,48 +186,64 @@ def facilities(ctx, arguments: dict) -> CapabilityResult:
     text = [f"{len(rows)} facilities are visible [F1@facilities]."]
     shown = page(rows, arguments, default=_PAGE, what="facilities", order="by id")
     for i, r in enumerate(shown, start=2):
-        if r.get("unavailable"):
-            span = "stored data that cannot be read right now"
+        if r.get("unavailable"):  # its counts were not read: never "0 points" (#322)
+            what = "its stored data cannot be read right now"
+            fact = f"{_state(r['state'])}, {what}"
         else:
             span = f"data from {r['start']} to {r['end']}" if r["start"] else "no stored data"
+            what = f"with {r['n_points']} points"
+            fact = (
+                f"{_state(r['state'])}, {r['n_points']} points on {r['n_equipment']} "
+                f"equipment, {span}"
+            )
         facts.append(
             {
                 "id": f"F{i}@facilities",
                 "kind": "facility",
                 "facility_id": r["facility_id"],
                 "value": r["n_points"],
-                "text": f"{r['facility_id']} ({name(r['name'])}): {_state(r['state'])}, "
-                f"{r['n_points']} points on {r['n_equipment']} equipment, {span}",
+                "text": f"{r['facility_id']} ({name(r['name'])}): {fact}",
             }
         )
         if i - 1 <= _LISTED:
-            text.append(
-                f"{r['facility_id']} is {_state(r['state'])} with {r['n_points']} points "
-                f"[F{i}@facilities]."
-            )
+            sep = ", " if r.get("unavailable") else " "
+            text.append(f"{r['facility_id']} is {_state(r['state'])}{sep}{what} [F{i}@facilities].")
     banners = []
-    unreadable = [r["facility_id"] for r in rows if r.get("unavailable")]
+    replacing = [r["facility_id"] for r in rows if _why(r) == "being_replaced"]
+    if replacing:
+        banners.append(
+            f"The stored data of {', '.join(replacing)} is being replaced (an ingest, prune or "
+            "removal); calls on it return the error code unavailable with retryable true until "
+            "it is done: retry later. If it stays so, a writer was killed mid-replace; the "
+            "store's next ingest, prune or removal finishes it."
+        )
+    unreadable = [r["facility_id"] for r in rows if _why(r) == "unreadable"]
     if unreadable:
         banners.append(
             f"The stored data of {', '.join(unreadable)} cannot be read right now (a damaged "
             "file or a concurrent ingest); calls on it return the error code unavailable."
         )
+    # 0.112 (#333): the withheld ids are named (an allowed id is no secret to its caller), so
+    # a model does not tell a user that a right id may be wrong
     if withheld:
         banners.append(
-            f"{withheld} allowed facility(ies) hold research-only (non-commercial / "
-            "no-derivatives) data and are not listed: such data is never served here."
+            f"{len(withheld)} allowed facility(ies) hold research-only (non-commercial / "
+            f"no-derivatives) data and are not listed: {_ids(withheld)}. The id is right, but "
+            "its data's licence forbids this use, so it is never served here: a call naming it "
+            "is refused_licence."
         )
     if unverified:
         banners.append(
-            f"{unverified} allowed facility(ies) are not listed because their licence or "
-            "lifecycle cannot be established from the store's facility registry; they are not "
-            "served until it is repaired."
+            f"{len(unverified)} allowed facility(ies) are not listed because their licence or "
+            "lifecycle cannot be established (from the store's facility registry, or not all "
+            f"of their files could be checked): {_ids(unverified)}. They are not served until "
+            "that is repaired."
         )
     data = {
         "facilities": shown,
         "count": len(rows),
-        "withheld_research_only": withheld,
-        "withheld_unverified": unverified,
+        "withheld_research_only": len(withheld),
+        "withheld_unverified": len(unverified),
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
@@ -192,5 +260,6 @@ CAPABILITIES = (
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,
         handler=facilities,
+        fences_itself=True,
     ),
 )

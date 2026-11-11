@@ -14,7 +14,7 @@ Subcommands:
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P] [--allow-host N] [--auth A]  # read API + /ui
-    camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+    camber datasets list|info|fetch|ingest|status|provenance|remove|config|score # dataset catalog
     camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
@@ -1261,6 +1261,45 @@ def _cmd_datasets_status(args) -> int:
     return 0
 
 
+_PROV_STATES = {
+    "marked": "provenance in every part",
+    "missing": "no provenance (ingested before 0.112; `camber datasets ingest --force` adds it)",
+    "mixed": "provenance in some parts only",
+    "own": "own data (no catalog dataset)",
+    "empty": "no part files",
+}
+
+
+@_ds_errors
+def _cmd_datasets_provenance(args) -> int:
+    """0.112 (#319): which facilities' part files carry the catalog dataset provenance."""
+    from .datasets._ops import store_provenance
+
+    rows = store_provenance(args.store)
+    if args.missing:
+        rows = [r for r in rows if r["state"] in ("missing", "mixed")]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("every facility's part files carry provenance" if args.missing else "no facility")
+        return 0
+    for r in rows:
+        ro = set(r["research_only_datasets"])
+        ids = ", ".join(d + (" research-only" if d in ro else "") for d in r["datasets"])
+        ids = f" [{ids}]" if ids else ""
+        # #334: what makes a facility research-only without naming a dataset, as --json says
+        if r["unreadable_marks"]:
+            ids += " [mark unreadable: counts as research-only]"
+        if r["unchecked"]:
+            ids += " [not all files could be checked: counts as research-only]"
+        print(
+            f"{r['facility_id']:32s} {r['marked']:>6d}/{r['parts']:<6d} "
+            f"{_PROV_STATES[r['state']]}{ids}"
+        )
+    return 0
+
+
 @_ds_errors
 @_lock_scoped
 def _cmd_datasets_remove(args) -> int:
@@ -2106,7 +2145,12 @@ def _cmd_store_verify(args) -> int:
 
     try:
         r = _normalize.verify(args.store, facility_id=args.facility)
-    except (ValueError, OSError) as e:
+    except OSError as e:  # #337: a path inside the store by its store-relative name only
+        where = os.path.relpath(e.filename, args.store) if isinstance(e.filename, str) else ""
+        where = "" if where in ("", ".") or where.startswith("..") else f": {where}"
+        print(f"error: {e.strerror or e}{where}", file=sys.stderr)
+        return 1
+    except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     c = r["counts"]
@@ -2137,15 +2181,31 @@ def _cmd_store_verify(args) -> int:
             "trash": "interrupted partition delete",
             "aside": "partition moved aside by an interrupted ingest",
             "scratch": "ingest staging directory",
+            "tmp": "temporary file of an interrupted registry or other write",  # #335
         }[x["kind"]]
         who = f" of {x['facility_id']}" if x["facility_id"] else ""
-        state = " (its process is still running)" if x["alive"] else ""
+        state = ""
+        if x["alive"]:  # #330: one made on another system is alive while its writer holds the store
+            state = (
+                " (made on another system by the writer that holds the store's claim now)"
+                if x.get("elsewhere")
+                else " (a writer holds the store now: it may be that write in progress)"
+                if x["kind"] == "tmp"
+                else " (its process is still running)"
+            )
         mark = "!" if x["stranded"] else "-"
         print(f"  {mark} leftover {x['path']}: {what}{who}{state}")
     if any(x["stranded"] for x in left):
         print("    ! a facility's data is outside its partition; the next ingest recovers it")
-    elif left:
+    elif any(not x["alive"] for x in left):
         print("    the next ingest into this store removes or recovers these")
+    elif any(x.get("elsewhere") for x in left):
+        print(
+            "    the next ingest removes these once that claim is let go, or taken over 10 s"
+            " after its writer stopped"
+        )
+    elif left:
+        print("    left alone while their writers run")
     for fe in empty:
         print(f"  - {fe['facility_id']} ({fe['state']}) is registered but has no part files")
     if c["noncanonical"]:
@@ -3134,6 +3194,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
     )
+    from . import __version__
+
+    ap.add_argument("--version", action="version", version=f"camber {__version__}")  # #322
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("run", help="run a config and print/write findings")
@@ -3762,6 +3825,20 @@ def _build_parser() -> argparse.ArgumentParser:
     dss.add_argument("--json", action="store_true")
     dss.set_defaults(func=_cmd_datasets_status)
 
+    dsp = dssub.add_parser(
+        "provenance",
+        help="which facilities' part files carry their dataset's provenance (licence, "
+        "research-only flag) and which lack it",
+    )
+    dsp.add_argument("--store", required=True, help="ParquetStore directory")
+    dsp.add_argument(
+        "--missing",
+        action="store_true",
+        help="only the facilities whose parts lack provenance (re-ingest adds it)",
+    )
+    dsp.add_argument("--json", action="store_true")
+    dsp.set_defaults(func=_cmd_datasets_provenance)
+
     dsr = dssub.add_parser("remove", help="delete a dataset's downloads (and store facilities)")
     dsr.add_argument("id")
     dsr.add_argument("--dir")
@@ -4165,15 +4242,34 @@ def _interrupted(exc: BaseException | None) -> bool:
     return bool(_SIGINT_SEEN)
 
 
+def _quiet_hook(hook):
+    """``hook`` (``sys.excepthook`` / ``sys.unraisablehook``) that drops a Ctrl-C: an extension
+    module's import that a Ctrl-C interrupted may print the ``KeyboardInterrupt`` and swallow it
+    (pandas); it is noted instead, and the command still ends with 130 (#322)."""
+
+    def quiet(*args):
+        exc_type = args[0] if len(args) == 3 else getattr(args[0], "exc_type", None)
+        if isinstance(exc_type, type) and issubclass(exc_type, KeyboardInterrupt):
+            _SIGINT_SEEN.append(signal.SIGINT)
+            return None
+        return hook(*args)
+
+    return quiet
+
+
 def main(argv=None):
     """CLI entry point: parse args and dispatch to the requested subcommand. Ctrl-C ends it
-    quietly with exit status 130, however early it comes (#321)."""
+    quietly with exit status 130, however early it comes (#321, #322)."""
     _SIGINT_SEEN.clear()
     noted = False
     with contextlib.suppress(ValueError):  # ValueError: not the main thread (an embedding)
         if signal.getsignal(signal.SIGINT) is signal.default_int_handler:
             signal.signal(signal.SIGINT, _note_sigint)
             noted = True
+    hooks = {"excepthook": sys.excepthook, "unraisablehook": sys.unraisablehook}
+    if noted:
+        for name, hook in hooks.items():
+            setattr(sys, name, _quiet_hook(hook))
     try:
         return _main(argv)
     except SystemExit:
@@ -4185,6 +4281,9 @@ def main(argv=None):
     finally:
         if noted and signal.getsignal(signal.SIGINT) is _note_sigint:
             signal.signal(signal.SIGINT, signal.default_int_handler)
+        if noted:
+            for name, hook in hooks.items():
+                setattr(sys, name, hook)
 
 
 def _main(argv):

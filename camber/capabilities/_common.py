@@ -10,6 +10,7 @@ import datetime as _dt
 import enum
 import math
 import os
+import re
 from functools import lru_cache
 
 import numpy as np
@@ -332,7 +333,7 @@ def caller_config(ctx, facility_id: str) -> tuple:
     notice = (
         f"No run config names this facility, so this run uses the config template packaged for "
         f"catalog dataset {name(dataset_id)} (the one `camber datasets config` writes): its "
-        "equipment classes, rules and parameters, not ones tuned for your own use of the data."
+        "equipment classes, rules and parameters, not a config tuned for your own use of the data."
     )
     return config, os.path.dirname(os.path.abspath(ctx.store)), notice
 
@@ -350,13 +351,15 @@ def dataset_template(ctx, facility_id: str) -> tuple:
 
     if not ctx.store or not _is_dataset_name(facility_id):
         return None, None
+    # outside the try: a registry that cannot be read just now is unavailable, never a run
+    # without the template (0.112, #324)
+    entries, problem = read_registry(ctx.store)
+    if problem is not None:
+        return None, None
     try:
         from ..datasets import get
         from ..datasets._ops import build_config
 
-        entries, problem = read_registry(ctx.store)
-        if problem is not None:
-            return None, None
         block = (entries.get(facility_id) or {}).get("dataset")
         did = block.get("dataset_id") if isinstance(block, dict) else None
         if did:
@@ -624,8 +627,8 @@ def trust_banner(declines: list, floor) -> str | None:
     return (
         f"{len(declines)} check(s) declined because an input scored below the trust floor"
         f"{under} ({which}{inputs}). The fault and warn counts do not cover them: a declined "
-        "check is not a pass. sensor_trust over the same window reports these scores and the "
-        "flags behind them."
+        "check is not a pass, and those checks were not judged. sensor_trust over the same "
+        "window reports these scores and the flags behind them."
     )
 
 
@@ -659,22 +662,189 @@ def is_fleet_id(rule: str, equip: str) -> bool:
     return equip == FLEET and rule in fleet_rules()
 
 
-def finding_fact(fact_id: str, row: dict) -> dict:
-    """The fact that cites one finding row; its text names the equipment as a quoted value
-    (#291), also where the rule's summary starts with it (``AHU-1: ...``)."""
-    equip, summary = row["equip"], row["summary"]
-    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
+def summary_text(equip: str, summary: str, *, own: bool = False) -> str:
+    """A rule's one-line summary of a finding on ``equip`` as a fact's text writes it: the
+    equipment it starts with (``AHU-1: ...``) as a quoted name, the rest as the rule's prose."""
+    summary = " ".join(str(summary or "").split())
     flat = " ".join(equip.split())
     # #314: the rest of the summary is the rule's text about the data (it may name more units,
     # zones or points): a span, so a name with a slash in it is not taken for a path
     if flat and summary.startswith(f"{flat}:"):
-        summary = name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
-    else:
-        summary = prose(summary)
+        return name(equip, own=own) + ":" + prose(summary[len(flat) + 1 :])
+    return prose(summary)
+
+
+#: the most null metrics a finding fact names (the rest are counted)
+_NULLS_NAMED = 6
+
+
+#: the most energy or cost totals a finding fact names (the rest are counted)
+_TOTALS_NAMED = 4
+#: a metric's last word that makes it an energy or cost total, and that total's unit
+_TOTAL_UNITS = {
+    "kbtu": "kBtu",
+    "mmbtu": "MMBtu",
+    "btu": "Btu",
+    "kwh": "kWh",
+    "mwh": "MWh",
+    "therm": "therms",
+    "therms": "therms",
+    "usd": "$",
+}
+
+
+def _total_figure(v: float, unit: str) -> str:
+    """A total as a fact writes it: whole, with thousands separators, from 100 up (``6,182``),
+    else to 2 places (``14.25``); a dollar figure with its sign before the ``$``."""
+    size = f"{abs(v):,.0f}" if abs(v) >= 100 else f"{round(abs(v), 2):g}"
+    sign = "-" if v < 0 and size.strip("0.,") else ""
+    return f"{sign}${size}" if unit == "$" else f"{sign}{size} {unit}"
+
+
+def _metric_totals(metrics: dict) -> str:
+    """The energy and cost totals of a finding's metrics (0112-cite14), which hosts quote from
+    the JSON: ``totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu, ...``. Each
+    metric whose last word is an energy or cost unit (not a rate: no ``per``), with its other
+    words, so a sentence must say which total it gives ("cooling", not "heating"). At most
+    :data:`_TOTALS_NAMED`, then "and N more". Empty when there is none."""
+    said = []
+    for k in sorted(metrics):
+        v = metrics[k]
+        words = str(k).split("_")
+        unit = _TOTAL_UNITS.get(words[-1])
+        if (
+            unit is None
+            or "per" in words
+            or len(words) < 2
+            or str(k).startswith("_")
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float, np.integer, np.floating))
+            or not math.isfinite(float(v))
+        ):
+            continue
+        said.append(f"{k} ({' '.join(words[:-1])}) {_total_figure(float(v), unit)}")
+    if not said:
+        return ""
+    more = len(said) - _TOTALS_NAMED
+    return "totals: " + ", ".join(said[:_TOTALS_NAMED]) + (f" and {more} more" if more > 0 else "")
+
+
+#: the most thresholds and limits a finding fact names (the rest are counted)
+_THRESHOLDS_NAMED = 6
+#: (0112-cite15) a metric word that makes it a rule's threshold or limit
+_THRESHOLD_WORDS = frozenset(("threshold", "floor", "limit"))
+#: a first word that makes it a count or a share against a threshold, not the threshold
+_THRESHOLD_NOT_FIRST = frozenset(("n", "pct", "below", "above", "over", "under", "frac"))
+#: a last word that makes it something else of a threshold (its hours, its confidence)
+_THRESHOLD_NOT_LAST = frozenset(
+    ("hours", "h", "samples", "confidence", "provisional", "label", "start", "excluded")
+)
+#: a metric word that gives a threshold's unit
+_THRESHOLD_UNITS = {
+    "f": "°F",
+    "c": "°C",
+    "pct": "%",
+    "kw": "kW",
+    "gpm": "gpm",
+    "psi": "psi",
+    "cfm": "cfm",
+    "inwc": "inWC",
+    "hours": "h",
+    "minutes": "min",
+}
+
+
+def _metric_thresholds(metrics: dict) -> str:
+    """The thresholds and limits a finding's metrics carry (0112-cite15), which hosts quote
+    from the JSON ("that is the rule's warn threshold"): ``thresholds: warn threshold 40%
+    (warn_pct_threshold), ...``. Each numeric metric that is a warn or fault level (``warn_*``,
+    ``fault_*``) or names a threshold, floor or limit, not a count or share against one
+    (``n_above_limit``, ``pct_over_threshold``, ``below_floor_pct``) nor its hours; its unit
+    from its words, and its other words as its label. At most :data:`_THRESHOLDS_NAMED`, then
+    "and N more". Empty when there is none."""
+    said = []
+    # the warn and fault levels and the named thresholds first, then the limits and floors
+    first = sorted(
+        metrics,
+        key=lambda k: (
+            not (str(k).split("_")[0] in ("warn", "fault") or "threshold" in str(k).split("_")),
+            str(k),
+        ),
+    )
+    for k in first:
+        v = metrics[k]
+        words = str(k).split("_")
+        if (
+            str(k).startswith("_")
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float, np.integer, np.floating))
+            or not math.isfinite(float(v))
+            or words[0] in _THRESHOLD_NOT_FIRST
+        ):
+            continue
+        level = words[0] in ("warn", "fault")
+        if not (level or _THRESHOLD_WORDS & set(words)):
+            continue
+        if words[-1] in _THRESHOLD_NOT_LAST and not (level and words[-1] in ("hours", "h")):
+            continue
+        unit = next((_THRESHOLD_UNITS[w] for w in reversed(words) if w in _THRESHOLD_UNITS), "")
+        label = [w for w in words if w not in _THRESHOLD_UNITS] or [str(k)]
+        if not _THRESHOLD_WORDS & set(label):
+            label.append("threshold")  # "fault_pct": the fault threshold
+        fig = f"{float(v):g}"
+        size = f"{fig}%" if unit == "%" else (f"{fig} {unit}" if unit else fig)
+        # the threshold's words just before its figure, so a sentence reads it as a threshold
+        said.append(f"{' '.join(label)} {size} ({k})")
+    if not said:
+        return ""
+    more = len(said) - _THRESHOLDS_NAMED
+    return (
+        "thresholds: "
+        + ", ".join(said[:_THRESHOLDS_NAMED])
+        + (f" and {more} more" if more > 0 else "")
+    )
+
+
+def _metric_flags(metrics: dict) -> str:
+    """What a finding's metrics say beyond its summary that hosts state from the JSON
+    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), its
+    energy and cost totals (:func:`_metric_totals`, 0112-cite14), its thresholds and limits
+    (:func:`_metric_thresholds`, 0112-cite15) and the metrics it left null (``null:
+    oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
+    keys = [k for k in sorted(metrics) if not k.startswith("_")]
+    parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
+    totals = _metric_totals(metrics)
+    if totals:
+        parts.append(totals)
+    thresholds = _metric_thresholds(metrics)
+    if thresholds:
+        parts.append(thresholds)
+    nulls = [k for k in keys if metrics[k] is None]
+    if nulls:
+        more = len(nulls) - _NULLS_NAMED
+        parts.append(
+            "null: " + ", ".join(nulls[:_NULLS_NAMED]) + (f" and {more} more" if more > 0 else "")
+        )
+    return "; ".join(parts)
+
+
+def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dict:
+    """The fact that cites one finding row; its text names the equipment as a quoted value
+    (#291), also where the rule's summary starts with it (``AHU-1: ...``). A finding with
+    insufficient data says it was not judged, and the fact names its facility (0.112, #328), so
+    a sentence can say either."""
+    equip = row["equip"]
+    own = is_fleet_id(row["rule"], equip)  # 0.111 (#320)
+    summary = summary_text(equip, row["summary"], own=own)
     text = f"{name(equip, own=own)} {row['rule']} ({row['severity']}): {summary}"
+    if str(row["summary"]).startswith("insufficient data"):
+        text = text.rstrip(" .;") + ": this check was not judged"
     if row.get("conditional_on"):  # 0.111 (#313)
         text = text.rstrip(" .;") + "; conditional on " + "; ".join(row["conditional_on"])
-    return {
+    flags = _metric_flags(row.get("metrics") or {})
+    if flags:
+        text = text.rstrip(" .;") + "; " + flags
+    fact = {
         "id": fact_id,
         "kind": "finding",
         "value": row["severity"],
@@ -684,6 +854,354 @@ def finding_fact(fact_id: str, row: dict) -> dict:
         "text": text,
         "metrics": row["metrics"],
     }
+    if facility_id is not None:
+        fact["facility_id"] = facility_id
+    return fact
+
+
+# --------------------------------------------------------------------------- notes as facts
+# 0112-cite10: what a result's JSON says beyond its facts -- a finding's caveats, its labels
+# (the string-valued metrics, such as a missed cause or an airflow source) and the samples it
+# masked, the rules a run skipped for missing inputs and the basis of a rule's parameters --
+# each issued as a fact of its own. Hosts read the whole result and cited the nearest fact for
+# these (the real-host baseline of PLAN-CITE-EVAL: 31 of 39 kept false sentences), so a sentence
+# stating one now has a fact that states it to cite, and is checked against that fact.
+
+#: the metrics of a finding counted as masked samples (``n_masked_fan_off``, ...)
+_MASKED = "n_masked"
+#: the longest label value a labels fact gives in full
+_LABEL_LEN = 160
+
+
+def caveat_facts(
+    context: str, rows: list, facility_id: str | None = None, totals: dict | None = None
+) -> list:
+    """The facts of the caveats of finding ``rows``, kind ``caveat``, ``V<k>@<context>``: one
+    per rule and caveat text, naming every unit it was given for (a caveat a rule gives each of
+    its findings is one fact), in the rule's words (``"AHU-1" leaking_valve caveat: judged on
+    supply air minus mixed air ...``): what the rule says may make its findings read wrong, or
+    what it left out. ``totals`` (rule: its results on every page): a caveat given for fewer
+    of a rule's results says so, ``(given for 3 of its 145 results)``, and carries ``of`` (the
+    rule's results), so a sentence must name the units it is for (0112-cite13)."""
+    groups: dict = {}
+    for r in rows:
+        for c in r.get("caveats") or []:
+            c = " ".join(str(c).split())
+            if c:
+                groups.setdefault((r["rule"], c), []).append(r)
+    out = []
+    for k, ((rule, caveat), of) in enumerate(groups.items(), start=1):
+        units = list(dict.fromkeys(r["equip"] for r in of))
+        named = ", ".join(name(u, own=is_fleet_id(rule, u)) for u in units)
+        total = (totals or {}).get(rule) or 0
+        part = f" (given for {len(of)} of its {total} results)" if total > len(of) else ""
+        fact = {
+            "id": f"V{k}@{context}",
+            "kind": "caveat",
+            "value": "caveat",  # a word, not a figure a sentence could match
+            "rule": rule,
+            "finding_ids": [r["finding_id"] for r in of],
+            "text": f"{named} {rule} caveat{part}: {prose(caveat).rstrip(' .;')}",
+        }
+        if part:
+            fact["of"] = total
+        if len(units) == 1:
+            fact["equip"] = units[0]
+            fact["subject"] = subject(facility_id, units[0], finding=of[0]["finding_id"])
+        else:
+            fact["equips"] = units
+        out.append(fact)
+    return out
+
+
+def finding_labels(fact_id: str, row: dict, facility_id: str | None = None) -> dict | None:
+    """The fact of a finding row's labels, kind ``finding_labels`` (None when it has none): its
+    string-valued metrics (``missed_cause``, ``oa_cost_airflow``, ``fan_gate``, an M&V
+    ``method`` or ``kernel``) and the samples it masked (``n_masked_*``), each as ``key
+    "value"`` (a value is quoted: it may name a zone or a point from the data)."""
+    metrics = row.get("metrics") or {}
+    labels = [
+        f"{k} {name(v, limit=_LABEL_LEN)}"
+        for k, v in sorted(metrics.items())
+        if isinstance(v, str) and v.strip() and not k.startswith("_")
+    ]
+    masked = [
+        f"{k} {v:g}"
+        for k, v in sorted(metrics.items())
+        if k.startswith(_MASKED) and isinstance(v, (int, float)) and not isinstance(v, bool)
+    ]
+    if not labels and not masked:
+        return None
+    equip = row["equip"]
+    own = is_fleet_id(row["rule"], equip)
+    parts = []
+    if labels:
+        parts.append("labels: " + "; ".join(labels))
+    if masked:
+        parts.append("samples masked: " + "; ".join(masked))
+    return {
+        "id": fact_id,
+        "kind": "finding_labels",
+        "value": "labels",
+        "rule": row["rule"],
+        "equip": equip,
+        "finding_id": row["finding_id"],
+        "subject": subject(facility_id, equip, finding=row["finding_id"]),
+        "text": f"{name(equip, own=own)} {row['rule']} " + "; ".join(parts),
+    }
+
+
+#: the skipped rules a skipped-rules fact names (the rest are counted)
+_SKIPS_NAMED = 20
+
+
+def skipped_fact(fact_id: str, skips: list, facility_id: str) -> dict | None:
+    """The fact naming the rules a run skipped for missing inputs, kind ``skipped_rules`` (None
+    when it skipped none): per rule, the inputs it lacked and the equipment it was skipped on
+    (``skips``: ``{"rule", "equip", "reason", "missing"}`` rows, every page)."""
+    if not skips:
+        return None
+    per: dict = {}
+    for s in skips:
+        k = (s["rule"], tuple(s.get("missing") or ()))
+        per.setdefault(k, []).append(s.get("equip") or "")
+    named = []
+    for (rule, missing), equips in sorted(per.items())[:_SKIPS_NAMED]:
+        units = [e for e in equips if e]
+        on = ""
+        if units:
+            listed = ", ".join(name(e) for e in units[:5])
+            more = f" and {len(units) - 5} more" if len(units) > 5 else ""
+            on = f" on {listed}{more}"
+        lacks = f" (missing {', '.join(prose(m) for m in missing)})" if missing else ""
+        named.append(f"{rule}{on}{lacks}")
+    more = f"; and {len(per) - _SKIPS_NAMED} more" if len(per) > _SKIPS_NAMED else ""
+    rules = sorted({s["rule"] for s in skips})
+    return {
+        "id": fact_id,
+        "kind": "skipped_rules",
+        "facility_id": facility_id,
+        "value": len(rules),
+        "rules": rules,
+        "text": f"{len(rules)} rule(s) skipped for missing inputs on {facility_id}, so not "
+        f"judged: {'; '.join(named)}{more}",
+    }
+
+
+#: the most parameter conditions a rule's inputs fact names (the rest are counted)
+_CONDITIONS_NAMED = 4
+#: a parameter note's sentence that says when its parameter applies ("Needs CHW flow and
+#: temperatures.", "Used only when a fan speed is trended.")
+_CONDITION = re.compile(r"(?:Needs|Requires|Used only (?:when|with|if)|Applies only|Only with)\b")
+#: a sentence that denies (left out: a fact's "not" or "no" would support a sentence denying
+#: something of the data, as round 13 measured for "not computed")
+_DENIES = re.compile(r"\b(?:no|not|never|none|nothing|without|unless|cannot)\b|n't\b", re.I)
+
+
+def _listed(items: list, last: str = "and") -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {last} {items[-1]}"
+
+
+def rule_inputs_fact(
+    fact_id: str, rule: str, rule_obj, params: list, facility_id=None, row=None
+) -> dict | None:
+    """The fact of what ``rule`` reads and when its parameters apply, kind ``rule_inputs``
+    (0112-cite14; None when it says nothing): the inputs it needs (``roles_required``, each
+    ``roles_any_of`` group), those it reads when mapped (``roles_optional``) and the conditions
+    its parameter notes give in a positive sentence (``low_load_pct: needs CHW flow and
+    temperatures``). ``params``: the rule's documented parameters (``name``, ``note``)."""
+    from ..model.entities import roles_any_of
+
+    def slug(r) -> str:
+        return str(getattr(r, "value", r))
+
+    need = [slug(r) for r in getattr(rule_obj, "roles_required", ()) or ()]
+    read = [slug(r) for r in getattr(rule_obj, "roles_optional", ()) or () if slug(r) not in need]
+    groups = [[slug(r) for r in g] for g in roles_any_of(rule_obj)] if rule_obj is not None else []
+    conds: dict = {}
+    for p in params or ():
+        for sent in re.split(r"(?<=[.;])\s+", str(p.get("note") or "")):
+            sent = " ".join(sent.split()).rstrip(" .;")
+            if _CONDITION.match(sent) and not _DENIES.search(sent):
+                conds.setdefault(prose(sent[0].lower() + sent[1:]), []).append(str(p["name"]))
+    parts = []
+    if need:
+        parts.append("needs " + _listed(need))
+    parts += ["needs one of " + _listed(g, "or") for g in groups if g]
+    if read:
+        parts.append("reads " + _listed(read) + " when mapped")
+    said = [f"{', '.join(names)}: {c}" for c, names in conds.items()]
+    if said:
+        more = len(said) - _CONDITIONS_NAMED
+        parts.append(
+            "parameter conditions: "
+            + "; ".join(said[:_CONDITIONS_NAMED])
+            + (f"; and {more} more" if more > 0 else "")
+        )
+    if not parts:
+        return None
+    fact: dict = {
+        "id": fact_id,
+        "kind": "rule_inputs",
+        "value": "inputs",  # a word, not a figure a sentence could match
+        "rule": rule,
+        "text": f"{rule} inputs: " + "; ".join(parts),
+    }
+    if row is not None:
+        fact["subject"] = subject(facility_id, row["equip"], finding=row["finding_id"])
+    return fact
+
+
+def parameter_basis_fact(fact_id: str, rule: str, params: list, row: dict, facility_id=None):
+    """The fact of the basis a rule gives for its parameters' values, kind
+    ``parameter_basis`` (None when none gives one): ``max_starts_per_day: CAMBER judgment: a
+    generic cycling limit ...``."""
+    said = [
+        f"{p['name']}: {prose(' '.join(str(p['basis']).split())).rstrip(' .;')}"
+        for p in params
+        if isinstance(p.get("basis"), str) and p["basis"].strip()
+    ]
+    if not said:
+        return None
+    return {
+        "id": fact_id,
+        "kind": "parameter_basis",
+        "value": "basis",
+        "rule": rule,
+        "subject": subject(facility_id, row["equip"], finding=row["finding_id"]),
+        "text": f"{rule} parameter basis: " + "; ".join(said),
+    }
+
+
+def note_facts(
+    context: str, rows: list, facility_id: str | None = None, labels=None, totals=None
+) -> list:
+    """The caveat facts of ``rows`` (:func:`caveat_facts`, with ``totals``) and the labels facts
+    (``M<k>@<context>``, :func:`finding_labels`) of the rows ``labels`` keeps (all when None)."""
+    out = caveat_facts(context, rows, facility_id, totals)
+    m = 0
+    for r in rows:
+        if labels is None or labels(r):
+            fact = finding_labels(f"M{m + 1}@{context}", r, facility_id)
+            if fact is not None:
+                m += 1
+                out.append(fact)
+    return out
+
+
+# --------------------------------------------------------------------------- structured facts
+# 0.112 (#294): a fact added for a figure a model is asked to state carries it as fields too --
+# ``value`` with its ``unit``, the ``subject`` it is about (facility, equipment, point) and, where
+# one applies, a ``verdict`` (a closed set of words per kind) -- so a citation check can test
+# the subject and the unit, not only that the digits appear somewhere in the fact.
+
+
+def subject(facility_id=None, equip=None, role=None, **more) -> dict:
+    """The ``subject`` of a fact: the facility, equipment and point (role) it is about, only the
+    ones given (``more``: e.g. ``condition``)."""
+    out = {"facility_id": facility_id, "equip": equip, "role": role, **more}
+    return {k: str(v) for k, v in out.items() if v is not None}
+
+
+def when(ts) -> str:
+    """A time stamp as a fact's text writes it: ``2025-05-14 06:00`` (its ISO form is a field)."""
+    return pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+
+@lru_cache(maxsize=1)
+def _percent_slugs() -> frozenset:
+    from ..units import PERCENT_ROLES
+
+    return frozenset(str(r.value) for r in PERCENT_ROLES)
+
+
+def role_unit(role) -> str | None:
+    """The unit CAMBER's rules read a point of ``role`` in (0.112, #294): ``°F`` for a
+    temperature or temperature setpoint, ``%`` for a valve, damper, speed or humidity (see
+    :mod:`camber.units`), else ``None`` (the point's own units, which the store does not record).
+    The adapters convert to these at ingest, so a bias or a constant reading is in this unit."""
+    slug = str(jsonable(role))
+    if slug in _percent_slugs():
+        return "%"
+    if slug == "oat" or "temp" in slug.split("_") or slug in ("cool_sp", "heat_sp"):
+        return "°F"
+    return None
+
+
+def with_unit(x: float, unit: str | None, fmt: str = "g") -> str:
+    """``x`` formatted with ``fmt`` and its unit (``+3.0 °F``, ``0 %``), or alone."""
+    return f"{x:{fmt}} {unit}" if unit else f"{x:{fmt}}"
+
+
+#: a point needs this many samples before "it never moves over the window" is said of it
+FLAT_MIN_SAMPLES = 24
+
+
+def flat_roles(frame, roles=None) -> dict:
+    """``{role slug: {"value", "n_samples", "start", "end"}}`` of the numeric points of ``frame``
+    that never move over it: every valid sample reads the same value (``roles``: only these
+    slugs). A point with fewer than :data:`FLAT_MIN_SAMPLES` valid samples is left out."""
+    out: dict = {}
+    if frame is None or getattr(frame, "empty", True):
+        return out
+    for col in frame.columns:
+        slug = str(jsonable(col))
+        if roles is not None and slug not in roles:
+            continue
+        s = pd.to_numeric(frame[col], errors="coerce").dropna()
+        if len(s) < FLAT_MIN_SAMPLES or not isinstance(s.index, pd.DatetimeIndex):
+            continue
+        first = float(s.iloc[0])
+        if float(s.max()) - float(s.min()) > 1e-9 * max(1.0, abs(first)):
+            continue
+        out[slug] = {
+            "value": round(first, 6),
+            "n_samples": int(len(s)),
+            "start": s.index.min().isoformat(),
+            "end": s.index.max().isoformat(),
+        }
+    return out
+
+
+def flat_fact(fact_id: str, facility_id: str, equip: str, role: str, info: dict, why="") -> dict:
+    """The fact that the point ``role`` of ``equip`` never moves over the window (``info`` from
+    :func:`flat_roles`); ``why`` says what rests on it (``"leaking_valve reads it"``)."""
+    v, unit = info["value"], role_unit(role)
+    tail = f"; {why}" if why else ""
+    return {
+        "id": fact_id,
+        "kind": "flat_point",
+        "equip": equip,
+        "role": role,
+        "value": v,
+        "unit": unit,
+        "verdict": "flat",
+        "subject": subject(facility_id, equip, role),
+        "n_samples": info["n_samples"],
+        "start": info["start"],
+        "end": info["end"],
+        "text": f"{name(equip)} {name(role)} never moves over the window: all "
+        f"{info['n_samples']:,} valid samples from {when(info['start'])} to {when(info['end'])} "
+        f"read {with_unit(v, unit)}, so it is flat for the whole window{tail}",
+    }
+
+
+def notice_facts(banners: list, context: str) -> list:
+    """One fact per notice of a result (0.112, #294), ``N1@<context>`` (``context`` carries the
+    call's token), kind ``notice``: the server's own NOTICE lines, so a draft that repeats one
+    can cite it. A notice states a condition of the result (a cut list, a declined check, a
+    licence); it is not a measured value."""
+    return [
+        {
+            "id": f"N{k}@{context}",
+            "kind": "notice",
+            "basis": "notice",
+            "value": "notice",
+            "text": str(b),
+        }
+        for k, b in enumerate(banners, start=1)
+        if isinstance(b, str) and b.strip()
+    ]
 
 
 # --------------------------------------------------------------------------- sensor references

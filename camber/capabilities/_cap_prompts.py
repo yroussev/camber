@@ -14,20 +14,53 @@ import json
 from . import CapabilityError, Prompt, PromptArg
 from ._sanitize import defang, one_line
 
+#: where a result gives its fact ids and notices, in either form a host may show (#331)
+_WHERE = (
+    "Where the facts are: every tool result lists the facts it issued, each id with its text, "
+    "and its notices, in both of its forms; use whichever you see. As text: a list headed "
+    "'Facts (cite by [id] ...)', one '[id] text' per line, and lines starting with 'NOTICE:'. "
+    'As JSON: the "camber" object, whose "facts" maps each fact id to its text and whose '
+    '"notices" lists the notices. Cite only ids listed there, and show the user every notice.'
+)
+
 _CITE_RULES = (
     "Rules for the answer: state only what the tool results say. End every sentence with the "
-    "fact id(s) it rests on in square brackets, exactly as the results give them, token "
+    "fact id(s) it rests on in square brackets, exactly as the results list them, token "
     "included (for example [F2@rule_run-1a2b3c]; each call's ids carry their own token). "
+    "Never shorten a fact id ([F2] is not a citation): cite each id exactly as issued. "
     "Copy every number exactly as a cited fact states it and state no number "
-    "that is not in a fact you cite. A declined check, a skipped rule or an unevaluated "
-    "equipment is not a pass: say it was not judged. If a call is refused (not_allowed, "
-    "refused_licence), say so and stop; do not work around it."
+    "that is not in a fact you cite. Each evidence span, data gap, point's coverage, point "
+    "that never moves, rank and notice has a fact of its own: cite that fact when you give "
+    "it (a notice you repeat cites its N id). Number a ranked list with a marker at the start "
+    "of the line ('1.') or cite the fact that states the rank. A claimed_figure fact says only "
+    "what the claim states: cite it for the claim, never for a measured result. A declined "
+    "check, a skipped rule or an unevaluated "
+    "equipment is not a pass: say it was not judged, citing the fact that reports it. Use a "
+    "verdict, negation or assurance word (passes, fails, not, never, none, all, verified, "
+    "clean, real, confident) only as a fact you cite does: check_citations compares them both "
+    "ways. Say 'both', 'each' or 'all' of several equipment or points only citing a fact about "
+    "each one. Give each unit its own sentence: one that names several units and cannot be "
+    "read as one clause per unit, each against that unit's facts, fails. A heading or short "
+    "label that gives a verdict, negation or quantifier, and a short remark without a citation "
+    "('That matches.', '- AHU-1: OK.'), is not judged and is left out: say it in a sentence "
+    "that cites its fact. Quote a name from the data in double quotes. If a call is refused "
+    "(not_allowed, refused_licence), say so and stop; do not work around it."
 )
 
 _FINISH = (
-    "Finally, call check_citations with your draft as text and, as facts, every 'facts' array "
-    "the calls above returned (combined). Fix or remove each sentence it does not mark "
-    "supported, then give the corrected text."
+    "Finally, call check_citations with your draft as text; you need not pass facts: the "
+    "server looks up every fact id it gave you in this session (the ids each result lists, as "
+    'text or under "camber" "facts"). Its result gives a verdict per failing sentence and '
+    "its notices the same two ways. Your own judgment (a verdict on the whole, advice, how "
+    "sure you are) rests on facts but is not one, so it is not marked supported: give it "
+    "after the checked text, labelled as your judgment. A verified_text that opens with a "
+    "NOTICE that sentences were removed is not the answer. Fix or remove each sentence it does "
+    "not mark supported and call check_citations again on the revised draft, the whole of it "
+    "every time (every sentence you will give, not only the ones you changed), until it marks "
+    "every sentence supported: never give text it has not checked. A check covers only the "
+    "text it was given: if you reword, shorten or add a sentence after it, check the whole text "
+    "again, and never say the check passed for text you changed after it. Then give that last "
+    "verified_text, and after it your labelled judgment, as the corrected text."
 )
 
 
@@ -71,8 +104,8 @@ def _steps(*steps: str) -> str:
 def triage_ahu(args: dict) -> list:
     fid, equip = _arg(args, "facility_id"), _arg(args, "equip")
     return _message(
-        f"Triage the air handler {equip} at facility {fid}: what is wrong, how sure we are, and "
-        "what to do first.",
+        f"Triage the air handler {equip} at facility {fid}: what is wrong, what each conclusion "
+        "rests on (and what is conditional on a sensor), and what to do first.",
         _steps(
             f"Call points with {_j(facility_id=fid, equip=equip)} to see what it trends.",
             f"Call sensor_trust with {_j(facility_id=fid, equips=[equip])}. Read its references "
@@ -81,14 +114,22 @@ def triage_ahu(args: dict) -> list:
             "in the trend. A passing reference comparison is evidence the sensor reads right.",
             f"Call rule_run with {_j(facility_id=fid, equips=[equip])}.",
             "For each fault or warn finding (at most five, worst first), call finding_detail "
-            "with its finding_id and the same facility_id and equips.",
+            "with its finding_id and the same facility_id and equips. Its facts give the "
+            "flagged spans, the inputs that never move over the window, and for a finding "
+            "conditional_on a sensor reference the finding re-judged with that sensor's bias "
+            "taken off and whether its flagged hours fall in the window the reference covers.",
             "Rank the causes. A fault resting on an untrusted input, or marked conditional_on a "
             "sensor whose reference disagrees, is a sensor problem first: rank that sensor "
-            "above the fault and say the fault may follow from it.",
-            "Write a short triage: the likely causes ranked, the evidence hours, which inputs "
+            "above the fault. Say the fault is explained by the sensor only when finding_detail "
+            "states that the finding is explained by the sensor offset; otherwise say it may "
+            "follow from it. An input that never moves (a valve that never opens, a setpoint "
+            "that never resets) can decide the diagnosis: say so.",
+            "Write a short triage: the likely causes ranked, the evidence hours and spans, which "
+            "inputs "
             "are suspect (and which a reference confirmed), and the first checks to make on "
             "site (the sensor before the equipment it may be misreporting).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -102,13 +143,15 @@ def rcx_executive_summary(args: dict) -> list:
             f"Call rcx_report with {_j(facility_id=fid)}.",
             "It returns the first issues by rank; when a notice says more are ranked, call it "
             "again with the offset the notice names until you have them all, so that no issue "
-            "conditional on a sensor fix is missed.",
+            "conditional on a sensor fix is missed. Keep the default top_n and limit: a larger "
+            "page can exceed what your host accepts as one result.",
             "Write one or two paragraphs for a building owner: how many issues, the top issues "
             "with their equipment and cost (or why they are uncosted), what is conditional on a "
             "sensor fix, and how much of the data the verdicts rest on. Cite the report's own "
             "fact ids (K1@summary-<token>, C1@<issue key>-<token>, ...) or the F ids of the "
-            "result.",
+            "result; an issue's F fact states its rank ('Issue 1 of 6').",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -128,10 +171,14 @@ def explain_finding(args: dict) -> list:
             "equipment (for a '<fleet>' finding, the units its metrics name), to check the "
             "inputs it rests on.",
             "Explain in plain words what the rule checks, what it saw (the hours and the time "
-            "spans), the threshold it used, how far the inputs can be trusted, and which "
-            "evidence chart shows it. If the finding is conditional_on a sensor whose configured "
-            "reference disagrees, say first that it may be that sensor, not the equipment.",
+            "spans, each span a fact), the threshold it used, how far the inputs can be trusted "
+            "(and any input that never moves over the window), and which evidence chart shows "
+            "it. If the finding is conditional_on a sensor whose configured reference disagrees, "
+            "say first that it may be that sensor, not the equipment, and what finding_detail "
+            "says when the rule is re-judged with the sensor's bias taken off and whether the "
+            "flagged hours fall in the window the reference covers.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -140,18 +187,32 @@ def explain_finding(args: dict) -> list:
 def check_savings_claim(args: dict) -> list:
     fid = _arg(args, "facility_id")
     claim = _arg(args, "claim", required=False, default="")
-    about = f' The claim to check: "{claim}".' if claim else ""
+    # 0.112 (#332): a host's slash command may pass only the first word of a quoted claim
+    about = (
+        f' The claim to check: "{claim}". If that looks cut short, use the whole claim as the '
+        "user wrote it in the conversation (ask for it if it is not there) in its place."
+        if claim
+        else " If the user states the claim in the conversation, pass it whole as claim."
+    )
+    # 0.112 (#294): the claim goes to mv_summary, which states each of its figures as a
+    # claimed_figure fact, so a sentence quoting the claim can be cited
+    call = _j(facility_id=fid, claim=claim) if claim else _j(facility_id=fid)
     return _message(
         f"Check a savings claim for the M&V project configured for facility {fid}.{about}",
         _steps(
-            f"Call mv_summary with {_j(facility_id=fid)}.",
+            f"Call mv_summary with {call}.",
             "Compare the claim with the mv_savings results: the avoided energy, the savings %, "
             "the uncertainty (fsu) and the baseline fit statistics. Note any declined result "
             "and its reason, any rebaseline trigger, and whether the reporting period lies "
             "outside the baseline's conditions.",
-            "Give a verdict: supported, partly supported, or not supported by the M&V results, "
-            "and what would be needed to support it.",
+            "Restate the claim's figures as its claimed_figure facts state them, citing each "
+            '("The claim states 12% [A1@mv_summary-...]"), with no word of direction (a saving, '
+            "a reduction, an increase): a bare figure says none. Give a verdict: supported, "
+            "partly supported, or not "
+            "supported by the M&V results, and what would be needed to support it (the verdict "
+            "is your judgment: see below).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -168,10 +229,12 @@ def data_quality_review(args: dict) -> list:
             "own span (from its first sample) on the rule run's time grid; the coverage tool's "
             "is over the whole window, so one point can read differently in the two: say which "
             "one you quote. A point whose configured reference disagrees is suspect.",
-            "Write a review: overall coverage, the equipment and points with the worst gaps, "
+            "Write a review: overall coverage, the equipment and points with the worst gaps "
+            "(each point's coverage and each listed gap is a fact), any point that never moves, "
             "the untrusted or suspect sensors and their flags, and what to fix first (trend "
             "setup, sensor calibration or replacement).",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -201,6 +264,7 @@ def compare_equipment(args: dict) -> list:
             "peers pass is the signal; a finding conditional_on a disagreeing reference is a "
             "sensor problem first). Name the unit to look at first and why.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -222,6 +286,7 @@ def sensor_trust_review(args: dict) -> list:
             "flags or reference comparison that explain it, and what it blocks. Order by "
             "impact.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )
@@ -232,16 +297,20 @@ def plan_site_visit(args: dict) -> list:
     return _message(
         f"Plan a site visit to facility {fid}: what to look at, in what order, and what to bring.",
         _steps(
-            f"Call rcx_report with {_j(facility_id=fid)} for the ranked issues.",
+            f"Call rcx_report with {_j(facility_id=fid)} for the ranked issues. When a notice "
+            "says more are ranked, call it again with the offset the notice names until you "
+            "have every issue you plan for; keep the default top_n and limit (a larger page can "
+            "exceed what your host accepts as one result).",
             f"Call sensor_trust with {_j(facility_id=fid)} for the sensors to verify.",
             "For the top three issues, call finding_detail with the same facility_id and one of "
             "the issue's finding_ids (each rcx_report issue lists them) to get the time spans to "
-            "reproduce on site; an issue with no finding_ids rests on drift or report checks "
-            "only.",
+            "reproduce on site (each span is a fact); an issue with no finding_ids rests on "
+            "drift or report checks only.",
             "Write the plan: a walk order by equipment, for each stop what to check and what "
             "reading would confirm or rule out the issue, the sensors to spot-check with a "
             "reference instrument, and the trends to pull before leaving.",
         ),
+        _WHERE,
         _CITE_RULES,
         _FINISH,
     )

@@ -1,0 +1,2976 @@
+{
+ "coverage": [
+  {
+   "facility_id": "site-a",
+   "id": "F1@coverage-cd485b",
+   "kind": "coverage",
+   "subject": {
+    "facility_id": "site-a"
+   },
+   "text": "site-a: 27 points on 3 equipment have a mean coverage of 100.0% of the whole window from 2026-03-02T00:00:00 to 2026-03-22T23:00:00; 0 point(s) are below 90% and 0 gap(s) are listed",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "F2@coverage-cd485b",
+   "kind": "equip_coverage",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\": mean coverage 100.0% of the window over 9 points; worst \"cool_valve\" at 100.0%",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "F3@coverage-cd485b",
+   "kind": "equip_coverage",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\": mean coverage 100.0% of the window over 9 points; worst \"cool_valve\" at 100.0%",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-3",
+   "id": "F4@coverage-cd485b",
+   "kind": "equip_coverage",
+   "subject": {
+    "equip": "AHU-3",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-3\": mean coverage 100.0% of the window over 9 points; worst \"cool_valve\" at 100.0%",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P1@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "cool_valve",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "cool_valve"
+   },
+   "text": "\"AHU-1\" \"cool_valve\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P2@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "duct_static",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "duct_static"
+   },
+   "text": "\"AHU-1\" \"duct_static\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P3@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "heat_valve",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "heat_valve"
+   },
+   "text": "\"AHU-1\" \"heat_valve\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P4@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "mixed_air_temp",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "mixed_air_temp"
+   },
+   "text": "\"AHU-1\" \"mixed_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P5@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "oa_damper",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "oa_damper"
+   },
+   "text": "\"AHU-1\" \"oa_damper\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P6@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "oat",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "oat"
+   },
+   "text": "\"AHU-1\" \"oat\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P7@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "return_air_temp",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "return_air_temp"
+   },
+   "text": "\"AHU-1\" \"return_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P8@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "supply_air_temp",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "supply_air_temp"
+   },
+   "text": "\"AHU-1\" \"supply_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-1",
+   "id": "P9@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "supply_fan_status",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "supply_fan_status"
+   },
+   "text": "\"AHU-1\" \"supply_fan_status\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P10@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "cool_valve",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "cool_valve"
+   },
+   "text": "\"AHU-2\" \"cool_valve\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P11@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "duct_static",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "duct_static"
+   },
+   "text": "\"AHU-2\" \"duct_static\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P12@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "heat_valve",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "heat_valve"
+   },
+   "text": "\"AHU-2\" \"heat_valve\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P13@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "mixed_air_temp",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "mixed_air_temp"
+   },
+   "text": "\"AHU-2\" \"mixed_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P14@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "oa_damper",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "oa_damper"
+   },
+   "text": "\"AHU-2\" \"oa_damper\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P15@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "oat",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "oat"
+   },
+   "text": "\"AHU-2\" \"oat\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P16@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "return_air_temp",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "return_air_temp"
+   },
+   "text": "\"AHU-2\" \"return_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P17@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "supply_air_temp",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "supply_air_temp"
+   },
+   "text": "\"AHU-2\" \"supply_air_temp\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "P18@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "supply_fan_status",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "supply_fan_status"
+   },
+   "text": "\"AHU-2\" \"supply_fan_status\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-3",
+   "id": "P19@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "cool_valve",
+   "subject": {
+    "equip": "AHU-3",
+    "facility_id": "site-a",
+    "role": "cool_valve"
+   },
+   "text": "\"AHU-3\" \"cool_valve\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "equip": "AHU-3",
+   "id": "P20@coverage-cd485b",
+   "kind": "point_coverage",
+   "longest_gap_hours": 0.0,
+   "n_gaps": 0,
+   "role": "duct_static",
+   "subject": {
+    "equip": "AHU-3",
+    "facility_id": "site-a",
+    "role": "duct_static"
+   },
+   "text": "\"AHU-3\" \"duct_static\": coverage 100.0% of the whole window (504 samples), 0 gap(s), the longest 0 hours",
+   "unit": "%",
+   "value": 100.0
+  },
+  {
+   "basis": "notice",
+   "id": "N1@coverage-cd485b",
+   "kind": "notice",
+   "text": "'points' shows rows 1-20 of 27 (worst first): call again with offset=20 for the next page",
+   "value": "notice"
+  }
+ ],
+ "dataset_entry": [
+  {
+   "dataset_id": "at-30bldg-sensors",
+   "id": "F1@dataset_entry-a824c5",
+   "kind": "dataset",
+   "text": "at-30bldg-sensors (Austrian 30-building campus sensors (research-only)) is a real dataset from Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger (Self2B project, FFG) under CC-BY-NC-SA-4.0, access research_only",
+   "value": "CC-BY-NC-SA-4.0"
+  },
+  {
+   "dataset_id": "at-30bldg-sensors",
+   "id": "F2@dataset_entry-a824c5",
+   "kind": "dataset_size",
+   "text": "at-30bldg-sensors: default subset download 1,024,904,878 bytes",
+   "value": 1024904878
+  },
+  {
+   "basis": "notice",
+   "id": "N1@dataset_entry-a824c5",
+   "kind": "notice",
+   "text": "Research-only dataset: its licence or terms forbid commercial use or derivatives, so this server refuses any facility ingested from it. Use it only under its licence, outside this assistant.",
+   "value": "notice"
+  },
+  {
+   "dataset_id": "at-30bldg-sensors",
+   "id": "F3@dataset_entry-a824c5",
+   "kind": "dataset_uses",
+   "text": "at-30bldg-sensors is good for: sensor health on a real historian export: placeholders, clamps, saturation, gaps; change-of-value logs and sample-and-hold resampling; why point-type inference cannot lean on names (the ids are anonymised)",
+   "value": 3
+  }
+ ],
+ "dataset_search": [
+  {
+   "id": "F1@dataset_search-9300c9",
+   "kind": "dataset_count",
+   "text": "16 catalog dataset(s) match, 2 of them research-only",
+   "value": 16
+  },
+  {
+   "dataset_id": "at-30bldg-sensors",
+   "id": "F2@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "at-30bldg-sensors (Austrian 30-building campus sensors (research-only)): real, licence CC-BY-NC-SA-4.0, access research_only",
+   "value": "CC-BY-NC-SA-4.0"
+  },
+  {
+   "dataset_id": "b4b-windesheim",
+   "id": "F3@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "b4b-windesheim (Brains4Buildings Windesheim office rooms: two CO2 sensors, ventilation valve and occupancy): real, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "irish-ahu",
+   "id": "F4@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "irish-ahu (Irish industrial AHU (real BMS trends, unlabelled)): real, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-b59",
+   "id": "F5@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-b59 (LBNL Building 59: three years of a real office's rooftop units, zone CO2 and underfloor terminals): real, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-boiler",
+   "id": "F6@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-boiler (LBNL simulated boiler plant (labelled faults, Brick model)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-chiller",
+   "id": "F7@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-chiller (LBNL simulated chiller plant (labelled faults)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-ddahu",
+   "id": "F8@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-ddahu (LBNL simulated dual-duct AHU (labelled faults)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-fcu",
+   "id": "F9@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-fcu (LBNL simulated fan-coil unit (labelled faults)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-fpu",
+   "id": "F10@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-fpu (LBNL simulated fan-powered VAV terminal units (labelled faults)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "lbnl-sdahu",
+   "id": "F11@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "lbnl-sdahu (LBNL simulated single-duct AHU (labelled faults)): simulated, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "nuig-ahu101",
+   "id": "F12@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "nuig-ahu101 (NUIG lecture-theatre AHU101 (real BMS trends, unlabelled)): real, licence CDLA-Permissive-1.0, access open",
+   "value": "CDLA-Permissive-1.0"
+  },
+  {
+   "dataset_id": "ornl-frp-vav",
+   "id": "F13@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "ornl-frp-vav (ORNL multi-zone VAV terminal faults (real building, labelled)): real, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "rbc-g36-ahu",
+   "id": "F14@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "rbc-g36-ahu (RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV) (research-only)): simulated, licence CC-BY-4.0, access research_only",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "robod",
+   "id": "F15@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "robod (ROBOD: room-level occupancy and building operation (Singapore, 5 rooms)): real, licence CC-BY-4.0, access open",
+   "value": "CC-BY-4.0"
+  },
+  {
+   "dataset_id": "synthetic-ahu-sensor-bias",
+   "id": "F16@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "synthetic-ahu-sensor-bias (Synthetic air handlers: a supply-air sensor reading 3 F high (generated by CAMBER)): synthetic, licence Apache-2.0, access open",
+   "value": "Apache-2.0"
+  },
+  {
+   "dataset_id": "synthetic-heat-pump",
+   "id": "F17@dataset_search-9300c9",
+   "kind": "dataset",
+   "text": "synthetic-heat-pump (Synthetic heat pumps: defrost, mode, capacity, staging and the source loop (generated by CAMBER)): synthetic, licence Apache-2.0, access open",
+   "value": "Apache-2.0"
+  },
+  {
+   "basis": "notice",
+   "id": "N1@dataset_search-9300c9",
+   "kind": "notice",
+   "text": "2 research-only dataset(s): its licence or terms forbid commercial use or derivatives, so this server refuses any facility ingested from it. Use it only under its licence, outside this assistant.",
+   "value": "notice"
+  }
+ ],
+ "drift": [
+  {
+   "facility_id": "site-a",
+   "id": "F1@drift-7d8ee7",
+   "kind": "drift",
+   "text": "Drift on site-a (baseline period): 1 family run(s), 0 fault and 0 warn findings, 3 detector check(s) declined, 0 equipment with no detector run; those were not judged",
+   "value": 6
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "ahu:coil_valve_drift@AHU-1",
+   "id": "F2@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "declined": true
+   },
+   "rule": "coil_valve_drift",
+   "text": "\"AHU-1\" coil_valve_drift (info): \"AHU-1\": declined -- no frozen coil-valve baseline to compare against",
+   "value": "info"
+  },
+  {
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "finding_id": "ahu:coil_valve_drift@AHU-2",
+   "id": "F3@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "declined": true
+   },
+   "rule": "coil_valve_drift",
+   "text": "\"AHU-2\" coil_valve_drift (info): \"AHU-2\": declined -- no frozen coil-valve baseline to compare against",
+   "value": "info"
+  },
+  {
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "finding_id": "ahu:coil_valve_drift@AHU-3",
+   "id": "F4@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "declined": true
+   },
+   "rule": "coil_valve_drift",
+   "text": "\"AHU-3\" coil_valve_drift (info): \"AHU-3\": declined -- no frozen coil-valve baseline to compare against",
+   "value": "info"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "ahu:economizer_damper_drift@AHU-1",
+   "id": "F5@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "econ_damper_median_cmd_pct": 55.0,
+    "econ_degenerate_excluded_pct": 69.23,
+    "econ_oa_fraction_baseline_frozen_at": "capability",
+    "econ_oa_fraction_baseline_sigma_pct": 0.0,
+    "econ_oa_fraction_drift_direction": "up",
+    "econ_oa_fraction_drift_pct": -0.0,
+    "econ_oa_fraction_drift_sigma": null,
+    "econ_oa_fraction_n_current": 20,
+    "econ_oa_fraction_pct_outside_2sigma": null,
+    "econ_oa_fraction_slope_pct_per_month": -0.0,
+    "magnitude_threshold_confidence": "screening-grade",
+    "thresholds_provisional": true
+   },
+   "rule": "economizer_damper_drift",
+   "text": "\"AHU-1\" economizer_damper_drift (ok): \"AHU-1\": economizer OA fraction holds near its baseline (0pp, nanσ vs the known-good period at matched damper command)",
+   "value": "ok"
+  },
+  {
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "finding_id": "ahu:economizer_damper_drift@AHU-2",
+   "id": "F6@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "econ_damper_median_cmd_pct": 55.0,
+    "econ_degenerate_excluded_pct": 72.31,
+    "econ_oa_fraction_baseline_frozen_at": "capability",
+    "econ_oa_fraction_baseline_sigma_pct": 0.0,
+    "econ_oa_fraction_drift_direction": "up",
+    "econ_oa_fraction_drift_pct": 0.0,
+    "econ_oa_fraction_drift_sigma": null,
+    "econ_oa_fraction_n_current": 18,
+    "econ_oa_fraction_pct_outside_2sigma": null,
+    "econ_oa_fraction_slope_pct_per_month": -0.0,
+    "magnitude_threshold_confidence": "screening-grade",
+    "thresholds_provisional": true
+   },
+   "rule": "economizer_damper_drift",
+   "text": "\"AHU-2\" economizer_damper_drift (ok): \"AHU-2\": economizer OA fraction holds near its baseline (0pp, nanσ vs the known-good period at matched damper command)",
+   "value": "ok"
+  },
+  {
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "finding_id": "ahu:economizer_damper_drift@AHU-3",
+   "id": "F7@drift-7d8ee7",
+   "kind": "finding",
+   "metrics": {
+    "baseline_source": "period:2026-03-02..2026-03-15",
+    "econ_damper_median_cmd_pct": 55.0,
+    "econ_degenerate_excluded_pct": 70.77,
+    "econ_oa_fraction_baseline_frozen_at": "capability",
+    "econ_oa_fraction_baseline_sigma_pct": 0.0,
+    "econ_oa_fraction_drift_direction": "up",
+    "econ_oa_fraction_drift_pct": -0.0,
+    "econ_oa_fraction_drift_sigma": null,
+    "econ_oa_fraction_n_current": 19,
+    "econ_oa_fraction_pct_outside_2sigma": null,
+    "econ_oa_fraction_slope_pct_per_month": -0.0,
+    "magnitude_threshold_confidence": "screening-grade",
+    "thresholds_provisional": true
+   },
+   "rule": "economizer_damper_drift",
+   "text": "\"AHU-3\" economizer_damper_drift (ok): \"AHU-3\": economizer OA fraction holds near its baseline (0pp, nanσ vs the known-good period at matched damper command)",
+   "value": "ok"
+  },
+  {
+   "basis": "notice",
+   "id": "N1@drift-7d8ee7",
+   "kind": "notice",
+   "text": "The threshold_confidence_note of 3 finding(s) here, said once: magnitude floors (degF and sigma) are screening-grade: characterized for this signal class and adequate for ranking equipment, but not established on this equipment",
+   "value": "notice"
+  },
+  {
+   "basis": "notice",
+   "id": "N2@drift-7d8ee7",
+   "kind": "notice",
+   "text": "Drift is measured against the baseline window given, fitted for this call only: it is a known-good period only if the equipment was healthy then.",
+   "value": "notice"
+  }
+ ],
+ "facilities": [
+  {
+   "id": "F1@facilities-027f1a",
+   "kind": "facility_count",
+   "text": "2 facilities are visible to this caller",
+   "value": 2
+  },
+  {
+   "facility_id": "mv-site",
+   "id": "F2@facilities-027f1a",
+   "kind": "facility",
+   "text": "mv-site (\"Metered site\"): active, 4 points on 2 equipment, data from 2024-01-01T00:00:00 to 2024-05-29T23:00:00",
+   "value": 4
+  },
+  {
+   "facility_id": "site-a",
+   "id": "F3@facilities-027f1a",
+   "kind": "facility",
+   "text": "site-a (\"Test site A\"): active, 27 points on 3 equipment, data from 2026-03-02T00:00:00 to 2026-03-22T23:00:00",
+   "value": 27
+  }
+ ],
+ "finding_detail": [
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "F1@finding_detail-4ecd59",
+   "kind": "finding",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "rule": "economizer_high_limit",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out)",
+   "value": "fault"
+  },
+  {
+   "id": "F2@finding_detail-4ecd59",
+   "kind": "evidence_hours",
+   "longest_span_hours": 7.0,
+   "n_spans": 5,
+   "share": 0.4324,
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "economizer_high_limit@AHU-1"
+   },
+   "text": "The rule flagged 32 hours (32 of 74 judged samples above the 68°F high limit, 43.2%) in 5 contiguous span(s), the longest 7 hours",
+   "unit": "h",
+   "value": 32.0
+  },
+  {
+   "id": "F3@finding_detail-4ecd59",
+   "kind": "parameters",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "economizer_high_limit@AHU-1"
+   },
+   "text": "economizer_high_limit ran with high_limit_f = 68.0 (set for this run), min_damper = 0.25, min_oa_pct = 30.0 (set for this run), oa_margin_pct = 5.0, warn_pct = 10.0, fault_pct = 25.0, denom_min_f = 5.0, assumed_min_oa_pct = 20.0, conservative_min_oa_pct = 50.0, differential = True, fan_gate = True",
+   "value": 11
+  },
+  {
+   "id": "F4@finding_detail-4ecd59",
+   "kind": "chart",
+   "text": "Evidence chart: A diagnostic scatter (economizer lockout (high limit 68°F, excess > 35%)) with the violating samples marked",
+   "value": "diagnostic"
+  },
+  {
+   "end": "2026-03-09T18:00:00",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "S1@finding_detail-4ecd59",
+   "kind": "evidence_span",
+   "start": "2026-03-09T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" economizer_high_limit flagged span 1 of 5 in time order: 2026-03-09 12:00 to 2026-03-09 18:00, 7 hours",
+   "unit": "h",
+   "value": 7.0
+  },
+  {
+   "end": "2026-03-10T18:00:00",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "S2@finding_detail-4ecd59",
+   "kind": "evidence_span",
+   "start": "2026-03-10T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" economizer_high_limit flagged span 2 of 5 in time order: 2026-03-10 12:00 to 2026-03-10 18:00, 7 hours",
+   "unit": "h",
+   "value": 7.0
+  },
+  {
+   "end": "2026-03-11T17:00:00",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "S3@finding_detail-4ecd59",
+   "kind": "evidence_span",
+   "start": "2026-03-11T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" economizer_high_limit flagged span 3 of 5 in time order: 2026-03-11 12:00 to 2026-03-11 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-12T17:00:00",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "S4@finding_detail-4ecd59",
+   "kind": "evidence_span",
+   "start": "2026-03-12T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" economizer_high_limit flagged span 4 of 5 in time order: 2026-03-12 12:00 to 2026-03-12 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-13T17:00:00",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "S5@finding_detail-4ecd59",
+   "kind": "evidence_span",
+   "start": "2026-03-13T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" economizer_high_limit flagged span 5 of 5 in time order: 2026-03-13 12:00 to 2026-03-13 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "F1@finding_detail-95ce3b",
+   "kind": "finding",
+   "metrics": {
+    "chw_open_pct": 84.85,
+    "hhw_open_pct": 26.67,
+    "mean_overlap_when_simul": 30.0,
+    "n_considered": 165,
+    "simultaneous_hc_pct": 26.67,
+    "valve_coverage_pct": 100.0
+   },
+   "rule": "simultaneous_heat_cool",
+   "text": "\"AHU-2\" simultaneous_heat_cool (fault): \"AHU-2\": both coils open 26.7% of occupied hours (CHW 85%, HHW 27%)",
+   "value": "fault"
+  },
+  {
+   "id": "F2@finding_detail-95ce3b",
+   "kind": "evidence_hours",
+   "longest_span_hours": 9.0,
+   "n_spans": 5,
+   "share": 0.2667,
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   },
+   "text": "The rule flagged 44 hours (44 of 165 judged occupied samples with both valves trended, 26.7%) in 5 contiguous span(s), the longest 9 hours",
+   "unit": "h",
+   "value": 44.0
+  },
+  {
+   "id": "F3@finding_detail-95ce3b",
+   "kind": "parameters",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   },
+   "text": "simultaneous_heat_cool ran with dehumidification not set, reheat_lift_f = 2.0, dewpoint_margin_f = 2.0, humid_rh_pct = 55.0, fault_pct = 5.0, warn_pct = 1.0",
+   "value": 6
+  },
+  {
+   "id": "F4@finding_detail-95ce3b",
+   "kind": "chart",
+   "text": "Evidence chart: A diagnostic scatter (no_simultaneous_hc) with the violating samples marked",
+   "value": "diagnostic"
+  },
+  {
+   "end": "2026-03-16T17:00:00",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "S1@finding_detail-95ce3b",
+   "kind": "evidence_span",
+   "start": "2026-03-16T09:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool flagged span 1 of 5 in time order: 2026-03-16 09:00 to 2026-03-16 17:00, 9 hours",
+   "unit": "h",
+   "value": 9.0
+  },
+  {
+   "end": "2026-03-17T17:00:00",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "S2@finding_detail-95ce3b",
+   "kind": "evidence_span",
+   "start": "2026-03-17T09:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool flagged span 2 of 5 in time order: 2026-03-17 09:00 to 2026-03-17 17:00, 9 hours",
+   "unit": "h",
+   "value": 9.0
+  },
+  {
+   "end": "2026-03-18T17:00:00",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "S3@finding_detail-95ce3b",
+   "kind": "evidence_span",
+   "start": "2026-03-18T09:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool flagged span 3 of 5 in time order: 2026-03-18 09:00 to 2026-03-18 17:00, 9 hours",
+   "unit": "h",
+   "value": 9.0
+  },
+  {
+   "end": "2026-03-19T17:00:00",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "S4@finding_detail-95ce3b",
+   "kind": "evidence_span",
+   "start": "2026-03-19T09:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool flagged span 4 of 5 in time order: 2026-03-19 09:00 to 2026-03-19 17:00, 9 hours",
+   "unit": "h",
+   "value": 9.0
+  },
+  {
+   "end": "2026-03-20T17:00:00",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "S5@finding_detail-95ce3b",
+   "kind": "evidence_span",
+   "start": "2026-03-20T10:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool flagged span 5 of 5 in time order: 2026-03-20 10:00 to 2026-03-20 17:00, 8 hours",
+   "unit": "h",
+   "value": 8.0
+  },
+  {
+   "flagged_hours": 44.0,
+   "id": "R1@finding_detail-95ce3b",
+   "kind": "reference_window",
+   "overlap_end": "2026-03-22 23:00:00",
+   "overlap_start": "2026-03-02 00:00:00",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "finding": "simultaneous_heat_cool@AHU-2",
+    "role": "supply_air_temp"
+   },
+   "text": "All 44 flagged hours of \"AHU-2\" simultaneous_heat_cool (fault) fall in the window the \"supply_air_temp\" reference comparison on \"AHU-2\" covers (2026-03-02 00:00 to 2026-03-22 23:00, ok)",
+   "unit": "h",
+   "value": 44.0,
+   "verdict": "inside"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "F1@finding_detail-aaf1aa",
+   "kind": "finding",
+   "metrics": {
+    "denom_min_f": 5.0,
+    "excess_oa_pct": 42.3,
+    "failure_mode": "excess_oa",
+    "fan_gate": "fan status",
+    "median_oaf_cooling": 20.0,
+    "min_oa_pct": 20.0,
+    "min_oa_pct_by_month": null,
+    "min_oa_source": "default",
+    "n_cooling": 71,
+    "n_masked_fan_off": 0,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 42,
+    "n_valid": 123,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 52.0,
+    "oa_cost_excess_cool_btu_per_cfm": null,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": null,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0,
+    "oaf_median_pct": 55.0,
+    "occupancy": "assumed",
+    "under_vent_pct": 0.0
+   },
+   "rule": "outdoor_air_fraction",
+   "text": "\"AHU-1\" outdoor_air_fraction (warn): \"AHU-1\": OAF median 55% (20% in cooling weather); excess OA 42% of cooling hours above 20% min",
+   "value": "warn"
+  },
+  {
+   "id": "F2@finding_detail-aaf1aa",
+   "kind": "evidence_hours",
+   "longest_span_hours": 6.0,
+   "n_spans": 5,
+   "share": 0.2439,
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "outdoor_air_fraction@AHU-1"
+   },
+   "text": "The rule flagged 30 hours (30 of 123 judged occupied fan-on samples, 24.4%) in 5 contiguous span(s), the longest 6 hours",
+   "unit": "h",
+   "value": 30.0
+  },
+  {
+   "id": "F3@finding_detail-aaf1aa",
+   "kind": "condition_hours",
+   "share": 0.4225,
+   "subject": {
+    "condition": "excess OA",
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "outdoor_air_fraction@AHU-1"
+   },
+   "text": "excess OA: the rule flagged 30 hours (30 of 71 judged occupied fan-on cooling-weather samples, 42.2%)",
+   "unit": "h",
+   "value": 30.0
+  },
+  {
+   "id": "F4@finding_detail-aaf1aa",
+   "kind": "parameters",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "outdoor_air_fraction@AHU-1"
+   },
+   "text": "outdoor_air_fraction ran with min_oa_pct = 20.0 (not set: the rule's built-in fallback), cooling_cutoff_f = 70.0, denom_min_f = 5.0, fan_gate = True, min_oa_pct_by_month not set",
+   "value": 5
+  },
+  {
+   "id": "F5@finding_detail-aaf1aa",
+   "kind": "chart",
+   "text": "Evidence chart: A diagnostic scatter (OA fraction (min 20%, cooling above 70°F)) with the violating samples marked",
+   "value": "diagnostic"
+  },
+  {
+   "end": "2026-03-09T17:00:00",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "S1@finding_detail-aaf1aa",
+   "kind": "evidence_span",
+   "start": "2026-03-09T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" outdoor_air_fraction flagged span 1 of 5 in time order: 2026-03-09 12:00 to 2026-03-09 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-10T17:00:00",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "S2@finding_detail-aaf1aa",
+   "kind": "evidence_span",
+   "start": "2026-03-10T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" outdoor_air_fraction flagged span 2 of 5 in time order: 2026-03-10 12:00 to 2026-03-10 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-11T17:00:00",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "S3@finding_detail-aaf1aa",
+   "kind": "evidence_span",
+   "start": "2026-03-11T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" outdoor_air_fraction flagged span 3 of 5 in time order: 2026-03-11 12:00 to 2026-03-11 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-12T17:00:00",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "S4@finding_detail-aaf1aa",
+   "kind": "evidence_span",
+   "start": "2026-03-12T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" outdoor_air_fraction flagged span 4 of 5 in time order: 2026-03-12 12:00 to 2026-03-12 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "end": "2026-03-13T17:00:00",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "S5@finding_detail-aaf1aa",
+   "kind": "evidence_span",
+   "start": "2026-03-13T12:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "\"AHU-1\" outdoor_air_fraction flagged span 5 of 5 in time order: 2026-03-13 12:00 to 2026-03-13 17:00, 6 hours",
+   "unit": "h",
+   "value": 6.0
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset@AHU-1",
+   "id": "F1@finding_detail-b34055",
+   "kind": "finding",
+   "metrics": {
+    "fan_gate": "fan status",
+    "n_considered": 139,
+    "pct_sat_below_58": 100.0,
+    "r2": 0.005,
+    "reset_direction": "flat",
+    "sat_median": 55.0,
+    "sat_std": 0.32,
+    "slope_per_F": 0.003
+   },
+   "rule": "supply_air_reset",
+   "text": "\"AHU-1\" supply_air_reset (warn): \"AHU-1\": SAT median 55.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT); conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1",
+   "value": "warn"
+  },
+  {
+   "id": "F2@finding_detail-b34055",
+   "kind": "parameters",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "supply_air_reset@AHU-1"
+   },
+   "text": "supply_air_reset ran with fan_gate = True",
+   "value": 1
+  },
+  {
+   "id": "F3@finding_detail-b34055",
+   "kind": "chart",
+   "text": "Evidence chart: A scatter of supply_air_temp against outdoor-air temperature",
+   "value": "oat_scatter"
+  },
+  {
+   "bias": {
+    "supply_air_temp": 3.0
+   },
+   "bias_unit": {
+    "supply_air_temp": "°F"
+   },
+   "id": "R1@finding_detail-b34055",
+   "kind": "reference_effect",
+   "severity": "warn",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "supply_air_reset@AHU-1"
+   },
+   "text": "\"AHU-1\" supply_air_reset (warn) re-judged with its input(s) corrected for the configured reference's bias (\"supply_air_temp\" by -3.0 °F): warn, \"AHU-1\": SAT median 52.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~52 F regardless of OAT); so the finding stands with the offset taken off: the offset does not explain it",
+   "value": "warn",
+   "verdict": "persists"
+  },
+  {
+   "basis": "notice",
+   "id": "N1@finding_detail-b34055",
+   "kind": "notice",
+   "text": "1 listed finding(s) rest on an input whose configured sensor reference disagrees with it (conditional_on names the comparison): treat each as a possible sensor problem first and check that sensor before acting on the equipment. sensor_trust shows the comparison.",
+   "value": "notice"
+  },
+  {
+   "id": "I1@finding_detail-4ecd59",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "economizer_high_limit",
+   "text": "economizer_high_limit inputs: needs oa_damper and oat; reads mixed_air_temp, return_air_temp, oa_airflow, airflow, supply_fan_status and supply_fan_speed when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "economizer_high_limit@AHU-1"
+   }
+  },
+  {
+   "id": "I1@finding_detail-95ce3b",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "simultaneous_heat_cool",
+   "text": "simultaneous_heat_cool inputs: needs heat_valve and cool_valve; reads oat, return_air_temp, oa_damper, occupancy, warmup, cooldown, cool_coil_leaving_temp, supply_air_temp, outdoor_rh, return_air_humidity, supply_fan_status and supply_fan_speed when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   }
+  },
+  {
+   "id": "I1@finding_detail-aaf1aa",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "outdoor_air_fraction",
+   "text": "outdoor_air_fraction inputs: needs mixed_air_temp and return_air_temp; reads oat, oa_damper, supply_fan_status, supply_fan_speed, airflow and occupancy when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "outdoor_air_fraction@AHU-1"
+   }
+  },
+  {
+   "id": "I1@finding_detail-b34055",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "supply_air_reset",
+   "text": "supply_air_reset inputs: needs supply_air_temp; reads cool_valve, oat, occupancy, warmup, cooldown, supply_fan_status, supply_fan_speed, airflow, supply_air_temp_sp and sat_reset_requests when mapped",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "finding": "supply_air_reset@AHU-1"
+   }
+  }
+ ],
+ "mv_summary": [
+  {
+   "facility_id": "mv-site",
+   "id": "F1@mv_summary-34b587",
+   "kind": "mv_summary",
+   "text": "M&V for mv-site: 2 meter(s), 2 baseline fit(s), 2 savings result(s), 0 trigger(s); 0 result(s) declined",
+   "value": 4
+  },
+  {
+   "baseline_period": [
+    "2024-01-01",
+    "2024-03-31"
+   ],
+   "equip": "Meter-1",
+   "facility_id": "mv-site",
+   "finding_id": "mv_savings@Meter-1",
+   "id": "F2@mv_summary-34b587",
+   "kind": "finding",
+   "metrics": {
+    "abs_uncertainty": 124.79,
+    "avoided_energy": -40.31,
+    "baseline_end": "2024-03-31",
+    "baseline_projected": 104065.88,
+    "baseline_start": "2024-01-01",
+    "baseline_version": null,
+    "basis": "reporting-period conditions",
+    "confidence": 0.9,
+    "coverage_tier": "in_range",
+    "declined": false,
+    "enpi": 1.000387,
+    "enpi_uncertainty": 0.0012,
+    "fsu": 3.0956,
+    "fsu_extrapolation_factor": null,
+    "kernel": "g14",
+    "max_beyond_rel": 0.0185,
+    "method": "forecast",
+    "method_declared": false,
+    "n_outside": 0,
+    "n_report_days": 59,
+    "reporting_actual": 104106.19,
+    "rho": 0.1114,
+    "savings_pct": -0.0004,
+    "sep_range_valid": true,
+    "share_energy_outside": 0.0,
+    "share_points_outside": 0.0,
+    "validity": "g14"
+   },
+   "rule": "mv_savings",
+   "text": "\"Meter-1\" mv_savings (info): \"Meter-1\": avoided energy -40 (-0.0%) ± 125 at 90% over 59 reporting days; baseline coverage in_range; energy in the meter's own units (its trended rate summed over hours; the run config names no energy unit); baseline period 2024-01-01 to 2024-03-31",
+   "value": "info"
+  },
+  {
+   "baseline_period": [
+    "2024-01-01",
+    "2024-03-31"
+   ],
+   "equip": "Meter-2",
+   "facility_id": "mv-site",
+   "finding_id": "mv_savings@Meter-2",
+   "id": "F3@mv_summary-34b587",
+   "kind": "finding",
+   "metrics": {
+    "abs_uncertainty": 161.05,
+    "avoided_energy": 10398.67,
+    "baseline_end": "2024-03-31",
+    "baseline_projected": 104163.93,
+    "baseline_start": "2024-01-01",
+    "baseline_version": null,
+    "basis": "reporting-period conditions",
+    "confidence": 0.9,
+    "coverage_tier": "in_range",
+    "declined": false,
+    "enpi": 0.90017,
+    "enpi_uncertainty": 0.001392,
+    "fsu": 0.0155,
+    "fsu_extrapolation_factor": null,
+    "kernel": "g14",
+    "max_beyond_rel": 0.0137,
+    "method": "forecast",
+    "method_declared": false,
+    "n_outside": 0,
+    "n_report_days": 59,
+    "reporting_actual": 93765.26,
+    "rho": 0.3058,
+    "savings_pct": 0.0998,
+    "sep_range_valid": true,
+    "share_energy_outside": 0.0,
+    "share_points_outside": 0.0,
+    "validity": "g14"
+   },
+   "rule": "mv_savings",
+   "text": "\"Meter-2\" mv_savings (info): \"Meter-2\": avoided energy 10,399 (10.0%) ± 161 at 90% over 59 reporting days; baseline coverage in_range; energy in the meter's own units (its trended rate summed over hours; the run config names no energy unit); baseline period 2024-01-01 to 2024-03-31",
+   "value": "info"
+  },
+  {
+   "baseline_period": [
+    "2024-01-01",
+    "2024-03-31"
+   ],
+   "equip": "Meter-1",
+   "facility_id": "mv-site",
+   "finding_id": "mv_baseline@Meter-1",
+   "id": "F4@mv_summary-34b587",
+   "kind": "finding",
+   "metrics": {
+    "accept": true,
+    "baseline_end": "2024-03-31",
+    "baseline_start": "2024-01-01",
+    "cv_rmse": 0.0039,
+    "model": "4P",
+    "n_days": 91,
+    "nmbe": -0.0,
+    "oat_fit_max": 75.37716588675012,
+    "oat_fit_min": 54.9366887278884,
+    "oat_support_hi": 75.37716588675012,
+    "oat_support_lo": 54.9366887278884,
+    "r2": 0.9995,
+    "rho": 0.11137805009907126,
+    "short_baseline": true
+   },
+   "rule": "mv_baseline",
+   "text": "\"Meter-1\" mv_baseline (ok): \"Meter-1\": 4P baseline, R2 1.00, CV(RMSE) 0.4% over 91 days -- meets daily acceptance (G14 criteria; the 30% daily CV(RMSE) tier is CAMBER's) (short baseline); baseline period 2024-01-01 to 2024-03-31",
+   "value": "ok"
+  },
+  {
+   "baseline_period": [
+    "2024-01-01",
+    "2024-03-31"
+   ],
+   "equip": "Meter-2",
+   "facility_id": "mv-site",
+   "finding_id": "mv_baseline@Meter-2",
+   "id": "F5@mv_summary-34b587",
+   "kind": "finding",
+   "metrics": {
+    "accept": true,
+    "baseline_end": "2024-03-31",
+    "baseline_start": "2024-01-01",
+    "cv_rmse": 0.0041,
+    "model": "4P",
+    "n_days": 91,
+    "nmbe": 0.0,
+    "oat_fit_max": 75.46353768790212,
+    "oat_fit_min": 55.00320134788482,
+    "oat_support_hi": 75.46353768790212,
+    "oat_support_lo": 55.00320134788482,
+    "r2": 0.9994,
+    "rho": 0.3058466275468735,
+    "short_baseline": true
+   },
+   "rule": "mv_baseline",
+   "text": "\"Meter-2\" mv_baseline (ok): \"Meter-2\": 4P baseline, R2 1.00, CV(RMSE) 0.4% over 91 days -- meets daily acceptance (G14 criteria; the 30% daily CV(RMSE) tier is CAMBER's) (short baseline); baseline period 2024-01-01 to 2024-03-31",
+   "value": "ok"
+  },
+  {
+   "basis": "notice",
+   "id": "N1@mv_summary-34b587",
+   "kind": "notice",
+   "text": "2 saving(s) are in the meter's own units (its trended rate summed over hours; the run config names no energy unit); add a units block to the run config to report kWh or kBtu.",
+   "value": "notice"
+  }
+ ],
+ "points": [
+  {
+   "facility_id": "site-a",
+   "id": "F1@points-bf8dfd",
+   "kind": "point_count",
+   "text": "site-a stores 27 points on 3 equipment",
+   "value": 27
+  }
+ ],
+ "rcx_report": [
+  {
+   "facility_id": "site-a",
+   "id": "F1@rcx_report-ce1b62",
+   "kind": "rcx_report",
+   "kpis": {
+    "annual_cost_usd": null,
+    "at_risk_usd": null,
+    "coverage_pct": 100.0,
+    "n_conditional": 1,
+    "n_cost_conditional": 0,
+    "n_costed": 0,
+    "n_declined": 0,
+    "n_issues": 5,
+    "n_uncosted": 5
+   },
+   "text": "The RCx report for site-a ranks 5 issue(s) with no cost",
+   "value": 5
+  },
+  {
+   "data": {
+    "n_issues": 5
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "K1@summary-ce1b62",
+   "kind": "kpi",
+   "text": "The report ranks 5 issues."
+  },
+  {
+   "data": {
+    "n_costed": 0
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "K2@summary-ce1b62",
+   "kind": "kpi",
+   "text": "No issue is costed, so the report states no dollar total."
+  },
+  {
+   "data": {
+    "n_conditional": 1,
+    "n_uncosted": 5
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "K3@summary-ce1b62",
+   "kind": "kpi",
+   "text": "5 issue(s) are uncosted and 1 are conditional on a sensor fix."
+  },
+  {
+   "data": {
+    "coverage_pct": "100"
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "K4@summary-ce1b62",
+   "kind": "kpi",
+   "text": "Data coverage of the air-side points is 100% (the mean share of samples present)."
+  },
+  {
+   "data": {
+    "n_declined": 0
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "K5@summary-ce1b62",
+   "kind": "kpi",
+   "text": "0 check(s) declined to reach a verdict."
+  },
+  {
+   "data": {
+    "rule": "economizer_high_limit"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "M1@appA-ce1b62",
+   "kind": "missing",
+   "text": "economizer_high_limit on \"AHU-1\" ran without optional input(s) oa_airflow, airflow."
+  },
+  {
+   "data": {
+    "rule": "economizer_high_limit"
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "M2@appA-ce1b62",
+   "kind": "missing",
+   "text": "economizer_high_limit on \"AHU-2\" ran without optional input(s) oa_airflow, airflow."
+  },
+  {
+   "data": {
+    "rule": "economizer_high_limit"
+   },
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "M3@appA-ce1b62",
+   "kind": "missing",
+   "text": "economizer_high_limit on \"AHU-3\" ran without optional input(s) oa_airflow, airflow."
+  },
+  {
+   "data": {
+    "rule": "supply_air_reset"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "M4@appA-ce1b62",
+   "kind": "missing",
+   "text": "supply_air_reset on \"AHU-1\" ran without optional input(s) occupancy, warmup, cooldown."
+  },
+  {
+   "data": {
+    "rule": "supply_air_reset"
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "M5@appA-ce1b62",
+   "kind": "missing",
+   "text": "supply_air_reset on \"AHU-2\" ran without optional input(s) occupancy, warmup, cooldown."
+  },
+  {
+   "data": {
+    "key": "boiler_efficiency",
+    "value": 0.8
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A1@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption boiler_efficiency = 0.8."
+  },
+  {
+   "data": {
+    "key": "chiller_load_factor",
+    "value": 0.6
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A2@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption chiller_load_factor = 0.6."
+  },
+  {
+   "data": {
+    "key": "chiller_target_kw_per_ton",
+    "value": 0.65
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A3@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption chiller_target_kw_per_ton = 0.65."
+  },
+  {
+   "data": {
+    "key": "cool_cop",
+    "value": 3.5
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A4@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption cool_cop = 3.5."
+  },
+  {
+   "data": {
+    "key": "ct_kw_per_approach_f",
+    "value": 0.015
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A5@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption ct_kw_per_approach_f = 0.015."
+  },
+  {
+   "data": {
+    "key": "fan_excess_frac",
+    "value": 0.15
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A6@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption fan_excess_frac = 0.15."
+  },
+  {
+   "data": {
+    "key": "g36_gap_ref_f",
+    "value": 5.0
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A7@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption g36_gap_ref_f = 5.0."
+  },
+  {
+   "data": {
+    "key": "per_start_loss",
+    "value": 0.005
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A8@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption per_start_loss = 0.005."
+  },
+  {
+   "data": {
+    "key": "pump_excess_frac",
+    "value": 0.15
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A9@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption pump_excess_frac = 0.15."
+  },
+  {
+   "data": {
+    "key": "reheat_diversity",
+    "value": 0.3
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A10@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption reheat_diversity = 0.3."
+  },
+  {
+   "data": {
+    "key": "reset_fan_excess_frac",
+    "value": 0.15
+   },
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A11@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Cost assumption reset_fan_excess_frac = 0.15."
+  },
+  {
+   "data": {},
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A12@appB-ce1b62",
+   "kind": "assumption",
+   "text": "Energy price: package placeholders ($0.15/kWh, $1.20/therm), not the site's."
+  },
+  {
+   "data": {},
+   "equip": "",
+   "facility_id": "site-a",
+   "id": "A13@appB-ce1b62",
+   "kind": "assumption",
+   "text": "No equipment sizing supplied, so sizing-dependent issues stay uncosted."
+  },
+  {
+   "data": {
+    "rank": 1
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "I1@454ac9ff9dc1-ce1b62",
+   "kind": "issue",
+   "text": "Issue 1: Supply air held cold (no reset seen), on \"AHU-2\"; severity fault, confidence M."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "C1@454ac9ff9dc1-ce1b62",
+   "kind": "cost",
+   "text": "Issue 1 has no dollar figure: uncosted — no cost model for this rule."
+  },
+  {
+   "data": {
+    "hours": "44"
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "T1@454ac9ff9dc1-ce1b62",
+   "kind": "hours",
+   "text": "Issue 1 ran 44 violation hours (union of members), 22.6% of 195 fan-on hours; gate: fan status."
+  },
+  {
+   "data": {
+    "rule": "supply_air_reset"
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "F1@454ac9ff9dc1-ce1b62",
+   "kind": "finding",
+   "text": "root finding supply_air_reset on \"AHU-2\" (warn): \"AHU-2\": SAT median 55.0F, slope -0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)."
+  },
+  {
+   "data": {
+    "rule": "simultaneous_heat_cool"
+   },
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "F2@454ac9ff9dc1-ce1b62",
+   "kind": "finding",
+   "text": "member finding simultaneous_heat_cool on \"AHU-2\" (fault): \"AHU-2\": both coils open 26.7% of occupied hours (CHW 85%, HHW 27%)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "R1@454ac9ff9dc1-ce1b62",
+   "kind": "action",
+   "text": "Recommended action, Enable supply-air-temperature reset: Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends). Suggested: SAT setpoint reset schedule → 65→55°F over 0–60°F OAT."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "W1@454ac9ff9dc1-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Input trust H: supply_air_temp trusted (1.00)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "W2@454ac9ff9dc1-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Mapping H: roles recorded at ingest by the dataset adapter."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "W3@454ac9ff9dc1-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Assumptions M: rule defaults; no site parameters configured."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "W4@454ac9ff9dc1-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Sample M: 140 samples judged, 100% input coverage."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "W5@454ac9ff9dc1-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Corroboration H: supply_air_reset scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark."
+  },
+  {
+   "data": {},
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "id": "V1@454ac9ff9dc1-ce1b62",
+   "kind": "caveat",
+   "text": "Caveat: dehumidification with reheat could not be ruled out: no cooling-coil leaving temperature, humidity or dew point is trended -- declare the unit's sequence with the rule parameter `dehumidification` (true / false)."
+  },
+  {
+   "data": {
+    "rank": 2
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "I1@fcee28b6b426-ce1b62",
+   "kind": "issue",
+   "text": "Issue 2: Economizer open above the high limit, on \"AHU-1\"; severity fault, confidence M."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "C1@fcee28b6b426-ce1b62",
+   "kind": "cost",
+   "text": "Issue 2 has no dollar figure: uncosted — needs supply_airflow_cfm or design_oa_cfm."
+  },
+  {
+   "data": {
+    "hours": "32"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "T1@fcee28b6b426-ce1b62",
+   "kind": "hours",
+   "text": "Issue 2 ran 32 violation hours (union of members), 16.4% of 195 fan-on hours; gate: fan status."
+  },
+  {
+   "data": {
+    "rule": "economizer_high_limit"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "F1@fcee28b6b426-ce1b62",
+   "kind": "finding",
+   "text": "root finding economizer_high_limit on \"AHU-1\" (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out)."
+  },
+  {
+   "data": {
+    "rule": "outdoor_air_fraction"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "F2@fcee28b6b426-ce1b62",
+   "kind": "finding",
+   "text": "member finding outdoor_air_fraction on \"AHU-1\" (warn): \"AHU-1\": OAF median 55% (20% in cooling weather); excess OA 42% of cooling hours above 20% min."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "R1@fcee28b6b426-ce1b62",
+   "kind": "action",
+   "text": "Recommended action, Lock out the economizer above the high limit: Excess outside air is admitted when it is hot. Verify the OA dry-bulb high limit (~68°F, or differential against return air) actually locks the economizer out, and that the damper returns to minimum OA (≈15% unless the design minimum is known) when it does. Suggested: Economizer high limit + min OA damper → lockout above ~68°F, damper to design minimum."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W1@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Input trust H: oa_damper trusted (0.80), oat trusted (1.00)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W2@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Mapping H: roles recorded at ingest by the dataset adapter."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W3@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Assumptions H: site-configured parameters {\"high_limit_f\": 68.0, \"min_oa_pct\": 30.0}."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W4@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Sample M: 74 samples judged, 100% input coverage."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W5@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Corroboration H: economizer_high_limit scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W6@fcee28b6b426-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Cost at risk (the verdict stands): its estimate reads sensor_drift:supply_air_temp warn (\"AHU-1\" supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on \"AHU-1\"."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "V1@fcee28b6b426-ce1b62",
+   "kind": "caveat",
+   "text": "Caveat: 19 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)."
+  },
+  {
+   "data": {
+    "rank": 3
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "I1@5eac9731426a-ce1b62",
+   "kind": "issue",
+   "text": "Issue 3: Sensor drift: supply air temp, on \"AHU-1\"; severity warn, confidence M."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "C1@5eac9731426a-ce1b62",
+   "kind": "cost",
+   "text": "Issue 3 has no dollar figure: uncosted — no cost model for this rule."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "T1@5eac9731426a-ce1b62",
+   "kind": "hours",
+   "text": "Issue 3's violation hours were not measured."
+  },
+  {
+   "data": {
+    "rule": "sensor_drift:supply_air_temp"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "F1@5eac9731426a-ce1b62",
+   "kind": "finding",
+   "text": "root finding sensor_drift:supply_air_temp on \"AHU-1\" (warn): \"AHU-1\" supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "R1@5eac9731426a-ce1b62",
+   "kind": "action",
+   "text": "No packaged action: the engineer is to specify the fix."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W1@5eac9731426a-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Input trust not assessed (no sensor-trust scores for this finding's inputs)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W2@5eac9731426a-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Mapping H: roles recorded at ingest by the dataset adapter."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W3@5eac9731426a-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Assumptions M: reference series and default bias / drift thresholds."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W4@5eac9731426a-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Sample H: 504 samples judged."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W5@5eac9731426a-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Corroboration not assessed: no benchmark track scores 'sensor_drift:supply_air_temp'."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "D1@5eac9731426a-ce1b62",
+   "kind": "dependency",
+   "text": "supply_air_reset on \"AHU-1\" is conditional on this sensor issue."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "V1@5eac9731426a-ce1b62",
+   "kind": "caveat",
+   "text": "Caveat: drift not evaluated: overlap spans 21.0 days (< 28); a per-month rate from a shorter window is an extrapolation."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "V2@5eac9731426a-ce1b62",
+   "kind": "caveat",
+   "text": "Caveat: bias is the median of \"AHU-1\" supply_air_temp minus handheld reference logger over their paired samples: positive means the point reads high against the reference, negative that it reads low."
+  },
+  {
+   "data": {
+    "rank": 4
+   },
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "I1@c11f47e5da10-ce1b62",
+   "kind": "issue",
+   "text": "Issue 4: Supply air held cold (no reset seen), on \"AHU-3\"; severity warn, confidence M."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "C1@c11f47e5da10-ce1b62",
+   "kind": "cost",
+   "text": "Issue 4 has no dollar figure: uncosted — no cost model for this rule."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "T1@c11f47e5da10-ce1b62",
+   "kind": "hours",
+   "text": "Issue 4's violation hours were not measured."
+  },
+  {
+   "data": {
+    "rule": "supply_air_reset"
+   },
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "F1@c11f47e5da10-ce1b62",
+   "kind": "finding",
+   "text": "root finding supply_air_reset on \"AHU-3\" (warn): \"AHU-3\": SAT median 55.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "R1@c11f47e5da10-ce1b62",
+   "kind": "action",
+   "text": "Recommended action, Enable supply-air-temperature reset: Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends). Suggested: SAT setpoint reset schedule → 65→55°F over 0–60°F OAT."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "W1@c11f47e5da10-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Input trust H: supply_air_temp trusted (1.00)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "W2@c11f47e5da10-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Mapping H: roles recorded at ingest by the dataset adapter."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "W3@c11f47e5da10-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Assumptions M: rule defaults; no site parameters configured."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "W4@c11f47e5da10-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Sample M: 141 samples judged, 100% input coverage."
+  },
+  {
+   "data": {},
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "id": "W5@c11f47e5da10-ce1b62",
+   "kind": "why",
+   "text": "Confidence M: Corroboration H: supply_air_reset scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark."
+  },
+  {
+   "data": {
+    "rank": 5
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "I1@b0aab55068dc-ce1b62",
+   "kind": "issue",
+   "text": "Issue 5: Supply air held cold (no reset seen), on \"AHU-1\"; severity warn, confidence L."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "C1@b0aab55068dc-ce1b62",
+   "kind": "cost",
+   "text": "Issue 5 has no dollar figure: uncosted — no cost model for this rule."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "T1@b0aab55068dc-ce1b62",
+   "kind": "hours",
+   "text": "Issue 5's violation hours were not measured."
+  },
+  {
+   "data": {
+    "rule": "supply_air_reset"
+   },
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "F1@b0aab55068dc-ce1b62",
+   "kind": "finding",
+   "text": "root finding supply_air_reset on \"AHU-1\" (warn): \"AHU-1\": SAT median 55.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "R1@b0aab55068dc-ce1b62",
+   "kind": "action",
+   "text": "Recommended action, Enable supply-air-temperature reset: Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends). Suggested: SAT setpoint reset schedule → 65→55°F over 0–60°F OAT."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W1@b0aab55068dc-ce1b62",
+   "kind": "why",
+   "text": "Confidence L: Input trust L: conditional on sensor_drift:supply_air_temp warn (\"AHU-1\" supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on \"AHU-1\"."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W2@b0aab55068dc-ce1b62",
+   "kind": "why",
+   "text": "Confidence L: Mapping H: roles recorded at ingest by the dataset adapter."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W3@b0aab55068dc-ce1b62",
+   "kind": "why",
+   "text": "Confidence L: Assumptions M: rule defaults; no site parameters configured."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W4@b0aab55068dc-ce1b62",
+   "kind": "why",
+   "text": "Confidence L: Sample M: 139 samples judged, 100% input coverage."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "W5@b0aab55068dc-ce1b62",
+   "kind": "why",
+   "text": "Confidence L: Corroboration H: supply_air_reset scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark."
+  },
+  {
+   "data": {},
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "id": "D1@b0aab55068dc-ce1b62",
+   "kind": "dependency",
+   "text": "Conditional pending a sensor fix: sensor_drift:supply_air_temp warn (\"AHU-1\" supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on \"AHU-1\"."
+  },
+  {
+   "equip": "AHU-2",
+   "id": "F2@rcx_report-ce1b62",
+   "issue_key": "454ac9ff9dc1",
+   "kind": "issue",
+   "of": 5,
+   "rank": 1,
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a"
+   },
+   "text": "Issue 1 of 5 on \"AHU-2\": Supply air held cold (no reset seen) (fault, confidence M, uncosted)",
+   "value": 1
+  },
+  {
+   "equip": "AHU-1",
+   "id": "F3@rcx_report-ce1b62",
+   "issue_key": "fcee28b6b426",
+   "kind": "issue",
+   "of": 5,
+   "rank": 2,
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "Issue 2 of 5 on \"AHU-1\": Economizer open above the high limit (fault, confidence M, uncosted)",
+   "value": 2
+  },
+  {
+   "equip": "AHU-1",
+   "id": "F4@rcx_report-ce1b62",
+   "issue_key": "5eac9731426a",
+   "kind": "issue",
+   "of": 5,
+   "rank": 3,
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "Issue 3 of 5 on \"AHU-1\": Sensor drift: supply air temp (warn, confidence M, uncosted)",
+   "value": 3
+  },
+  {
+   "equip": "AHU-3",
+   "id": "F5@rcx_report-ce1b62",
+   "issue_key": "c11f47e5da10",
+   "kind": "issue",
+   "of": 5,
+   "rank": 4,
+   "subject": {
+    "equip": "AHU-3",
+    "facility_id": "site-a"
+   },
+   "text": "Issue 4 of 5 on \"AHU-3\": Supply air held cold (no reset seen) (warn, confidence M, uncosted)",
+   "value": 4
+  },
+  {
+   "equip": "AHU-1",
+   "id": "F6@rcx_report-ce1b62",
+   "issue_key": "b0aab55068dc",
+   "kind": "issue",
+   "of": 5,
+   "rank": 5,
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a"
+   },
+   "text": "Issue 5 of 5 on \"AHU-1\": Supply air held cold (no reset seen) (warn, confidence L, uncosted; conditional on sensor_drift:supply_air_temp warn)",
+   "value": 5
+  },
+  {
+   "basis": "notice",
+   "id": "N1@rcx_report-ce1b62",
+   "kind": "notice",
+   "text": "The run config's OAT reference fetches weather over the network; it was left out here, so the report compares the OAT sources with each other instead.",
+   "value": "notice"
+  },
+  {
+   "basis": "notice",
+   "id": "N2@rcx_report-ce1b62",
+   "kind": "notice",
+   "text": "'fact_index appendix A' shows rows 1-5 of 24 (as in the report): call again with limit=24 for all of it",
+   "value": "notice"
+  }
+ ],
+ "rule_params": [
+  {
+   "id": "F1@rule_params-390ae2",
+   "kind": "rule_count",
+   "text": "2 rule(s) match, with 19 tunable parameter(s) between them",
+   "value": 2
+  },
+  {
+   "id": "F2@rule_params-390ae2",
+   "kind": "rule_params",
+   "params": [
+    {
+     "default": 65.0,
+     "name": "high_limit_f",
+     "range": [
+      55.0,
+      80.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": 0.25,
+     "name": "min_damper",
+     "range": [
+      0.0,
+      1.0
+     ],
+     "unit": "fraction (OA damper, 0-1)"
+    },
+    {
+     "default": null,
+     "name": "min_oa_pct",
+     "range": [
+      0.0,
+      100.0
+     ],
+     "unit": "% of supply airflow (OA fraction)"
+    },
+    {
+     "default": 5.0,
+     "name": "oa_margin_pct",
+     "range": [
+      1.0,
+      15.0
+     ],
+     "unit": "% of supply airflow (percentage points)"
+    },
+    {
+     "default": 10.0,
+     "name": "warn_pct",
+     "range": [
+      2.0,
+      30.0
+     ],
+     "unit": "% of fan-on samples above the high limit"
+    },
+    {
+     "default": 25.0,
+     "name": "fault_pct",
+     "range": [
+      10.0,
+      60.0
+     ],
+     "unit": "% of fan-on samples above the high limit"
+    },
+    {
+     "default": 5.0,
+     "name": "denom_min_f",
+     "range": [
+      2.0,
+      15.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": 20.0,
+     "name": "assumed_min_oa_pct",
+     "range": [
+      5.0,
+      40.0
+     ],
+     "unit": "% of supply airflow (OA fraction)"
+    },
+    {
+     "default": 50.0,
+     "name": "conservative_min_oa_pct",
+     "range": [
+      30.0,
+      80.0
+     ],
+     "unit": "% of supply airflow (OA fraction)"
+    },
+    {
+     "default": true,
+     "name": "differential",
+     "range": [
+      false,
+      true
+     ],
+     "unit": "flag"
+    },
+    {
+     "default": true,
+     "name": "fan_gate",
+     "range": [
+      false,
+      true
+     ],
+     "unit": "flag"
+    }
+   ],
+   "rule": "economizer_high_limit",
+   "text": "economizer_high_limit (rule, run with rule_run) defaults: high_limit_f = 65.0 °F, min_damper = 0.25 fraction (OA damper, 0-1), min_oa_pct not set by default, oa_margin_pct = 5.0 % of supply airflow (percentage points), warn_pct = 10.0 % of fan-on samples above the high limit, fault_pct = 25.0 % of fan-on samples above the high limit, denom_min_f = 5.0 °F, assumed_min_oa_pct = 20.0 % of supply airflow (OA fraction), conservative_min_oa_pct = 50.0 % of supply airflow (OA fraction), differential = True flag, fan_gate = True flag",
+   "value": 11
+  },
+  {
+   "id": "F3@rule_params-390ae2",
+   "kind": "rule_params",
+   "params": [
+    {
+     "default": 2.0,
+     "name": "fan_heat_f",
+     "range": [
+      0.5,
+      4.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": 3.0,
+     "name": "delta_thr_f",
+     "range": [
+      1.0,
+      6.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": 5.0,
+     "name": "valve_closed_thr",
+     "range": [
+      0.0,
+      15.0
+     ],
+     "unit": "% of valve stroke"
+    },
+    {
+     "default": false,
+     "name": "coil_sensor_fan_heat",
+     "range": [
+      false,
+      true
+     ],
+     "unit": "flag"
+    },
+    {
+     "default": null,
+     "name": "measured_fan_heat_f",
+     "range": [
+      0.0,
+      4.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": null,
+     "name": "cool_delta_thr_f",
+     "range": [
+      0.5,
+      6.0
+     ],
+     "unit": "°F"
+    },
+    {
+     "default": false,
+     "name": "occupied_only",
+     "range": [
+      false,
+      true
+     ],
+     "unit": "flag"
+    },
+    {
+     "default": true,
+     "name": "judge_heating_on_supply_air",
+     "range": [
+      false,
+      true
+     ],
+     "unit": "flag"
+    }
+   ],
+   "rule": "leaking_valve",
+   "text": "leaking_valve (rule, run with rule_run) defaults: fan_heat_f = 2.0 °F, delta_thr_f = 3.0 °F, valve_closed_thr = 5.0 % of valve stroke, coil_sensor_fan_heat = False flag, measured_fan_heat_f not set by default, cool_delta_thr_f not set by default, occupied_only = False flag, judge_heating_on_supply_air = True flag",
+   "value": 8
+  },
+  {
+   "id": "I1@rule_params-390ae2",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "economizer_high_limit",
+   "text": "economizer_high_limit inputs: needs oa_damper and oat; reads mixed_air_temp, return_air_temp, oa_airflow, airflow, supply_fan_status and supply_fan_speed when mapped"
+  },
+  {
+   "id": "I2@rule_params-390ae2",
+   "kind": "rule_inputs",
+   "value": "inputs",
+   "rule": "leaking_valve",
+   "text": "leaking_valve inputs: needs cool_valve, mixed_air_temp and supply_air_temp; reads heat_valve, heat_coil_leaving_temp, cool_coil_leaving_temp, supply_fan_status and supply_fan_speed when mapped"
+  }
+ ],
+ "rule_run": [
+  {
+   "counts": {
+    "fault": 2,
+    "info": 0,
+    "ok": 12,
+    "warn": 4
+   },
+   "facility_id": "site-a",
+   "id": "F1@rule_run-54307c",
+   "kind": "rule_run",
+   "text": "6 rules were run on 3 equipment of site-a and 6 of them returned a result, 18 rule-equipment result(s) in all: 2 fault, 4 warn, 0 info and 12 ok; 0 rule-equipment pair(s) (0 rule(s)) skipped for missing inputs",
+   "value": 18
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "F2@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "rule": "economizer_high_limit",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out)",
+   "value": "fault"
+  },
+  {
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "finding_id": "simultaneous_heat_cool@AHU-2",
+   "id": "F3@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "chw_open_pct": 84.85,
+    "hhw_open_pct": 26.67,
+    "mean_overlap_when_simul": 30.0,
+    "n_considered": 165,
+    "simultaneous_hc_pct": 26.67,
+    "valve_coverage_pct": 100.0
+   },
+   "rule": "simultaneous_heat_cool",
+   "text": "\"AHU-2\" simultaneous_heat_cool (fault): \"AHU-2\": both coils open 26.7% of occupied hours (CHW 85%, HHW 27%)",
+   "value": "fault"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "outdoor_air_fraction@AHU-1",
+   "id": "F4@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "denom_min_f": 5.0,
+    "excess_oa_pct": 42.3,
+    "failure_mode": "excess_oa",
+    "fan_gate": "fan status",
+    "median_oaf_cooling": 20.0,
+    "min_oa_pct": 20.0,
+    "min_oa_pct_by_month": null,
+    "min_oa_source": "default",
+    "n_cooling": 71,
+    "n_masked_fan_off": 0,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 42,
+    "n_valid": 123,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 52.0,
+    "oa_cost_excess_cool_btu_per_cfm": null,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": null,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0,
+    "oaf_median_pct": 55.0,
+    "occupancy": "assumed",
+    "under_vent_pct": 0.0
+   },
+   "rule": "outdoor_air_fraction",
+   "text": "\"AHU-1\" outdoor_air_fraction (warn): \"AHU-1\": OAF median 55% (20% in cooling weather); excess OA 42% of cooling hours above 20% min",
+   "value": "warn"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset@AHU-1",
+   "id": "F5@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "fan_gate": "fan status",
+    "n_considered": 139,
+    "pct_sat_below_58": 100.0,
+    "r2": 0.005,
+    "reset_direction": "flat",
+    "sat_median": 55.0,
+    "sat_std": 0.32,
+    "slope_per_F": 0.003
+   },
+   "rule": "supply_air_reset",
+   "text": "\"AHU-1\" supply_air_reset (warn): \"AHU-1\": SAT median 55.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT); conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1",
+   "value": "warn"
+  },
+  {
+   "equip": "AHU-2",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset@AHU-2",
+   "id": "F6@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "fan_gate": "fan status",
+    "n_considered": 140,
+    "pct_sat_below_58": 100.0,
+    "r2": 0.0,
+    "reset_direction": "flat",
+    "sat_median": 55.0,
+    "sat_std": 0.33,
+    "slope_per_F": -0.001
+   },
+   "rule": "supply_air_reset",
+   "text": "\"AHU-2\" supply_air_reset (warn): \"AHU-2\": SAT median 55.0F, slope -0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)",
+   "value": "warn"
+  },
+  {
+   "equip": "AHU-3",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset@AHU-3",
+   "id": "F7@rule_run-54307c",
+   "kind": "finding",
+   "metrics": {
+    "fan_gate": "fan status",
+    "n_considered": 141,
+    "pct_sat_below_58": 100.0,
+    "r2": 0.004,
+    "reset_direction": "flat",
+    "sat_median": 55.0,
+    "sat_std": 0.3,
+    "slope_per_F": 0.003
+   },
+   "rule": "supply_air_reset",
+   "text": "\"AHU-3\" supply_air_reset (warn): \"AHU-3\": SAT median 55.0F, slope +0.00 F/F, <58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)",
+   "value": "warn"
+  },
+  {
+   "finding_ids": [
+    "leaking_valve@AHU-1",
+    "simultaneous_heat_cool@AHU-1",
+    "supply_air_reset_compliance@AHU-1"
+   ],
+   "id": "C1@rule_run-54307c",
+   "kind": "conditional_not_listed",
+   "text": "3 result(s) not listed here also rest on an input whose configured sensor reference disagrees with it, so each is conditional on that sensor (a pass too): \"AHU-1\" leaking_valve (ok); \"AHU-1\" simultaneous_heat_cool (ok); \"AHU-1\" supply_air_reset_compliance (ok)",
+   "value": 3
+  },
+  {
+   "basis": "notice",
+   "id": "N1@rule_run-54307c",
+   "kind": "notice",
+   "text": "1 listed finding(s) rest on an input whose configured sensor reference disagrees with it (conditional_on names the comparison): treat each as a possible sensor problem first and check that sensor before acting on the equipment. sensor_trust shows the comparison. 3 ok result(s) below min_severity rest on such an input too and are not listed (a lower min_severity lists them); a pass measured with that input is conditional as well.",
+   "value": "notice"
+  },
+  {
+   "equip": "AHU-1",
+   "finding_ids": [
+    "economizer_high_limit@AHU-1"
+   ],
+   "id": "V1@rule_run-54307c",
+   "kind": "caveat",
+   "of": 3,
+   "rule": "economizer_high_limit",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "finding": "economizer_high_limit@AHU-1"
+   },
+   "text": "\"AHU-1\" economizer_high_limit caveat (given for 1 of its 3 results): 19 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)",
+   "value": "caveat"
+  },
+  {
+   "equip": "AHU-2",
+   "finding_ids": [
+    "simultaneous_heat_cool@AHU-2"
+   ],
+   "id": "V2@rule_run-54307c",
+   "kind": "caveat",
+   "of": 3,
+   "rule": "simultaneous_heat_cool",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "finding": "simultaneous_heat_cool@AHU-2"
+   },
+   "text": "\"AHU-2\" simultaneous_heat_cool caveat (given for 1 of its 3 results): dehumidification with reheat could not be ruled out: no cooling-coil leaving temperature, humidity or dew point is trended -- declare the unit's sequence with the rule parameter `dehumidification` (true / false)",
+   "value": "caveat"
+  },
+  {
+   "id": "F2@rule_run-834d22",
+   "kind": "finding",
+   "value": "fault",
+   "rule": "economizer_high_limit",
+   "equip": "AHU-1",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out); oa_cost_flagged true; totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 715 kBtu, oa_cost_excess_heat_kbtu (oa cost excess heat) 0 kBtu",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": "trended supply airflow",
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": 715.199,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": 0.0,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "economizer_high_limit@AHU-1",
+   "id": "F2@rule_run-888c71",
+   "kind": "finding",
+   "metrics": {
+    "basis": "OA-fraction",
+    "denom_min_f": 5.0,
+    "fan_gate": "fan status",
+    "high_limit_f": 68.0,
+    "min_damper": 0.25,
+    "min_oa_pct": 30.0,
+    "min_oa_source": "configured",
+    "n_above_limit": 74,
+    "n_masked_fan_off": 83,
+    "n_masked_out_of_range": 0,
+    "n_masked_small_delta_t": 34,
+    "not_locked_out_pct": 43.24,
+    "oa_cost_airflow": null,
+    "oa_cost_cool_basis": "sensible (no outdoor and return humidity trended)",
+    "oa_cost_cool_h": 30.0,
+    "oa_cost_economizing_h": 0.0,
+    "oa_cost_excess_cool_btu_per_cfm": 143.04,
+    "oa_cost_excess_cool_kbtu": null,
+    "oa_cost_excess_heat_btu_per_cfm": 0.0,
+    "oa_cost_excess_heat_kbtu": null,
+    "oa_cost_flagged": true,
+    "oa_cost_heat_basis": "heat_valve",
+    "oa_cost_heat_h": 0.0,
+    "oa_cost_heat_unjudged_h": 0.0,
+    "oa_cost_interval_h": 1.0,
+    "oa_cost_margin_pct": 5.0,
+    "oa_cost_observed_h": 504.0
+   },
+   "rule": "economizer_high_limit",
+   "text": "\"AHU-1\" economizer_high_limit (fault): \"AHU-1\": excess OA above the 68°F high limit 43% of those samples (OA-fraction: OAF > 35%; economizer not locked out); oa_cost_flagged true; thresholds: high limit 68 °F (high_limit_f); null: oa_cost_airflow, oa_cost_excess_cool_kbtu, oa_cost_excess_heat_kbtu",
+   "value": "fault"
+  },
+  {
+   "equip": "AHU-1",
+   "facility_id": "site-a",
+   "finding_id": "supply_air_reset_compliance@AHU-1",
+   "id": "F10@rule_run-888c71",
+   "kind": "finding",
+   "metrics": {
+    "actual_sat_median": 55.1,
+    "fan_gate": "fan status",
+    "mean_above_gap_f": -1.19,
+    "mean_abs_error_f": 1.36,
+    "mean_gap_f": 1.01,
+    "n": 165,
+    "n_gated": 165,
+    "n_warm": 139,
+    "occupancy_gate": "assumed schedule (weekdays 07-18)",
+    "pct_above_target": 0.0,
+    "pct_below_target": 23.0,
+    "reset_source": "g36_default",
+    "target_median": 55.0,
+    "target_source": "g36",
+    "track_gap_f": 5.0,
+    "tracks_target": true,
+    "warn_gap_floor_f": 2.0,
+    "warn_pct_threshold": 40.0
+   },
+   "rule": "supply_air_reset_compliance",
+   "text": "\"AHU-1\" supply_air_reset_compliance (ok): \"AHU-1\": SAT median 55.1°F vs G36 target 55.0°F; below target 23% of hours (mean gap +1.0°F) -- tracks the G36 reset target; conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1; tracks_target true; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
+   "value": "ok"
+  }
+ ],
+ "sensor_trust": [
+  {
+   "facility_id": "site-a",
+   "id": "F1@sensor_trust-c81f17",
+   "kind": "trust_summary",
+   "min_trust": 0.5,
+   "text": "site-a: 27 points judged (rules view): 23 trusted, 4 suspect, 0 untrusted; 0 below the trust floor 0.5",
+   "value": 0
+  },
+  {
+   "equip": "AHU-2",
+   "id": "F2@sensor_trust-c81f17",
+   "kind": "point_trust",
+   "rank": 1,
+   "role": "heat_valve",
+   "text": "\"AHU-2\" \"heat_valve\": trust 0.70 (suspect; bimodal, outliers); coverage 100% of its own span",
+   "value": 0.6953
+  },
+  {
+   "equip": "AHU-3",
+   "id": "F3@sensor_trust-c81f17",
+   "kind": "point_trust",
+   "rank": 2,
+   "role": "oa_damper",
+   "text": "\"AHU-3\" \"oa_damper\": trust 0.72 (suspect; bimodal, outliers); coverage 100% of its own span",
+   "value": 0.7169
+  },
+  {
+   "equip": "AHU-2",
+   "id": "F4@sensor_trust-c81f17",
+   "kind": "point_trust",
+   "rank": 3,
+   "role": "oa_damper",
+   "text": "\"AHU-2\" \"oa_damper\": trust 0.73 (suspect; bimodal, outliers); coverage 100% of its own span",
+   "value": 0.7286
+  },
+  {
+   "equip": "AHU-1",
+   "id": "F5@sensor_trust-c81f17",
+   "kind": "point_trust",
+   "rank": 4,
+   "role": "supply_air_temp",
+   "text": "\"AHU-1\" \"supply_air_temp\": trust 0.98 (suspect; bimodal, reference_warn); coverage 100% of its own span",
+   "value": 0.9766
+  },
+  {
+   "end": "2026-03-22T23:00:00",
+   "equip": "AHU-1",
+   "id": "L1@sensor_trust-c81f17",
+   "kind": "flat_point",
+   "n_samples": 504,
+   "role": "heat_valve",
+   "start": "2026-03-02T00:00:00",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "heat_valve"
+   },
+   "text": "\"AHU-1\" \"heat_valve\" never moves over the window: all 504 valid samples from 2026-03-02 00:00 to 2026-03-22 23:00 read 0 %, so it is flat for the whole window",
+   "unit": "%",
+   "value": 0.0,
+   "verdict": "flat"
+  },
+  {
+   "end": "2026-03-22T23:00:00",
+   "equip": "AHU-3",
+   "id": "L2@sensor_trust-c81f17",
+   "kind": "flat_point",
+   "n_samples": 504,
+   "role": "heat_valve",
+   "start": "2026-03-02T00:00:00",
+   "subject": {
+    "equip": "AHU-3",
+    "facility_id": "site-a",
+    "role": "heat_valve"
+   },
+   "text": "\"AHU-3\" \"heat_valve\" never moves over the window: all 504 valid samples from 2026-03-02 00:00 to 2026-03-22 23:00 read 0 %, so it is flat for the whole window",
+   "unit": "%",
+   "value": 0.0,
+   "verdict": "flat"
+  },
+  {
+   "bias": 3.0,
+   "equip": "AHU-1",
+   "id": "R1@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "n_samples": 504,
+   "overlap_end": "2026-03-22 23:00:00",
+   "overlap_start": "2026-03-02 00:00:00",
+   "rmse": 3.0,
+   "role": "supply_air_temp",
+   "subject": {
+    "equip": "AHU-1",
+    "facility_id": "site-a",
+    "role": "supply_air_temp"
+   },
+   "text": "\"AHU-1\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" disagrees (warn): the point is suspect, and a finding that rests on it is conditional on this sensor: AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0; bias +3.0 °F is the median of the point minus the reference, so the point reads high against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00",
+   "unit": "°F",
+   "value": "warn",
+   "verdict": "warn"
+  },
+  {
+   "bias": 0.0,
+   "equip": "AHU-2",
+   "id": "R2@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "n_samples": 504,
+   "overlap_end": "2026-03-22 23:00:00",
+   "overlap_start": "2026-03-02 00:00:00",
+   "rmse": 0.0,
+   "role": "supply_air_temp",
+   "subject": {
+    "equip": "AHU-2",
+    "facility_id": "site-a",
+    "role": "supply_air_temp"
+   },
+   "text": "\"AHU-2\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" agrees within the comparison's thresholds (passed): AHU-2 supply_air_temp: bias +0.0, drift not evaluated, RMSE 0.0, r=1.00 over 504 samples / 21 days -- tracks reference; bias +0.0 °F is the median of the point minus the reference, so the point reads neither high nor low against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00",
+   "unit": "°F",
+   "value": "ok",
+   "verdict": "ok"
+  },
+  {
+   "id": "R3@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "equip": "AHU-1",
+   "role": "supply_air_temp",
+   "value": "warn",
+   "verdict": "warn",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "role": "supply_air_temp"
+   },
+   "bias": 3.0,
+   "unit": "°F",
+   "rmse": 3.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-1\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" disagrees (warn): the point is suspect, and a finding that rests on it is conditional on this sensor: AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0; bias +3.0 °F, RMSE 3.0 °F: the bias is the median of the point minus the reference, so the point reads high against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
+  },
+  {
+   "id": "R4@sensor_trust-c81f17",
+   "kind": "reference_comparison",
+   "equip": "AHU-2",
+   "role": "supply_air_temp",
+   "value": "ok",
+   "verdict": "ok",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "role": "supply_air_temp"
+   },
+   "bias": 0.0,
+   "unit": "°F",
+   "rmse": 0.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-2\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" agrees within the comparison's thresholds (passed): AHU-2 supply_air_temp: bias +0.0, drift not evaluated, RMSE 0.0, r=1.00 over 504 samples / 21 days -- tracks reference; bias +0.0 °F, RMSE 0.0 °F: the bias is the median of the point minus the reference, so the point reads neither high nor low against it; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
+  },
+  {
+   "facility_id": "site-a",
+   "id": "F1@sensor_trust-6420d0",
+   "kind": "trust_summary",
+   "min_trust": 0.5,
+   "text": "site-a: 27 points judged (report view: operating-state-aware, duct points judged with the fan on and plant points while their equipment runs): 23 trusted, 4 suspect, 0 untrusted; 0 below the trust floor 0.5",
+   "value": 0
+  }
+ ]
+}

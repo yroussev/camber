@@ -25,7 +25,7 @@ import os
 from ..store import FacilityRegistry, ParquetStore, make_facility_id, require_facility_id
 from ..store.facilities import _WORKSPACE_MARKER, _workspace_of_store
 from ._audit import AUDIT_FILE, append_audit, audit_record, read_audit
-from ._lock import LOCK_FILE, describe_holder, portfolio_lock, probe, read_holder
+from ._lock import LOCK_FILE, confirm_claims, describe_holder, portfolio_lock, probe, read_holder
 from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
@@ -74,11 +74,18 @@ def _default_doc(store_rel: str) -> dict:
 
 
 def _write_json(path: str, data: dict) -> None:
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, sort_keys=True)
-        fh.write("\n")
-    os.replace(tmp, path)
+    confirm_claims()  # 0.112 (#330, #335): still the workspace's writer, before anything is written
+    tmp = f"{path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        with open(tmp, "x", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        confirm_claims()  # and still it, just before the rename
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def is_workspace(path) -> bool:

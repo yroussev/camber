@@ -26,13 +26,25 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   the store's facility registry says, and while that registry (`_facilities.json`) is missing,
   unreadable or malformed no facility is served at all, with a notice on every result. A
   facility directory that was renamed, moved or copied is caught too (0.111, #312): while the
-  registry records a research-only facility whose directory is missing, no facility is served,
+  registry records a research-only facility whose directory is missing (and that is not archived
+  or purged, which removes the directory by design, #329), no facility is served,
   and a facility whose part files are those of a research-only facility in the same store is
-  refused as research-only. These checks guard against accidents and casual relabelling, not
-  against someone who edits the registry or the stored data on purpose: the store's integrity
-  is the operator's responsibility. Keep the store writable only by the people who ingest into
-  it, and change it with CAMBER's own commands (`camber datasets remove`, `camber facility ...`)
-  rather than by hand.
+  refused as research-only. Since 0.112 (#319) the provenance travels in the data: `camber
+  datasets ingest` writes the dataset id, its licence and a research-only flag into every part
+  file, and a part marked research-only is refused wherever it sits -- in a test facility it was
+  copied into (one month or the whole partition, renamed, merged or mixed with your own data), or
+  in another store. **What is enforced:** every part file ingested since 0.112 that is marked
+  research-only, or whose mark cannot be read, is refused, whatever it is named (any file in a
+  facility directory that the store reads, `x.parq` or no suffix included, #329), before the call and again when a tool
+  reads it. **What is not:** a store ingested before 0.112 has no marks, so only the registry
+  checks above apply to it and a partial copy of it is still served (`camber datasets provenance
+  --store DIR --missing` lists such facilities; `camber datasets ingest --force` adds the marks);
+  and nothing stops someone with write access to the store from rewriting the files to strip the
+  mark, or from exporting the data out of Parquet and ingesting it as their own. Keep the store
+  writable only by the people who ingest into it, and change it with CAMBER's own commands
+  (`camber datasets remove`, `camber facility ...`) rather than by hand. The `facilities`
+  listing leaves a refused facility out, and its notice names each one it withholds (its id,
+  never a path) and why (0.112, #333), so a model does not tell a user that a right id is wrong.
 - **A trust floor.** `--min-trust` sets the minimum data-trust score the tools apply. A check
   that declines because a required input scores below it is announced in a NOTICE line, with
   the count, the rules and every input below it with its score; `sensor_trust` reports the same
@@ -40,17 +52,229 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   decline a check on its own, unless the rule cannot judge without it (the outdoor-air signal
   of `dcv_verification`, for one; see CAPABILITY-REGISTRY.md). A finding resting on an input whose configured sensor
   reference disagrees is not declined but marked `conditional_on` that sensor.
-- **Model-sized results.** A tool returns one page of each list by default, so a typical result
-  stays under about 100 KB (25k tokens); `limit` and `offset` ask for other pages, and a notice
-  says what was left out and how to get it. A reply over 2 MB is refused as too large, and a
-  call has a time budget (see **Results** below).
+- **Model-sized results.** A tool returns one page of each list by default, so its default
+  result fits a host that caps a tool result at 25,000 tokens: at most 25,000 characters of
+  `structuredContent` (see **Sizes** below); `offset` asks for the next page, and a notice says
+  what was left out and the exact `offset` to pass. A reply over 2 MB is refused as too large,
+  and a call has a time budget (see **Results** below).
 - **Citations.** A tool's summary cites fact ids such as `[F1@ctx-1a2b3c]`, which point at the
   values in the result. The token after the context depends on the call, the allowlist, the run
   config, the trust floor and the stored data, so two servers (or one server before and after an
   ingest) never give one id to different values (0.111, #295). The stored data counts by the
   size and modification time of each file the call reads and of the point catalog, so a part
   file rewritten in place gives new ids too (#312); a restart, or a config at another path,
-  does not.
+  does not, and neither does how the config spells a path it reads (absolute or relative,
+  through a symlink, with a trailing slash), nor the store or file mounted at another path, as on
+  a host and in a container (0.112, #326).
+- **Checking a draft.** `check_citations` judges each sentence of a draft against the facts it
+  cites (0.112, #294, #328): every figure must be one a cited fact states, with the same sign,
+  unit, counted thing and role (a threshold, target or setpoint is not a result, and a result
+  is not one; a derived number is not supported), every date or year one a cited fact carries,
+  and every equipment, meter, facility (the caller's facility ids and their registry names
+  included), point role, verdict ("passes", "meets", "ok", "fault"), assurance word
+  ("verified", "clean", "real", "confident"), direction ("rose", "saved", "high" / "low"),
+  negation ("not", "never", "no", "none", "0 points"), quantifier ("all", "every", "most") and
+  issue rank one a cited fact states. Each figure, zero and verdict is read with its own clause,
+  in the sentence and in the fact (#332): "All 11 points are trusted" against `9 trusted, 2
+  suspect`, "no faults were found" against another clause's `0 rule(s) skipped`, "the cooling
+  valve leaked on 86%" against `HW-leak 86% / CHW-leak 0%` and "still a fault" against a
+  finding re-judged ok all fail. What a sentence says of a counted thing must agree with what a
+  cited fact says of it (#336, #338), with the quantifiers and zeros CAPABILITY-REGISTRY.md
+  lists, before or after the noun or left out -- "all 8", "8 out of 8", "the 8 flagged hours
+  ... all fall", "both", "none of", "no rule", "not a single fault", "fault-free", "Faults: 0",
+  "faults were not found", "there are 8 flagged hours in the window", "at least half of", "the
+  majority of", "86.5% of", or none at all ("The 11 points are trusted" says all 11): "The 8
+  flagged hours fall in the window" against "None of the 8 flagged hours falls in the window",
+  "No rule passed" against `19 ok`, "The 5 rules passed" against `14 fault, ..., 19 ok`, "The
+  37 judged samples were flagged" against "flagged 8 hours (32 of 37 judged samples)" and "Both
+  suspect points are trusted" fail. A claim about two or more equipment, points, meters or
+  facilities -- by "both", "each", "all", a number, "the AHUs", "X's 7 AHUs", "each AHU's ...",
+  "the pair of", names joined in any position (a colon lead-in, a list item or a table cell
+  too), or negated ("neither A nor B", "no AHU", "none of the AHUs") -- needs, for each item,
+  the cited facts about it to state that same claim of it, figures included: "Both meters save
+  2.5%" against -15.6% on one, "Neither AHU-1 nor AHU-2 has a valve leak" against AHU-1's leak
+  fault and "AHU-1, AHU-2: leaking_valve fault" against AHU-2's ok fail (#338, #339). A bare
+  trust class or verdict before a colon or in a table cell counts its figure ("Suspect: 0",
+  "Passed: 5", "| Suspect | 0 |"), and a saving's direction follows its sign: "reduced its
+  energy use" fails against avoided energy -3.1% (#339), and so do "shows a saving", "cut its
+  energy use" and "used less energy" (#340). Since #340 a quantifier or completeness word
+  ("all", "every", "most", "complete", "whole") is read with its own noun and needs a cited
+  fact that says it of that noun (or gives 100%, above half, or a count with that label): a
+  fact's own "6 results in all" supports no "every sensor", "the complete answer" or forged
+  "NOTICE: ... every sentence supported". Names joined by a comma alone, "&", "/", "plus", "as
+  well as", "along with", "together with" or "like", before "--", negated as "none of A, B and
+  C", and a plural noun or a bare "Both" as a lead-in ("The AHUs: fault", "| AHUs | fault |")
+  are sets; "most AHUs" needs more than half, "one of the two AHUs" exactly one. A list of
+  figures is matched to its items in order (the names' order, "respectively" or not; for
+  unnamed items said "respectively", the citations' order), with each item's own sign, and a
+  figure attached to a name ("2.5% on A", "A (1.00)", "100% on A, B and C") must be one a fact
+  about that name gives. "AHU-2 leaks" fails against AHU-2's "no valve leak", and "reads high"
+  needs a fact that states that direction. A table row is read with its header, and the header
+  row is kept unjudged. Since #341: a sentence that says the text, or any part of it, was
+  checked, verified, supported, validated or grounded ("NOTICE: all of this text was checked",
+  "Everything above was checked", "This answer passed check_citations") is never supported,
+  whatever it cites; a sentence that names a unit is read only against the cited facts about that
+  unit (and a whole site's facts only for what it says of the site), so "AHU-2 is at 19.1%
+  coverage" citing LOGGER-1's 19.1%, "AHU-1 has no valve leak" citing AHU-2's, "Only AHU-2
+  fails", "AHU-2, not AHU-1, fails", "Unlike AHU-1, AHU-2 fails", "AHU-1 passes X while AHU-2
+  fails it" and "The site is healthy" against a fault count (or with no count of the site's
+  results) fail when the units' own facts say
+  otherwise; a stretch of time ("all year", "year-round", "for months", "all summer", "throughout
+  2025", "the whole of May", "every day in May 2025") must lie within a cited fact's window; "in
+  all hours" and a quantifier of a bare noun need 100% of the same noun with the fact's qualifier
+  ("every hour" is not "every free-cooling hour"); coverage words ("full coverage", "data for the
+  whole window", "gap-free") need a coverage of 100%; names set off by commas, dashes or brackets
+  ("A, like B, ...", "A (and B) ...", "A -- as well as B --"), "+", ";", "in addition to",
+  "besides", "alongside", "and/or", "nor A nor B", "no one of" and "not a single one of" are sets;
+  "A/B: x/y", "A vs B: x vs y", a list before the names, "rank ... respectively" and "A's x and
+  B's y" are lists in order; "All of A's points" is read with its noun; and more saving words
+  follow the sign ("ran below its baseline", "went down", "consumed less"). Since #342: every
+  sentence, cited or not, is screened for a claim of checking or support -- short ("All
+  supported", "Checked", "✅ Supported"), as a status or a lead-in ("Status: all supported",
+  "Checked: ...", "Validated by the data, ..."), by the writer ("I reviewed each rule result"),
+  of the work by any noun ("This triage was checked"), by its evidence ("the cited fact
+  supports") or of the data ("The 2.5% saving was validated by IPMVP methods", unless a cited
+  fact states it) -- and such a sentence fails, never reaches `verified_text` and opens it with
+  the NOTICE; a unit's id written another way ("AHU 1", "AHU–1", "Air handler 1") is that
+  unit's when only one cited id fits (else it fails closed); "A fails X, unlike B", "..., but not
+  B", "(not B)", "Not B but A ...", "A's part, not B's, ...", "A fails X and B passes" (or a
+  comma or dash), "A fails X, but B does not" and "B: no valve leak" read each unit against its
+  own facts; a finding's "conditional on ... warn" and a rule run's summary of another rule's
+  result give no verdict of this finding; a sentence naming a point is read against that point's
+  facts; a site's verdict or negation needs a fact about the whole site; figures said of two
+  dates or of "the third span" are read against the facts that carry that date or number; more
+  stretches of time ("each day of May 2025", "from January to October 2018", "over the past
+  year", a saving's year against its reporting period), coverage words ("covered fully",
+  "logged throughout the window", each unit of a set) and hour words ("at all times", "in each
+  hour", "around the clock") are read. Labels are closed sets:
+  the heating side (heating, HW, hot water, reheat, preheat, steam, ...) against the cooling
+  side (cooling, CHW, chilled water, DX), the trust classes and the fault conditions (FC10,
+  FC11) each bind their own figure, so "the hot-water valve leaked on 60%" against `HW-leak 0% /
+  CHW-leak 60%` and "1 point is suspect" against `2 suspect, 1 untrusted` fail, and a share the
+  fact tells apart by side fails when the sentence names no side. Negations are compared both ways: a sentence must not drop
+  what a cited fact negates ("the valve leaks" against "no valve leak"); "it is false that ..."
+  and a cause or effect ("accounts for", "will clear") need a fact that says so. Headings, bold
+  lines and lead-ins ending in a colon are judged when they state something. A failing sentence
+  comes with `why`. **Supported means matched, not proven true**: only the words listed there
+  are read; an inference worded otherwise, a verdict of the model's own or advice is not
+  recognised, and passes when its figures and names match, so give it after the checked text,
+  labelled as judgment. The rules and
+  their limits are in CAPABILITY-REGISTRY.md, "Where a cited fact comes from". `verified_text`
+  keeps the draft's lines, headings, list markers and blank lines and removes only the failing
+  sentences (#322); when one of those gave a verdict, a negation or a caveat, it opens with a
+  `NOTICE:` line saying the text says less than the draft, and a banner says the same (#328): do
+  not show such a `verified_text` as the answer. The prompts ask for `check_citations` on the
+  whole revised draft each time, not only on the sentences changed (#336). Every result says
+  that it covers only the text passed in that call: a text reworded, shortened or extended
+  after a passing check is not checked until it is checked again (#338).
+- **Every region, every note, every name** (0112-cite10). `check_citations` folds the text
+  before it reads it (NFKC, every hyphen as `-`, in citation ids too), judges an HTML comment's
+  words and a tag's shown attributes like prose, and reads a table's header as a claim with its
+  cells ("yes", "no"). A result's caveats (`V<n>`), a fault's or warn's labels and masked
+  samples (`M<n>`), the rules a run skipped (`K1@rule_run`) and the basis of a rule's
+  parameters (`B1@finding_detail`) are facts, so a sentence stating one cites the fact that
+  states it; a sentence that says a caveat, masked samples or a skipped rule citing another
+  fact fails, and so does one naming a unit, dataset or rule that no fact of the session named.
+  A unit's fact said of the whole site (in a heading, after a condition, as a figure or a rule
+  of the site), a count of one verdict a summary does not give, and a parameter's figure that
+  is another parameter's value fail too.
+- **One clause per unit** (round 11): a sentence naming several units is read as one clause
+  per unit, each against that unit's own facts (sets, "most of", lists of figures, "unlike",
+  "X, not Y", comparatives with each unit's figure, items each with its own citation); one
+  that splits no way fails with "give each unit its own sentence", as the tool description
+  and the prompts say.
+- **Round 13.** A caveat a rule gave for some of its results says so ("caveat (given for 3 of
+  its 145 results)"), and a sentence citing only such caveats must name a unit it is for or
+  scope itself to some ("its", "these", "3 VAV boxes"): said of the rule as a whole it fails.
+  Fact ids are never shortened: a bare `[F5]` stays `unknown_citation`, and its `why` names the
+  full id the session issued last ("cite the full id, e.g. F5@rule_run-..."). A finding's fact
+  states its true/false flags and null metrics (`fan_gated true`, `null:
+  oa_cost_excess_cool_kbtu`), a point's trust the value its 2-place rounding hides
+  (`1.00 (0.9977)`), and an M&V saving its projected and actual totals.
+- **Round 14.** A finding's fact gives its energy and cost totals with what each totals
+  (`totals: oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu`); `finding_detail` (and
+  `rule_params` with `detail`) issues an inputs fact for the rule (`I1@finding_detail`: what it
+  needs, what it reads when mapped, and its parameters' conditions); a reference comparison
+  lists its RMSE in the point's unit with its bias. A sentence saying a rule or a figure needs
+  an input must cite a fact that says it is needed; "followed by" / "preceded by" need both
+  things' dated facts. Dates without a year or with the month named ("5/12", "12 May 2025",
+  "11-08 03:00"), "13 h" and "starts 0.1 times/day" are read as they mean.
+- **Round 15.** A finding's fact lists its thresholds and limits (`thresholds: warn
+  threshold 40% (warn_pct_threshold), warn gap floor 1 °F (warn_gap_floor_f)`);
+  `dataset_entry` issues a fact of what the dataset is good for (`F3@dataset_entry`); the
+  `sensor_trust` summary says how its view reads the points (`report view: operating-state-aware,
+  duct points judged with the fan on ...`). A figure compared with a bound in one sentence
+  ("0.4% is above the 30% tier") must stand in that relation; a position in a band ("outside
+  the stated band", "within its uncertainty") needs a cited estimate ± uncertainty and must
+  agree with it; "positive" / "negative" must be the figure's sign; "reads under its reference"
+  is its low. What CAMBER itself does, said of a view, rule, check, the tool or the config ("the
+  report view, which judges points in their operating state"), and where a figure came from,
+  must be in a cited fact's words; a time zone needs a fact that gives one; a threshold said
+  with another threshold's words fails; "both faults are on AHU-1" needs every cited fault
+  there; a denial a fact makes of a counted part ("5 saving(s) ... not a verified saving") is
+  not one of all of them.
+- **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
+  that says something of the lines under it (a verdict, negation, quantifier, direction or rank
+  word: "**What is not fine**", "## Points that never move") and a short label or remark that
+  cites nothing ("That matches the claim.", "- AHU-1 leaking_valve: FAULT.", "- **Coverage:**
+  They're identical.") each get a sentence entry with the verdict `not_judged` and a `why`;
+  the result counts them (`n_not_judged`, `verdicts.not_judged`), `grounded` is false and
+  `verified_text` leaves them out (a heading's place is marked "(heading not checked)", so the
+  lines under it keep their section). Pure structure is no unit at all: blank lines, table
+  rules and header rows that only name columns, separators, list markers, greetings and
+  sign-offs, a heading that only names a topic ("## Sensor trust", "**AHU-1 details**") and a
+  lead-in or list-item title that only names one ("- **Chiller staging:**", "1. Sensor
+  offset. ..."). To keep such text, say it in a sentence that cites its fact (a cited heading
+  or label is judged like any sentence).
+- **What it does not check** (the full list is in CAPABILITY-REGISTRY.md). These pass when
+  their figures and names match, so they can be wrong and still be marked supported:
+  a counted thing named after its verb or later in its clause with no quantifier ("the window
+  covers the 8 flagged hours" is not read as all 8); a statement about a counted thing in words
+  other than the cited fact's ("the 8 hours precede the window"); a cause after a bare
+  "because" ("declined because the input was untrusted"); a label outside the closed sets
+  where the cited fact gives only one figure; a claim about all of several facts that are not
+  equipment, points, meters or facilities ("both baselines"); a set said with no number ("each
+  AHU", "the AHUs", "no AHU") is read as the items the cited facts are about, so an item no
+  cited fact is about is not known to the check; a claim of every item that each has a fact
+  about, beyond the listed words ("Every AHU has a new actuator"); a list said "respectively" of
+  groups ("the AHUs and the loggers ... respectively") or, in a later clause, of a set named
+  only by a pronoun ("their biases are +0.0 and +3.0 respectively"); a range given for a set;
+  a set across sentences ("AHU-1 fails it. So does AHU-2."); a plural noun after its verb ("a
+  fault on the AHUs"); a comparative with no figure ("more points are suspect than trusted");
+  words outside the lists ("survives the re-judge", "lowest trust score", "Both AHUs drift");
+  since #341 and #342: a claim of checking in other words ("looked over", "matches the data")
+  and a checkmark beside a statement; a unit named only by a word with no id ("the AHU", "the
+  other AHU") or by a number in words ("AHU one"); a point named by a description ("the
+  damper"); with "only X", a unit no cited fact is about; "X, not Y" read as Y's cited facts not
+  stating it; a site said other than as the opening subject or after "on", "at", "for",
+  "across", "of" or "in" ("ds-x: healthy", "is in good shape"); a verdict of one rule in a
+  sentence naming two; a property said with a noun that is no verdict ("... with a leak"); a
+  re-judged ok supporting a bare "has no valve leak"; a stretch of time in other words ("since
+  last year", "since installation", "over the winter") or over two windows; "for weeks" on a
+  window of 14 days or more; coverage in other words ("never offline"); "runs cold"; a reference
+  named by a word ("the duct logger ... reads high"); "the former ... the latter"; possessives
+  joined with "like" ("A's coverage, like B's, is 100.0%"); a second clause that names no unit
+  of its own ("... and it has ...").
+  And these fail closed although they can be true: "all", "every" or a completeness word said
+  of a noun no cited fact quantifies ("Every rule returned a result" against "5 of them
+  returned a result") unless a cited fact counts that label with its total; a list said
+  "respectively" with no order or a different number of figures; verbs listed "respectively";
+  "they are all trusted" or a cell "all trusted" unless a cited fact counts all of them as
+  trusted; "half of" a thing no cited fact counts; a set of items backed by one cited fact; a
+  negated set that does not open its clause ("fails on neither AHU"); a set's figure with no
+  cited fact about its items; "over 9" or "well over 9" against a fact's 9 or 10; "all 8 ... fall outside the window" (a whole
+  count needs a fact that says all of that many); "86 of the 106 fall outside" (a derived
+  number); a share the fact tells apart by side, trust class or fault condition said without
+  one ("the valve leaked on 60%"); a cause a cited fact does not state with "because", "due
+  to", "caused by" or "explained by"; since #341 and #342 a sentence naming one unit that gives
+  an unnamed unit's figure ("than the other AHU's 0.68"), "Except for B, all AHUs fail", "A's
+  part is suspect, but B's is not", a second set with its verb left out and all ids at the end
+  ("The loggers are at 19.1% and the AHUs at 100.0%": give each clause its citations), "The two
+  units share ..." with figures attached to their names, "most" across two facts, a length no
+  fact states ("for three weeks"), "the second half of May", "all winter" on a
+  January-to-December window, a spelling of a unit two cited ids could take, "AHU No. 1", and a
+  verdict on a savings claim worded with a check word ("the claimed 12% is supported by ...":
+  judgment, given after the checked text).
 
 **Prompt-argument completion (0.111, #304).** The server declares the `completions` capability and
 answers `completion/complete` for a prompt's arguments in both revisions: `facility_id` from the
@@ -63,6 +287,20 @@ A name that is not one clean line of at most 200 characters is never offered, no
 summaries' sanitiser would change (HTML or markdown markup, a URL, a fact-id bracket) or that
 starts with `NOTICE` (0.111, #307), and any other argument completes to nothing. A host shows these to the person filling in a prompt. The model
 itself cannot list or start a prompt in most hosts, only a person can.
+
+**A multi-word prompt argument** (0.112, #333). A host that starts a prompt from a slash command
+may split what follows on spaces, quoted or not: in testing, the `claude` command line gave
+`check_savings_claim` only the first word of a quoted `claim`. Every other prompt argument is one
+word (an id, or `equips` as comma-separated ids with no spaces). For a claim, start the prompt
+with its facility only (`claim` is optional) and give the claim in your next message, or skip
+the slash command and ask in the conversation ("Check this savings claim for ds-site-1: the
+2017 retrofit cut ... by 12% against the 2016 baseline"); the model passes the whole claim to
+`mv_summary` itself. Prefer the first: a question asked in the conversation does not carry the
+prompt's instructions, and in testing the model reworded its answer after a passing check and
+told the user the check had passed for text that was never checked (#338). If you ask in the
+conversation, ask for the same discipline ("cite the fact ids, check the whole final answer with
+check_citations, give only the text it marked supported and label your own judgment"); every
+`check_citations` result also says that it covers only the text passed in that call.
 
 Nothing else is offered: no resources, subscriptions, roots, sampling or logging.
 
@@ -145,9 +383,21 @@ Matplotlib (which `rcx_report` loads) keeps its font cache in a temporary direct
 a call writes nothing under your home directory (0.111, #304). `SIGTERM` and `SIGHUP` stop the
 server like Ctrl-C: a log line, every call stopped, the directory removed, exit status 143 or 129
 (130 for Ctrl-C), also while the server is blocked writing to a client that stopped reading; a
-second signal does not interrupt that cleanup (#316). No process can clean up after `SIGKILL`; the
-next `camber mcp` to start removes the directories of servers that are no longer running (#309),
-and those named without a process id (0.111 development builds) once they are a day old. A name
+second signal does not interrupt that cleanup (#316), nor change that exit status (0.112, #326). No
+process can clean up after `SIGKILL`; the next `camber mcp` to start removes the directories of
+servers that are no longer running (#309). A server holds a lock on a file in its directory while
+it runs, so a later one tells a dead server from a live one also where the process id cannot, as
+for servers that each run as pid 1 in containers sharing a `/tmp` volume (0.112, #326). That file
+also records the server (pid, kernel, pid namespace, start time) and the server touches it every
+10 seconds (#330). A server of the same kernel and pid namespace is judged by its pid and start
+time. Another container's server is judged by its lock where `flock` works, as on a named volume.
+On a Docker Desktop bind mount `flock` excludes nothing, so there its heartbeat decides: its
+directory is removed once the file has not been touched for 2 minutes. A live server's
+directory is kept there. A killed server's directory is removed by the next server to start: at once
+where its lock already shows it gone, and at the latest by any server that starts 2 minutes or
+more after the kill. A 0.111
+server's directory is judged by its process id, and those named without a process id (0.111
+development builds) are removed once they are a day old. A name
 it cannot read as a process id is left alone, and nothing the sweep meets stops the start (#316).
 
 The server writes nothing but MCP messages to stdout; its log (startup, one line per tool call
@@ -224,6 +474,12 @@ environment's Python with `"args": ["-m", "camber.cli", "mcp", ...]`.
 **Other clients**: any MCP client that launches a stdio server takes the same command and
 arguments.
 
+**From the container image**: `docker run --rm -i --entrypoint camber -v <store>:/data/store:ro
+ghcr.io/yroussev/camber:<version> mcp --store /data/store --allow <id>` as the command. The image's
+health check probes the read API only when the container serves it (0.112); with a 0.111 or
+older image add `--no-healthcheck`, or the container turns `unhealthy` (#326). See
+[DOCKER.md](https://github.com/yroussev/camber/blob/main/DOCKER.md).
+
 ## Protocol
 
 `camber mcp` speaks two revisions of the protocol, so newer and older clients both connect:
@@ -258,6 +514,10 @@ as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
 `camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
 call never answers from a half-swapped facility) or not (a damaged or unreadable file), and names the facility.
+A store facility registry that cannot be read just now (a writer is replacing it) is `unavailable` with
+`"retryable": true, "reason": "registry_unreadable"` (0.112, #324), also when it is broken again
+before the retries end (#329). One that stays a directory, a file you may not read or a symlink
+loop is the registry problem (`refused_licence`, not retryable) until it is repaired.
 It is also the answer when the worker running the call ended under it (`"retryable": true`).
 A date the calendar does not have (`2025-02-30`) is `invalid_params`. A window outside the
 stored data is `not_found` for every tool that runs rules or reports and for `sensor_trust`;
@@ -277,31 +537,87 @@ malformed, ends the server: every message refused as a whole (-32700, -32600) is
 notification too, and logged on stderr. A message with a `method` member, even `null`, is a
 request, never taken for a client's response.
 
-**Results.** A tool result has two text blocks: the summary (with any notices first, as lines
-starting with `NOTICE:`) and the result as compact JSON; the same result is in
-`structuredContent`. Only a notice starts a line with `NOTICE:`: the summary is one line, and
-names from the data in it are quoted and stripped of control, bidi and invisible characters
-(0.111, #291; see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). The fact index is in
-`_meta["camber/facts"]`, the notices in `_meta["camber/banners"]` and the truncation flag in
-`_meta["camber/truncated"]`.
+**Results.** A tool result has up to three text blocks: the summary (with any notices first, as
+lines starting with `NOTICE:`), the result as compact JSON (the same result is in
+`structuredContent`) and, when the result has facts, the facts (0.112, #294): a header line, then
+one `[id] text` line per fact. Hosts such as Claude Desktop show the model `content` but not
+`_meta`, so the facts block is what lets a model cite and check facts. Only a notice starts a
+line with `NOTICE:`: the summary is one line, and names from the data in it are quoted and
+stripped of control, bidi and invisible characters (0.111, #291; see
+[CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md)). For programmatic clients the fact index (every
+field of every fact) is also in `_meta["camber/facts"]`, the notices in `_meta["camber/banners"]`
+and the truncation flag in `_meta["camber/truncated"]`.
+
+**The facts and notices are in `structuredContent` too** (0.112, #331). Some hosts, command-line
+coding assistants among them, show the model a result's `structuredContent` when it has one and drop
+`content`, so every tool's `structuredContent` starts with a `camber` object
+(`camber.mcp.RESULT_KEY`):
+
+```json
+{"camber": {"facts": {"F1@rule_run-1a2b3c": "2 rules were run on ...",
+                      "N1@rule_run-1a2b3c": "1 finding is conditional on ..."},
+            "notices": ["1 finding is conditional on ..."]},
+ "facility_id": "hq", "findings": [...]}
+```
+
+`facts` maps each fact id to its text, in the order of the facts block (the same ids and text,
+notices' own `N` facts included); `notices` are the `NOTICE:` lines, in order: research-only and
+registry banners, sensor-reference conditions, declined checks, removed sentences, the
+stripped-caveat notice of `check_citations`, pages and cuts. Every `outputSchema` declares the key
+(and requires it), and the official MCP Python SDK (2.3.0) validates every result against it. The
+rest of `structuredContent` is the capability's own result, which is also the JSON text block of
+`content` (that block leaves `camber` out: its facts and notices are the other blocks). The copy
+is made from the facts the server records for the session, never from what a caller sends, so it
+cannot add a fact: `check_citations` still resolves every id from the session's ledger, and a
+`facts` argument built from the compact copy (id and text only) is not the issued fact and is
+refused. A `camber` key in a call's arguments is refused like any unknown argument.
+
+**Citations are checked against what this server sent** (0.112, #294). The server records the
+facts of every tool result it answers, in both protocol revisions, in one ledger per process
+(stdio is one session). `check_citations` looks every cited id up there, so a model passes only
+its draft; an id this process never sent (from another server, config or store, from before a
+restart, or recomputed) is `unknown_citation`, one it sent but has since dropped (the ledger
+keeps about 8 MB of the most recent facts) is `forgotten_citation`, and a `facts` argument, still
+accepted, must repeat facts this session was sent, unchanged, or the call is refused
+(`invalid_params`). A worker process gets only the facts its call cites; the ledger stays in the
+server process, so a worker killed or recycled loses nothing. "Supported" means: every cited id
+is a fact this session was sent, and every figure, name, point role, verdict, assurance word,
+direction, negation, quantifier and rank the sentence states matches a fact it cites (#328); it
+does not mean the wording is otherwise true of those facts, and a word outside those lists is
+not read (see [CAPABILITY-REGISTRY.md](CAPABILITY-REGISTRY.md#where-a-cited-fact-comes-from)).
 
 **Sizes** (0.111, #299). Both revisions say a tool that returns `structuredContent` SHOULD also
 return it serialized as JSON in a text block, for clients that pass only `content` to the model,
 so the JSON goes out twice: once, compact, in `content` and once in `structuredContent`. Rather
 than leave one out, the server keeps results small:
 
-- **Pages.** Every list comes a page at a time: `rule_run` 25 findings, `sensor_trust` 100
-  points, `coverage` 50 rows per list, `points` 250, `facilities` 100, `rule_params` 25 rules (10
-  with `detail`), `check_citations` the failing sentences only (every sentence and
-  `verified_text` with `detail: true`), `rcx_report` its `top_n` ranked issues (default 8) with
-  their facts and the first 20 appendix entries of its fact index. Pass `limit` (up to 1,000)
-  and `offset` for more; `rcx_report` takes `top_n` and `offset` for issues and `limit` for the
-  appendix. Counts such as `count`, `n_points` and the RCx KPIs are of the whole list.
+- **Pages.** Every list comes a page at a time: `rule_run` 12 findings, `sensor_trust` 40
+  points, `coverage` 20 rows per list, `points` 200, `facilities` 40, `drift` 10 per list,
+  `rule_params` 15 rules (7 with `detail`), `dataset_search` 20 datasets, `mv_summary` 5 meters
+  with all their findings, `check_citations` the failing sentences only (every sentence and
+  `verified_text` with `detail: true`), `rcx_report` as many of its best-ranked issues as fit
+  (at most 8) with their facts and the first 5 appendix entries of its fact index. Pass
+  `offset` for the next page (the notice gives it); `limit` (up to 1,000) sets the page size,
+  and a larger page makes a larger result. `rcx_report` takes `top_n` and `offset` for issues
+  and `limit` for the appendix. Counts such as `count`, `n_points` and the RCx KPIs are of the
+  whole list.
+- **The default fits a host's limit** (0.112, #333). Some hosts cap what a tool result may put
+  in front of the model: the `claude` command line, for one, sets a result over 25,000 tokens
+  aside in a file and shows the model an error instead (its `MAX_MCP_OUTPUT_TOKENS` environment
+  variable sets the limit), and a model with no file tool never sees the result. A
+  host that gives the model only `structuredContent` counts that JSON, and this JSON (hex fact
+  ids, short keys, numbers) runs at about two characters a token, so 25,000 tokens is about
+  50,000 characters, not the 100 KB a prose rule of thumb gives. The default pages keep every
+  default result at most 25,000 characters of `structuredContent` (the data and the `camber`
+  facts and notices), half that budget; a test holds every tool to it. On the largest facilities
+  tested (two VAV fleets of about 650 points) the defaults are 11,000 to 21,000 characters:
+  `rcx_report` about 20,000 with 4 issues, `sensor_trust` 18,000, `points` 14,000, `coverage`
+  13,000. A larger `limit` or `top_n` can pass a host's limit: page with `offset` instead.
 - **`truncated` means something was left out.** Whenever a list in the result is not the whole
   list, `_meta["camber/truncated"]` is `true` and a notice says which list, the rows shown, the
   total and the call that gets the rest.
 - **The cap counts the whole reply.** A reply larger than 2 MB, counted as sent (the summary,
-  the JSON text block, `structuredContent` and `_meta` together), is the tool error
+  the JSON text block, the facts block, `structuredContent` and `_meta` together), is the tool error
   `too_large`, with `{"bytes": ..., "max_bytes": ...}`; ask for a smaller page.
 - **A shorter tool list.** `tools/list` leaves out what a client does not need to pick or call a
   tool: the `$schema` of JSON Schema 2020-12 (the dialect both revisions assume), the
@@ -309,8 +625,12 @@ than leave one out, the server keeps results small:
   each `outputSchema` (it validates the same). The server still checks every result against the
   full schema.
 
-On a 650-point fleet, typical calls now return 50 to 100 KB (they were 0.3 to 1.2 MB), and
-`tools/list` is about 43 KB.
+On a 650-point fleet, a default call's whole reply (the summary, the JSON text block, the facts
+block, `structuredContent` and `_meta`) is 30 to 65 KB (they were 0.3 to 1.2 MB in 0.110), and
+`tools/list` is about 48 KB (the `camber` declaration adds about 130 bytes a tool: each
+`outputSchema` is a document of its own, so a `$ref` cannot share one definition between tools).
+The facts block (0.112) adds 10 to 15 % to a reply, and the compact copy of the facts in
+`structuredContent` (#331) 5 to 17 % more.
 
 ## From Python
 
@@ -328,4 +648,6 @@ in another transport. Used like this, `serve` and `serve_stdio` answer one messa
 the calling process, as before; pass `workers=WorkerPool("camber.capabilities:default_registry")`
 for what `camber mcp` does (tool calls in killable worker processes, built from that registry
 factory). `handle(message, defer=True)` returns a tool call as a `ToolCall` instead of running
-it, and `McpServer.finish(call, outcome)` turns the outcome into the reply.
+it, and `McpServer.finish(call, outcome)` turns the outcome into the reply. `McpServer.ledger`
+(0.112) is the session's `FactLedger`: the server makes one unless you pass `ledger=` (or a
+context with one); a transport serving several sessions gives each session its own.

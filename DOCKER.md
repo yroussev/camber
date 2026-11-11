@@ -27,6 +27,24 @@ curl localhost:8080/about
 docker run --rm -p 8080:8080 -v "$PWD/data/store:/data/store:ro" ghcr.io/yroussev/camber:latest
 ```
 
+**Writing a store from a container.** Mount a store read-only (`:ro`) wherever the container
+only reads it. If a container writes it (`camber datasets ingest`, `camber lab`), do not also
+write it from the host: the host and Docker Desktop's VM do not share `flock`. Since 0.112 a
+writer's claim (`<store>/_lock.owner`) makes the other side wait and then refuse, but CAMBER 0.111
+and older make no claim (#325). A writer paused for more than 10 seconds (Ctrl-Z, `docker pause`, a
+debugger) has its claim taken over by the other side. When it resumes it fails with `… this writer
+lost its claim …` before its next change to the store, and the store stays as the other writer
+left it. Only a pause of over 10 seconds that falls exactly between that check and the rename
+after it lets one change through, and that writer still fails instead of reporting success (#330).
+Containers of one Docker Desktop VM share its kernel, and so its `flock` on a bind-mounted store
+(since #335 CAMBER never locks through the open that created the lock file, whose `flock`
+excludes nothing there). So a paused container writer is **not** taken over by another container:
+that one waits, as for a running writer, and after its `--lock-timeout` exits 1 with `… -- a
+writer that is alive but stopped …`. Unpause or stop the paused container. A container writer
+that was killed is taken over by another container within at most 10 seconds: at once when the
+lock already shows it gone, as for a container started after the kill. See
+[docs/DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+
 Config is via environment variables (already set in the image): `CAMBER_STORE` (default
 `/data/store`), `CAMBER_API_HOST` (`0.0.0.0` in the container), `CAMBER_API_PORT` (`8080`),
 `CAMBER_API_ALLOWED_HOSTS` (`localhost,127.0.0.1`).
@@ -56,6 +74,20 @@ cross-site` header, or an `Origin` whose host is not on the allowlist. The `HEAL
 name the browser uses, since it arrives in `Origin`. Token auth became the default in 0.107 for
 loopback binds only, so the image (bound to `0.0.0.0`) keeps no authentication by default, with
 the warning; a container started with `CAMBER_API_HOST=127.0.0.1` gets token auth.
+
+## Run the MCP server
+
+The image runs any `camber` command; give it the store and `-i` for the server's stdin:
+
+```sh
+docker run --rm -i --entrypoint camber -v "$PWD/data/store:/data/store:ro" \
+  ghcr.io/yroussev/camber:latest mcp --store /data/store --allow north-campus
+```
+
+The image's `HEALTHCHECK` probes the read API only when the container runs it (the default
+command or `camber serve`); for `camber mcp` and any other command it passes while the container
+runs (0.112, #326). Images up to 0.111 probe the API whatever the command, so such a container
+turns `unhealthy` after about 100 s: start those with `--no-healthcheck`.
 
 ## Run any command / a shell
 

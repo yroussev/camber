@@ -286,6 +286,32 @@ def test_check_citations_passes_a_numbered_draft(tmp_path):
     assert "The damper is stuck" in res.data["verified_text"]
 
 
+@pytest.mark.parametrize(
+    "fact, text, verdict",
+    [
+        ({"text": "valve leaks 3 F"}, "The valve leaks 3 F", "supported"),
+        ({"text": "valve does not leak; no leaks found"}, "The valve leaks", "unsupported_claim"),
+        (
+            {"kind": "caveat", "text": "a coil that leaks can read as a sensor fault"},
+            "The coil leaks",
+            "unsupported_claim",
+        ),
+    ],
+)
+def test_a_leak_is_supported_by_a_fact_that_says_it_not_a_denial_or_a_caveat(
+    tmp_path, fact, text, verdict
+):
+    """The round-11 leak rule takes a fact's own words for a leak, never a denied leak or a
+    caveat's hypothetical one."""
+    facts = [{"id": "F1@x-abc123", **fact}]
+    res = REG.call(
+        "check_citations",
+        {"text": f"{text} [F1@x-abc123].", "facts": facts, "detail": True},
+        _ctx(tmp_path),
+    )
+    assert res.data["sentences"][0]["verdict"] == verdict
+
+
 # --------------------------------------------------------------------------- redaction
 
 

@@ -25,17 +25,22 @@ from ._common import (
     check_selection,
     check_window,
     facility_config,
+    flat_fact,
+    flat_roles,
     jsonable,
     narrow,
     reference_findings,
+    role_unit,
+    subject,
     window,
+    with_unit,
 )
 from ._page import OFFSET, limit_arg, page
 from ._policy import open_store
 from ._sanitize import name, plain, prose
 
 #: points per page by default (#299)
-_PAGE = 100
+_PAGE = 40  # 100 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -79,6 +84,7 @@ _REFERENCE = {
         "role",
         "reference",
         "verdict",
+        "unit",
         "bias",
         "rmse",
         "correlation",
@@ -99,6 +105,12 @@ _REFERENCE = {
             "description": "ok: agrees (a passing comparison); warn / fault: disagrees, so the "
             "point is suspect and findings resting on it are conditional on it; not_compared: "
             "too few paired samples",
+        },
+        "unit": {
+            "type": ["string", "null"],
+            "description": "the unit of bias and rmse: the one CAMBER's rules read this point "
+            "in (°F for a temperature, % for a valve, damper or speed); null: the point's own "
+            "units",
         },
         "bias": {
             "type": ["number", "null"],
@@ -212,6 +224,15 @@ OUTPUT_SCHEMA = {
     },
 }
 
+#: (0112-cite15) how each view reads the points, as the trust summary says it: hosts stated the
+#: report view's way of reading from the tool's description ("judges points in their operating
+#: state"), which no fact said
+_VIEW_SAID = {
+    "rules": "rules view: as the rule runner reads its inputs",
+    "report": "report view: operating-state-aware, duct points judged with the fan on and plant "
+    "points while their equipment runs",
+}
+
 #: points named in the summary, and given their own fact
 _LISTED, _FACTS = 8, 200
 
@@ -276,6 +297,7 @@ def _references(ctx, fid: str, run, equips, roles) -> dict:
             "equip": equip,
             "role": role,
             "reference": str(m.get("reference") or ""),
+            "unit": role_unit(role),  # 0.112 (#294)
             "verdict": sev if sev in ("ok", "warn", "fault") else "not_compared",
             "bias": _num(m.get("bias"), 3),
             "rmse": _num(m.get("rmse"), 3),
@@ -306,15 +328,23 @@ _REF_WORDS = {
 }
 
 
-def _reference_fact(fact_id: str, r: dict) -> dict:
+def _reference_fact(fact_id: str, r: dict, fid: str | None = None) -> dict:
     sign = ""
     if r["bias"] is not None:
         b = round(r["bias"], 1)
         reads = "high" if b > 0 else "low" if b < 0 else "neither high nor low"
         sign = (
-            f"; bias {b:+.1f} is the median of the point minus the reference, so the point reads "
-            f"{reads} against it"
+            f"; bias {with_unit(b, r['unit'], '+.1f')} is the median of the point minus the "
+            f"reference, so the point reads {reads} against it"
         )
+        if r["rmse"] is not None and r["unit"]:
+            # 0112-cite14: the RMSE in the point's unit too, listed with the bias so a figure
+            # says which of the two it is
+            sign = (
+                f"; bias {with_unit(b, r['unit'], '+.1f')}, RMSE "
+                f"{with_unit(round(r['rmse'], 1), r['unit'], '.1f')}: the bias is the median of "
+                f"the point minus the reference, so the point reads {reads} against it"
+            )
     span = (
         f" from {r['overlap_start']} to {r['overlap_end']}"
         if r["overlap_start"] and r["overlap_end"]
@@ -326,6 +356,15 @@ def _reference_fact(fact_id: str, r: dict) -> dict:
         "equip": r["equip"],
         "role": r["role"],
         "value": r["verdict"],
+        # 0.112 (#294): the comparison's figures as fields
+        "verdict": r["verdict"],
+        "subject": subject(fid, r["equip"], r["role"]),
+        "bias": r["bias"],
+        "unit": r["unit"],
+        "rmse": r["rmse"],
+        "n_samples": r["n_samples"],
+        "overlap_start": r["overlap_start"],
+        "overlap_end": r["overlap_end"],
         "text": f"{name(r['equip'])} {name(r['role'])} against its configured reference "
         f"{name(r['reference'])} {_REF_WORDS[r['verdict']]}: {prose(r['summary'])}{sign}; "
         f"{r['n_samples']} paired samples{span}",
@@ -339,13 +378,31 @@ def _reference_sentence(r: dict, fact_id: str) -> str:
         "ok": "agrees with its configured reference",
         "not_compared": "could not be compared with its configured reference",
     }[r["verdict"]]
-    bias = f" (bias {r['bias']:+.1f})" if r["bias"] is not None else ""
+    bias = f" (bias {with_unit(r['bias'], r['unit'], '+.1f')})" if r["bias"] is not None else ""
     return f"{name(r['equip'])} {name(r['role'])} {what}{bias} [{fact_id}]."
+
+
+def _score(trust: float) -> str:
+    """A trust score as a fact writes it: to 2 places, with the result's own value after it
+    when the rounding hides it (0112-cite13: ``1.00 (0.9977)``, a suspect point that reads as
+    a perfect score to 2 places; hosts quote the 0.9977 from the JSON)."""
+    two = f"{trust:.2f}"
+    return two if float(two) == trust else f"{two} ({trust:g})"
 
 
 def _frac(x) -> float:
     v = jsonable(x)
     return min(max(float(v), 0.0), 1.0) if isinstance(v, (int, float)) else 0.0
+
+
+def _selection_words(equips, roles) -> str:
+    """The points a call judged, as its facts say them: "points", "supply_air_temp points",
+    "points on AHU-1", "supply_air_temp or mixed_air_temp points on AHU-1, AHU-2" (round 11:
+    the role and equipment filter is in the fact, not "matching points")."""
+    words = f"{' or '.join(str(r) for r in roles)} points" if roles else "points"
+    if equips:
+        words += f" on {', '.join(str(e) for e in equips)}"
+    return words
 
 
 def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
@@ -365,6 +422,7 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     frame_for, resample = run.frame_for, run.resample
     refs = _references(ctx, fid, run, want_eq, want_roles)  # 0.111 (#313)
     rows, read_any = [], False
+    flat: dict = {}  # 0.112 (#294): {(equip, role): the points that never move over the window}
     for equip in sorted(classes):
         if want_eq is not None and equip not in want_eq:
             continue
@@ -378,6 +436,7 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         if frame is None or frame.empty:
             continue
         read_any = True
+        flat.update({(equip, r): v for r, v in flat_roles(frame).items()})
         for role, t in _health(frame, view).items():
             slug = str(jsonable(role))
             if want_roles is not None and slug not in want_roles:
@@ -417,22 +476,24 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
     counts = {k: sum(1 for r in rows if r["verdict"] == k) for k in ("trusted", "suspect")}
     counts["untrusted"] = sum(1 for r in rows if r["verdict"] == "untrusted")
     counts["below_floor"] = sum(1 for r in rows if r["below_floor"])
-    # 0.111 (#320): a selection's count is not the facility's
-    points = "matching points" if want_eq or want_roles else "points"
+    # 0.111 (#320): a selection's count is not the facility's; 0112-cite10 (round 11): it says
+    # the selection ("4 supply_air_temp points", "6 points on AHU-1"), not "matching points"
+    points = _selection_words(want_eq, want_roles)
     facts = [
         {
             "id": "F1@sensor_trust",
             "kind": "trust_summary",
             "facility_id": fid,
             "value": counts["below_floor"],
-            "text": f"{fid}: {len(rows)} {points} judged ({view} view): {counts['trusted']} "
+            "text": f"{fid}: {len(rows)} {points} judged ({_VIEW_SAID[view]}): {counts['trusted']} "
             f"trusted, {counts['suspect']} suspect, {counts['untrusted']} untrusted; "
             f"{counts['below_floor']} below the trust floor {floor:g}",
             "min_trust": floor,
         }
     ]
     text = [
-        f"Of {len(rows)} {points} on {fid}, {counts['below_floor']} are below the trust floor "
+        f"Of {len(rows)} {points} {'at' if want_eq else 'on'} {fid}, {counts['below_floor']} are "
+        f"below the trust floor "
         f"{floor:g} [F1@sensor_trust]."
     ]
     shown = page(rows, arguments, default=_PAGE, what="points", order="least trusted first")
@@ -447,19 +508,36 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 "equip": r["equip"],
                 "role": r["role"],
                 "value": r["trust"],
-                "text": f"{name(r['equip'])} {name(r['role'])}: trust {r['trust']:.2f} "
+                # 0.112 (#336): its place in the least-trusted-first list ("the least trusted")
+                "rank": (arguments.get("offset") or 0) + i - 1,
+                "text": f"{name(r['equip'])} {name(r['role'])}: trust {_score(r['trust'])} "
                 f"({r['verdict']}; {why}); coverage {r['coverage']:.0%} of its own span",
             }
         )
         if i - 1 <= _LISTED:
             text.append(
-                f"{name(r['equip'])} {name(r['role'])} scores {r['trust']:.2f} ({r['verdict']}"
+                f"{name(r['equip'])} {name(r['role'])} scores {_score(r['trust'])} ({r['verdict']}"
                 + ("; its configured reference disagrees" if "reference" in why else "")
                 + f") [F{i}@sensor_trust]."
             )
+    # 0.112 (#294): a point that never moves over the window can score trusted (a constant has
+    # no outliers) yet decide a diagnosis (a valve that never opens, a setpoint that never
+    # resets): each one on this page is a fact
+    n_flat = 0
+    for r in shown:
+        info = flat.get((r["equip"], r["role"]))
+        if info is None or n_flat >= _FACTS:
+            continue
+        n_flat += 1
+        facts.append(flat_fact(f"L{n_flat}@sensor_trust", fid, r["equip"], r["role"], info))
+        if n_flat <= _LISTED:
+            text.append(
+                f"{name(r['equip'])} {name(r['role'])} never moves over the window (it reads "
+                f"{with_unit(info['value'], role_unit(r['role']))}) [L{n_flat}@sensor_trust]."
+            )
     for j, ref in enumerate(refs["all"], start=1):
         fact_id = f"R{j}@sensor_trust"
-        facts.append(_reference_fact(fact_id, ref))
+        facts.append(_reference_fact(fact_id, ref, fid))
         if j <= _LISTED:
             text.append(_reference_sentence(ref, fact_id))
     banners = list(refs["notes"])
@@ -494,8 +572,8 @@ CAPABILITIES = (
             "Score each point of a facility for trust (0-1: trusted / suspect / untrusted) from "
             "coverage, flatlines, stuck runs, outliers, range and cross-point checks, with the "
             "flags behind it. Least trusted first; below_floor marks exactly the inputs rule_run "
-            "declines on. Also compares the run config's sensor references (bias, RMSE, samples, "
-            "verdict; passing ones too): a disagreeing one makes the point suspect. Use it before "
+            "declines on. Also compares the run config's sensor references "
+            "(passing ones too): a disagreeing one makes the point suspect. Use it before "
             "believing a fault. view='report' judges duct points with the fan on. Cost: reads "
             "every trend (narrow with equips, roles or a window). Needs facility_id."
         ),

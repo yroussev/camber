@@ -68,7 +68,7 @@ _PAIR = {
 }
 
 #: rows per list and page by default (#299)
-_PAGE = 25
+_PAGE = 10  # 25 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -286,10 +286,12 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
                     "equip": str(dd.get("equip") or getattr(d, "equip", "")),
                     "severity": str(dd.get("severity") or ""),
                     "summary": str(dd.get("summary") or ""),
+                    # 0.112 (#333): not the equip, severity and summary again
                     "detail": {
                         k: v
                         for k, v in sorted(dd.items())
-                        if isinstance(v, (str, int, float, bool)) or v is None
+                        if (isinstance(v, (str, int, float, bool)) or v is None)
+                        and k not in ("equip", "severity", "summary")
                     },
                 }
             )
@@ -326,6 +328,8 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
     untrusted = f" ({len(declines)} on untrusted input(s))" if declines else ""
     if declines:
         facts[0]["text"] += f" ({len(declines)} declined on untrusted input(s))"
+    if declined or unevaluated:  # 0.112 (#328): what a sentence saying "not judged" cites
+        facts[0]["text"] += "; those were not judged"
     # #304: a declined detector is a check not made, so the count is always stated (a bare
     # "0 equipment were not evaluated" read as everything judged)
     text = [
@@ -334,16 +338,18 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         "detector run at all [F1@drift]."
     ]
     rows = page(rows, arguments, default=_PAGE, what="findings", order="worst first")
+    shared = _shared_notes(rows)
     for i, r in enumerate(rows[:_FACTS], start=2):
         fact_id = f"F{i}@drift"
         r["fact"] = fact_id
-        facts.append(finding_fact(fact_id, r))
+        facts.append(finding_fact(fact_id, r, fid))
         if i - 1 <= _LISTED and r["severity"] in ("fault", "warn"):
             text.append(cite(facts[-1]))
     banners = [config_notice] if config_notice else []
     notice = trust_banner(declines, ctx.min_trust if floor is None else floor)
     if notice:
         banners.append(notice)
+    banners += shared
     if source == "baseline_period":
         banners.append(
             "Drift is measured against the baseline window given, fitted for this call only: it "
@@ -359,6 +365,29 @@ def drift(ctx, arguments: dict) -> CapabilityResult:
         "unevaluated": page(unevaluated, arguments, default=_PAGE, what="unevaluated"),
     }
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
+
+
+#: a metric text at least this long, the same on several findings of a page, is said once
+_NOTE = 120
+
+
+def _shared_notes(rows: list) -> list:
+    """Say once what several findings of a page say alike (0.112, #333): a long metric text
+    (a detector's threshold note) the same on two or more rows leaves their metrics and is
+    returned as a notice, so a page is not mostly one paragraph repeated."""
+    seen: dict = {}
+    for r in rows:
+        for k, v in r["metrics"].items():
+            if isinstance(v, str) and len(v) >= _NOTE:
+                seen.setdefault((k, v), []).append(r)
+    out = []
+    for (k, v), alike in seen.items():
+        if len(alike) < 2:
+            continue
+        for r in alike:
+            del r["metrics"][k]
+        out.append(f"The {k} of {len(alike)} finding(s) here, said once: {v}")
+    return out
 
 
 CAPABILITIES = (

@@ -45,6 +45,13 @@ TRASH_PREFIX = "_trash-"
 _NEW, _OLD, _READY = ".new", ".old", ".ready"
 
 
+def _confirm_claims() -> None:
+    """0.112 (#330): stop a writer whose lock claim another system took over, before it renames."""
+    from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
+    confirm_claims()
+
+
 def _paths(target: str) -> tuple:
     parent, name = os.path.split(os.path.abspath(target))
     stem = os.path.join(parent, f"{SWAP_PREFIX}{name}")
@@ -112,6 +119,7 @@ def _finish(target: str) -> None:
     parent = os.path.dirname(os.path.abspath(target))
     if os.path.isdir(new):
         with _fence.guard(target):  # readers of a store partition see the swap (#306)
+            _confirm_claims()  # #330: just before the renames
             if os.path.lexists(target):
                 _rm(old)
                 os.rename(target, old)
@@ -141,6 +149,7 @@ def recover(target: str):
             _rm(old)
         else:
             with _fence.guard(target):
+                _confirm_claims()  # #330
                 os.rename(old, target)
     return "rolled_back"
 
@@ -157,6 +166,7 @@ def discard(path: str) -> bool:
     parent, name = os.path.split(path)
     trash = os.path.join(parent, f"{TRASH_PREFIX}{name}-{uuid.uuid4().hex[:12]}")
     with _fence.guard(path):
+        _confirm_claims()  # #330
         os.rename(path, trash)
     _fsync_dir(parent)
     _rm(trash)

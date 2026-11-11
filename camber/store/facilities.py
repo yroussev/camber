@@ -16,6 +16,7 @@ raw name causes as a partition directory.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import hashlib
 import json
@@ -141,7 +142,11 @@ class FacilityRegistry:
     # ----------------------------------------------------------------- reads
 
     def _raw(self) -> dict:
-        return _read_json(self._path())
+        from .._servable import snapshot_raw  # lazy: it imports the store
+
+        # within a capability call: the registry the call read once (0.112, #324)
+        snap = snapshot_raw(self.root)
+        return _read_json(self._path()) if snap is None else snap
 
     def all(self) -> dict:
         """The whole registry ``{facility_id: {...}}`` (empty if absent/corrupt).
@@ -531,17 +536,30 @@ def _read_json(path: str) -> dict:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, OSError):
+    except (ValueError, OSError, RecursionError):  # not UTF-8 / JSON, or too deep (#329)
         return {}
 
 
 def _write_json(path: str, data: dict, *, root: str) -> None:
-    """Atomic write: temp file + ``os.replace`` (readers never see a half-written file)."""
+    """Atomic write: temp file + ``os.replace`` (readers never see a half-written file).
+
+    0.112 (#335): the claim is confirmed before the temp file is made, not only before the
+    rename, so a writer that lost it leaves nothing behind; the temp file's name is this write's
+    own (``<name>.tmp-<pid>-<token>``), and it is removed on any failure."""
+    from ..portfolio._lock import confirm_claims  # lazy: the portfolio imports the store
+
     os.makedirs(root, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, sort_keys=True)
-    os.replace(tmp, path)
+    confirm_claims()  # 0.112 (#330, #335): still the store's writer, before anything is written
+    tmp = f"{path}.tmp-{os.getpid()}-{os.urandom(4).hex()}"
+    try:
+        with open(tmp, "x", encoding="utf-8") as fh:
+            json.dump(data, fh, sort_keys=True)
+        confirm_claims()  # and still it, just before the rename
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def _partition_ids(root: str) -> list:

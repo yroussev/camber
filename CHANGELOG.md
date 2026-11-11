@@ -6,13 +6,810 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Older releases
 
-Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/index.md):
+Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/index.md):
 
+- [0.106.0 to 0.109.1](docs/changelog/changelog-0.106-0.109.md)
 - [0.103.0 to 0.105.0](docs/changelog/changelog-0.103-0.105.md)
 - [0.98.0 to 0.102.0](docs/changelog/changelog-0.98-0.102.md)
 - [0.90.0 to 0.97.0](docs/changelog/changelog-0.90-0.97.md)
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
+
+## [Unreleased]
+
+### Security
+- **A citation is supported only by a fact this server gave the session (#294).** `check_citations`
+  used to believe whatever facts the caller passed, so an invented fact, an altered value with a
+  recomputed id, or a fact about a facility the caller may not see could make a sentence
+  "supported". The server now records every fact it sends in a per-session ledger (`camber mcp`:
+  one per process, kept in the server process, so a killed or recycled worker loses nothing) and
+  looks each cited id up there: an id it never sent in this session (from another server,
+  config or store, from before a restart, or made up) is `unknown_citation`. The ledger is
+  bounded (about 8 MB of the most recent facts); a cited fact it has since dropped is the new
+  verdict `forgotten_citation` -- run the tool again and cite the new id.
+- **Research-only data is refused wherever it is copied (#319).** A partial or altered copy of a
+  research-only facility -- one month copied into a test facility, a whole partition with one
+  part file deleted, renamed or merged, or a copy into another store -- was served in full by
+  `camber mcp` under its new id: the 0.111 checks compared whole partitions. `camber datasets
+  ingest` now writes the dataset id, its licence and a research-only flag into every Parquet
+  part file's metadata, every rewrite keeps it (append, `store normalize`, `store
+  migrate-partitions`, `retention apply`, a forced re-ingest, archive and restore), and the
+  capability registry refuses (`refused_licence`) any facility holding a part marked
+  research-only, in any facility, directory or store, before the call runs and again when a tool
+  reads it. The refusal names the facility and the dataset, never a path. `camber run`, `camber
+  report` and `camber lab` still read research-only data locally, with the licence banners.
+  **Re-ingest to get the marks:** a store ingested before 0.112 has none, keeps the 0.111
+  checks, and a partial copy of it is still served; `camber datasets ingest <id> --store DIR
+  --force` adds them.
+- **A research-only part file is checked whatever it is named (#329).** The store reads every
+  file in a facility directory whose name does not start with `_` or `.`, but the research-only
+  check looked only at files named `*.parquet`, so a research-only part copied in as `x.parq`,
+  `x.PARQUET`, `x` or `x.parquet.tmp` let `facilities` and `points` list its equipment, classes
+  and roles (the data-reading tools still refused it). The check, `camber datasets provenance`
+  and the store readers now share one definition of a part file, and a facility directory
+  nested too deep to check in full is refused.
+- **A dangling symlink or an unreadable directory no longer hides research-only parts (#334).**
+  The research-only check walked a facility directory and stopped at the first entry it could
+  not resolve, so research-only parts copied in by hand after a dangling symlink (or a directory
+  it may not list) went unchecked: `facilities` listed the facility, `points` served its
+  equipment ids, classes, roles and data span, `camber datasets provenance` showed nothing
+  marked and a local report had no non-commercial banner (the data-reading tools still refused
+  it). The check now goes on past every entry it skips, and a facility it cannot check in full
+  -- a dangling symlink, a directory it may not list, a symlink loop or files nested too deep --
+  is refused with the reason that not all of its files could be checked (`refused_licence`,
+  `licence_unverified`). A change below the month level (a copied-in subdirectory) is now seen
+  by the cached check too.
+
+### Fixed
+- **A facility is no longer refused while a re-ingest swaps its files (#334).** The provenance
+  walk counted a file removed between its listing and its `stat` as a dangling link, so a
+  reader during a forced re-ingest could get `refused_licence` ("not all of its files could be
+  checked"). Such a file is now skipped; a dangling link is still refused.
+- **`check_citations` no longer calls a wrong claim "supported" (#294).** A sentence was
+  supported when it cited a known fact and its numbers appeared somewhere in that fact, so
+  `-45%` passed against 45 %, `47,980 MWh` against a figure with no unit, a 60 °F threshold as
+  "saves 60%", another air handler's or meter's name with this one's figures, "consumption
+  rose" against a saving, "meets G14" against a baseline that fails it, a citation hidden in an
+  HTML comment, and a number that was only part of a name from the data. Each figure must now
+  be one a cited fact states, with the same sign, unit, counted thing (hours, samples, points,
+  ...) and role (a threshold is not a result); each date or year one a cited fact carries; and
+  each equipment, meter or facility named, verdict, direction and negation one a cited fact
+  states; a claim's own figure (a `claimed_figure` fact) supports only a sentence that says it is
+  the claim's. Only visible citations count. Docs: CAPABILITY-REGISTRY.md, "Where a cited fact comes from".
+- **`check_citations` no longer rejects what a fact does support (#294).** A rank ("Ranked cause
+  1", "step 2"), an ordinal or a list marker is not a figure; "in 2017" matches a fact whose
+  period is in 2017; a `NOTICE:` line repeating the text of a `notice` fact among the facts
+  is kept and not judged; and `[F1@a, F2@b]` (or `[F1@a; F2@b]`) cites both ids instead of nothing.
+- **`check_citations` reads each figure, zero and verdict with its own clause (#332).** Four
+  kinds of wrong sentence were still marked supported because a word matched somewhere in the
+  cited fact. A whole count ("All 11 points are trusted", "106 of the 106", "0 of the 11 points
+  are suspect") now needs a fact that says all, or none, of that many; a zero or "no" ("No
+  faults were found", "0 rules returned a fault") needs the fact's zero of the same thing in its
+  own list item, not the `0 rule(s) skipped` of another; a share keeps its label, so "the
+  cooling valve leaked on 86%" fails against `HW-leak 86% / CHW-leak 0%`; and a finding re-judged
+  with the sensor's bias taken off supports only its new verdict, not "is still a fault". Also
+  read now: "it is false that", "is incorrect", "but that is wrong" and a closing "-- not";
+  "the same days" against "other days"; rank words ("the top issue", "the second issue", "#1",
+  "the worst", "most severe") only where a cited fact ranks; a cause or effect ("accounts for",
+  "due to", "about the same size as", "will clear this warn") only where a cited fact states
+  the explanation. True sentences that were stripped now pass: "bias +0.0 and RMSE 0.1", "the
+  CHW-leak share is 0%", "HW-leak 0% / CHW-leak 0%" without what it is a share of, "0
+  facilities are visible" (a server's own summary was stripped), "None of the baselines meets
+  G14" when each cited fact says its baseline does not, a paging notice restated with what it
+  counts ("only the first 25 of 223 findings"), and whole sentences of a fact or notice quoted
+  word for word. `4P` and `3P` are model names, not counts, and a `why` gives the words as
+  written (no internal placeholders or stems) and says when a claim spans several facts.
+- **`check_citations` reads what a sentence says of a counted thing, and labels as closed sets
+  (#336).** Fresh wordings of the same wrong claims still passed: a dropped or moved quantifier
+  ("The 8 flagged hours ... all fall in the reference window" or "8 out of 8 flagged hours fall
+  ..." against "None of the 8 flagged hours ... falls"; "The 11 points are trusted" against 9
+  trusted, 2 suspect), a zero said otherwise ("Not a single fault was found", "No rule passed",
+  "is fault-free" against a run with faults; "No rule returned a fault or a warn", which an
+  earlier 0.112 build rejected, borrowed the run's `0 warn`), and a figure moved to another
+  label ("the hot-water valve", "reheat", "preheat" or "steam" valve given the cooling side's
+  share; FC10's share given to FC11; "1 point is suspect" against 2 suspect, 1 untrusted). Now,
+  with the quantifiers CAPABILITY-REGISTRY.md lists, before the noun, after it, or none at all
+  (where "the 11 points" is all of them), the count a sentence gives must be a cited fact's
+  count of that label or of that statement, the heating and cooling sides (each with its
+  spellings), the trust classes and the fault conditions each bind their own figures, and a
+  figure the fact tells apart by one of them fails when the sentence does not say which. Also:
+  "stands", "remains valid" and "still holds" no longer keep a finding re-judged ok a fault;
+  "no fan heat was set" no longer matches "measured_fan_heat_f not set". True sentences that
+  were stripped now pass: "declined because of the untrusted input" when a cited notice says
+  "declined because an input scored below the trust floor", "with the +3.0 °F bias taken off"
+  against "corrected by -3.0 °F" (a figure with the other sign says so in its `why`), "the
+  figures above", "the 2016 baseline", and "the least trusted point" for the first of
+  `sensor_trust`'s least-trusted-first list (its point facts now carry their `rank`). The
+  prompts ask for `check_citations` on the whole revised draft each time, not only the
+  sentences changed. The forms still not read, and those that fail closed, are listed in
+  CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` reads "both", "each" and "all" across items, verdicts on a whole set, and
+  more forms of zeros and counts (#338).** The fourth round of the 0.112 acceptance test still
+  found wrong sentences marked supported. "Both AHUs fail leaking_valve" (or "each AHU", "the
+  AHUs all", "on both units", "every unit") citing one air handler's finding, or citing a second
+  one that says "no valve leak", now fails: such a set is read against the equipment, points,
+  meters or facilities the cited facts are about, each needs a cited fact stating the claim of
+  it, and "both" or a number needs that many. "The 5 rules passed", "The 7 equipment are
+  healthy" and "The 3 rules returned a fault" now fail against a run with faults, warns or oks
+  besides. Zeros said as "Faults on X: 0", "Number of faults: 0", "faults were not found",
+  "there aren't any faults", "fault free", "suspect-free", "free of suspect points" and
+  "neither suspect nor untrusted points" now agree with the fact's count. "The 37 judged samples
+  were flagged" against "flagged 8 hours (32 of 37 judged samples, 86.5%)", "The 1672
+  free-cooling hours ran mechanical cooling" against 42% of them, "There were 8 flagged hours in
+  the reference window" against "None of the 8 ... falls in the window", "1 point is below the
+  trust floor and 1 is suspect", "A single point is suspect", "They are all trusted" and a table
+  cell "all trusted" now fail where the fact says otherwise. "The majority of" and "the bulk of"
+  are read as "most of", "over 9" as more than 9, and "half of" as a share of the count, so
+  "At least half of the 11 points are trusted" passes again. True sentences that were stripped
+  now pass: "86.5% of the judged samples were flagged", "0% heating and 0% cooling leak", one
+  clause's "high" next to another clause's "neither high nor low" cited to another fact, "trusted
+  at 0.97 and the ... setpoint at 1.00", "One ok result" and "The claim names 2017, 12% and
+  2016". Every result now says that it covers only the text passed, and the prompts that a
+  reworded answer must be checked again; MCP.md says the same for a question asked in the
+  conversation. The forms still not read, and those that fail closed, are listed in
+  CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` screens every sentence for a claim of checking, and binds verdicts to the
+  unit, rule and point they are said of (#342).** Round 8 of the 0.112 acceptance test found
+  short, status, lead-in and first-person claims of checking passing ("All supported",
+  "Checked", "✅ Supported", "Status: all supported", "I reviewed each rule result", "This triage
+  was checked", "The 2.5% saving was validated by IPMVP methods"), and uncited ones not judged
+  at all (kept in `verified_text` with `grounded` true, seen in a real host). Every sentence,
+  cited or not, is now screened: a claim that the text, the work, or what it states was checked,
+  verified, supported, validated, grounded, confirmed, reviewed, fact-checked or backed -- of
+  any noun, by the writer, by its evidence ("the cited fact supports"), by the checker ("The
+  check passed") or as a checkmark -- fails, never reaches `verified_text`, and opens it with the
+  NOTICE; a check word a cited fact states of the data ("checked against its reference") still
+  passes. Units, rules and points: "AHU 1", "AHU–1", "AHU - 1" and "Air handler 1" are bound to
+  AHU-1 when one cited id fits (else they fail closed); "B fails X, unlike A", "but not A", "(not
+  A)", "as opposed to A", "Not A but B", "A's damper, not B's", "B fails X and A passes" (or a
+  comma or dash), "A fails X, but B does not", "A: no valve leak" and "No valve leak was found on
+  A" read each unit against its own facts, as do "A agrees with its reference while B
+  disagrees" and "leaking_valve flags A"; a finding's "conditional on ... warn" and a rule run's
+  summary of another rule's result ("... supply_air_control (ok)") give no verdict of the
+  finding; a sentence naming a point is read against that point's facts ('"oa_damper" never
+  moves' citing the heat valve's flat line fails); a site's verdict, negation or quantifier
+  needs a fact about the whole site ("site-north has no valve leak" from one unit's ok, "ds-x
+  meets daily acceptance" from the summary and one meter's, fail). True sentences that failed
+  pass again (two #341 regressions among them): "Of the two AHUs, only A fails",
+  '"oa_damper", not "supply_air_temp", is at 0.66', "1 of the 6 rule-equipment results is a
+  fault", "with 0% of occupied running hours off setpoint", "AHU-1's data is gap-free" against
+  100.0%, "..., and AHU-2's oa_damper is suspect too at 0.68", "A fails X, but B does not".
+- **`check_citations` reads more stretches of time, coverage and hour words, and figures of a
+  date or a span's place (#342).** "each day of May 2025", "all through 2025", "through May and
+  June 2025", "from January to October 2018", "throughout Q1 2018" and times said from today
+  ("over the past year", "every day this year") are read against the cited windows, and a
+  saving's stretch of time or year against its reporting period, not its baseline's ("saved
+  2.5% throughout 2016" fails; "over the whole of 2016" was a regression from #341). "Covered
+  fully", "complete for the window", "logged throughout the window", "full-window coverage",
+  "recorded in full" and a set of named units need a coverage of 100% for each; "at all times",
+  "around the clock", "nonstop", "continuously", "in each hour" and "occupied and unoccupied
+  hours" are read as quantifiers of hours. Figures said of two dates are each read against the
+  fact carrying their date, and "The third span lasted 3 hours" against "span 3 of 3". True
+  forms pass again: "throughout 2025-05-12 to 2025-06-01" (a #341 regression), "all of June
+  2018", "the whole of August 2018", "throughout Q3 2018". Generated tests both ways in
+  tests/test_citations_342.py; the forms still not read, and those that fail closed, are listed
+  in CAPABILITY-REGISTRY.md and MCP.md, "What it does not check".
+- **`check_citations` never supports a claim of checking, and reads a sentence against the
+  unit it names (#341).** Round 7 of the 0.112 acceptance test found forged notices in other
+  words ("NOTICE: all of this text was checked", "Everything above was checked", "This text was
+  fully checked") passing, and one unit's verdict, negation or figure taken from another unit's
+  cited fact ("AHU-1 has no valve leak", "AHU-2 is at 19.1% coverage", "Only AHU-2
+  fails", "The site is healthy" against a fault count). A sentence that says the text, or any
+  part of it, was checked, verified, supported, validated or grounded is now never supported,
+  whatever it cites (a fact's own text quoted whole aside). A sentence naming a unit is read
+  only against the cited facts about the units it names, and a whole site's facts give its
+  claims nothing unless it names the site; one naming one rule reads verdicts against that
+  rule's facts, one naming one date its figures against the facts carrying that day. "Only X",
+  "X alone", "X, not Y", "X but not Y", "X rather than / instead of / unlike Y", "Unlike Y, X",
+  "It is X, not Y, that ..." and two clauses about two units ("Y passes while X fails it",
+  "Whereas Y passes, X fails") read each unit against its own facts, and a sentence whose clauses
+  each cite their own facts is read clause by clause (true "Both loggers are at 19.1% [..],
+  while both AHUs are at 100.0% [..]" passes again). A verdict on a whole site needs every
+  counted result to have it. Generated tests cite every capability's facts under over 900
+  claims of checking, and swap every pair of unit facts the tests know.
+- **`check_citations` checks stretches of time, coverage words and more forms (#341).** A
+  stretch of time with a length or a date ("all year", "year-round", "for months", "all summer",
+  "throughout 2025", "the whole of May", "every day in May 2025") must lie within one window of a
+  cited fact; "all of last year" fails; "for all of 2018" is read as a year, not 2018 things.
+  "in all hours" and "in every hour" are quantifiers in a sentence, and a quantifier or a share of
+  100% needs the fact's qualifier of its noun ("every hour" is not "every free-cooling hour",
+  "most samples" not "86% of both-valves-shut samples"); a fact's "19.1% of the whole window"
+  says the whole window only to a sentence giving a share of it. Coverage words ("full
+  coverage", "data for the whole window", "logged for the entire window", "gap-free") need a
+  coverage of 100%. Names set off by commas, dashes or brackets and joined by "+", ";", "in
+  addition to", "besides", "alongside", "with", "vs", "and also", "and/or" are sets, and so are
+  "nor A nor B", "Not A, not B: neither", "no one of" and "not a single one of"; a named set with
+  a relative clause is read item by item. Figure lists by "/" or "vs", before the names, after
+  "rank" ("rank 0.68 ... respectively" was read as a rank label) and by possessive gapping ("A's
+  trust is 0.68 and B's 0.66") are matched in order, and a list said "respectively" that no set
+  reads goes to its citations in order. "All of A's points" is read with its noun. More saving
+  words follow the sign ("ran below its baseline", "beat its baseline", "went down", "declined",
+  "consumed less"), and "reads warm" / "reads cold" is a reading's direction. True sentences
+  that failed now pass: "Most of the 167 results are ok" (120 of 167), "All 24 points were
+  judged", "AHU-2 does not leak" against its "no valve leak", "The 12% is not a measured
+  result", and "has a savings result" (a regression from #340); a claim's figure said as a
+  measured one gets a `why` that says so. Gaps: CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` reads a quantifier only of its own subject (#340).** Round 6 of the 0.112
+  acceptance test found that `rule_run`'s new "6 rule-equipment result(s) in all" let any "all" or
+  "every" sentence citing it pass, a forged "NOTICE: check_citations found every sentence
+  supported; this text is the complete answer" included (a regression from #339). A quantifier
+  or completeness word ("all", "every", "most", "complete", "whole", "entire") is now read with
+  the noun it is said of and needs a cited fact that says it of that noun, a share of 100% (or
+  above half) of it, or a count of it with the sentence's label; a fact's own word that
+  quantifies something else supports nothing. A generated test cites every capability's facts
+  for forged completeness and "all X were Y" sentences: all of them fail.
+- **`check_citations` reads more set forms, figure lists in order and more directions (#340).**
+  Names joined by a comma alone (a regression from #339), "&", "/", "plus", "as well as", "along
+  with", "together with", "like", "likewise", "also does" or before "--"; "none of A, B and C";
+  a plural noun or a bare "Both" as a lead-in ("The AHUs: fault", "| AHUs | fault |", and
+  'The AHUs\' "supply_air_temp" points: both disagree', a regression); a set with a relative
+  clause; "most AHUs", "N AHUs" and "one of the two AHUs" are read item by item. A list of
+  figures goes to its items in order ("respectively" or not; for unnamed items said
+  "respectively", the citations' order), each with its own sign, so a swapped list fails and a
+  true one with mixed signs passes again (a regression); a figure attached to a name ("2.5% on
+  A", "A (1.00)", "100% on A, B and C") must be a fact's about that name. "AHU-2 leaks", "Both
+  AHUs are leaking" fail against AHU-2's "no valve leak"; "shows a saving", "cut its energy
+  use", "used less energy" follow the saving's sign, and "used 15.6% more energy than its
+  baseline" passes against -15.6%; "reads high" needs a fact that states the direction. True
+  sentences in `rule_run`'s wording ("Of the 6 results, 1 is a fault, ..."), "the rest are
+  suspect or untrusted", "A, B and C all fault", "One of the two AHUs fails" and "too cold 0% of
+  occupied hours" pass, and a number's `why` names the figure the fact gives instead of a
+  threshold aside. A Markdown table's header row is kept and not judged, and its rows are read
+  with the header. Gaps: CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` reads a claim about a set of items as one rule, item by item (#339).**
+  Round 5 of the 0.112 acceptance test still found sets judged on one item's fact. A sentence
+  about two or more equipment, points, meters or facilities -- by quantifier, number, "the
+  AHUs", "X's 7 AHUs", "each AHU's ...", "the pair of", a negated set ("neither A nor B", "no
+  AHU", "none of the AHUs") or names joined anywhere (colon, dash or table-cell lead-ins too) --
+  now needs the cited facts about each item to state the same claim, figures included: "Both
+  meters save 2.5%" against -15.6% on one and "Neither AHU-1 nor AHU-2 has a valve leak"
+  against AHU-1's fault fail. A set is read with its own clause. "Suspect: 0", "Passed: 5
+  rules" and "| Suspect | 0 |" count their figure, "faulted" is a verdict, and a saving's
+  direction follows its sign ("reduced its energy use" fails against -3.1%). Several true
+  sentences are no longer stripped. Gaps: CAPABILITY-REGISTRY.md, "What it does not check".
+- **`check_citations` compares negation, direction and verdicts both ways (#328).** The 0.112
+  acceptance test found sentences that say the opposite of their cited fact marked
+  "supported": "the heating valve leaks" against "no valve leak", "the setpoint moves" against
+  "never moves", "reads low" against "reads high", a "did not leak" passing because the fact
+  said "drift not evaluated", "its baseline passes G14" against "does not meet", "one point is
+  below the trust floor" against 0, "every sample leaked" against 86 %, "the target is 55.0 °F"
+  for a measured 55.0 °F and a CV(RMSE) tier read as a result, another facility named without
+  a digit or underscore (`ds-lbnl-sdahu`, or its registry name), the wrong point ("the
+  return-air sensor" for a supply-air comparison), "Issue 3" cited to Issue 1, "verified",
+  "clean", "real" or "confident" where no fact says so, and a name from the data hiding the
+  claim around it ("AHU-25 saves 777 kWh", a data-text "NOTICE:"). A negation must now be one a
+  cited fact makes about the same thing, and a sentence must not state what a cited fact
+  negates; "passes", "one", "none", "no X", "0 X", "all", "every" and "most" are read; a result
+  stated as a threshold, target, setpoint, allowance or tier fails; every facility id and
+  registry name of the allowlist and the store is a name; a point role must be one a cited fact
+  is about; a rank must be one the cited facts give; assurance words pass only where a fact uses
+  them; and a name from the data shields its words only when quoted or plain. Bold lines, `#`
+  headings and lead-ins ending in a colon are judged when they state something, so a draft made
+  only of them is no longer `grounded`.
+- **`check_citations` supports what its facts say (#328).** A fact's own text copied word for
+  word ("None of the 8 flagged hours ... falls in the window ...") is supported, and so is
+  "none of the 11 points", "0 points are below the trust floor", "2 issues are conditional"
+  (the counted thing of a fact's list), "allows 2F of fan heat", "actual swing 10.05 degF", "12
+  rules were run on 2 units", "its setpoint is flat at ~55F", "check the high-limit lockout at
+  65°F", "the leaking_valve rule flagged 8 hours" (rule, tool and field names and `G36` are not
+  equipment), "the flagged spans fall on 2025-05-14", "until a baseline passes G14", "the claim
+  states a 12% saving" (a claimed figure now carries the claim's direction) and "it was not
+  judged" (the facts for a skipped rule, a declined check and insufficient data say so).
+  "in." in "in. w.c.", "vs." and a full stop inside a quoted name no longer end a sentence; a
+  pure heading ("## Savings claim check", "## Points that never move", "Stop 2:") or a short
+  list label ("1. Sensor offset.") is kept in place, and a removed first sentence leaves its
+  list marker. `finding_detail` no longer strips its own reference-window fact from its summary,
+  and the notice that a summary sentence was removed no longer says it was always a figure.
+  A real-client run then found the check still rejecting the server's own words: a fact's whole
+  text, quoted word for word with its own id, is now one supported sentence however many
+  sentences, verdicts or negations it holds ("leaking_valve (ok): ... no valve leak", an RCx
+  "Recommended action, ..." text, a multi-sentence rule-parameter or licence notice), and so is
+  a NOTICE line that repeats a notice and cites its `N` id ("NOTICE:", "Notice:" or bold),
+  which a full stop or semicolon in it no longer splits into an uncited half. A quote with a
+  word added, changed or left out, or citing another fact, is judged as before. The
+  `check_savings_claim` prompt no longer recommends "The claim states a 12% saving", which
+  fails when the claim was a bare "12%": it asks for the claimed figure with no word of
+  direction ("The claim states 12%"). A share listed before the one that says what it is of
+  ("HW-leak 0% / CHW-leak 0% of the samples") is now read as a zero of that too, as in the
+  facts: copying that list is supported, and "HW-leak 0%" cited to a fact with "HW-leak 86%"
+  no longer is.
+- **`verified_text` keeps the draft's lines (#322).** It joined the draft into one paragraph
+  and dropped headings ("# AHU triage", "Findings:") as uncited sentences. It is now the draft
+  with only the failing sentences removed: paragraphs, list markers, headings and the trailing
+  line break stay. `camber.agent.verify.check` repairs a text the same way, so `camber explain`,
+  `camber ask` and the RCx report's prose keep their lines too.
+- A store fence whose process id has 4,301 or more digits, or is otherwise not 1 to 10 ASCII
+  digits, is a malformed fence: it no longer makes every call on its facility and the whole
+  `facilities` listing fail with an internal error, and `datasets ingest --force` resets it
+  instead of failing (#322).
+- Ctrl-C early in `camber mcp` exits 130 quietly. An interrupted import inside numpy or pandas
+  could turn the Ctrl-C into a misleading numpy `ImportError` traceback with exit status 1, or
+  swallow it so that the server started anyway and ignored further Ctrl-C (#322).
+- `camber mcp` ended by a signal no longer dies by a second signal that arrives 20-100 ms
+  later, after its cleanup: it exits 143, 129 or 130 as documented, so a supervisor reading the
+  wait status sees the exit status, not "killed by signal" (#326).
+- The matplotlib directory of a `camber mcp` killed with `SIGKILL` is now removed by the next
+  server also when every server runs as pid 1 in containers sharing a `/tmp` volume: a server
+  holds a lock on a file in its directory while it runs, and the sweep goes by that lock
+  instead of the process id (#326).
+- The container image's `HEALTHCHECK` probes the read API only when the container runs it (the
+  default command or `camber serve`); a container running `camber mcp` or any other command no
+  longer turns `unhealthy`. With a 0.111 image, start such a container with `--no-healthcheck`;
+  DOCKER.md and MCP.md show how to run the MCP server from the image (#326).
+- **A momentary failure to read the facility registry no longer changes an answer (#324).** A
+  writer replaces `_facilities.json` with a rename, which some filesystems (a Docker Desktop
+  bind mount) show a reader as briefly missing. A `camber mcp` call that read it at that moment
+  ran a catalog-dataset facility with every built-in rule at its defaults instead of its packaged
+  template (different `rule_run` findings and `sensor_trust` scores, with no notice), or refused
+  it as `refused_licence`, or answered under a notice saying nothing was served. A failed read is
+  now tried again for a moment; one that keeps failing while the file changes, or fails with an
+  I/O error, is `unavailable` with `"retryable": true, "reason": "registry_unreadable"`, and
+  `camber mcp` refuses to start rather than guess. A call reads the registry once, so its licence
+  check, config template, timezone and notices agree. A registry that stays missing or damaged
+  is still refused (#290).
+- **A host and a container no longer write one store at once (#325).** The store and cache lock is
+  the kernel's `flock`, which a macOS host and a Docker Desktop container on one bind mount (or two
+  machines on one share) do not share: both wrote, ingests failed (`ENOENT`, `Directory not
+  empty`) and left `_trash-ingest-*` directories, and readers got wrong answers. A writer now
+  also claims `<dir>/_lock.owner` and keeps a heartbeat in it; a writer on another system waits
+  for it and is then refused with `… locked by <pid>@<host> … on another system sharing this
+  directory`, and a claim whose writer was killed is taken over (at once on its own system,
+  after 10 s without a heartbeat from another). CAMBER 0.111 and older make no claim, so write a
+  store from the host or from containers, not both (DATASETS.md, CLI.md, PORTFOLIO.md,
+  DOCKER.md).
+- `ParquetStore.partitions()` and `camber store normalize`'s part check no longer open a FIFO
+  named like a part file (which waited for a writer for ever); the retention roll-up's partition
+  read skips one too (#319).
+- **Archiving a research-only facility no longer stops `camber mcp` serving the rest of the store
+  (#329).** After `facility offboard` and `facility archive`, the registry's research-only entry
+  had no directory, which read as a renamed or moved partition, so every facility was refused
+  with "directory is missing (renamed or moved?)". An archived or purged entry no longer counts;
+  the archived facility itself is still refused as research-only.
+- **Deeply nested JSON no longer crashes the provenance checks (#329).** A part file's
+  provenance mark or a `_facilities.json` nested tens of thousands of levels deep made every
+  call fail with an internal error, `camber mcp` exit with a traceback at startup, and `camber
+  datasets provenance` crash. Such a mark (or one longer than 4 KB) now counts as research-only,
+  and such a registry is the usual "cannot be read" registry problem.
+- **A registry broken again and again is `unavailable`, never a licence refusal (#329).** When
+  `_facilities.json` was renamed, truncated or half-written again before the read retries ended,
+  every retry failed alike and 1-4 % of calls were refused with `licence_unverified`. A registry
+  whose file or directory changed between the retries is now `unavailable` with `"reason":
+  "registry_unreadable"`. A registry that stays a directory, unreadable (no read permission) or a
+  symlink loop was reported as retryable for ever; it is now the registry problem that a retry
+  does not fix (`refused_licence`, with the notice to repair it).
+- **A local `camber report` or `camber run` on research-only parts copied elsewhere carries the
+  banner (#329).** The non-commercial banner and the "Data source & licence" block came only
+  from the facility's registry entry, so a report built from research-only parts copied into
+  another facility or store had neither. They now also come from the part files' provenance
+  marks.
+- **A writer that was stopped no longer finishes without its claim and loses data (#330).** A
+  writer paused for more than 10 s (Ctrl-Z, `docker pause`, a debugger) had its #325 claim taken
+  over by a writer on the other side. That was right, since a stopped process cannot beat, but
+  when it resumed it finished its ingest anyway. Both exited 0, and a facility silently lost
+  points. A writer now checks that its claim is still its own immediately before every step that
+  changes a store, cache or workspace: a partition swap or delete, a write fence, a registry,
+  manifest or workspace file write, an append's renames. If the claim is gone it fails with
+  `… this writer lost its claim …`, naming the new holder, and leaves the directory as that
+  writer has it. A writer that loses its claim after its last change fails too, rather than
+  report success. DATASETS.md describes the one window that remains: a pause of over 10 s
+  between the check and the rename right after it.
+- **Two containers on one Docker Desktop bind mount no longer both get a store's lock (#330).**
+  `flock` excludes nothing there, and a claim of the same kernel was taken over at once as dead,
+  so both writers ran. Such a claim is now taken over at once only when its process is seen to be
+  gone: same pid namespace, and its pid has exited or started at another time. Otherwise the
+  writer waits for the claim's heartbeat to stop for 10 s, so a container killed while writing
+  is taken over after 10 s, not at once.
+- **A stopped writer is now waited for by every writer of its own system, and the refusal says
+  it is stopped (#335).** On a Docker Desktop bind mount the `flock` of the open that created
+  the lock file excludes nothing, while any other open's `flock` excludes every container of the
+  VM. So a container paused while it wrote a store was taken over by another container after
+  10 s when it had created the store's `_lock`, and blocked it for good when the file already
+  existed; the docs said it was always taken over. The lock file is now never locked through the
+  open that created it, so a stopped writer keeps its kernel's lock: another host process, or
+  another container of the same VM, waits for it as for a running one, and is refused with
+  `… -- a writer that is alive but stopped (Ctrl-Z, docker pause, a debugger) …`. Resume or end
+  the stopped writer. Only a writer on another system (the host against a container, another
+  machine) takes a stopped writer's claim over after 10 s. DATASETS.md, CLI.md, PORTFOLIO.md and
+  DOCKER.md now say exactly when a claim is taken over.
+- **A writer that lost its claim no longer leaves `_facilities.json.tmp` in the store (#335).**
+  The registry, cache manifest and workspace file writes made their temporary file before they
+  checked the claim, and left it when the check failed. They now check the claim before making
+  the file and again before the rename, give it a name of their own
+  (`<file>.tmp-<pid>-<token>`, so writers in two containers never share one), and remove it on
+  any failure. `camber store verify` lists such a file at the store root as a leftover
+  (`--strict` exits 1), and the next ingest removes it.
+- **A waiting writer no longer reads another writer's claim while it is empty (#335).** A claim
+  was created empty and then written, so a writer reading it at that moment named no holder
+  ("locked by an unknown process"). A claim is now written whole under a temporary name and
+  hard-linked into place, and a waiting writer names the holder by the last whole record it read.
+- **A starting `camber mcp` no longer removes a live server's matplotlib directory on a
+  bind-mounted `/tmp` (#330, a regression in the 0.112 candidate).** The #326 sweep trusted a
+  lock that a Docker Desktop bind mount does not enforce. The directory now records its server
+  (pid, kernel, pid namespace, start time), and the server touches it every 10 s. A server of
+  the same kernel and pid namespace is judged by its pid and start time. Another container's
+  server is judged by its lock where locks work (probed once), and by its heartbeat (2 minutes)
+  where they do not. A killed pid-1 server's directory is still swept.
+- **A killed pid-1 container ingest's `_staging/ingest-1-*` is removed by the next ingest
+  (#330).** Pid 1 is alive on every system, so the directory was kept forever and `store verify`
+  said "its process is still running". Each staging directory now records its writer in
+  `_owner.json`. One made in another container or on another system counts as live only while
+  its writer holds the store's claim. `store verify` says so, and says when the next ingest
+  will remove it.
+- **A host that shows the model only `structuredContent` now shows it the facts and notices
+  (#331).** Some MCP hosts, a command-line coding assistant among them, pass a tool result's
+  `structuredContent` to the model and drop the text blocks, so the model never saw the facts list
+  or the `NOTICE:` lines: it could cite almost nothing (`data_quality_review` could not be checked
+  at all), and research-only banners, sensor-reference conditions, paging notices and the
+  stripped-caveat notice of `check_citations` were never shown. Every tool's `structuredContent` now
+  starts with a `camber` object: `facts` maps each fact id to its text (the same ids and text as the
+  facts block, all of them resolved by `check_citations`) and `notices` lists the notices. The
+  prompts say where to find fact ids in either form.
+- **On Linux, an MCP worker that grew far past its usual memory is replaced again.** A worker
+  measured its peak memory with `ru_maxrss`, which on Linux carries over the peak of the server
+  process that started it: once the server had held more memory than a worker's first call
+  needed, every worker looked that large, and a call that took it well past its usual size
+  never had it replaced, so it kept that memory. A worker now reports its own peak (`VmHWM`).
+  macOS was not affected.
+- **Default results fit a host's tool-output limit (#333).** On a 648-point facility the default
+  `rcx_report` was about 54,000 characters of `structuredContent`; a command-line host that caps
+  a tool result at 25,000 tokens set it aside in a file the model could not read, so a site-visit
+  plan covered 3 of 32 issues. The JSON runs at about two characters a token, so the "100 KB (25k
+  tokens)" the docs gave was wrong. Every default result now stays within 25,000 characters of
+  `structuredContent` (facts and notices included; up to about 21,000 on the largest facilities
+  tested), a test holds every tool to it, and docs/MCP.md gives the real figures. Paging notices
+  give the exact `offset` of the next page.
+- **The `facilities` notice names the research-only facilities it withholds (#333).** It gave
+  only a count, so a model told a user that a correct facility id might be wrong. It now lists
+  the withheld ids (never a path) and says the id is right but the data's licence forbids this
+  use; the notice for facilities whose licence cannot be established names them too.
+- **docs/MCP.md says how to pass a multi-word prompt argument (#333).** A host's slash command
+  can split `check_savings_claim`'s `claim` on spaces, quoted or not; give the claim in the
+  conversation instead.
+- **A facility nested too deep or holding a symlink loop is no longer called research-only
+  (#334).** It was refused as holding "part files marked as research-only" even when it held
+  only open data, and `camber datasets provenance` showed a marked part that did not exist. The
+  refusal now says that not all of its files could be checked, and the provenance counts only
+  real parts.
+- **`camber datasets provenance` says when a facility counts as research-only (#334).** A
+  facility whose marks cannot be read (damaged, longer than 4 KB) or not all of whose files
+  could be checked had no tag in the table, though `--json` said `research_only: true` and the
+  server refused it. The table now adds `[mark unreadable: counts as research-only]` or `[not all
+  files could be checked: counts as research-only]`, and `--json` adds `unreadable_marks`,
+  `unchecked` and `research_only_datasets`.
+- **`coverage` with `equips` or `roles` keeps the facility's whole window (#337).** With a
+  filter, the window shrank to the selection's own first and last sample, so the same point read
+  "19.1% of the whole window, 2 gaps" without it and "100.0% of the whole window, 0 gaps" with
+  it, and both could be cited. An open start or end is now the facility's first or last stored
+  sample whatever the filter selects, so a point's coverage and gaps no longer change with it.
+- **`camber store verify` goes on past a directory it cannot list (#337).** A directory of mode
+  000 or 0o111 (a month, a year or the facility directory) stopped it with `Permission denied`
+  and an absolute path, with no counts, list or JSON. It now lists the directory as unreadable
+  by its store-relative path, checks the rest of the store, prints the counts (or `--json`) and
+  exits 1. A directory it can list but not enter is said to be a permission problem, not "a
+  dangling symlink or a loop?". `store normalize` walks the same way.
+- **Lock and cleanup timings in the docs (#337).** A killed writer's claim is taken over at most
+  10 s after its last heartbeat, at once on the same system when the lock already shows it gone;
+  a killed `camber mcp` server's matplotlib directory is removed by the next server to start, at
+  the latest by one starting 2 minutes after the kill (DATASETS.md, CLI.md, PORTFOLIO.md,
+  DOCKER.md, MCP.md).
+
+### Changed
+- **`check_citations` judges every region of a text (PLAN-CITE-EVAL B).** The text is folded
+  before it is read (NFKC, every hyphen and minus sign as `-`, "AHU–1" as AHU-1), citation ids
+  too, so `AHU‑1` with a non-breaking hyphen is AHU-1 and `[F1@x‑y]` cites `F1@x-y` (both were
+  misread). An HTML comment's words are judged like prose instead of being copied unread into
+  `verified_text` (a forged `<!-- NOTICE: ... verified -->` passed), and a comment whose
+  sentences all fail is removed. An HTML tag's shown attribute values (`title`, `alt`, `aria-*`,
+  `data-*`, ...) are read with the sentence the tag is in. A table's header row names its
+  columns also with a figure in it, a header that states something is judged as a claim with
+  its rows' citations, and a "yes" or "no" cell is read with its column's header ("| AHU-1 | no
+  |" under "Fails X" is the claim negated for AHU-1, and fails closed unless a cited fact states
+  it). On the generated cases E fell from 13.1% to 2.2% and S from 11.2% to 1.6%; 22 corpus
+  entries that were known gaps now pass.
+- **`check_citations` fails a name no fact of the session gave, and a note cited from the
+  wrong fact.** A sentence naming a unit, site or dataset as a slug ("irish-ahu") or a rule
+  that no result of the session named fails closed (the session's fact ledger now keeps the
+  names its facts gave, forgotten facts included, and a worker's view carries them); a rule
+  named with a run's summary must be named by a cited fact ("the condenser_bypass_leak rule was
+  skipped" citing `F1@rule_run` fails); a sentence that says a rule's caveat, masked samples or
+  a skipped rule must cite a fact that says so; and a sentence citing only a caveat that hedges
+  ("can read as a heating leak") must hedge too. On the real-host drafts, E fell from 14.3% to
+  9.4% with S up 0.4 points.
+- **`check_citations` reads a site, a verdict count, a unit spelling and a parameter as theirs
+  (0112-cite10).** A unit's finding said of the whole site in a heading, after a leading
+  condition, in a bold label or a table row, or as a figure or a rule of the site ("site-a has
+  economizer_high_limit on 43% of those samples") fails; "site-a has 6 warn results" no longer
+  matches a summary's "6 of them returned a result" when it counts "4 warn"; "AHU 3" is read as
+  AHU-3 when a cited fact names AHU-1 only in its text; and "the default warn_pct is 20%" fails
+  when 20 is another listed parameter's value. On the generated cases E fell from 1.9% to 0.6%
+  with S down from 1.5% to 1.3%.
+- **`check_citations` reads a sentence that names several units one unit at a time (PLAN-CITE-EVAL
+  C, round 11; was `CAMBER_CITE_C=split`, the switch is gone).** Such a sentence is written as
+  one clause per unit and each clause is checked against that unit's own facts: a set ("A and B
+  both P", "A plus B", "A/B", "A, as well as B,", "A (like B)", "None of A, B P"), "most of"
+  (more than half must hold), lists of figures in order with or without "respectively", "their
+  ... respectively" after a set, a figure list after a comma ("A and B ran 100%, C 42%"),
+  "unlike", "X, not Y", "but not", "rather than", "in contrast to", "A P rather than Q-ing, as
+  B does", comparatives with each unit's figure ("A's oa_damper (0.66) is more suspect than
+  B's (0.68)": the comparison must hold), and items that each carry their own citation. A
+  denied clause is read against the denied unit's facts (a past verb, "has no X" and a
+  contradicted direction or coverage included). A sentence that splits no way fails closed
+  with "give each unit its own sentence", which the tool description and the prompts now say.
+  On the generated cases (10,517, round 11) E fell from 0.94% to 0.00% and S from 4.3% to 0.8%
+  against 6c4354b; no cell is above 2% (was 46); 41 corpus entries that were known gaps pass.
+- **Facts state what hosts quote from the result (round 13).** A point's trust fact gives the
+  value its 2-place rounding hides (`trust 1.00 (0.9977)`, a suspect point that read as a perfect
+  score); a finding's fact gives its true/false flags and the metrics it left null (`fan_gated
+  true`, `null: oa_cost_excess_cool_kbtu, ...`, at most six named); an M&V saving's fact gives
+  its baseline-projected and reporting-actual totals; and a caveat given for some of a rule's
+  results says so (`caveat (given for 3 of its 145 results)`). On the real-host drafts these
+  were claims true in the tool JSON that no fact stated, so a judge read them as false.
+- **`check_citations` scopes a caveat to its units, and ids are never shortened (round 13).** A
+  sentence citing only caveats given for some of a rule's results, that states the caveat as a
+  fact of the rule ("Reheat penalty: not evaluated, ..."), fails unless it names a unit the
+  caveat is for or scopes itself to some ("its", "these", "3 VAV boxes"); one that reports the
+  caveat ("the rule's caveat says", "can read as a leak") is read as before. A bare short id
+  (`[F5]`) stays `unknown_citation`, and its `why` now names the full id the session issued last
+  ("cite the full id, e.g. F5@rule_run-..."); the tool description and the prompt rules say never
+  to shorten an id. A pro-form "one" in a negation stands for the fact's noun ("not one tuned for
+  this site" of "not a config tuned for ...", "not a measured one"). On the 50 round-10 drafts
+  cited strips fell from 50 to 47 of 537 with no new escape; the generated cases add 111 (bare
+  ids and caveat scope), with 0 escapes. A heading that only names a unit does not scope the
+  items under it yet (`gap:heading-scope`, a strict-xfail corpus entry).
+- **Facts state a finding's totals, a rule's inputs and an RMSE's unit (round 14).** A
+  finding's fact gives its energy and cost totals with what each totals (`totals:
+  oa_cost_excess_cool_kbtu (oa cost excess cool) 6,182 kBtu, ...`, at most four named; a rate
+  such as `_btu_per_cfm` is not a total), so a sentence must say which total it gives.
+  `finding_detail` issues an inputs fact for the rule (`I1@finding_detail`: what it needs, what
+  it reads when mapped, and the conditions its parameter notes state in a positive sentence,
+  `low_load_pct: needs CHW flow and temperatures`), and so does `rule_params` with `detail` for
+  each rule on the page (`I<k>@rule_params`). A reference comparison's fact lists its RMSE in
+  the point's unit with its bias (`bias +3.0 °F, RMSE 3.0 °F: the bias is ...`). On the
+  real-host drafts these were claims true in the tool JSON that no fact stated.
+- **`check_citations` reads more of what naive drafts write (round 14).** A rule, metric or
+  check said to need an input ("the low-load figure needs CHW flow") needs a cited fact that
+  says it is needed, in those words or the input's id ("reads ... when mapped" is no need);
+  advice ("needs an inspection") and asides ("you would need") are not read. "Followed by" and
+  "preceded by" need both things' dated facts cited, in that order. Read as they mean: a date
+  without a year or with the month named ("5/12 to 6/1", "12 May 2025", "11-08 03:00", carried
+  by a cited fact's date of that month and day), "13 h", "starts 0.1 times/day" (the fact's
+  starts), a figure compared "against a threshold", a threshold listed with results ("66% of
+  run hrs below 40%"), "running" as "run", and a possessive before a share's noun. On the 50
+  round-10 drafts cited strips fell from 47 to 38 of 537 (naive drafts 26 to 20 of 116) with
+  no new escape; the generated cases add 474 (totals, inputs, RMSE and the new facts' own),
+  with 0 escapes. A rule said to need an input only one of its parameters needs is still kept
+  (`gap:needs-scope`), and a total quoted to the JSON's 3 places is stripped
+  (`gap:total-precision`): both strict-xfail corpus entries.
+- **Facts state a finding's thresholds, a dataset's uses and a trust view's reading (round
+  15).** A finding's fact lists its thresholds and limits from its metrics, each with its words
+  just before its figure (`thresholds: warn threshold 40% (warn_pct_threshold), warn gap floor
+  1 °F (warn_gap_floor_f)`; a count or share against one, such as `n_above_limit`, is not
+  listed); `dataset_entry` issues `F3@dataset_entry`, what the entry says the dataset is good
+  for; the `sensor_trust` summary says how its view reads the points (`rules view: as the rule
+  runner reads its inputs`, `report view: operating-state-aware, duct points judged with the fan
+  on and plant points while their equipment runs`). On the real-host drafts these were claims
+  true in the tool JSON or the tool description that no fact stated.
+- **`check_citations` checks relations, bands, signs and what CAMBER does (round 15).** A figure
+  compared with another in one sentence ("CV(RMSE) 0.4% is above the 30% tier", "trust 0.70,
+  below the floor 0.5", "38.1% > 30%") must stand in that relation, "not" turning it round; a
+  position in a band ("outside the stated band", "within its uncertainty", "the uncertainty is
+  larger than the saving", "indistinguishable from zero") needs a cited estimate ± uncertainty
+  and must agree with it; "positive" / "negative" said of a saving, bias, drift or slope must be
+  the cited figure's sign; "reads under / over its reference" is its low / high. What CAMBER
+  itself does, said of a view, rule, check, the tool, the model or the config ("the report view,
+  which judges points in their operating state", "the tool defaulted to the forecast method"),
+  and where a figure came from ("came from the trended supply airflow"), must be in a cited
+  fact's words; a time zone or clock ("the site wall clock", "UTC") needs a fact that gives one;
+  a figure said as one threshold with another's words ("the fault threshold is 40%" of "warn
+  threshold 40%") fails; "both faults are on AHU-1" needs every cited fault there; and a denial a
+  fact makes of a counted part ("5 saving(s) ... not a verified saving") supports no "none of the
+  savings". Eight first-corpus strict-xfail entries are now met and promoted; the generated cases
+  add 797 with 0 escapes. Open, as strict-xfail corpus entries: `gap:compare-unstated`,
+  `gap:set-scope-unlisted` and `gap:method-paraphrase`.
+- **`check_citations` reports text it does not read as `not_judged`, never as a pass
+  (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
+  quantifier, direction or rank word) and a short label or remark that cites nothing ("That
+  matches the claim.", "- AHU-1 leaking_valve: FAULT.") used to be copied into `verified_text`
+  unread, so they counted as passes. Each is now a sentence entry with the new verdict
+  `not_judged` and a `why`; the result counts them in `n_not_judged`, `grounded` is false, and
+  `verified_text` leaves them out (a heading's line is marked "(heading not checked)"). Pure
+  structure is no unit: blank lines, separators, table rules and column headers, greetings, and
+  headings, lead-ins and list-item titles that only name a topic. The tool description and the
+  prompts say to put such text in a cited sentence. On the 300 + 50 real-host drafts, 173 + 43
+  units became `not_judged` (68 + 12 of them true, all uncited; 1 + 0 false); cited strips
+  are unchanged, and the one false unit was an escape.
+- **`check_citations` reads more of what hosts write (round 11).** A year before a period's
+  noun is a year ("2016 baseline fit", "2017 avoided energy", and never a unit's number in
+  "Meter 2016"); a header's year is the header row's claim, so a row reads its column without
+  it; a column that asks ("Baseline passes G14?") states nothing itself, and its "Yes: ..." or
+  "No: R2 0.62, ..." cells are the answer with details, the "No" negated at the header's verb;
+  a cell of parts that each cite their own fact is read as it is; "tracks its reference" is
+  "agrees with" it; a leak said of a unit ("AHU-2's coil leaks") needs a cited fact that states
+  one, so another rule's fault or a leaking_valve "ok" no longer supports it, and "AHU-1's coil
+  does not leak" is supported by its leaking_valve "ok"; and a unit excluded by "unlike" is read
+  against its own facts only. On the round-10 real-host drafts the cited true sentences removed
+  fell from 11.7% to 9.3% (all true sentences: 27.9% to 26.0%) with the same escapes.
+- **`sensor_trust` and the evidence chart say what they judged (round 11).** The trust summary
+  `F1` names the call's filter ("4 supply_air_temp points judged", "6 points on AHU-1 judged",
+  was "4 matching points"), and a diagnostic scatter's chart fact names its axes ("of
+  oa_fraction_pct (outdoor-air fraction, y) against oat (outdoor-air temperature, x)"), so a
+  draft that says which points or axes can cite them.
+- **`mv_summary` shows 4 meters a page by default** (was 5), so its default result, now with
+  each caveat a fact, still fits a host's 25,000-character tool output.
+- **The changelog's 0.106.0 to 0.109.1 sections are archived** in
+  `docs/changelog/changelog-0.106-0.109.md`, linked from the changelog, its index and the docs
+  site (#340), so `CHANGELOG.md` stays under the 200 KB render limit.
+- **`structuredContent` has a new first key, `camber` (#331).** It holds `{"facts": {id: text},
+  "notices": [...]}` and is declared (and required) in every tool's `outputSchema`; the rest of
+  `structuredContent` is the result as before, and the JSON text block in `content` is that rest
+  (it no longer equals `structuredContent` byte for byte). A client that compares
+  `structuredContent` with a fixed object, or rejects unknown keys, should ignore `camber`
+  (`camber.mcp.RESULT_KEY`). No capability may declare that key. `tools/list` grows by about
+  1.7 KB (47.7 KB) and a reply by 5 to 17 %.
+- **Fact ids no longer depend on how a run config spells the paths it reads (#326).** The id
+  token covered the config's text, so an absolute or a relative `source.store`, one through a
+  symlink or with a trailing slash, and the same store mounted at another path (a host and a
+  container) gave different ids for the same data. A path now counts by what it resolves to: the
+  store by its data, a folder by its entries, the mapping and `shared_oat` files by their size and
+  modification time. The ids of a server started with a `--config` change once; cite the new ones.
+- **`rule_run`'s summary fact counts its verdicts as rule-equipment results (#339):** "... and
+  3 of them returned a result, 6 rule-equipment result(s) in all: 1 fault, ...". Match its start.
+- **`check_citations`'s summary says what it covers (#338).** Its text now ends "This check
+  covers only the text passed in this call ...: give the user only text a check marked
+  supported, and if you reword, shorten or add to it afterwards, even one sentence, check the
+  whole text again before you give it or say that it was checked." A client
+  that compares that text with a fixed string should match its start. A sentence that says
+  "both", "each" or "all" of several equipment or points now needs a cited fact about each one:
+  cite them all ("Both AHUs fail leaking_valve [F2] [F7]").
+- **`verified_text` says when it dropped a verdict or caveat (#328).** Removing an unsupported
+  verdict or caveat ("for information only", "conditional on the sensor") while keeping the
+  figures they qualified made a checked answer read as more certain than its draft. When a
+  removed sentence gave a verdict, a negation or a caveat, `verified_text` now opens with a
+  `NOTICE: check_citations removed sentences ...` line and the result carries a banner: show
+  such a text only after fixing those sentences. Checking that text again keeps the line.
+- **Stricter citation matching can mark sentences unsupported that passed in 0.111 (#328).**
+  Write negations, verdicts and quantifiers as a cited fact does ("no valid sample", not "no
+  data"; "fails G14", not "is not a pass"), quote a name from the data, and cite the fact about
+  the facility, point or issue rank a sentence names. A model's own verdict, advice or
+  confidence is never supported: the prompts now ask for it after the checked text, labelled as
+  judgment. `rule_run`, `drift`, `rcx_report`, finding facts and the trust-floor notice now
+  say "not judged" for skipped, declined and insufficient-data checks, the dataset-template
+  notice says "not a config tuned for your own use of the data", finding and RCx facts carry
+  their `facility_id`, and `finding_detail`'s evidence facts their `finding`; the wording of
+  what "supported" means is in MCP.md and CAPABILITY-REGISTRY.md.
+- **More sentences need a fact that says them (#332).** A whole count, a rank word, a denial
+  ("false", "wrong") and a cause or effect are now read, so a draft that relied on them can
+  lose sentences that passed before: say "9 of the 11 points are trusted" rather than "all",
+  cite the issue fact for a rank, and give an inference after the checked text, labelled as
+  judgment. The prompts now ask the model to run `check_citations` again on its revised draft
+  until every sentence is supported, and to give only that text and its labelled judgment.
+  `plan_site_visit` and `rcx_executive_summary` ask it to page `rcx_report` with the `offset`
+  a notice names rather than ask for a larger `top_n`, and `check_savings_claim` to use the
+  whole claim from the conversation when the argument looks cut short (a host's slash command
+  can pass only its first word).
+- **`check_citations` needs only the text (#294).** `facts` is optional. If you still pass it,
+  every fact must be one the session was sent, unchanged, or the call is refused with
+  `invalid_params` (`data` lists the ids under `not_issued`, `forgotten` or `changed`): leave `facts` out
+  instead. The output gains `provenance` (`issued`, or `unverified` when a direct Python caller
+  gives no `CallContext.ledger` and the facts are taken as given, as before), the verdict
+  `forgotten_citation` in `verdicts` and a sentence's `forgotten` ids; code that compares
+  `verdicts` with a fixed dict needs the new key. The built-in prompts no longer ask the model to
+  pass facts back.
+- **`check_citations` has a new verdict, `unsupported_claim` (#294)**, for a sentence whose
+  figures match but whose equipment, verdict, direction or negation no cited fact states; the
+  `verdicts` counts gain the key, and each failing sentence gains `why`, which says what did not
+  match. A client that lists the verdicts should add it. Some drafts that passed before now
+  fail: a sentence that infers beyond its facts ("so no check was declined"), uses a verdict
+  word the cited fact does not ("the suspect sensor" citing the finding instead of the sensor's
+  fact), restates a metric the fact's text does not state (44.9 % for "45%"), or derives a
+  number (a sum, a difference, a ratio). Say it as a fact says it and cite that fact.
+  `camber.agent.verify.check` applies the same rules and flags such a sentence
+  `unsupported-claim`.
+- The built-in prompts point at the new facts: cite a span, gap, rank or notice by its own fact,
+  number a ranked list with a marker at the start of the line, say a fault is explained by a
+  sensor only when `finding_detail` says so, and never cite a claimed figure for a measured
+  result (#294).
+- Results have more facts (#294). No existing fact id is renumbered: the new facts take their
+  own prefixes (`S`, `L`, `P`, `G`, `A`, `N`, and `R` in `finding_detail`). A caller that
+  expects a result's facts to be only its `F` facts, or counts them, should filter on `kind` (a
+  notice is `kind` `notice`).
+- The `facilities` capability no longer fails as a whole with `unavailable` while one allowed
+  facility is being replaced (a re-ingest, prune or removal in progress, or one killed between
+  the two renames of its swap). It lists every facility and marks that one with
+  `"unavailable": {"retryable": true, "reason": "being_replaced"}`, null `start` / `end`, zero
+  counts and a banner saying to retry later; calls on the facility itself still answer
+  `unavailable` with `"retryable": true`. Every `unavailable` row now carries a `reason`
+  (`being_replaced` or `unreadable`). A client that retried the whole listing on `unavailable`
+  should read the rows' `unavailable` instead (#322).
+- The `camber` console script now starts from `camber.__main__:main` (`camber.cli:main` still
+  works), so a Ctrl-C while the CLI loads exits 130 quietly. Packagers that list the entry point
+  themselves should change it (#322).
+- **Smaller default pages, and `rcx_report` pages its issues by size (#333).** The defaults are
+  now `rule_run` 12 findings (was 25), `sensor_trust` 40 points (100), `coverage` 20 rows per list
+  (50), `points` 200 (250), `facilities` 40 (100), `drift` 10 per list (25) and `rule_params`
+  15 rules (25; 7 with `detail`, was 10). `rcx_report` without `top_n` returns as many of the best-ranked issues as
+  fit (at most 8; it was the config's `top_n`, else 8) and 5 appendix A entries (20); its
+  `fact_index` entries are `{id, kind}`, no longer repeating each fact's `text` and `equip` (read
+  them from the result's facts). `dataset_search` and `mv_summary` are paged (`limit`, `offset`:
+  20 datasets, 5 meters with all their findings; their counts still cover everything). `drift`'s
+  `diagnoses[].detail` no longer repeats `equip`, `severity` and `summary`, and a long metric note
+  that several findings of a page share is said once, in a notice, not in each finding's
+  `metrics`. A paging notice says "call again with offset=N for the next page" and no longer
+  suggests a larger limit. A caller that read a whole list from one default call should page
+  with `offset`, or pass `limit` / `top_n` (a larger page can pass a host's limit).
+- **`camber store verify` checks every file the store reads (#334).** It looked only at
+  `*.parquet` files in `year=/month=` directories, so a stray `notes.txt`, `README`, `.csv` or
+  Finder `Icon` file that makes a facility's reads fail (`unavailable ... damaged`) was not
+  reported, and it exited 0. It now uses the store readers' definition of a part file: such a
+  file is unreadable, a `x.parquet~` backup or a part at the facility root or below the month is
+  listed as not canonical, and an entry that keeps the research-only check from seeing all of a
+  facility (a dangling symlink, an unreadable directory, a symlink loop, files nested too deep)
+  is unreadable. **A script that runs `store verify` may now see exit code 1** on a store that
+  passed before: remove or move the files it lists out of the facility directory.
+- **One rule for a provenance mark with a field of the wrong type (#337).** A hand-written mark
+  whose `dataset_id` was a number or an object was tagged "counts as research-only" in the
+  `datasets provenance` table while its `--json` said `research_only: false` and the server
+  served the facility. A mark whose `dataset_id` is not a non-empty string, whose `licence` is
+  not a string or whose `research_only` is not `true` / `false` (or that lacks one of them) is now
+  unreadable everywhere: research-only in the table, in `--json` and in the server's checks.
+  **A facility holding such a mark is now refused by `camber mcp`**; `camber datasets ingest
+  <id> --force` writes a well-formed mark, or remove the hand-edited part.
+
+### Added
+- **A result's notes are facts (0112-cite10).** `rule_run`, `finding_detail` and
+  `mv_summary` issue each caveat their findings carry as a `caveat` fact (`V<n>`, one per rule
+  and caveat text, naming the units it was given for: the leaking_valve rule's fan-heat note, an
+  M&V saving's "no mv.method declared: the SEP default, forecast, was used", the G14 kernel's
+  band); `rule_run` (faults and warnings) and `finding_detail` a finding's labels and masked
+  samples (`M<n>` `finding_labels`: `missed_cause "economizer_not_commanded"`, `oa_cost_airflow
+  "trended supply airflow"`, `n_masked_fan_off 824`); `rule_run` the rules it skipped for
+  missing inputs, by name with what each lacked (`K1` `skipped_rules`); and `finding_detail` the
+  basis of the rule's parameters (`B1` `parameter_basis`). Hosts read these in the result's
+  JSON and cited the nearest fact for them: 31 of the 39 false sentences kept on the real-host
+  baseline were such notes.
+- **Facts the model can see (#294).** A `camber mcp` tool result now ends with a third text
+  block listing its facts, one `[id] text` line each, because hosts such as Claude Desktop show
+  the model `content` but not `_meta`; `_meta["camber/facts"]` stays for programmatic clients.
+  It adds 10 to 15 % to a reply and counts toward the 2 MB reply cap. In Python,
+  `camber.capabilities.FactLedger` holds one session's facts: give it in
+  `CallContext(ledger=...)` and `Registry.call` records into it and `check_citations` reads from
+  it (`Registry.ledger_view` picks out the facts one call needs, for a transport that runs calls
+  in another process).
+- **Facts for what a model is asked to say** (#294). A sentence giving one of these can now be
+  cited, where before `check_citations` always stripped it:
+  - `finding_detail`: each flagged span (`S1@finding_detail-...`: start, end, hours), the
+    longest span in the hours fact, the rule's inputs that never move over the window, and for
+    a finding conditional on a sensor reference, the finding re-judged with that sensor's bias
+    taken off ("... ok; so the finding is explained by the sensor offset", or "the finding
+    stands") and how many of its flagged hours fall in the window the reference comparison
+    covers (none, part or all).
+  - `coverage`: each point's coverage and each listed gap with its dates (at most 200 of each
+    per page).
+  - `sensor_trust` and `rcx_report`: the points that never move over the window (a valve that
+    never opens, a setpoint that never resets), which can score trusted yet decide a diagnosis.
+  - `rcx_report`: each issue's fact reads "Issue 1 of 6 on ...", so a numbered ranking can be
+    cited.
+  - every capability: each notice is a fact too (`N1@<capability>-...`), its text exactly the
+    banner's.
+  - `mv_summary` takes an optional `claim`: each figure it states becomes a `claimed_figure`
+    fact ("The claim under check states 15%: the claim's own figure, not a measured or computed
+    result"); `check_savings_claim` passes the claim to it.
+  - The new facts carry their figure as fields: `value`, `unit`, `subject` (facility,
+    equipment, point) and, where one applies, a `verdict`. See docs/CAPABILITY-REGISTRY.md.
+- `sensor_trust` gives a sensor reference's bias its unit (`°F` for a temperature, `%` for a
+  valve, damper or speed) in the summary, the reference's fact and a new `unit` field of
+  `data.references`.
+- `camber --version` prints the installed version, and `python -m camber` runs the CLI (#322).
+- **`camber datasets provenance --store DIR [--missing] [--json]` (#319)** lists each facility
+  with how many of its part files carry their dataset's provenance, and names the catalog
+  facilities that lack it (ingested before 0.112). It reads the files' footers and writes
+  nothing.
+- **`mv_summary` states each meter's baseline and reporting dates (#333).** A claim's periods
+  ("against the 2016 baseline") could not be checked: no result gave a date. Each finding's
+  `metrics` now carry `baseline_start` / `baseline_end` (and on a saving `reporting_start` /
+  `reporting_end`), and its fact gives them as `baseline_period` / `reporting_period` and in its
+  text ("baseline period 2016-01-01 to 2016-12-31 (the year 2016)"), so a sentence can cite them.
+  An `mv_baseline` finding's metrics gain the `window` the versioned one already had.
 
 ## [0.111.0] — 2026-10-31
 
@@ -674,1060 +1471,3 @@ Releases before 0.106.0 are archived under [`docs/changelog/`](docs/changelog/in
   path-redacted a handler's `CapabilityError` message but passed its `data` through; it is now
   redacted the same way. An `invalid_params` refusal by the input schema no longer has its JSON
   pointers (`/facility_id: expected string`) mistaken for paths and redacted.
-
-## [0.109.1] — 2026-10-24
-
-**0.109.1: a store fix (#274).** An append now stages its Parquet parts and renames each into place, so a process reading the store while another writes to it can no longer open a half-written part.
-
-### Fixed
-- **A concurrent reader can no longer open a half-written Parquet part (#274).** An append wrote
-  its parts straight into the live partitions, so a reader listing the store mid-write could hit
-  `ArrowInvalid: Parquet file size is 4 bytes`. The parts are now written under
-  `<store>/_staging/append-<pid>-<token>/` and renamed into place one by one; an interrupted
-  append's scratch shows up with the other store leftovers.
-
-## [0.109.0] — 2026-10-24
-
-**0.109: the promised 0.108 removals and a forwarder that sends only what is new (#266, #271, #272).** **Breaking (#271):** an unknown edge-config key is refused with an error that names it and the closest known key, on every `camber edge` command; 0.108 only warned. **Breaking (#272):** `supply_air_reset_compliance` findings no longer carry the `pct_below_g36_target`, `g36_target_median` and `pct_above_g36_target` aliases; read `pct_below_target`, `target_median` and `pct_above_target`. **Behaviour change (#266):** the edge forwarder keeps a per-point high-water mark of the last acknowledged observation in `<spool>/high_water.json`, so an idle poll sends nothing and a poll sends only the months with a newer or revised observation; delivery stays at-least-once, and `Forwarder(high_water=False)` keeps the full read.
-
-### Changed
-- **Breaking: an unknown edge-config key is refused (#271).** `load_config` raises a
-  `ValueError` for a key it does not know, at the top level or in a file source or sink, naming
-  the key and the closest known one (`'spool_dri' (did you mean 'spool_dir'?)`), so every
-  command that reads an edge config (`edge run`, `send-once`, `status`, `selftest`, `requeue`,
-  `compact`, `decommission`) exits 1 with that error before it builds anything. 0.108 ignored the
-  key with a WARNING and a `FutureWarning`. Fix the key, or prefix a comment key with `_` (`note`,
-  `comment` and `description` stay comments).
-- **Behaviour change: a forwarder poll sends only what is new (#266).** The forwarder keeps a
-  high-water mark per source point, the last observation the sink acknowledged, in
-  `<spool>/high_water.json`. A poll reads each point from the start of its mark's month and sends
-  a month only when one of its points has a newer observation or a revised last one; the open
-  month is still sent whole, so the landing replaces its stored part as in 0.108, and a revised
-  last observation (the hour that was in progress) is sent. An idle poll sends nothing.
-  `poll_once(since=...)` still reads and sends the window given. `Forwarder(high_water=False)`
-  keeps the pre-0.109 full read.
-
-### Added
-- **The forwarder's high-water mark (#266)** (`camber.edge.high_water`: `HighWater`,
-  `read_high_water`, `config_fingerprint`). The mark advances only when a drain acknowledges the
-  part (a part's marks wait in the file until then, and are dropped if the disk cap evicts it),
-  survives restarts and is written atomically under the spool lock. A missing file means a full
-  read, as before; an unreadable one, or a change of facility, source, mapping, `resample` or
-  `timezone`, is logged as a `WARNING edge.high_water`, read in full and rewritten. `edge status`
-  shows the mark (`high_water` in `--json`), and the poll result counts the `unchanged` months
-  and the points `advanced`. A source whose `load_points` accepts `since=` is given the earliest
-  month start, so it can read less. Delivery stays at-least-once.
-
-### Removed
-- `EdgeConfig.warnings` and the `config_warnings` key of `edge status --json`, which carried the
-  unknown config keys 0.108 ignored (#271); `edge status` and `edge selftest` no longer print
-  `CONFIG WARNING` lines.
-- **The `*_g36_target` SAT-reset metric aliases (#272), breaking.** `supply_air_reset_compliance`
-  findings no longer carry `pct_below_g36_target`, `g36_target_median` or
-  `pct_above_g36_target`, the pre-0.108 names 0.108 kept as aliases for one release. Read
-  `pct_below_target`, `target_median` and `pct_above_target` (the same values). The cost estimate
-  and the cause-chain linking read only `pct_below_target`, so a finding saved before 0.108 is no
-  longer priced from the old key. The `SATResetComplianceResult` fields of `camber.g36_reset` are
-  unchanged. The `air-sat-reset` workbook exercise reads the new key (same answers).
-
-## [0.108.0] — 2026-10-17
-
-**0.108: a second audit and the 0.107 follow-ups — 42 issues across the rules, the edge and ingest path, legal holds and the facility lifecycle, interop, charts and reports — plus a redesigned synthetic G36 fleet, three new synthetic lab cases and sensor references for any point (#226, #228–#265, #267–#269).** **Behaviour changes (edge, #228, #233, #245, #249):** presigned uploads go to the bucket's `_inbox/` by default (`inbox=False` keeps the old layout); a growing month replaces its earlier part, an overlap that agrees is merged, and a conflicting overlap is quarantined; permanent sink errors dead-letter after five attempts (`edge requeue`), while a 401/403 is retried with an "auth failing" warning; unknown edge-config keys warn now and will be refused in 0.109. **Behaviour changes (lifecycle, #250–#252, #255, #256):** inside a workspace the store and registry deletes refuse a held or non-active facility, need a reason and are audited; config runs record no state for archived or purged facilities; restore is all-or-nothing; a rename cannot take another facility's name; crash recovery never deletes a held facility's data. **Behaviour changes (rules):** `chiller_staging` uses a size-relative run threshold (or compressor status) instead of a fixed 2 kW (#235); short-cycle rates are per observed day (#237); tower drift declines when its baseline was fitted on another load (#234); `zones_heat_cool_census` no longer faults a fleet on one or two boxes (#241). **Workbook:** the synthetic G36 fleet generates version 3, so the `zone-g36-fleet` answers are re-recorded (#226); new exercises `rcx-cause-chains`, `air-excess-oa-cost` and `data-sensor-conditional`. The RCx report takes a reference reading for any sensor (`report.rcx.references`, #267), and a distrusted cost-only input puts that issue's dollars at risk (#268). Also: BACnet trend logs read the newest records and keep devices apart (#243, #248), Haystack history reads cross DST (#244), Brick export round-trips names and parts (#253, #254), reports are written as UTF-8 with escaped point names (#259, #260), and evidence charts shade the samples their rule flagged (#258, #262). Changelog 0.103–0.105 archived.
-
-### Added
-- **A worked example of the RCx report's generated prose (#231).**
-  `examples/rcx_prose/prose.json` is a prose file for the synthetic RCx demo (the golden report's
-  store and config). It fills the executive summary, which is shown boxed with its cited facts,
-  and one issue slot whose last sentence cites nothing, so that slot falls back and Appendix A
-  records it. docs/RCX-REPORT.md walks through it ("A worked example") with a screenshot,
-  `docs/img/shots/rcx-prose.png`. `tests/test_rcx_prose_example_231.py` renders the example and
-  checks the prose box, the cited facts, the fallback and its Appendix A row against the docs. The
-  default golden report is unchanged.
-- **Docs screenshots from per-entry modules.** A module under `scripts/docs_figures.d/` can
-  register a browser screenshot with `df.screenshot(path, what)`; `--screenshots --only <path>`
-  takes just those. Dev tooling, not packaged.
-- **`camber edge reconcile` finds and removes row duplicates already in the store (#229).** A
-  store reconciliation lists the groups of parts of one facility that hold identical rows under
-  different keys (left by a landing before 0.107, which had no row check), with their keys,
-  sizes and landing times and the copy it keeps, the oldest (`row_duplicates` and
-  `duplicate_copies` in the report; `camber.edge.landing.row_duplicates`). `edge reconcile
-  --apply --yes --reason R` deletes the other copies under the store lock, audited as
-  `edge.reconcile.dedupe` before anything is deleted (`camber.edge.quarantine.remove_row_duplicates`).
-  A facility under a legal hold has its extra copies moved to quarantine instead, and facilities
-  that do not accept data are left alone.
-- `camber.edge.row_digest.PartitionView` and `read_rows`, the row comparisons behind the landing,
-  and a timestamp span (`ts_min`, `ts_max`) in each `_edge_rows.json` entry.
-- **`camber edge requeue` and the spool's dead-letter folder (#245).** A batch the sink refuses
-  permanently is kept in `<spool>/dead/` with a record of why (see Changed);
-  `camber edge requeue <edge.json> [--key K] --apply` queues it again once the cause is fixed
-  (`Spool.dead_letters`, `Spool.requeue_dead`, `Spool.stuck`). `camber edge status` shows the
-  stuck and dead batches, and `--json` prints them. The forwarder's poll result counts
-  `already_spooled`, `rejected` and `dead` batches.
-- **Edge config: `timezone` and `dead_letter_after` (#245, #249).** `timezone` (or
-  `CAMBER_EDGE_TIMEZONE`) is the site's IANA zone, passed to the file sources (`source.timezone`
-  overrides it); `dead_letter_after` (default 5) is how many permanent rejections a batch gets.
-- **BACnet: the trend-log read count is configurable (#243)** (`Bacpypes3Client(trend_records=)`,
-  `BacnetClientConfig.trend_records`, `read_trend_log(max_records=)`), and a `BacnetPoint`
-  carries its device's `device_instance` and `address` (#248).
-- **Haystack: `HaystackAdapter(timezone=, strict_timezone=)`, `parse_his_grid(timezone=,
-  strict_timezone=)` and `haystack_tz` (#244).**
-- **A synthetic fleet whose faults reach the boxes, and the `rcx-cause-chains` exercise
-  (0.108, C1).** The new catalog entry `synthetic-g36-rcx-chains` (generator `g36_rcx_chains`)
-  runs the G36 fleet model with each air handler's supply fan speed and cooling valve, as five
-  air handlers: a healthy one, a healthy one with one stuck box damper, a cooling coil that
-  cannot make supply air below 63 °F, a weak fan that cannot make more than 0.35 in. w.c., and
-  a SAT reset disabled at 55 °F with two single-maximum reheat boxes. Its run template declares
-  the served-by topology and the reheat-coil sizes, so the RCx report shows the #196 cause
-  chains: supply air too warm (5 of 6 boxes), duct static too low (5 of 6 boxes) and supply air
-  too cold (2 of 6 boxes, costed at its largest member), while the stuck box stays its own
-  issue. Without the topology the same run ranks 22 issues instead of 5 and counts the reheat
-  twice. The workbook exercise `rcx-cause-chains` walks through it, with an instructor key and a
-  figure.
-- **`unmet_setpoint_hours` and `airflow_tracking` on the G36 fleet (#226).** The
-  `synthetic-g36-vav-fleet` run template and the `zone-g36-fleet` exercise configs run both
-  rules, and the entry labels the boxes behind `AHU__starved` and `AHU__not_responding`
-  (`starved_by_air_handler`) so `camber datasets score` scores them. With the boxes' symptoms in
-  the run, the RCx report links them to `AHU__not_responding`'s reset findings (6 of 6 boxes,
-  for both resets).
-- `reheat_minimization_g36`'s `min_reheat_hours` parameter (default 2 h) and its metric
-  `n_reheat_samples` (#238). `cohort_starvation`'s `min_present_frac` parameter and the
-  `group_skipped_cycles` metric and result field (#239). `zones_heat_cool_census`'s
-  `min_heating_frac`, `max_driver_zones` and `persistent_frac` parameters and its metrics
-  `heating_frac_when_mixed`, `persistent_heating_zones`, `driver_zones`,
-  `pct_hours_mixed_without_drivers` and `severity_capped` (#241).
-- **Excess outside air priced end to end, and the `air-excess-oa-cost` exercise (0.108, C2).**
-  The new catalog entry `synthetic-ahu-excess-oa` (generator `ahu_excess_oa`, catalog file 102)
-  generates two variable-air-volume air handlers with trended outdoor and return humidity, supply
-  airflow, a heating valve and occupancy, every 15 minutes for six weeks of a humid spring: one
-  holding about 45 % outside air against its declared 20 % minimum in all weather, one
-  economizing below a 65 °F high limit. The first is ingested a second time without its airflow
-  point (`AHU__excess_oa_no_flow`). Its run template prices the excess with the 0.107 estimator
-  (#195): $731/yr on the enthalpy path (cooling and heating), $255/yr if the humidity points are
-  dropped, $0 for the economizer, and declines without airflow or a declared minimum. The
-  workbook exercise `air-excess-oa-cost` walks through it, with two config variants
-  (`--no-min`, `--design-oa`), an instructor key and a figure.
-- **A biased sensor, conditional findings and the at-risk total: the `data-sensor-conditional`
-  exercise (0.108, C3).** The new catalog entry `synthetic-ahu-sensor-bias` (generator
-  `ahu_sensor_bias`, catalog file 103) generates two identical air handlers on a fixed 55 °F
-  supply setpoint, one with a supply-air sensor reading 3 °F high, and a calibrated duct logger
-  in each for four days (`LOGGER__<unit>`). The false reading makes `leaking_valve` fault, the
-  loop it drives makes `supply_air_control` pass, and the sensor-trust layer scores it trusted.
-  With the loggers as `report.rcx.references` (#267, below), the bias becomes a
-  `sensor_drift:supply_air_temp` finding: the unit's dependent findings turn conditional and its
-  reset estimate moves to the RCx report's at-risk total ($5,250/yr), while the healthy twin's
-  identical finding stays firm. The workbook exercise `data-sensor-conditional` walks through it
-  (the `--no-reference` variant is the report before the references), with an instructor key
-  and a figure.
-- **Sensor references for any point in the RCx report (#267).** `report.rcx.references` maps an
-  equipment to `{role: reference}`: another equipment's reading in the store facility (a duct
-  logger ingested as its own equipment), or a CSV file, with an optional label and comparison
-  thresholds. Each comparison is the OAT reference's (bias, drift, correlation), listed in the
-  data section; at warn or fault it is a `sensor_drift:<role>` issue on that unit, and the unit's
-  findings that read the point become conditional, their dollars at risk. A constant offset
-  that no trust check can see now reaches the report through the config alone.
-  `references["*"]["oat"]` is an alias of `oat_reference`. See docs/RCX-REPORT.md, "Sensor
-  references".
-- `Issue.cost_conditional_on`, `Issue.cost_at_risk` and the `n_cost_conditional` total (#268);
-  the `supply_air_reset_compliance` metrics `target_source`, `pct_below_target`,
-  `target_median` and `pct_above_target` (#269).
-
-### Changed
-- **A rule's docstring citations are checked against its references (#232).**
-  `tests/test_references.py` now checks that every PNNL guide or Re-tuning chapter a rule's class
-  docstring cites ("PNNL Re-tuning Ch.5/7") is in that rule's `RULE_REFERENCES` entry.
-  `zones_heat_cool_census` now also links chapter 5, whose discharge-air temperature section lists
-  reheating in the cooler zones among the effects of a low discharge-air temperature. Its
-  Learn-more links gain that chapter. docs/REFERENCES.md explains both changes.
-- **Behaviour change: the upload inbox is the default (#233).** `route_key(portfolio, key)` now
-  signs an accepted upload into the bucket's `_inbox/` prefix, so every upload passes the
-  landing's row checks before it reaches the store; `inbox=False` keeps the straight-to-store
-  layout of 0.107. Upgrade the cloud landing first (with `camber edge land <bucket>/_inbox
-  --apply` scheduled), then the brokers; forwarders need no change. docs/EDGE-DEPLOY.md gives the
-  order.
-- **Behaviour change: a growing month replaces its earlier part (#228).** The forwarder re-sends
-  the month in progress on every poll with more rows. When a landed object holds every row of
-  the stored parts it overlaps, `camber edge land` replaces them instead of storing it beside
-  them, so a month keeps one part and reads never see a row twice. The partition is swapped in
-  whole (a reader or a crash sees the old partition or the new one), the replacement is audited
-  in the `edge.land` records and recorded in the row-digest cache, and under a legal hold the
-  replaced part is copied into quarantine first. The last observation of each series in the
-  stored part may differ: that is the hour still in progress when it was polled (a resampled mean
-  of the samples so far), which the next poll revises. An object whose rows are all stored
-  already (a late, smaller poll) is a `duplicate`.
-- **Behaviour change: a conflicting overlap is quarantined (#228).** An object that shares an
-  observation (timestamp, equipment and role) with a stored part without holding all of its
-  rows, such as a month whose history changed at the source, goes to quarantine as a `conflict`
-  with the parts it overlaps, instead of landing beside them. Releasing it stores it beside them.
-- **Behaviour change: an empty folder is an empty store everywhere (#233).** `camber store
-  verify` reports 0 parts and exits 0 on an empty directory, and `store normalize` and
-  `migrate-partitions` do nothing and create nothing there, not even a lock file, as `camber
-  serve` already accepted it. A missing path, a file or a directory of other things is still
-  refused. `camber serve` and the store commands now share one definition of a store directory.
-- **Chiller run gate in `analyze_chiller_staging` and `analyze_chiller_staging_fleet` (#235).**
-  Their `min_power_kw` keyword now defaults to `None`, which reads a chiller as running above a
-  tenth of its own 95th-percentile power (the new `run_frac` keyword,
-  `camber.schedules.CHILLER_POWER_RUN_FRAC`), or by a `Status` column when one is present. Pass
-  `min_power_kw=2.0` for the fixed 2 kW gate used before 0.108.
-- **Tower drift baselines record their load (#234).** A `cooling_tower_approach_drift` or
-  `cooling_tower_fan_effort_drift` baseline frozen from 0.108 records the load it was fitted on
-  (`load_source` in the stored coefficients). A baseline frozen earlier has no `load_source`: it
-  is still scored, as fitted on the current load, with a caveat that asks for a refreeze if the
-  load has changed since.
-- **Behaviour change: a legal hold refuses the store and registry delete primitives inside a
-  workspace (#250).** `ParquetStore.drop_facility`, `prune` and `drop_partition` and
-  `FacilityRegistry.remove` now refuse a facility under a legal hold (`LifecycleError`, nothing
-  deleted). They also need a `reason=` (`ValueError` without one) and are audited as
-  `store.drop_facility`, `store.prune` (one line per facility) and `store.drop_partition`, with
-  `facility.remove` carrying the reason given. `drop_facility` and `remove` also refuse a facility
-  that is not `provisioning` or `active` (suspended, offboarding, archived), as a dataset purge
-  does: an archived facility leaves through `camber facility purge`. The rule lives with the 0.107
-  dataset rules in
-  `camber.datasets._lifecycle`, so every caller shares it. There is no override flag: release the
-  hold first. A plain store outside a workspace is unchanged.
-- **Behaviour change: store writes cannot change a facility's privacy flag or display name inside
-  a workspace (#250).** `FacilityRegistry.register`, and so a store write's metadata, refuses to
-  change `private`, `display_name`, `archive`, `offboarding` or `edge_devices`. Before this,
-  `write_role_frame(..., private=False, display_name=...)` turned a private facility public and
-  renamed it, with no audit line. Use `camber facility private|rename`, which audit the change. A
-  facility created by its first write may still start `private` or with a display name; its
-  `facility.register` line records them.
-- **Behaviour change: config runs write no state for an archived or purged facility (#252).** A
-  run with a `faults` fold is refused up front (`LifecycleError`), and so are `camber drift
-  freeze|accept` and `camber mv freeze|rebaseline|adjust --apply`. A report such a run writes is
-  still written, but it is not recorded in the facility manifest, and a warning says so. A run
-  with no fault fold still runs. A legal hold alone does not block these writes: it blocks only
-  deleting or replacing data, so a held active facility keeps folding faults and freezing
-  baselines.
-- **Behaviour change: `facility rename` refuses another facility's labels (#255).** The new name
-  may not equal, exactly or loosely, another facility's id, registered name, or current or past
-  display name, live or tombstoned.
-- **Behaviour change: the Brick export writes encoded names and per-equipment parts (#253,
-  #254).** `to_brick`, `site_to_ttl` and `site_to_223` percent-encode every character of a name
-  outside `[A-Za-z0-9_-]` in its local name (`bldg:SA%20Temp`). The Brick output adds an
-  `rdfs:label` with the exact name and names each part node after its equipment
-  (`bldg:AHU_1.Cooling_Coil`). Models written by other tools are read as before.
-- **Behaviour change: a rolling window merges with the part it overlaps.** A source that holds
-  only a window (a BACnet trend log is a ring buffer, a Haystack range can roll) sends a later
-  poll that lacks the oldest rows of the stored part; that landed as a `conflict`. Now, when
-  every observation the new object shares with the stored parts it overlaps carries the same row
-  (the stored part's last observation of each series may still be revised), `camber edge land`
-  stores the union of their rows as one canonical part named by its own bytes, swapped in with
-  the same crash-safe partition swap as a replacement. It is audited in `edge.land` as `merges` /
-  `merged`, with the stored key and the counts of stored rows kept, new rows and revised rows.
-  Any disagreement in the overlap is still a `conflict`, an exact superset is still a
-  replacement, duplicates are still quarantined, and under a legal hold the parts a merge
-  supersedes are copied into quarantine first (`camber.edge.row_digest.merge_parts`).
-- **Behaviour change: a permanently refused batch is dead-lettered and no longer blocks the spool
-  (#245).** A 4xx answer other than 401, 403, 408, 425 and 429, or a validation error, is permanent:
-  the drain counts it and goes on with the batches behind it (it used to retry the head batch
-  forever and send nothing else). After `dead_letter_after` rejections the batch moves to
-  `<spool>/dead/` with a `<file>.json` record, a `dead` journal record and a WARNING. Transient
-  errors still stop the cycle and back off. Dead letters count toward the disk cap, and `edge
-  decommission` counts them as unacknowledged (`camber.edge.sink.is_permanent_error`,
-  `is_permanent_status`, `PermanentSinkError`).
-- **Behaviour change: SDK sinks send a compact metadata subset (#245).** The S3, Azure and GCS
-  sinks send `sha256`, `rows`, `rows_sha256`, `schema_version`, `year` and `month`,
-  JSON-encoded and ASCII-safe (`camber.edge.sink.sink_metadata`), instead of the whole manifest as
-  Python reprs, which exceeded S3's 2 KB metadata limit for a site with a few hundred equipment
-  and broke on non-ASCII names. The full manifest stays in the spool journal.
-- **Behaviour change: the spool keeps one copy of each batch (#246).** `Spool.enqueue` skips a
-  batch whose key and content sha256 are already pending or dead-lettered, so a forwarder that
-  re-reads its window while offline no longer queues a copy per poll.
-- **Behaviour change: the edge config is validated (#249).** `load_config` refuses a non-boolean
-  `quality`, an `interval`, `spool_max_bytes` or `sink.timeout` of 0 or less, an unknown
-  `wire_format`, `part_layout`, sink kind, `resample` or `timezone`, and, as secrets, any value with
-  a signature or credential in it whatever its scheme (an Azure SAS `sig=`, `X-Goog-Signature`,
-  `signature=` / `token=` parameters, `AccountKey=`) and any URL with a password in its userinfo.
-  Keys starting with `_`, and `note`, `comment`, `description`, are comments. `Spool` refuses a
-  `max_bytes` of 0 or less.
-- **Deprecation: unknown edge-config keys warn in 0.108 and will be refused in 0.109.** A key
-  `load_config` does not know, at the top level or in a file source or sink (a typo such as
-  `spool_dri`, which leaves the default in force), is ignored with a WARNING that names the
-  closest known key: logged, raised as a `FutureWarning`, kept in `EdgeConfig.warnings` and shown
-  by `edge status` (`CONFIG WARNING`; `config_warnings` in `--json`) and `edge selftest`. The
-  forwarder keeps running. **CAMBER 0.109 will refuse unknown keys**: fix or remove them now, or
-  prefix a comment key with `_`.
-- **Behaviour change: a 401 or 403 from the sink is transient, never dead-lettered.** An
-  authentication or authorization refusal is a fleet-wide credential or configuration problem
-  (an expired presigned URL template, a revoked key), not a bad batch: the drain stops the cycle
-  and backs off, as for a network error, and logs a loud `edge.spool.auth AUTH FAILING since
-  <time>` WARNING. `edge status` shows `AUTH FAILING since <time>` (`auth_failing` in `--json`;
-  `Spool.auth_failing`) until a batch is delivered again. Other 4xx answers and validation errors
-  stay permanent (`camber.edge.sink.is_auth_error`, `is_auth_status`, `AUTH_STATUSES`).
-- **Behaviour change: duplicate BACnet point names are refused (#248).** `BacnetSource` raises
-  instead of silently keeping one of two points with one name, and `discovery_to_points` names
-  objects that share a name on different devices `<device name>_<object name>` (then
-  `_<type><instance>`), with a warning.
-- **Behaviour change: Haystack history is on the site's wall clock (#244).** `parse_his_grid`
-  returns a tz-naive index through `parse_timestamps`, like every other adapter, using the
-  adapter's `timezone`, else the Haystack tz name on the timestamps (`New_York`), instead of a
-  fixed-offset aware index.
-- **Behaviour change: `edge land` isolates per-object errors (#247).** One object that fails is
-  reported in the report's `errors` and the `done` audit record, the run goes on, and `land
-  --apply` exits 1. `edge reconcile --apply` does the same.
-- **The G36 fleet generator is at version 3 (#226).** On version 2, `unmet_setpoint_hours` and
-  `airflow_tracking` flagged the healthy air handler's boxes: its zones sat 3-5 °F above their
-  cooling setpoint for up to 28 % of occupied hours, with dampers wide open at 40-56 % of their
-  airflow setpoint. The rules were right and their defaults stand: an unmet tolerance of 4 °F
-  still left a healthy box 18 % unmet, and `airflow_tracking` needed half the setpoint. The generator was the cause: each perimeter zone
-  peaked alone, and a correct reset that ignores two requests (G36's I = 2) left that zone
-  warm. One trim-and-respond cycle an hour could not follow the morning load, and the duct
-  static trimmed to its minimum overnight. Version 3 gives the zones loads that rise and fall
-  together, takes three reset cycles per trended hour, holds both resets at their start value
-  while the fan is off (G36 §5.1.14), and holds a tier-1 request until the loop or the damper
-  falls below 85 % (G36's hysteresis). The blocked inlet of `rogue_static` moves from box 5 to
-  the north box 4, and the near miss's extra load becomes 0.008 of its cooling maximum on weekday
-  mornings (it was 0.06 all day). Every labelled fault is still detected and the label scores
-  hold. **Workbook:** the `zone-g36-fleet` answers are re-recorded (key, instructor block, page
-  and config comments). The headline moves: the SAT rogue sends all of its air handler's SAT
-  requests (92.5 % before) and the static rogue is `VAV4__rogue_static` (was `VAV5`, 95.9 %, now
-  100 %); SAT cohort starvation on `AHU__not_responding` 57.8 % → 83.1 % of active cycles, static
-  71.1 % → 86.1 %; `cohort_space_temp` adds four `AHU__starved` boxes to its outliers; the
-  healthy SAT reset swings 5.15 → 6.82 °F; `VAV2__reheat` and `VAV4__reheat` above minimum
-  69.7 % → 56.5 % and 93.1 % → 72.4 % (still faults); the building-wide census 98.3 % → 100 %
-  mixed, the `reheat` run 18.3 % → 8.9 %, the `heat_cool` run 98.3 % → 85.0 %; overall detection
-  73 % → 22 of 23, with `unmet_setpoint_hours` (13 of 14) and `airflow_tracking` (14 of 14)
-  newly scored; the near miss's zone 1 holds the binding request on 45.4 % → 44.4 % of active
-  cycles and sends 43.0 % → 30.8 % of the requests. On the healthy fleet the north zone's z is
-  now −2.2 (it was −7.6, excused by the 1 °F floor), so that answer is gone.
-- **Behaviour change (#238):** `reheat_minimization_g36` reports `info`, with a caveat, below
-  `min_reheat_hours` of occupied reheat, so one sample no longer decides the verdict.
-  `n_reheat_hours` now counts hours (samples × the sample interval), and heating-loop samples
-  that read nothing are left out instead of read as a low loop.
-- **Behaviour change (#239):** `sat_` and `static_cohort_starvation` judge a cycle only when at
-  least `min_present_frac` (default `cohort_frac`) of the group's zones have data, and say how
-  many cycles they skipped. One box reporting through the others' outage is no longer a starved
-  cohort.
-- **Behaviour change (#241):** `zones_heat_cool_census` faults only when a meaningful share of
-  the fleet heats in the mixed hours (`min_heating_frac`, 10 %), and is at most `warn` when one
-  or two boxes drive the result in a larger fleet. It names the zones that heat persistently.
-
-### Fixed
-- **A distrusted cost-only input left an estimate firm (#268).** The points a rule reads only
-  to price its finding (`roles_cost`: the excess-outside-air rules' humidity, supply air,
-  heating valve and occupancy) never made the finding conditional, so an excess-OA estimate
-  priced on stuck humidity sensors stayed a firm $/yr. Now the verdict stands but the issue's
-  dollars move to "at risk pending a sensor fix", with the cause named on the issue page.
-- **The SAT-reset target is named by its source (#269).** `supply_air_reset_compliance` said "vs
-  G36 target" even for a configured or site-sequence reset map. Its summary, metrics and cost
-  basis now name the source ("vs configured target", `sat-below-configured-target->reheat`); a
-  G36-default map reads as before, and the old `*_g36_target` metric keys stay as aliases until
-  0.109.
-- **Appendix B named no airflow on a missing-minimum decline (#269).** The excess-OA estimate
-  returned before resolving its airflow; it now names the source it would use (the trended
-  supply airflow, or the configured one) on that decline too.
-- **`leaking_valve` cited a chapter that does not cover it (#232).** Its docstrings cited
-  Re-tuning chapters 5 and 7, but the rule judges an air handler's coil valves, which chapter 5
-  covers. Chapter 7's reheat-valve leakage is a terminal box's. The docstrings now cite chapter 5,
-  which matches the rule's mapping.
-- **The `overcooling_min_flow` evidence shades the rule's own samples (#258).** It shaded every
-  hour more than 3 °F below the cooling setpoint, occupied or not, so on a box overcooling at its
-  minimum flow it could shade only the nights and none of the flagged hours. `analyze_overcooling`
-  now returns the samples behind its percentages (`masks_out`), and the chart shades the occupied
-  samples the verdict counts: satisfied on cooling, at minimum flow and, when a heating valve is
-  trended, with the valve open. The chart also plots the airflow against its minimum setpoint and
-  the heating valve, scaled 0–1 per unit (`normalize="unit"` in `fault_multitrend`) so each
-  setpoint stays comparable with its point. `OvercoolingMinFlow.violation_masks` exposes both
-  masks.
-- **Reports are written as UTF-8 on every platform (#259).** `camber report`, the RCx and M&V
-  reports, the dossier, `camber fleet`, the drift report, the JSON outputs and the config's
-  `out_text` / `out_html` were written in the locale's encoding: under a cp1252 or Latin-1 locale
-  a report with `≥` in its text failed and left an empty file, and elsewhere the bytes did not
-  match the page's `utf-8` charset. Every text write now names `encoding="utf-8"`.
-  `camber fleet --out` writes a whole HTML document with its charset
-  (`FleetReport.to_html_document`); `to_html` stays a fragment.
-- **The interactive dashboard escapes point names (#260).** The scatter's axis labels and the
-  carpet's title were put into the page as written, so a column name holding HTML became markup
-  in a shareable page.
-- **The fleet report's most common findings are the same on every run (#261).** Ties were ordered
-  by the hash seed; they now break by rule name.
-- **Evidence spans cover every flagged sample and stop at data gaps (#262).** A run of flagged
-  samples was shaded only to its last sample, so two flagged hours shaded one, and a run bridged
-  missing data. Each flagged sample is now shaded over its own interval, to the next sample, and
-  a run splits where a step is longer than 2.5 times the median step. This applies to the
-  evidence charts, the dashboard and the RCx trend charts.
-- **Load carpets keep days with no data (#263).** The static and the interactive carpet had a
-  column only for days with data, so an outage disappeared and the date axis was not linear.
-  Both now have a column for every calendar day from the first sample to the last.
-- **Point names with `$` no longer break charts (#264).** Matplotlib read a `$` in a point or
-  equipment name as math text: the evidence chart was silently dropped, a name such as
-  `VAV $5 to $10` was garbled, and a dashboard with such a column failed. Every data-derived
-  label, legend entry, tick label and title now escapes `$`. A dashboard or site-report section
-  whose chart fails to draw shows a note, and the rest of the report builds.
-- **Dashboard robustness (#265).** In the interactive dashboard, a trend line breaks at missing
-  samples instead of dropping to the series minimum, and an all-NaN column is left out; the
-  scatter's range is computed with a loop, so a year of 1-minute data no longer leaves it blank.
-  A dashboard or site report on a frame with a text column (a mode point) no longer fails: the
-  data-quality section, the default trend and the scatter skip non-numeric columns. A zero-row
-  frame builds.
-- **A year-only part re-sent in new bytes after its year was migrated is caught (#230).** The
-  landing compares a year-only object's rows with the month partitions of its year and
-  quarantines it as a `duplicate` when they already hold every row, instead of storing the year
-  again beside the migrated months.
-- `camber edge land` now invalidates the store's point catalog after it stores parts, so new
-  equipment and points show up without a manual `rebuild_catalog`.
-- **Tower drift rules no longer score against a baseline fitted on another load (#234).**
-  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift` match on chilled-water
-  tons, condenser heat rejected or the tower's range. The frozen baseline did not record which,
-  so mapping `cw_flow` after the range caveat asked for it, or running a tower as its own
-  equipment after running it with its chiller's points, scored tons against degrees. A healthy
-  tower then read "approach narrowed 116.5°F" or "fan speed -2436.2%-pts", and a fresh baseline
-  on the same input read 0.0°F. Both rules now decline (`info`, reason
-  `load_source_mismatch`, metrics for the current and the baseline's load) with "baseline fitted
-  on X, current load is Y; refreeze", and a caveat that names `camber drift accept`.
-- **`chiller_staging` and `chiller_staging_fleet` no longer read standby draw as running (#235).**
-  A chiller ran above a fixed 2 kW, but a stopped chiller draws 5 to 15 kW for its controls, oil
-  heater and crankcase heater. A chiller cycling an hour on and an hour off over an 8 kW standby
-  read 0.1 starts a day and 100 % runtime; it now reads 12 starts a day (fault) and 50 %. A
-  chiller runs by its `compressor_status` when that is mapped, else above `run_frac` (0.10) of
-  its own 95th-percentile power, taken over the samples that draw any power so that a lag chiller
-  at 0 kW most of the time still runs. Both rules take `min_power_kw` (default `None`) and
-  `run_frac` parameters and report the metric `run_source`; `chiller_staging` also reports
-  `run_threshold_kw`.
-- **`control_hunting` checks resolution per signal (#236).** The resolution ceiling was the
-  lowest across all modulating signals, so one 15-minute OA damper made the rule decline and hid
-  a cooling valve sampled every minute and hunting at 20 reversals an hour. Its caveat also read
-  "observed reversals on 500% of the resolvable maximum". Now a signal whose sampling cannot show
-  the warn threshold is not evaluated: its rate is `None`, it is listed in the new metric
-  `not_evaluated_signals`, and a caveat names it. The verdict is the worst signal that can be
-  evaluated, judged against that signal's own ceiling. The rule declines only when no signal can
-  be evaluated.
-- **`boiler_short_cycle` and `compressor_short_cycle` count starts per observed day (#237).**
-  Starts were divided by the span from the first sample to the last, so a logger gap counted as
-  days with no starts. Two days cycling 24 times a day, a 28-day gap and a day off read 1.6
-  starts a day. The rate is now divided by the observed days: the sum of the sample steps no
-  longer than three median intervals, as `control_hunting` measures its observed time. The same
-  trend reads 16 a day (boiler fault, compressor warn). The new metric `n_days_observed` sits
-  beside `n_days` (the span), and a caveat is added when fewer than half the span's days are
-  observed.
-- **`heatpump_defrost` and `compressor_staging` read a short trend over one day (#240).** The
-  span was floored at 1e-9 days, so one defrost in two hours read 24.2 reversing-valve cycles a
-  day (warn), and one stage excursion read 24.2 stage changes a day. The span is now floored at
-  one day, as `boiler_short_cycle` does: those trends read 2.0 a day (ok), with a caveat that the
-  trend spans under a day. `n_days` still reports the real span.
-- **The `heatpump_defrost` ok summary names no cause (#240).** It ended "— check defrost
-  termination" even with no reversals. That cause now appears only on warn and fault, as for the
-  drift rules (#189).
-- **The store and registry primitives bypassed legal holds and the audit log (#250).** With a
-  facility under a hold, `drop_facility` deleted every row, `registry.remove` tombstoned it and
-  left the hold pointing at a removed id, and `prune` and `drop_partition` deleted partitions,
-  none of them audited. #212 had fixed this for the `camber datasets` path only.
-- **`interop openfdd ingest` replaced a held facility's data (#251).** A changed or forced
-  re-ingest now runs the same hold check as `camber datasets ingest` and is refused. An unchanged
-  re-ingest is still skipped.
-- **A config run wrote state for an archived facility, and the next restore failed half-way
-  (#252).** A folder or CSV config bound to an archived (even held) facility wrote
-  `state/<fid>/faults.json` and the manifest. The next restore then swapped the store partition
-  back in and failed its round-trip check on files the bundle did not hold, leaving the facility
-  `archived` with live data, and every retry failed the same way. Runs no longer write that state
-  (see Changed). Restore now stages every tree and re-hashes the staged files before the first
-  swap, so a mismatch leaves the live trees as they were. It also empties every live hot tree the
-  bundle does not list (its plan lists them under `deletes`), and under a legal hold it refuses a
-  restore that would delete or change a live file. A restore interrupted between two swaps leaves
-  the facility `archived`, and re-running it finishes the restore.
-- **Brick site export shared part nodes across equipment (#253).** Every air handler's valves
-  hung off one `bldg:Cooling_Coil`, so after `site_from_ttl(site_to_ttl(site))` each air handler
-  came back with every air handler's valves, dampers and fan points, with either backend. Each
-  equipment now has its own part nodes, and a test round-trips a two-air-handler site.
-- **The Brick export wrote invalid or mangled Turtle for real point names (#254).** A name with a
-  space was a syntax error for rdflib and returned nothing from the minimal reader, `AHU-1/SAT`
-  came back as `SAT`, `SAT.` did not parse, and the `AHU_1:supply_air_temp` names of
-  `Equip.from_roles` lost their prefix, so two air handlers' points collided. Names are now
-  percent-encoded local names with the exact name as `rdfs:label`, and both readers decode them.
-  The same applies to equipment ids in the minimal 223P export.
-- **A facility rename could permanently break another facility's site resolution (#255).**
-  Renaming B to A's name or id made A's labels ambiguous for ever, even after B was renamed back,
-  so A's site-keyed legacy faults and baselines stopped being adopted and `portfolio migrate`
-  blocked on them. Such renames are now refused (see Changed). A facility's own labels (id,
-  registered name, current display name) now outrank other facilities' past display names, so a
-  workspace that already holds such a rename resolves A's labels again.
-- **`portfolio recover` deleted a held facility's hot data when it finished an interrupted
-  archive (#256).** A hold placed after the crash now blocks the deletion: recover reports
-  `archive_blocked_legal_hold`, keeps the data, and finishes the archive once the hold is
-  released.
-- **Haystack JSON v3 and Hayson tags resolved nothing (#257).** `roles_from_haystack` and
-  `topology_from_haystack` counted only `true`, `"M"` and `"✓"` as markers and used ids as given.
-  They now read v3 markers (`"m:"`) and refs (`"r:<id> <dis>"`) and Hayson markers
-  (`{"_kind": "marker"}`) and refs (`{"_kind": "ref", "val": ...}`), for point ids, `ahuRef` and
-  `equipRef`. Fixtures in both encodings are under `tests/golden/haystack/`.
-- **`camber edge selftest` no longer drains the real spool (#242).** It ran the forwarder on the
-  configured spool, so a backlog queued during an outage was "sent" to the in-memory sink and
-  acknowledged, then deleted. It now runs on a temporary spool and never reads, creates or writes
-  the configured one, and a retired spool gives an error and exit 1 instead of a traceback.
-- **BACnet trend-log reads return the newest records (#243).** `read_trend_log` read 1000 records
-  from position 1, the oldest in the ring buffer, so once a log held more than 1000 records a
-  polling forwarder never saw new data. It now reads `record-count` and the newest records.
-- **A Haystack hisRead across a DST change parses, and units are kept (#244).** A range whose UTC
-  offset changed raised "Tz-aware datetime.datetime cannot be converted"; `units()` was always
-  empty and now holds each point's unit from the grid.
-- **A quarantine key collision no longer corrupts the record or aborts the landing (#247).** A
-  second, different upload at a key quarantine already held overwrote the record with its own
-  hash, then failed the move, and the exception stopped the run, so every later object stayed in
-  the inbox on every run. The record is never overwritten: the upload stays in the inbox as a
-  `quarantine_collision`, and the run goes on. `quarantine release` hashes each held object again
-  and refuses one that matches neither its name nor its record, record or not.
-- **BACnet objects with one name on two devices are both kept and read at their devices (#248).**
-  Discovery dropped each object's device; two controllers with a `ZN-T TREND` gave one point, and
-  every read went to the single target address.
-- **The edge config's secret scan catches SAS URLs and DSN passwords (#249)**, and file sources
-  get the config's `timezone` (it was dropped).
-- **The RCx report no longer reads supply air above its target as supply air too cold.**
-  `supply_air_reset_compliance` warns on both sides of the G36 target. The "supply air too
-  cold" cause chain took either one, so a coil that could not cool would root a chain of reheat
-  findings. It now takes only the below-target side.
-
-## [0.107.0] — 2026-10-17
-
-**0.107: the RCx report's next phase (an excess-outside-air cost, AHU-to-VAV cause chains, direct PDF output and optional grounded prose), byte-independent dedupe for edge uploads, and 28 fixes from an audit of the rules, M&V reports, CLI, store, servers and docs (#142, #194–#225).** **Behaviour change (#221):** `camber serve` bound to loopback now requires its access token when `--auth` is left out, completing the 0.104 deprecation; the launch URL with the token is printed and saved, `/health` stays open, `--auth none` keeps an open server, and binds beyond loopback (the container image, Kubernetes) are unchanged. **Behaviour change (#212):** dataset writes follow the facility lifecycle on every path, as the lab did: a purge or a forced or changed re-ingest of a facility under a legal hold is refused, an ingest into an archived or suspended facility is refused, and workspace ingests and purges need `--reason`. **Workbook:** the `zone-dcv` answers are re-recorded, because `co2_ventilation` now judges a room's trended occupancy instead of an assumed schedule (#200). The RCx report prices excess outside air (#195), groups an air handler's fault with the symptoms at the boxes it serves when a topology is declared (#196), writes PDF with the optional `pdf` extra (#197), and can carry generated prose in which every sentence cites a fact from the report, off by default (#194). The edge landing recognises a month re-sent in different bytes, and the forwarder writes canonical parts (#142). Rules no longer judge fan-off, compressor-off or idle hours (#198, #201–#203), and missing valve data no longer passes (#199); several ok summaries no longer name a fault (#204). `mv report` and `mv propose` agree with `mv run` (#205–#207, #225), and normalized savings no longer go NaN on one missing temperature (#208). An interrupted ingest no longer empties a facility (#213); config mistakes, bad ports and missing stores give one-line errors (#214, #215, #217, #218); server errors carry no paths (#216). The docs' examples, CLI flags and reference links are now checked by tests (#219–#224).
-
-### Added
-- **The edge landing recognises a month re-sent in different bytes (#142).** `camber edge land`
-  computes a row digest of every Parquet object before it stores it: a sha256 over the decoded
-  rows, with normalized types, in the store's canonical sort order, so row order, column order,
-  row groups, compression, timestamp unit, string type and schema metadata do not change it
-  (`camber.edge.row_digest`). When a part in the object's store partition, or another object of
-  the same run, already holds those rows, the object is a `duplicate`: it goes to quarantine with
-  the name of the matching part, and `edge quarantine release` refuses it. Each partition keeps
-  its parts' digests in `_edge_rows.json`, a cache checked against each part's size and
-  modification time; parts with no entry are digested on first use. A month whose rows changed
-  lands as before.
-- **Presigned uploads can be staged in an inbox (#142).** `route_key(portfolio, key, inbox=True)`
-  signs an accepted upload into the bucket's `_inbox/` prefix instead of the store's layout, so
-  `camber edge land` checks it before anything reaches the store. docs/EDGE-DEPLOY.md describes
-  the arrangement and the upgrade order.
-- The edge config's `part_layout` (`canonical` or `legacy`; `CAMBER_EDGE_PART_LAYOUT`) and two
-  manifest fields, `part_layout` and `rows_sha256`, for audit.
-- **The RCx report writes PDF directly (#197).** `camber report CONFIG --layout rcx --out
-  report.pdf` renders the report's own HTML through WeasyPrint, so there is still one layout
-  source: `--paper` sets the page size, sections start pages, figures and rows stay whole, table
-  headers and the research-only banner repeat, and the inline charts are embedded. The `.pdf`
-  extension picks PDF, as `.yaml` picks a YAML config; `--out` stays the one output flag.
-  `RcxReport.to_pdf(path=None)` returns the bytes. WeasyPrint fetches only `data:` URLs, so the
-  render reads nothing from disk or the network. The PDF's dates are the end of the data period,
-  or `SOURCE_DATE_EPOCH` when set, so the same data gives the same bytes. WeasyPrint is the new
-  optional `pdf` extra (`pip install "camber-toolkit[pdf]"`, `weasyprint>=68.1`), and it needs
-  the Pango system libraries. Without the extra or Pango, the command exits 2 before the run and
-  names the extra. On conda-forge, install `weasyprint` from conda-forge or with pip. Only the
-  rcx layout writes PDF: `--layout audit` with a `.pdf` path exits 2. A separate CI job installs
-  Pango and runs the PDF tests; the core matrix skips them.
-- **The RCx report costs excess outside air (#195).** A new estimator in
-  `camber.fault_economics` prices `outdoor_air_fraction` and `economizer_high_limit`
-  findings. It costs only the outside air above the declared minimum, on occupied fan-on
-  hours. Cooling is `4.5 × cfm × e × (h_OA − h_RA)` when outdoor and return humidity are
-  trended, else `1.08 × cfm × e × (OAT − RAT)`, at `cool_cop`. Heating is
-  `1.08 × cfm × e × (RAT − OAT)` while the unit heats, at `boiler_efficiency`, or at
-  `heat_pump_cop` when that is set. Excess while economizing costs nothing. The airflow is the
-  trended supply airflow, else the new `EquipmentLoad.supply_airflow_cfm`, else
-  `design_oa_cfm / (min_oa_pct / 100)`. When an input is missing the estimator names it
-  (`uncosted — needs supply_airflow_cfm or design_oa_cfm`, or `needs min_oa_pct`). Appendix B
-  lists each unit's minimum and its source, the airflow source, the cooling and heating bases,
-  and the estimate. In the `econ` chain the issue still shows the larger member, not the sum.
-  See docs/RCX-REPORT.md.
-- Both rules report the estimator's inputs as new `oa_cost_*` metrics. These are the period's
-  excess energy per cfm of supply air (or in kBtu with a trended airflow), the cooling,
-  heating, economizing and unjudged hours, and the bases used. `outdoor_air_fraction` also
-  reports `min_oa_source`. Severities do not change.
-- `camber.oafraction` gains `excess_oa_penalty`, `humidity_ratio`, `moist_air_enthalpy` and the
-  standard-air constants `SENSIBLE_BTUH_PER_CFM_F` (1.08) and `ENTHALPY_BTUH_PER_CFM` (4.5), plus the
-  heating thresholds `HEATING_RISE_F` (2 °F) and `HEATING_VALVE_PCT` (5 %).
-- A rule may declare `roles_cost`: roles it reads only to price its finding. They load like
-  optional roles, but they never gate the rule, are not reported as missing and do not make the
-  finding conditional.
-- `camber.api.BadQuery` (also `camber.api.read.BadQuery`, #216): the `ValueError` subclass a
-  malformed `start`, `end`, `limit` or `max_points` raises. It is the only error that the read
-  API's `dispatch` answers with 400.
-- **RCx issues chain an air handler to the boxes it serves (#196).** When the config declares a
-  served-by `topology`, an AHU finding roots one issue, and the matching findings on the boxes it
-  serves become members of that issue. The page and the summary give the count ("DemoAHU + 14 of
-  22 boxes"). There are three pairs (`camber.rules.triage.ZONE_CHAINS`):
-  - supply air too warm (`supply_air_control` with too-warm leading, G36 FC13, a SAT reset that
-    is not responding) leads to zones that can't cool (`unmet_setpoint_hours` with too-hot
-    leading);
-  - supply air too cold (`supply_air_control` with too-cold leading, `supply_air_reset`,
-    `supply_air_reset_compliance`, a SAT reset that is not trimming) leads to overcooling and
-    reheat (`overcooling_min_flow`, `overcooling_severity`, `reheat_penalty`,
-    `reheat_minimization_g36`);
-  - duct static too low (G36 FC1, a static reset that is not responding) leads to starved boxes
-    (`airflow_tracking` with under-setpoint leading, or a zone that can't cool).
-
-  The chain follows the existing issue rules: its cost is the largest member, never the sum,
-  and its hours are the union of the members' masks. A box symptom joins only when its hours
-  coincide with the root's, or when a side has no mask, and then the link says the overlap was
-  not assessed. A box symptom that leans on a distrusted sensor stays its own issue and is
-  counted on the link. An AHU finding that leans on one roots no chain. A SAT or static
-  rogue-zone census is listed on the air handler whose reset its rogue boxes sit under, and the
-  census stays its own issue (`ZONE_ROGUE_LINKS`). Nothing is linked without a declared
-  topology. A naming guess is not used, and neither is a box the topology does not cover or a
-  box served by another air handler. Appendix A names the boxes that a missing topology left
-  unlinked (`zone_chain_gaps`). `Issue.zone_links` holds the `ZoneLink` objects, and
-  `to_dict()` issues gain `zone_chains`. The `synthetic-g36-vav-fleet` template declares its
-  topology, but its rules form no chain: the one air handler whose resets fail has no box
-  symptom among the template's rules.
-- **The RCx report can carry grounded generated prose (#194).** Two kinds of prose slot: one
-  paragraph in the executive summary (`exec_summary`), and a "what we found / why it matters"
-  paragraph on each issue page (`issue:<key>`). These are the slot ids the engineer notes use.
-  Prose is off by default, and the report stays the deterministic one. It comes from a JSON file
-  keyed by slot (`--prose prose.json`, or `report.rcx.prose`), which runs offline and
-  reproducibly, or from a model you wire. On the CLI that is `--llm-cmd`, the same seam as
-  `camber explain` and `camber ask`; in Python it is an `AgentClient` passed as
-  `build_rcx_report(client=...)`. A slot is shown only when every sentence cites the report's
-  fact index and every figure in the sentence is in a fact that sentence cites. Otherwise the
-  page keeps its standard text, and Appendix A lists the slot and the reason. An engineer note on
-  a slot overrides its prose. Shown prose carries a marker and the list of the facts it cites.
-  `--prose-prompts out.json` (`camber.report.rcx.prose_prompts`) writes each slot's prompt, with
-  its facts, for offline generation. `camber.report.rcx.load_prose` reads a prose file. The PDF
-  output renders the prose too; a summary that shows prose drops its one-page print cap, so
-  the paragraph is never clipped.
-- **The RCx fact index (#194).** `RcxReport.facts` is built from the same objects the tables
-  render: the KPIs, each issue's headline, cost, member costs, uncosted reason, hours, members,
-  action, confidence reasons, caveats, sensor dependencies and AHU-to-VAV chain counts, plus the
-  declines, missing inputs, caveats and chain gaps of Appendix A and the assumptions of Appendix
-  B. Its ids are context-qualified: `K1@summary`, `X1@appA`, `A3@appB`, `C1@<issue key>`. An
-  issue's ids follow its key, so the same inputs give the same ids. With prose on, Appendix D
-  lists the whole index; with prose off it says the index is listed when prose is enabled.
-  `to_dict()` gains `facts` and `prose`.
-- `camber.agent.verify.check(..., require_cite_each_sentence=True)`: a sentence without a
-  resolving `[id]` is dropped (flagged `uncited-sentence`), and a sentence's figures must be in
-  the facts it cites itself. Citations may be context-qualified (`[F1@ctx]`); plain `[F1]` ids
-  work as before.
-- **The docs' Python examples run in the test suite (#219).** `tests/test_docs_fences.py` runs
-  every `python` fence in README.md and docs/ (the workbook included; not docs/dev/ or
-  docs/proposals/), each page's fences in order in one fresh interpreter, offline and in a
-  temporary folder. A fence that cannot run on its own (a fragment, or one that needs a dataset,
-  a store, a file, an optional extra or the network) carries a `fence: skip (reason)` HTML comment on
-  the line above it, which renders on neither GitHub nor the docs site.
-- **The CLI reference is checked against the parser (#224).** `tests/test_cli_reference.py`
-  fails when docs/CLI.md does not name a command or an option the parser accepts. docs/CLI.md
-  now documents `camber bacnet-discover`, `mv freeze --allow-short` (the only way past the
-  baseline-length rule) and every flag the reference was missing, including `--run-id`,
-  `--no-strict`, the `charts` options, `--quiet`, `--store` / `--equip` on `mv`, and the 0.107
-  `datasets ingest|remove --reason` and `remove --yes|--confirm`.
-- **The provisional-surfaces ledger covers 0.105 to 0.107 (#223).** docs/API-STABILITY.md lists
-  the TOWT and RMV2.0 additions, `ModelFitError`, the 0.106 rule parameters, metrics, `cw_flow`
-  and `is_chw_loop`, and the 0.107 surfaces, and notes the #183 metric rename.
-- `tests/test_references.py` checks that every PNNL guide or chapter a rule parameter's basis
-  cites is in that rule's `RULE_REFERENCES` entry, and that the references page lists every
-  `MV_REFERENCES` id (#222). `tests/test_docs_counts.py` computes the role counts that
-  docs/ONTOLOGY.md states (#220).
-
-### Changed
-- **The edge forwarder writes canonical parts (#142).** Each part is in the store's 0.103 layout
-  (rows sorted, fixed writer options, no pandas metadata) and still named by the sha256 of its
-  bytes, so the same rows give the same key and `camber store verify` counts edge parts as
-  canonical. NDJSON output is unchanged.
-- **Compatibility.** Parts that already landed are untouched: they still read the same, still
-  pass the hash check, and `store normalize` still leaves non-canonical edge parts alone. The
-  landing digests them on first use, so the first canonical re-send of a month an older forwarder
-  sent is recognised as a duplicate. Older forwarders keep working: their parts land and are
-  recorded as before. Upgrade the cloud landing first, and route presigned uploads through the
-  inbox: a pre-0.107 landing accepts canonical parts but would store each re-sent month twice. A
-  forwarder that must keep sending to an older landing can set `part_layout: legacy`. Batches
-  already in a spool keep their bytes and key. Uploads signed straight into the store's layout
-  get no row check.
-- `outdoor_air_fraction`'s `min_oa_pct` defaults to `None`, which means the generic 20 %. The
-  rule judges exactly as before. The new `min_oa_source` metric tells a configured minimum from
-  the default, and only a configured one is priced.
-- **Behaviour change (#221): `camber serve` on loopback requires its access token by default.**
-  This completes the switch announced as a deprecation in 0.104 (#134). Bound to loopback
-  (`127.0.0.1`, the default; `localhost`; `::1`) with `--auth` left out, the server now uses token
-  auth: it prints the launch URL with `?token=` and saves it in the launch file
-  `serve-<port>.url`, as `--auth token` does, and says in a one-line note that this is the
-  default. The 0.104 notice about a future switch is gone. `make_server` / `serve` with `auth`
-  unset and `python -m camber.api.server` with `CAMBER_API_AUTH` unset follow the same default.
-  `--auth none` (`CAMBER_API_AUTH=none`, `auth="none"`) keeps an open server. Binds to any other
-  address, including the container image's `0.0.0.0` and the Kubernetes manifest, keep no
-  authentication by default, with the warning, exactly as before; `GET /health` still needs no
-  token. Scripts that read a loopback server without credentials get 401 now: send
-  `Authorization: Bearer <token>` (fix it with `CAMBER_API_TOKEN`), or pass `--auth none`.
-- An RCx issue's heading never comes from a linked box member (#196): a box's reheat valve
-  cause stays on the box's own row, and the air handler's cause heads its chain. `link_findings`
-  judges sensor precedence for each member on that member's own equipment, which gives the same
-  result for a single-equipment issue.
-- **Dataset writes follow the facility lifecycle on every path (#212).** `camber datasets
-  ingest` and `remove --purge-store` (and `camber.datasets.ingest` / `remove`) now apply the
-  rules `camber lab` already applied, from one shared module (`camber.datasets._lifecycle`).
-  Inside a portfolio workspace, new refusals:
-  - an ingest into a facility that is not `provisioning` or `active` (suspended, offboarding,
-    archived) is refused before anything is written;
-  - a purge of a facility under a legal hold, or not `provisioning` / `active`, is refused
-    before anything is deleted, the dataset cache included; so is an ingest that would drop such
-    a facility because its subset no longer produces it;
-  - both need `--reason` (`reason=` in the API), and a purge also needs `--yes` or
-    `--confirm ID`. They are audited as `datasets.ingest`, `datasets.remove` and
-    `datasets.purge`.
-
-  Every ingest swap now passes the registry's write guard, so no ingest, in a workspace or not,
-  writes into an archived facility. Plain stores need no reason or confirmation, as before.
-  `camber lab` behaves as before.
-- **Behaviour change: a legal hold blocks a forced re-ingest, on every path (#212).** A hold
-  means nothing held is deleted, and a re-ingest replaces the facility's partition. So
-  `camber datasets ingest --force` (or a changed re-ingest) into a held facility that has data
-  is refused with `LifecycleError` and changes nothing: exit 1 in the CLI, 409 in `camber lab`
-  (which allowed it before), and the API raises. An unchanged re-ingest is still skipped, and
-  release the hold (`camber retention release`) to re-ingest. There is no override.
-- **`camber store verify` reports interrupted ingests (#213).** It lists leftover swap and
-  staging directories, and registered facilities with no part files in a state that should have
-  some. A facility whose data is stranded outside its partition fails verify even without
-  `--strict`; `--strict` also fails on any leftover or empty facility. The JSON report gains
-  `leftovers` and `empty_facilities`.
-- **More rules link their PNNL reading (#222).** Rules whose threshold bases cite a PNNL guide
-  or chapter now map to it, so reports give them *Learn more* links: the pump family's ten drift
-  detectors (`pump_flow_drift`, `pump_head_drift`, `loop_deltat_drift`, `loop_dp_drift`,
-  `pump_power_drift` and their `hw_` twins) link chapter 8, and the loop delta-T pair also the
-  plant guide whose heading asks whether the loop delta-T is low; `coil_leak_drift` links
-  chapter 5's leaking-valve checks; `economizer_damper_drift` links chapters 6 and 5; and
-  `outdoor_air_fraction` and `economizer_high_limit` add chapter 5, whose outdoor-air fraction
-  their bases cite. The pump detectors' `min_speed` basis cites chapter 8 only: the plant guides'
-  pressure headings ask about resetting the setpoint, which those detectors do not judge. In the
-  RCx report the economizer issue gains a chapter 5 link.
-- The docs build fails on a link to a heading that does not exist (`validation: anchors` in
-  mkdocs.yml, so `mkdocs build --strict` catches it) (#220).
-
-### Fixed
-- **`camber serve` error codes (#216).** A corrupt or unreadable store file gave 400 (pyarrow's
-  `ArrowInvalid` is a `ValueError`), and 400 and 500 bodies could name server paths. Now only a
-  malformed query parameter is 400. Any other failure is 500 with the body
-  `{"error": "internal error"}`, with no `detail`, and the exception and traceback go to the
-  server's stderr. `camber lab`'s `/history`, `/points` and `/facilities` routes go through the
-  same code, so their errors carry no path either.
-- **`camber serve` and `camber lab` check their startup arguments (#217).** `--port` outside 0 to
-  65535 is a usage error (exit 2) instead of an `OverflowError` traceback, and `make_server`
-  raises `ValueError` for such a port. `camber serve` exits 1 with "not a ParquetStore" when the
-  store path is missing, is a file, or is a folder with no store partitions or store files,
-  instead of serving an empty store. An empty folder is still served as a store with nothing
-  written yet.
-- **`simultaneous_heat_cool` judges only samples where both valves report (#199).** A missing
-  valve sample used to read as a closed valve, so an all-missing heating valve passed as `ok` at
-  0 % and gaps understated the both-open share. The rule now declines (`info`, reason
-  `no_valve_data`) when no sample has both valves, takes its percentages over the samples that
-  do, and reports the new `valve_coverage_pct` metric. Below 95 % of occupied samples
-  (`VALVE_COVERAGE_CAVEAT_PCT`) a caveat says how many were not judged.
-- **The air-cooled DX rules need a running gate (#201).** With no compressor status and no
-  return + supply air temperature, `dx_refrigerant_charge` (target, limits and baseline modes)
-  and `discharge_superheat_drift` read every row as cooling, so compressor-off hours were judged
-  as a low charge. They now decline (`info`, reason `no_run_gate`). A reversing valve or
-  supply-fan status alone is not a gate: the valve gives the mode and the fan runs through the
-  compressor's off cycles. A water-cooled unit is still gated on its chilled-water load.
-  `dx_indoor_airflow` requires the return and supply air temperatures, so it was always gated.
-- **`cooling_tower_approach` needs an operating signal (#202).** With only the CW supply and a
-  wet-bulb, idle-tower hours were judged as operating. The rule now also gates on a pump run
-  status, a chiller run status or the condenser-water flow (above 5 % of its 95th percentile,
-  the #184 loop-flow cut) when one is mapped, on top of the fan or range gate, and reports
-  `run_gate`. With no fan speed, CW return or run signal it declines (`info`, reason
-  `no_operating_signal`), and with a run signal that never reads as running it declines with
-  reason `never_running`. `analyze_cooling_tower_approach` takes the matching `run_mask`.
-- **The store commands refuse a path that is not a store (#215).** `store verify`, `normalize`
-  and `migrate-partitions` exit 1 with "not a ParquetStore" for a missing path, a file, or a
-  directory with no partitions, registry or workspace marker, and create nothing (normalize no
-  longer creates the directory and its `_lock`). `--facility` must name a facility the store
-  knows, and `retention apply --facility` one the workspace knows. `store verify --limit`
-  must be 0 or more.
-- **`camber datasets config --out` refuses a dataset that is not ingested in the store (#218)**,
-  or a `--facility` that is not one of its ingested facilities, and names the ingest command to
-  run. Printing the template without `--out` still works, with a warning.
-- **Config mistakes are one-line errors (#214).** Any command that hits a missing or unreadable
-  file, invalid JSON or YAML, or a bad value now prints `error: <message>` and exits 1 instead of
-  a traceback. Set `CAMBER_DEBUG=1` for the traceback. A config is checked when it loads:
-  - the top level must be an object;
-  - `rules` must be a list of names or `{"name": ...}` entries;
-  - `equipment` must be a list of `{"class": ...}` entries;
-  - `resample` must be a pandas frequency.
-
-  An unknown rule name lists close matches and every valid rule.
-- The IPMVP Option A example in docs/MANDV.md called `option_a_savings` with keywords it does
-  not take; it now passes the measured values by position (#219).
-- docs/ONTOLOGY.md, docs/CAPABILITIES.md and docs/workbook/index.md stated role and exercise
-  counts from earlier releases; the role counts are current and tested, and the rest no longer
-  give a number. docs/LAB.md's link to "Fetch & ingest is greyed out" pointed at a GitHub-style
-  anchor, and docs/API-STABILITY.md still named the 0.9.x series (#220).
-- docs/REFERENCES.md's M&V table lacked the LBNL RMV2.0 row (`lbnl-rmv2`) (#222).
-- docs/DATASETS.md listed `--lock-timeout` on fewer commands than accept it (#224).
-- **A crash during an ingest's partition swap no longer empties the facility (#213).** The swap
-  (also used by the open-fdd ingest) now uses the store's crash-recoverable replace
-  (`camber.store._swap`). A crash at any point leaves the old or the new partition once recovered.
-  Every ingest first finishes or rolls back an interrupted swap. It also puts back a partition
-  that a pre-0.107 swap left in `_staging/<fid>.old-<pid>`, and removes the staging directories
-  of ingests whose process is gone.
-- Catalog errors print their message, not a quoted `KeyError` repr (#214).
-- `"rules": "filter_fouling"` was iterated one character at a time; it is now refused (#214).
-- **`camber mv report`, `mv propose` and `mv rebaseline` apply the entry's extrapolation policy
-  (#205).** They graded coverage with the default policy and ignored an `mv` entry's
-  `extrapolation` block, which `mv run` applies. A strict policy could decline the saving in
-  `mv run` while `mv report` showed it as `in_range`. All four paths now build the policy from the
-  entry and reach the same verdict. Only configs that set `extrapolation` change.
-- **`mv run` and `mv report` use the same ledger date window (#206).** The report kept only
-  ledger entries dated inside the reported rows. A non-routine adjustment recorded with
-  `camber mv adjust` and dated between the baseline end and the reporting start, or inside the
-  baseline period, restated the saving in `mv run` but was skipped in `mv report` with no
-  caveat. Both paths now keep the entries dated from the baseline start to the reporting end.
-- **The M&V report's "Reported segments" table matches results by version (#207).** It paired
-  segments with results by position, so a segment declined for "no data" showed the next
-  version's savings, and that version had no row of its own. The declined segment now says
-  "no data", and each version shows its own savings.
-- **Normalized and standard-conditions savings skip normal-year periods with no finite projection
-  (#208).** One NaN or implausible temperature in the normal-year set turned every figure of
-  `normalized_savings` and `standard_conditions_savings` into NaN, with no caveat and no
-  decline. A period that either model cannot project is now left out, counted
-  (`NormalizedSavings.n_excluded`) and named in a caveat, as `avoided_energy_savings` has done
-  since 0.105. With no period left the saving is declined. Clean data is unchanged.
-- **More text shows the M&V registry's model labels (#209).** The versioned-store
-  `mv_baseline` summary, the RCx report's M&V table, the freeze and rebaseline plan text and
-  `camber mv list` now say "3P cooling" or "2P (5P fallback)" rather than "3PC" or "5P", as the
-  rest of the output has since 0.105. The metrics, the plan's `model` field and the `mv list`
-  JSON keep the codes; the plan rows gain `model_label`.
-- **The chained CUSUM chart takes its unit from the meter (#210).** Without a `units` block it
-  labelled every meter "Cumulative kWh", including a gas billing meter in therms. The unit now
-  comes from the unit system, else the meter's bills, else the energy its trended rate
-  integrates to (`MeterChain.meter_unit`). When none is known the axis reads "Cumulative energy".
-  `cusum_plot` and `chained_cusum_plot` default to that unit-free label.
-- **The fleet report's median EUI is a true median (#211).** With an even number of buildings it
-  took the upper of the two middle values, so every "vs median" percentage was off. EUIs of 40,
-  60, 80 and 200 now give a median of 70, not 80.
-- **`mv run`, `mv report` and `mv propose` date the T4 extrapolation trigger alike (#225).** The
-  run dated T4 at the reporting start, while the report, propose and rebaseline dated it the day
-  after the baseline ended. These paths now assess the triggers over the entry's
-  `reporting_period`, as the run does, so T4 falls on the reporting start everywhere. The
-  rebaseline settle days count from that date. Entries without a `reporting_period` are
-  unchanged.
-- **`airflow_tracking` judges fan-on, occupied hours (#198).** It judged every sample with a
-  setpoint, so a healthy box read as starved for every hour its air handler was off. It now reads
-  `SUPPLY_FAN_STATUS` (else `SUPPLY_FAN_SPEED`) and `OCCUPANCY` as optional roles and judges only
-  fan-on samples, and only occupied ones when an occupancy point is trended, as
-  `supply_air_control` does. Measured airflow is not used as the fan proxy, because a starved box
-  reads zero flow. With neither signal it judges every sample as before and adds a caveat. New
-  metrics `fan_gate` and `occupancy_gate`, and the summary names the hours judged. A new
-  `abs_tol` (cfm, default 0, off) counts a sample as off setpoint only when it also misses by more
-  than that, so a small miss on a tiny minimum setpoint is not inflated by the relative error.
-- **`co2_ventilation` and `co2_ventilation_system` honour a trended occupancy (#200).** Both used
-  the assumed weekday 07-18 schedule, so a room's empty hours inside it counted as
-  over-ventilated. `OCCUPANCY` is now an optional role: a trended point replaces the schedule
-  (`effective_occupied_mask`, as in `dcv_verification`). A finding judged on the assumed schedule
-  carries a caveat, and the new `occupancy_basis` metric says which was used.
-  `analyze_co2_ventilation` takes an `occupied` mask. Workbook `zone-dcv` is re-recorded on the
-  rooms' trended presence points. The b4b-windesheim rooms' over-ventilation share moves from
-  73-86 % to 30-66 %, and `co2_ventilation` moves from warn to ok on ROOM_917810,
-  ROOM_917810_scd41, ROOM_999169 and ROOM_999169_scd41 (ROOM_925038 stays warn). The sdu-ou44
-  ROOM2 `over_vent_pct` moves from 66.5 to 74.4 (still warn). The b4b stand-in gives its two
-  valve rooms two-person visits, so it tells the same story.
-- **`static_pressure_reset` takes its range and median from fan-on samples (#203).** Only the
-  classifier saw the fan-gated setpoint; `sp_range_inwc` and `sp_median_inwc` came from every
-  sample, so a flat setpoint that reads 0 with the fan stopped showed a range of its full value
-  and a median of 0, and a short trend was judged "resets with demand" on that range. Both now
-  come from the fan-on samples. With fewer than three fan-on samples the rule returns `info`.
-- **`ok` summaries name no fault (#204).** An `ok` `overcooling_severity` finding says "no
-  sustained overcooling below" its reference, and `max_depth_f` is floored at 0, so a zone above
-  its heating setpoint no longer reads "overcooled ... max -2.0 degF". An `ok`
-  `economizer_high_limit` finding says the economizer is locked out above the high limit instead
-  of ending "economizer not locked out". An `ok` `leaking_valve` finding says "no valve leak" and
-  drops "(worst: ...)". `warn` and `fault` wording is unchanged, and no severity moves.
-
-
-## [0.106.0] — 2026-10-17
-
-**0.106: rule fixes found while building the synthetic lab cases, for air-side maintenance, chiller plants, heat pumps and G36 zone fleets, and drift findings whose wording matches their verdict (#181–#190).** **Breaking (#183):** `chiller_staging_fleet`'s `n_running_hours` and `n_multi_hours` were sample counts and are renamed `n_running_samples` and `n_multi_samples`, with no aliases; the hours are new metrics beside them. **Scoring change (#184):** `camber datasets score` now scores each rule only on the equipment it applies to, so per-rule false-positive rates move on mixed-equipment entries; the overall confusion is unchanged. `filter_fouling` and `control_hunting` judge fan-on samples, and an unreachable hunting threshold no longer reads as a pass (#181, #182). `chiller_staging_fleet` counts only chillers and takes a declared `capacity_kw` (#183). A new `cw_flow` role lets tower drift match on heat rejected; chilled-water loops are gated on their pumps, and approach checks read running samples only (#184). Heat-pump rules handle coarse trends, no longer read a defrost as the wrong mode, and count stage changes only while running (#185). The G36 zone-fleet rules read `airflow_min_sp`, stop counting G36's high heating loop as a violation, and rate mixed heating and cooling by hours (#186). An `ok` drift finding now says the signal holds near its baseline instead of naming a fault, the drift reference declines only the detectors it could run, and the tower-approach and head-pressure detectors say which way the signal moved (#187–#190). The two synthetic entries publish the new points (generator version 2); the `air-maintenance`, `plant-chiller-multi`, `plant-heat-pump` and `zone-g36-fleet` workbook answers are re-recorded.
-
-### Added
-- **A condenser-water flow role, `cw_flow` (#184).** The flow through the tower in gpm. With
-  the tower's range it gives the heat rejected, so the tower drift rules match load correctly
-  when chillers and their condenser pumps stage. It has a Haystack hint, the Brick class
-  `Condenser_Water_Flow_Sensor`, a 223P quantity, physical bounds and the gpm unit check.
-- **`chiller_staging_fleet` takes a declared capacity (#183).** The new `capacity_kw` parameter
-  is each chiller's full-load power: one number for equal chillers, or an `{equip: kW}` map.
-  The new metric `capacity_source` (`declared`, `observed_p95` or `mixed`) says where the
-  capacity came from. Without a declaration a caveat says the observed figure reads low on a
-  plant that never loads a chiller fully.
-- `camber.model.equipclass.is_chw_loop` tells a chilled-water loop (`CHW_LOOP`, `SECLOOP`,
-  `CHILLED_WATER_LOOP`) from a chiller in the `chw_plant` family. `CHWLOOP` and
-  `CHILLEDWATERLOOP` are now listed spellings of that family.
-- The roles `airflow_min_sp` (a VAV box's minimum airflow setpoint), `zone_heat_loop` and
-  `zone_cool_loop` (a zone's heating and cooling loop outputs, %) (#186).
-
-### Changed
-- **`filter_fouling` and `control_hunting` judge fan-on samples (#181).** Both read the fan
-  from supply-fan status, else speed, else airflow (`schedules.fan_on_mask`), as the other
-  air-side rules do. `filter_fouling` takes its median over fan-on readings only: over every
-  sample, a unit running under half the day could never warn however dirty its filter, because
-  the transmitter reads about zero with the fan off. `control_hunting` counts only steps between
-  two fan-on samples, so fan-off hours no longer dilute the reversal rate. A unit that trends no
-  fan signal is judged ungated, with a caveat. New metrics: `fan_gate` on both,
-  `n_judged`, `n_masked_fan_off` and `fault_dp_inwc` on `filter_fouling`, and `fan_on_hours`
-  and `fault_reachable` on `control_hunting`. Each rule has a `fan_gate` parameter (default on).
-- `filter_fouling`'s fault multiplier, 1.5 times the change-out pressure, is now the documented
-  parameter `fault_factor` (#182).
-- `filter_fouling` links to PNNL Re-tuning chapter 9 (Building Walk Down). The chapter's
-  air-handler walk-down lists missing, dirty, plugged or collapsed filters among the things to
-  inspect. It gives no pressure threshold, so the change-out default is still CAMBER's own.
-- **`compressor_staging` counts only stage changes while the compressor runs (#185).** A change
-  to or from stage 0 is a start or a stop, which `compressor_short_cycle` already judges; counting
-  it here made a healthy unit cycling two or three times an hour read as hunting. On
-  `synthetic-heat-pump` the well-staged units now read 1.0 to 2.43 changes a day (4.29 to 6.5
-  before) and `WSHP__stage_hunting` 43.3 (52.23), a warn rather than a fault.
-- **`hp_capacity_shortfall` names a fighting room as the cause (#185).** When `hp_room_imbalance`
-  runs in the same config and finds a unit's room fighting, that unit's `capacity` or `mixed`
-  verdict becomes `room_fight` (`verdict_alone` keeps the old one, `deferred_to` and `room` say
-  where to look). The severity stands: the room is out of band, but a bigger unit will not fix it.
-- **`chiller_staging_fleet` counts only chillers (#183).** A chilled-water loop's power point
-  is its pumps', so loops are left out of the fleet (new metric `n_loops_excluded`, with a
-  caveat naming them).
-- **Breaking: `chiller_staging_fleet`'s count metrics are renamed (#183).** They were sample
-  counts named as hours. `n_running_hours` is now `n_running_samples` and `n_multi_hours` is now
-  `n_multi_samples`, with no aliases: a reader of the old keys gets nothing. The hours are new
-  metrics beside them (`running_hours`, `multi_hours`, and `sample_interval_min`).
-- **`chw_supply_tracking` and `chw_plant_reset` gate a chilled-water loop on its pumps (#184).**
-  Equipment whose class is a loop is "running" by its pumps' `pump_status` (duty above 0.5),
-  else its `chw_flow` above 5 % of its 95th percentile, else its pumps' `power` above a tenth of
-  its 95th percentile. `run_source` reads `pump_status`, `flow` or `pump_power`. A loop's power
-  is no longer called the chiller's. Chillers keep their status-then-power gate.
-- **`chiller_approach_fouling` reads running samples only (#184).** The medians read the samples
-  the chiller ran, by its `compressor_status` (duty above 0.5) or else its `power` above a tenth
-  of its 95th percentile. With neither, every sample is read, with a caveat. New metrics
-  `run_source` and `n_judged`. A chiller that never ran is `info`.
-- **`cooling_tower_fan_effort_drift` matches on heat rejected when the condenser flow is
-  trended (#184).** The new `load_source` `cw_heat_rejection` is `cw_flow` times the range, over
-  24. On the range alone the rule assumes a constant condenser flow, and a fired finding now says
-  so: when a second chiller and its condenser pump stage on, the range halves for the same heat
-  and the fans read as working harder.
-- **`cooling_tower_approach_drift` runs on a tower of its own (#184).** It needed chilled-water
-  flow and temperatures on the tower's own equipment, so it never ran on a separate tower. It
-  now matches the approach on chilled-water tons when they are there, else on the heat rejected
-  (`cw_flow` and the range), else on the range, with the constant-flow caveat on a fired
-  finding. The new metric `tower_approach_load_source` says which. Equipment with chilled-water
-  tons scores as before.
-- **`camber datasets score` scores each rule only on the equipment it applies to (#184).** This
-  changes per-rule label scores on any entry whose rules do not all run on every equipment. A
-  rule's false-positive rate counted every labelled equipment, including equipment the rule
-  cannot run on (the chillers, for a tower rule). Each record now lists the rules that ran on it
-  (`scored`, leaving out a class decline), and each rule's confusion counts those records only.
-  A suite rule with no finding anywhere is still scored over every record. The overall
-  confusion is unchanged. `camber.eval.benchmark` reads the optional `scored` key.
-- The `plant-chiller-multi` workbook answers are re-recorded (key, page, instructor block and the
-  config comments). Over
-  the whole facility the fleet counts 14 chillers, not 21, and 84.6 % of multi-chiller samples
-  are over-staged (was 100 %), still a fault. The secondary loops' `run_source` is `flow` (was
-  `power`), with the same figures. The `cooling_tower_fan_effort_drift` label score counts the
-  7 towers, not all 28 pieces of equipment, so its false-positive rate is 1 of 5 (was 1 of 26).
-  That rate is now 0 of 5: the synthetic tower trends its condenser flow (generator version 2,
-  below), so the over-staged plant's tower no longer warns.
-  `cooling_tower_approach_drift` now runs on the seven towers. It faults on the full-fan tower
-  (+5.7 °F) and passes the others, the controlled fouled tower included; the key now records it.
-- The `plant-heat-pump` label scores move with the scoring change and are re-recorded. Each rule now counts only the heat pumps or loops it ran on: `hp_mode_vs_need` and
-  `hp_capacity_shortfall` over the 10 heat pumps, `heatpump_defrost` over the 4 air-source heat
-  pumps, `compressor_staging` over the 6 water-source heat pumps and `source_loop_deltat` over the
-  2 loops, not all 12. The same false positives now read `hp_capacity_shortfall` 3 of 9 (was 3 of 11) and
-  `heatpump_defrost` on the 20-reversal variant 1 of 3 (was 1 of 11). `hp_mode_vs_need`'s one
-  false positive is gone with #185 (a defrost reads as heating). Every true-positive rate and
-  every zero false-positive rate stays.
-- **G36 zone-fleet rules (#186).** `airflow_sp` is the box's active airflow setpoint; the
-  reheat-at-minimum rules (`reheat_minimization_g36`, `zones_heat_cool_census`, `reheat_penalty`,
-  `overcooling_min_flow`) read `airflow_min_sp` when it is mapped. With only `airflow_sp` they
-  read it as the minimum as before, unless it swings with load while the airflow tracks it: then
-  the G36 rules infer the minimum and say so. `zones_heat_cool_census` now rates the occupied
-  hours with one zone heating while another cools (`pct_hours_mixed`), not one box heating
-  above its minimum. `reheat_minimization_g36` no longer counts G36's high heating loop (the
-  heating loop above 50 %, else the valve at 90 % or more or the discharge 15 °F or more above
-  the space) as a violation, and reads a trended occupancy point. Reset effectiveness judges
-  "not responding" and "not trimming" only on the cycles where the request-implied trajectory
-  had left that end, and lists every failure mode (`failure_modes`). The static rogue census
-  lists a rogue that is short of cooling under `overloaded_zones`, not `rogues`. The SAT
-  censuses count tier-1 requests from `zone_cool_loop`. The cohort-starvation summary names every
-  starved air handler. `cohort_space_temp` needs a 1 °F difference from the median
-  (`min_abs_dev`). `cohort_airflow` reads `info` when its cohort spreads past 0.3 (`max_spread`)
-  and nothing stands out. See docs/TR-RESET.md and docs/CAPABILITIES.md.
-- **Two synthetic entries publish the points #184 and #186 added (generator version 2).** The
-  cache regenerates them on the next fetch or ingest, because the generator version changed.
-  `synthetic-chw-plant-multi`'s tower now trends its condenser-water flow (`CW_GPM`, mapped to
-  `cw_flow`). Each running chiller has one 600 gpm pump, so the flow is 600 or 1,200 gpm,
-  read about 1 % noisy. The tower drift rules now match on the heat rejected. The over-staged
-  plant's tower no longer reads as working harder: `cooling_tower_fan_effort_drift` drops from
-  +6.5 to +0.8 points, `ok`. The two fouled towers still fault. `synthetic-g36-vav-fleet`'s boxes
-  now trend their active airflow setpoint (`ZN{n}_FLOW_SP`, mapped to `airflow_sp`) apart from
-  their minimum (`ZN{n}_FLOW_MIN`, now `airflow_min_sp`). They also trend their heating and
-  cooling loops (`ZN{n}_HTG_LOOP` and `ZN{n}_CLG_LOOP`, mapped to `zone_heat_loop` and
-  `zone_cool_loop`). The censuses now count about as many requests as the air handlers' own
-  `SAT_REQ` and `DSP_REQ`. `reheat_minimization_g36` reads the high heating loop from the loop,
-  not the valve, and both single-maximum boxes still fault. The `plant-chiller-multi` and
-  `zone-g36-fleet` workbook answers are re-recorded (keys, pages, instructor blocks and the
-  `zone-g36-fleet` figure, whose census now counts the cooling loop). On `plant-chiller-multi`
-  the fan-effort drift reads +37.9 and +55.3 points on the fouled towers (was +34.9 and +59.1),
-  +0.8 on the near miss (was +4.9), and the full-fan tower's approach drift +5.8 °F (was +5.7);
-  the fan-effort rule's false-positive rate is 0 of 5 (was 1 of 5) and the plant's 0 of 22 (was
-  1 of 22). On `zone-g36-fleet` the SAT census's rogue sends 92.5 % of its air handler's
-  requests (was 98.9 %), the equipment room 60.8 % of the static requests (was 48.6 %), the
-  single-maximum boxes reheat above minimum outside the high heating loop 69.7 % and 93.1 % of
-  their reheating hours (was 93.9 % and 100 %), and the near miss's zone 1 sends 43.0 % and binds
-  on 45.4 % (was 41.3 % and 46.8 %).
-
-### Fixed
-- **An `ok` pump or loop drift finding names no fault (#187).** `loop_dp_drift` ended every
-  summary with a cause, "rising system resistance / valve authority" or "bypass / stuck-open",
-  even on an `ok` Finding. `pump_flow_drift` and `pump_head_drift` called a sub-floor fall a
-  "deficit", and `pump_power_drift` called a sub-floor rise an "excess". An `ok` finding now says
-  the signal "holds near its baseline", with the signed shift and its σ. An `ok` loop DP move that
-  the DP setpoint reset explains keeps its size and says so. `warn` and `fault` wording is
-  unchanged, and the `hw_*` twins follow. Only the text moves: in
-  `tests/golden/pumpsim_fullsize.json` 39 `ok` summaries change (17 loop DP, 10 pump head, 8 pump
-  power, 4 pump flow), and every severity, metric and caveat is unchanged. `diagnose_pump_drift`
-  already named causes only for `warn` and `fault`.
-- **The drift reference declines only the detectors it could run (#188).** With a declared
-  `reference: {"equip": ...}`, the reference equipment declined as `is_reference` for every
-  detector in the family, including those it has no inputs for. It now gets the same inputs check
-  as every other unit: it declines as `is_reference` only where it has the detector's inputs, and
-  is skipped otherwise. The units that can run such a detector still decline as
-  `reference_missing_inputs`. The `camber datasets score` counts for `lbnl-chiller` and
-  `lbnl-boiler` are unchanged.
-- **`control_hunting` no longer reads an unreachable threshold as a pass (#182).** A trend can
-  show at most about one reversal per sample, and in practice a little less. A threshold now
-  counts as reachable only when that ceiling is at least `resolution_margin` times it (new
-  parameter, default 1.25). At 10-minute data the ceiling equals the 6/hr warn threshold, so
-  the rule now declines (info) instead of returning an `ok` it could not have failed. At
-  5-minute data the ceiling equals the 12/hr fault threshold, so severity is capped at warn,
-  with a caveat. The caveat now fits the verdict: "severity capped at warn" on a warning, and
-  "only warn-level hunting was testable" on an `ok`.
-- `filter_fouling`'s summary said "% of hours" above the change-out pressure; the figure is a
-  share of samples (fan-on samples when gated), and it now says so.
-- **A coarse trend no longer hides a heat pump's defrosts and stage changes (#185).**
-  `heatpump_defrost` and `compressor_staging` take `max_interval_min` (default 5 minutes). As
-  `boiler_short_cycle` does since #143, on a coarser trend the count is a floor: a count at or
-  above the limit keeps its verdict with a caveat, and below it, samples part-way between two
-  states decline the verdict to `info` ("cannot confirm on a 15-minute trend"). A resampled
-  reversing valve also counts the fewest changes its means allow, so a 5-minute defrost in a
-  15-minute bin (0.67) is two changes, not none. On `plant-heat-pump--15min`,
-  `ASHP__defrost_sensor` now faults at 49.89 a day (0.14, `ok`, before). Both rules report
-  `interval_min` and `n_partial`. **This changes behaviour on any trend coarser than 5 minutes:**
-  `heatpump_defrost` and `compressor_staging` now caveat every such finding, and decline a count
-  below the limit to `info`, where they used to pass silently. Run at the stored interval, or
-  raise `max_interval_min` only if the unit's defrosts and stage delays are longer than the
-  interval.
-- **A defrost no longer reads as cooling a cold room (#185).** With the mode read from the
-  compressor and the reversing valve, `hp_mode_vs_need`, `hp_capacity_shortfall` and
-  `hp_room_imbalance` count a cooling run of at most `max_defrost_min` (15 minutes) with heating
-  on both sides as heating. `hp_mode_vs_need` reports it as `defrost_hours`. `ASHP__no_aux_heat`
-  on `synthetic-heat-pump` no longer warns for its defrosts.
-- **`hp_capacity_shortfall`'s control verdict no longer calls a unit running the other way
-  "mostly idle" (#185).** The summary gives the split (in the needed mode, the other mode, idle),
-  and a new metric per side, `heating_opposite_pct` / `cooling_opposite_pct`, holds the share in
-  the other mode.
-- **An `ok` air-side, coil or chiller drift finding names no fault (#189).** The #187 fix now
-  covers the other drift detectors that named a cause for any move, even one under the floors.
-  `duct_static_drift` named "over-pressurization" or "the fan cannot hold setpoint",
-  `chiller_cw_range_drift` "less condenser-water flow" or "more flow",
-  `chiller_superheat_drift` an evaporator "starving" or "overfeeding", and
-  `economizer_damper_drift` a damper "leaking / stuck" or "slipping closed". On a rise,
-  `coil_valve_drift`, `vav_airflow_drift` and `vav_reheat_valve_drift` reported a "creep" with a
-  cause, `filter_loading_drift` called it "loading" and `fan_efficiency_drift` an "excess".
-  `coil_leak_drift` named "a leaking or passing valve" for a shift in the leak direction. An `ok`
-  finding now says the signal "holds near its baseline", with the signed shift and its σ. An `ok`
-  duct-static move that the static setpoint reset explains keeps its size and says so. All
-  `warn` and `fault` wording is unchanged, and so is the wording that says a fall is not a
-  fault. The pump and loop detectors now use the same helper, and their text is unchanged. Only
-  the text moves: no golden file quotes these summaries, and no severity, metric, caveat or
-  benchmark figure changes.
-- **`cooling_tower_approach_drift` and `chiller_head_pressure_drift` say which way the signal
-  moved (#190).** The tower summary said "approach widened" whatever the sign, so a fall read
-  "widened -0.4°F". It now says "narrowed" with the size of the fall, and adds that a narrower
-  approach is not a fault. `chiller_head_pressure_drift` said "climbed" on any rise, even an
-  `ok` one, and printed a fall as a bare signed number. A fall now says "fell", still noting that
-  a fall is not a high-side fault. An `ok` rise on either detector now says the signal "holds
-  near its baseline", with the signed shift and its σ, as in #187 and #189. `warn` and `fault`
-  wording is unchanged. Only the text moves: no golden file or workbook answer quotes these
-  summaries, and no severity, metric or caveat changes.

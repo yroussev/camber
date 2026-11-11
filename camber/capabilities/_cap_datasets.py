@@ -13,8 +13,11 @@ import re
 
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import cite
+from ._page import OFFSET, limit_arg, page
 
 _KINDS = ("simulated", "real", "lab", "synthetic")
+#: datasets on a page by default (0.112, #333: the whole catalog before)
+_PAGE = 20
 
 #: the notice a research-only entry carries
 REFUSED = (
@@ -42,6 +45,8 @@ SEARCH_INPUT = {
             "enum": ["all", "commercial"],
             "description": "commercial: only datasets usable commercially (default all)",
         },
+        "limit": limit_arg(_PAGE, "datasets"),
+        "offset": OFFSET,
     },
 }
 
@@ -143,6 +148,7 @@ def dataset_search(ctx, arguments: dict) -> CapabilityResult:
         }
     ]
     text = [f"{len(rows)} catalog dataset(s) match, {n_ro} research-only [F1@dataset_search]."]
+    rows = page(rows, arguments, default=_PAGE, what="datasets", order="by id")
     for i, r in enumerate(rows, start=2):
         fact_id = f"F{i}@dataset_search"
         facts.append(
@@ -162,7 +168,7 @@ def dataset_search(ctx, arguments: dict) -> CapabilityResult:
         if n_ro
         else []
     )
-    data = {"count": len(rows), "research_only": n_ro, "datasets": rows}
+    data = {"count": len(hits), "research_only": n_ro, "datasets": rows}
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
 
 
@@ -287,6 +293,18 @@ def dataset_entry(ctx, arguments: dict) -> CapabilityResult:
             + ("" if data["download_bytes"] else " (generated locally)"),
         },
     ]
+    if data["good_for"]:
+        # 0112-cite15: what the entry says the dataset is good for, which hosts state from the
+        # JSON ("the config can supply the missing airflow")
+        facts.append(
+            {
+                "id": "F3@dataset_entry",
+                "kind": "dataset_uses",
+                "dataset_id": e.id,
+                "value": len(data["good_for"]),
+                "text": f"{e.id} is good for: " + "; ".join(data["good_for"]),
+            }
+        )
     text = " ".join(cite(f) for f in facts)
     banners = [REFUSED] if e.research_only else []
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)
@@ -297,8 +315,8 @@ CAPABILITIES = (
         name="dataset_search",
         title="Search the dataset catalog",
         description=(
-            "Search CAMBER's catalog of open building datasets (fault-labelled simulations, real "
-            "building trends, lab rigs, synthetic sets) by words and filters: id, title, kind, "
+            "Search CAMBER's catalog of open building datasets (simulated, real, lab, synthetic) "
+            "by words and filters: id, title, kind, "
             "SPDX licence, access, commercial use, fault labels, equipment, size and what each is"
             " good for. Research-only entries are listed with a notice: this server refuses their"
             " data. Cheap."

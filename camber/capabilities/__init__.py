@@ -30,6 +30,12 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
 - **citations**: ``text`` is checked against ``facts`` with :func:`camber.agent.verify.check`
   (strict: a sentence stating a figure no cited fact carries is removed, and so is an unknown
   ``[id]``, each with a banner that says which);
+- **the session's facts** (0.112, #294): with a ``ctx.ledger`` (a :class:`FactLedger`, one per
+  client session), every fact of every result is recorded there, and ``check_citations`` resolves
+  the ids it is given from it: only a fact this server issued to this session supports a
+  sentence. A capability that reads the ledger names the ids it needs (``Capability.cites``), so
+  a transport can send a worker only those (:meth:`Registry.ledger_view`). With no ledger (direct
+  Python use) ``check_citations`` takes the caller's facts as given: unverified provenance;
 - **text from the data** (0.111, #291): ``text``, every fact's ``text``, every banner and every
   error message are one line with no control, bidi or invisible character, only the handler's
   own fact ids are citations in ``text`` (any other ``[F1@x]`` reads ``(F1@x)``), a value quoted
@@ -41,7 +47,9 @@ adapter over :meth:`Registry.call`, so policy is enforced in one place:
   ``{"retryable": bool, "facility_id": ...}`` (the facility only when the caller may see it); so
   is a call that a writer replacing or removing files of a facility it reads overlapped (a forced
   re-ingest, a prune: the facility's write fence, :mod:`camber.store._fence`, moved), retryable,
-  whatever the handler answered (#306);
+  whatever the handler answered (#306); and so is a facility registry that cannot be read just
+  now (``"reason": "registry_unreadable"``, :class:`camber._servable.RegistryUnavailable`), which
+  each call reads once (0.112, #324);
 - **no leaks**: any other exception becomes ``CapabilityError("internal")`` whose message holds
   no absolute local path.
 
@@ -73,10 +81,11 @@ import json
 import os
 import pkgutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from ._ledger import FactLedger
 from ._page import collect
 from ._policy import (
     known_roots,
@@ -103,6 +112,7 @@ __all__ = [
     "ERROR_CODES",
     "Caps",
     "CallContext",
+    "FactLedger",
     "CapabilityResult",
     "CapabilityError",
     "Capability",
@@ -113,6 +123,10 @@ __all__ = [
     "research_only",
     "run_config_for",
 ]
+
+#: the key of a structured result (MCP ``structuredContent``) where a transport repeats the
+#: result's facts and banners (0.112, #331); reserved: no capability's ``data`` holds it
+RESULT_KEY = "camber"
 
 #: every :attr:`CapabilityError.code`
 ERROR_CODES = (
@@ -151,6 +165,9 @@ class CallContext:
     # 0.111 (#308): ((path, loaded config), ...) as checked when the server started; the calls
     # read a config named here from this snapshot, never from the file again
     config_snapshot: tuple = field(default=(), compare=False, repr=False)
+    # 0.112 (#294): the facts issued to this caller's session (a FactLedger), recorded by every
+    # call and read by check_citations; None: no session, citations checked unverified
+    ledger: Any = field(default=None, compare=False, repr=False)
 
     def __post_init__(self):
         allowed = self.allowed_facilities
@@ -206,6 +223,12 @@ class Capability:
     # 0.111 (#320): top-level keys of ``data`` that hold the capability's own output (not values
     # from the data), never cut at :data:`~._sanitize.MAX_VALUE`
     own_output: tuple[str, ...] = ()
+    # 0.112 (#294): the fact ids a call reads from the session's ledger, from its arguments as
+    # given (not yet validated: tolerate any shape); None: it reads none
+    cites: Callable[[Any], Iterable[str]] | None = None
+    # 0.112 (#322): the handler reads each facility under its own write fence and reports one it
+    # cannot read in its result, so the registry takes no fence snapshot around the call
+    fences_itself: bool = False
 
 
 @dataclass(frozen=True)
@@ -297,6 +320,10 @@ class Registry:
             # MCP (2025-11-25) takes only an object outputSchema / structuredContent
             if getattr(cap, which).get("type") != "object":
                 raise ValueError(f"{cap.name}.{which} must be an object schema")
+        # 0.112 (#331): a transport puts the result's facts and notices under this key of the
+        # structured result (MCP structuredContent), so no capability's data may hold it
+        if RESULT_KEY in (cap.output_schema.get("properties") or {}):
+            raise ValueError(f"{cap.name}.output_schema must not declare {RESULT_KEY!r}")
         self._caps[cap.name] = cap
 
     def register_prompt(self, prompt: Prompt) -> None:
@@ -391,8 +418,24 @@ class Registry:
             raise CapabilityError("unknown_capability", f"no capability named {name!r}")
         return cap
 
+    def ledger_view(self, name: str, arguments: Any, ledger: FactLedger) -> FactLedger:
+        """The part of ``ledger`` a call of ``name`` with ``arguments`` reads (0.112, #294): the
+        facts its ``Capability.cites`` names, as a small :class:`FactLedger` a transport puts in
+        the call's context in place of the session's (``camber mcp`` sends it to the worker
+        process with the call, and records the result's facts into the session's ledger
+        itself). Empty for a capability that reads no facts or an unknown name."""
+        cap = self._caps.get(name) if isinstance(name, str) else None
+        ids: list = []
+        if cap is not None and cap.cites is not None:
+            try:
+                ids = [i for i in cap.cites(arguments) if isinstance(i, str)]
+            except Exception:  # noqa: BLE001 - malformed arguments: the call refuses them
+                ids = []
+        return ledger.view(ids)
+
     def call(self, name: str, arguments: dict, ctx: CallContext) -> CapabilityResult:
-        """Validate ``arguments``, run the handler under the policy, check the result.
+        """Validate ``arguments``, run the handler under the policy, check the result; with a
+        ``ctx.ledger``, record the result's facts there.
 
         Never raises anything but :class:`CapabilityError`; see the module docstring.
         """
@@ -400,7 +443,8 @@ class Registry:
         # before the generic pattern, which a path with a space or a comma would get past
         secrets = known_roots(ctx)
         try:
-            fence = _fence_snapshot(arguments, ctx)
+            cap = self._caps.get(name) if isinstance(name, str) else None
+            fence = {} if cap is not None and cap.fences_itself else _fence_snapshot(arguments, ctx)
             try:
                 res = self._call(name, arguments, ctx)
             except _SchemaError:
@@ -411,19 +455,23 @@ class Registry:
             _fence_check(ctx, fence)
             # the quoted spans keep their marks until here, so a name from the data gets the
             # known roots only (#307), then the marks go
-            return replace(
+            out = replace(
                 res,
                 text=unmark(redact(res.text, *secrets)),
                 banners=[unmark(redact(b, *secrets)) for b in res.banners],
                 # 0.111 (#318): a fact's text names data values, so it loses the known roots
                 # (with the rest of their path) only, as a quoted name in the text does
                 facts=[
-                    {**f, "text": redact_names(f["text"], *secrets)}
+                    {**f, "text": _fact_text(f, secrets)}
                     if isinstance(f, dict) and isinstance(f.get("text"), str)
                     else f
                     for f in res.facts or []
                 ],
             )
+            ledger = getattr(ctx, "ledger", None)
+            if ledger is not None:  # 0.112 (#294): what this session was given
+                ledger.record(out.facts)
+            return out
         except _SchemaError as e:  # built from the schema and the caller's own arguments
             raise CapabilityError(e.code, e.message, data=e.data) from None
         except CapabilityError as e:
@@ -439,6 +487,12 @@ class Registry:
             raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
+        from .._servable import call_snapshot
+
+        with call_snapshot():  # one read of the facility registry per call (0.112, #324)
+            return self._checked_call(name, arguments, ctx)
+
+    def _checked_call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
         from ._policy import check_arguments, outside_allowlist, registry_notice
         from ._schema import as_integers, validate
 
@@ -480,13 +534,16 @@ class Registry:
         text, cite_banners = _grounded(hidden, facts)
         text = lead(show_spans(text, spans))  # the marks stay for call()'s redact (#307)
         notice = registry_notice(ctx)  # 0.111 (#290): a damaged registry is said on every result
+        from ._common import notice_facts
+
         own = [finish(b) for b in [*(res.banners or []), *banners]]
+        every = [*([notice] if notice else []), *own, *cite_banners]
         out = replace(
             res,
             data=data,
             text=text,
-            facts=facts,
-            banners=[*([notice] if notice else []), *own, *cite_banners],
+            facts=[*facts, *notice_facts(every, f"{cap.name}-{token}")],  # 0.112 (#294)
+            banners=every,
             truncated=bool(res.truncated or banners),
         )
         _too_large(_result_bytes(out), ctx.caps.max_bytes)
@@ -497,13 +554,14 @@ class Registry:
         """``(result, notices)``: the handler in a worker thread, no-persist, within
         ``ctx.caps.max_seconds``, and the notices of what its pages left out."""
         from .._nopersist import no_persist
+        from ..store._partprov import serving
 
         box: dict = {}
 
         def work():
             box["cuts"], _token = collect()
             try:
-                with no_persist():
+                with no_persist(), serving():  # #319: a research-only part file is refused
                     box["result"] = cap.handler(ctx, arguments)
             except BaseException as e:  # noqa: BLE001 - re-raised in the calling thread
                 box["error"] = e
@@ -636,6 +694,9 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
         return None
     named = fid if fid in getattr(ctx, "allowed_facilities", frozenset()) else None
     data: dict = {"retryable": retryable}
+    code = getattr(exc, "code", None)
+    if code:  # the facility registry (0.112, #324)
+        data["reason"] = code
     if named is not None:
         data["facility_id"] = named
     where = f"the stored data of facility {named!r}" if named else "the stored data"
@@ -645,6 +706,14 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
         else "a retry will not help until the file is repaired or the facility is re-ingested"
     )
     return CapabilityError("unavailable", f"{where} cannot be read: {reason}; {hint}", data=data)
+
+
+def _fact_text(fact: dict, secrets: list) -> str:
+    """A fact's text as the result gives it: a notice fact's exactly as its banner reads
+    (0.112, #294), any other's with the known roots taken out of the data names it carries."""
+    if fact.get("kind") == "notice":
+        return unmark(redact(fact["text"], *secrets))
+    return redact_names(fact["text"], *secrets)
 
 
 def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
@@ -665,10 +734,55 @@ def call_token(name: str, arguments: dict, ctx: CallContext) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:6]
 
 
+def _config_identity(config: dict, path) -> dict:
+    """``config`` as the token sees it (#326): each path it reads stands for what it resolves to
+    (relative ones against the config's directory), never for its spelling, so an absolute or a
+    relative path, one through a symlink or with a trailing slash, and the same store or file
+    mounted elsewhere give one token. ``source.store`` stands for its data, which the store
+    generation in :func:`_server_state` covers; a folder for the name, size and modification
+    time of its entries, a file for its size and modification time. Stat calls only."""
+    import copy
+
+    from ..store.parquet_store import _partition_signature
+
+    base = os.path.dirname(os.path.abspath(os.fspath(path)))
+
+    def where(p):
+        return os.path.realpath(os.path.join(base, os.path.expanduser(p)))
+
+    def folder(p):
+        return ["folder", list(_partition_signature(where(p)))] if isinstance(p, str) else p
+
+    def file(p):
+        if not isinstance(p, str):
+            return p
+        try:
+            st = os.stat(where(p))
+            return ["file", st.st_size, st.st_mtime_ns]
+        except OSError:
+            return ["file", None]
+
+    out = copy.deepcopy(config)
+    source = out.get("source")
+    if isinstance(source, dict):
+        if isinstance(source.get("store"), str):
+            source["store"] = ["store"]
+        if "folder" in source:
+            source["folder"] = folder(source["folder"])
+        if isinstance(source.get("folders"), list):
+            source["folders"] = [folder(f) for f in source["folders"]]
+    for key, sub in (("mapping", "path"), ("shared_oat", "file")):
+        spec = out.get(key)
+        if isinstance(spec, dict) and sub in spec:
+            spec[sub] = file(spec[sub])
+    return out
+
+
 def _server_state(arguments: dict, ctx: CallContext) -> list:
     """What decides a call's values besides its arguments and the allowlist (#295): a digest of
-    the loaded run config (its canonical JSON, not its path; the file's bytes when it does not
-    load), the trust floor, and a cheap store generation: the size and modification time of the
+    the loaded run config (its canonical JSON, not its path, with the paths it reads standing for
+    what they resolve to: :func:`_config_identity`; the file's bytes when it does not load), the
+    trust floor, and a cheap store generation: the size and modification time of the
     facility registry and the point catalog, and of every file of each touched facility
     partition, part files included, so an in-place rewrite counts (#312; the facilities the
     arguments name, else every allowed one, plus a store-backed config's own facility). Stat
@@ -682,7 +796,9 @@ def _server_state(arguments: dict, ctx: CallContext) -> list:
     for path in config_paths(ctx):
         try:
             loaded = read_config(ctx, path)
-            text = json.dumps(loaded, sort_keys=True, separators=(",", ":"), default=str)
+            text = json.dumps(
+                _config_identity(loaded, path), sort_keys=True, separators=(",", ":"), default=str
+            )
             configs.append(hashlib.sha256(text.encode("utf-8")).hexdigest())
             source = loaded.get("source") or {}
             if source.get("kind") == "store" and source.get("facility_id"):
@@ -797,13 +913,17 @@ def _grounded(text: str, facts: list) -> tuple[str, list]:
     from ..agent.verify import check
 
     g = check(str(text or ""), _Facts(list(facts or [])), strict=True, source="template")
-    dropped = sum(1 for f in g.flagged if f["reason"] in ("uncited-number", "uncited-sentence"))
+    dropped = sum(
+        1
+        for f in g.flagged
+        if f["reason"] in ("uncited-number", "uncited-sentence", "unsupported-claim")
+    )
     unknown = sum(1 for f in g.flagged if f["reason"] == "unknown-citation")
     banners = []
     if dropped:
         banners.append(
-            f"{dropped} sentence(s) of the summary were removed: they state a figure that no "
-            "fact they cite carries"
+            f"{dropped} sentence(s) of the summary were removed: no fact they cite supports a "
+            "figure, name, verdict or negation they state"
         )
     if unknown:
         banners.append(

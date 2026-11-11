@@ -10,7 +10,7 @@ from ._sanitize import name
 
 _TEXT = {"type": "string", "minLength": 1, "maxLength": 200}
 #: points per page by default (#299)
-_PAGE = 250
+_PAGE = 200  # 250 before 0.112 (#333): a page fits a host's tool-output limit
 
 INPUT_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",

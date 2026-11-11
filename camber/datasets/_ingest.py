@@ -78,6 +78,7 @@ from ..store import FacilityRegistry, ParquetStore
 from ..store._fence import fence
 from ..store._leftovers import STAGING_DIR
 from ..store._lock import store_lock
+from ..store._partprov import value_for_entry
 from ..store.parquet_store import _scratch_store
 from ..units import normalize_percent_frame
 from . import _licence, _paths
@@ -589,7 +590,10 @@ def _equip_id(run: dict) -> str:
 
 
 def _staging_root(store: ParquetStore) -> str:
-    return os.path.join(store.root, _STAGING, f"ingest-{os.getpid()}-{id(store):x}")
+    """This ingest's staging directory, created with its owner's record (0.112, #330)."""
+    from ..store._leftovers import mark_owner
+
+    return mark_owner(os.path.join(store.root, _STAGING, f"ingest-{os.getpid()}-{id(store):x}"))
 
 
 def recover_staging(store: ParquetStore) -> list:
@@ -600,7 +604,9 @@ def recover_staging(store: ParquetStore) -> list:
       and an interrupted partition delete finished (:func:`camber.store._swap.recover_tree`);
     - a partition a pre-0.107 swap moved to ``_staging/<fid>.old-<pid>`` (its process gone) is
       put back when the facility has no partition, else deleted (the new one is in place);
-    - the ``_staging/ingest-<pid>-*`` directories of processes that are gone are deleted.
+    - the ``_staging/ingest-<pid>-*`` directories of processes that are gone are deleted;
+    - the temp files of interrupted registry and other atomic writes at the store root are
+      deleted (0.112, #335).
 
     Leftovers of a process that may still be running are left alone.
     """
@@ -626,7 +632,8 @@ def recover_staging(store: ParquetStore) -> list:
             _forget_cached(store, fid)
         elif os.path.lexists(path):
             _swap.discard(path)
-            done.append({"path": path, "action": "staging_removed"})
+            action = "tmp_removed" if item["kind"] == "tmp" else "staging_removed"  # #335
+            done.append({"path": path, "action": action})
     return done
 
 
@@ -782,7 +789,7 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
     sources = {r["id"]: _run_sources(r, paths, inputs) for r in runs}
     reader = _plan_reads(runs, spec, sources)
     fid = spec["facility"]
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
     labels, onsets, excluded, context, notes, warns = {}, {}, {}, {}, [], []
@@ -955,7 +962,7 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
     roles = spec.get("meter_roles") or {}
     default_role = Role(spec.get("default_meter_role", "energy_rate"))
     rule = spec.get("resample", "1h")
-    st = _scratch_store(staging)  # under the store lock its caller holds
+    st = _scratch_store(staging, provenance=value_for_entry(entry))  # under the caller's lock
     out: dict = {}
     series: dict = {}
     for m, path in files.items():
