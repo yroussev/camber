@@ -293,6 +293,18 @@ def dataset_entry(ctx, arguments: dict) -> CapabilityResult:
             + ("" if data["download_bytes"] else " (generated locally)"),
         },
     ]
+    if data["good_for"]:
+        # 0112-cite15: what the entry says the dataset is good for, which hosts state from the
+        # JSON ("the config can supply the missing airflow")
+        facts.append(
+            {
+                "id": "F3@dataset_entry",
+                "kind": "dataset_uses",
+                "dataset_id": e.id,
+                "value": len(data["good_for"]),
+                "text": f"{e.id} is good for: " + "; ".join(data["good_for"]),
+            }
+        )
     text = " ".join(cite(f) for f in facts)
     banners = [REFUSED] if e.research_only else []
     return CapabilityResult(data=data, text=text, facts=facts, banners=banners)

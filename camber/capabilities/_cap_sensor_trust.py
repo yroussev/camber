@@ -224,6 +224,15 @@ OUTPUT_SCHEMA = {
     },
 }
 
+#: (0112-cite15) how each view reads the points, as the trust summary says it: hosts stated the
+#: report view's way of reading from the tool's description ("judges points in their operating
+#: state"), which no fact said
+_VIEW_SAID = {
+    "rules": "rules view: as the rule runner reads its inputs",
+    "report": "report view: operating-state-aware, duct points judged with the fan on and plant "
+    "points while their equipment runs",
+}
+
 #: points named in the summary, and given their own fact
 _LISTED, _FACTS = 8, 200
 
@@ -476,7 +485,7 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
             "kind": "trust_summary",
             "facility_id": fid,
             "value": counts["below_floor"],
-            "text": f"{fid}: {len(rows)} {points} judged ({view} view): {counts['trusted']} "
+            "text": f"{fid}: {len(rows)} {points} judged ({_VIEW_SAID[view]}): {counts['trusted']} "
             f"trusted, {counts['suspect']} suspect, {counts['untrusted']} untrusted; "
             f"{counts['below_floor']} below the trust floor {floor:g}",
             "min_trust": floor,

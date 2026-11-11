@@ -729,16 +729,96 @@ def _metric_totals(metrics: dict) -> str:
     return "totals: " + ", ".join(said[:_TOTALS_NAMED]) + (f" and {more} more" if more > 0 else "")
 
 
+#: the most thresholds and limits a finding fact names (the rest are counted)
+_THRESHOLDS_NAMED = 6
+#: (0112-cite15) a metric word that makes it a rule's threshold or limit
+_THRESHOLD_WORDS = frozenset(("threshold", "floor", "limit"))
+#: a first word that makes it a count or a share against a threshold, not the threshold
+_THRESHOLD_NOT_FIRST = frozenset(("n", "pct", "below", "above", "over", "under", "frac"))
+#: a last word that makes it something else of a threshold (its hours, its confidence)
+_THRESHOLD_NOT_LAST = frozenset(
+    ("hours", "h", "samples", "confidence", "provisional", "label", "start", "excluded")
+)
+#: a metric word that gives a threshold's unit
+_THRESHOLD_UNITS = {
+    "f": "°F",
+    "c": "°C",
+    "pct": "%",
+    "kw": "kW",
+    "gpm": "gpm",
+    "psi": "psi",
+    "cfm": "cfm",
+    "inwc": "inWC",
+    "hours": "h",
+    "minutes": "min",
+}
+
+
+def _metric_thresholds(metrics: dict) -> str:
+    """The thresholds and limits a finding's metrics carry (0112-cite15), which hosts quote
+    from the JSON ("that is the rule's warn threshold"): ``thresholds: warn threshold 40%
+    (warn_pct_threshold), ...``. Each numeric metric that is a warn or fault level (``warn_*``,
+    ``fault_*``) or names a threshold, floor or limit, not a count or share against one
+    (``n_above_limit``, ``pct_over_threshold``, ``below_floor_pct``) nor its hours; its unit
+    from its words, and its other words as its label. At most :data:`_THRESHOLDS_NAMED`, then
+    "and N more". Empty when there is none."""
+    said = []
+    # the warn and fault levels and the named thresholds first, then the limits and floors
+    first = sorted(
+        metrics,
+        key=lambda k: (
+            not (str(k).split("_")[0] in ("warn", "fault") or "threshold" in str(k).split("_")),
+            str(k),
+        ),
+    )
+    for k in first:
+        v = metrics[k]
+        words = str(k).split("_")
+        if (
+            str(k).startswith("_")
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float, np.integer, np.floating))
+            or not math.isfinite(float(v))
+            or words[0] in _THRESHOLD_NOT_FIRST
+        ):
+            continue
+        level = words[0] in ("warn", "fault")
+        if not (level or _THRESHOLD_WORDS & set(words)):
+            continue
+        if words[-1] in _THRESHOLD_NOT_LAST and not (level and words[-1] in ("hours", "h")):
+            continue
+        unit = next((_THRESHOLD_UNITS[w] for w in reversed(words) if w in _THRESHOLD_UNITS), "")
+        label = [w for w in words if w not in _THRESHOLD_UNITS] or [str(k)]
+        if not _THRESHOLD_WORDS & set(label):
+            label.append("threshold")  # "fault_pct": the fault threshold
+        fig = f"{float(v):g}"
+        size = f"{fig}%" if unit == "%" else (f"{fig} {unit}" if unit else fig)
+        # the threshold's words just before its figure, so a sentence reads it as a threshold
+        said.append(f"{' '.join(label)} {size} ({k})")
+    if not said:
+        return ""
+    more = len(said) - _THRESHOLDS_NAMED
+    return (
+        "thresholds: "
+        + ", ".join(said[:_THRESHOLDS_NAMED])
+        + (f" and {more} more" if more > 0 else "")
+    )
+
+
 def _metric_flags(metrics: dict) -> str:
     """What a finding's metrics say beyond its summary that hosts state from the JSON
     (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), its
-    energy and cost totals (:func:`_metric_totals`, 0112-cite14) and the metrics it left null
-    (``null: oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
+    energy and cost totals (:func:`_metric_totals`, 0112-cite14), its thresholds and limits
+    (:func:`_metric_thresholds`, 0112-cite15) and the metrics it left null (``null:
+    oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
     keys = [k for k in sorted(metrics) if not k.startswith("_")]
     parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
     totals = _metric_totals(metrics)
     if totals:
         parts.append(totals)
+    thresholds = _metric_thresholds(metrics)
+    if thresholds:
+        parts.append(thresholds)
     nulls = [k for k in keys if metrics[k] is None]
     if nulls:
         more = len(nulls) - _NULLS_NAMED
