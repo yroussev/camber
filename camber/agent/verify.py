@@ -1129,7 +1129,7 @@ _UNITS = {
     "gbp": "£",
 }
 #: one-letter units that count only glued to the number ("3F", "24h") or as a capital F/C/K
-_SHORT_SPACED = frozenset({"F", "C", "K"})
+_SHORT_SPACED = frozenset({"F", "C", "K", "h"})  # "13 h gap": hours (0112-cite14)
 _DEGREE = frozenset({"deg", "degree", "degrees"})
 _CURRENCY = {"$": "$", "€": "€", "£": "£"}
 #: counted things: a bare count names what it counts with one of these (in the next 3 words)
@@ -1323,6 +1323,8 @@ def _stem(word: str) -> str:
         if suf == "es" and not w.endswith(("sses", "xes", "zes", "ches", "shes")):
             continue
         w = w[: -len(suf)]
+        if suf in ("ing", "ed") and len(w) >= 4 and w[-1] == w[-2] and w[-1] in "bdgmnprt":
+            w = w[:-1]  # (0112-cite14) "running", "logged", "stopped": run, log, stop
         break
     if w.endswith("e") and len(w) > 3:
         w = w[:-1]
@@ -1534,6 +1536,78 @@ _TOKEN = re.compile(
     r"|(?P<word>[A-Za-z]+(?:['’][A-Za-z]+)?(?:-[A-Za-z]+)*)"
     r"|(?P<sym>\S)"
 )
+
+
+#: (0112-cite14) a sentence's dates in other spellings than ISO: a month's name ("May 12",
+#: "12 May 2025", "June 1st, 2025"), a US month/day ("5/12", "5/12/2025") and a zero-padded
+#: month-day ("05-12", "11-08 03:00"); "may" is a month only as "May"
+_MONTH_NAMES = {m.lower(): i for i, m in enumerate(calendar.month_name) if m}
+_MONTH_NAMES.update({m.lower(): i for i, m in enumerate(calendar.month_abbr) if m})
+_MONTH_NAMES["sept"] = 9
+_MON = (
+    r"(?:(?i:january|february|march|april|june|july|august|september|october|november|december|"
+    r"jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\.?|May)"
+)
+_ORD = r"(?:st|nd|rd|th)?"
+_NOT_COUNT = r"(?!\s*(?:%|°|[.,]\d|(?i:h|hrs?|hours?|days?|samples?|points?|minutes?|mins?)\b))"
+_MONTH_DAY = re.compile(
+    rf"(?<![\w.])(?P<mon>{_MON})\s+(?P<day>\d{{1,2}}){_ORD}\b(?:,?\s+(?P<year>\d{{4}})\b)?{_NOT_COUNT}"
+)
+_DAY_MONTH = re.compile(
+    rf"(?<![\w.,\-])(?P<day>\d{{1,2}}){_ORD}\s+(?P<mon>{_MON})(?![\w])(?:,?\s+(?P<year>\d{{4}})\b)?"
+)
+#: a US month/day: with a year, or as one end of a range, or after a word that dates it
+_DATED_BY = r"(?i:on|from|since|until|till|through|thru|between|to|by|starting|ending|and)"
+_US_DATE = re.compile(
+    r"(?<![\w/.,])(?P<m>\d{1,2})/(?P<d>\d{1,2})/(?P<y>\d{4}|\d{2})(?![\d/])"
+    r"|(?<![\w/.,])(?P<m2>\d{1,2})/(?P<d2>\d{1,2})(?![\d/.]|,\d)"
+)
+_ISO_MD = re.compile(r"(?<![\d\-/.:])(?P<m>\d{2})-(?P<d>\d{2})(?![\d\-/])(?P<at>\s+\d{1,2}:\d{2})?")
+
+
+def _other_dates(s: str) -> str:
+    """(0112-cite14) ``s`` with a sentence's other date spellings written as ISO dates, so the
+    date rules read them; one without a year as year 0 (``0000-05-12``), which a cited fact's
+    date of any year with that month and day carries (:func:`_same_day`)."""
+
+    def valid(mo: int, d: int) -> bool:
+        return 1 <= mo <= 12 and 1 <= d <= calendar.monthrange(2024, mo)[1]
+
+    def put(mo: int, d: int, y, _raw: str) -> str:
+        y = 0 if y is None else int(y) + (2000 if int(y) < 100 else 0)
+        return f" {y:04d}-{mo:02d}-{d:02d} "
+
+    def named(m):
+        mo = _MONTH_NAMES[m.group("mon").rstrip(".").lower()]
+        d = int(m.group("day"))
+        return put(mo, d, m.group("year"), "") if valid(mo, d) else m.group(0)
+
+    s = _MONTH_DAY.sub(named, s)
+    s = _DAY_MONTH.sub(named, s)
+
+    def us(m):
+        if m.group("m") is not None:
+            mo, d = int(m.group("m")), int(m.group("d"))
+            return put(mo, d, m.group("y"), "") if valid(mo, d) else m.group(0)
+        mo, d = int(m.group("m2")), int(m.group("d2"))
+        before = re.findall(r"[A-Za-z]+", s[: m.start()])[-1:]
+        after = s[m.end() :]
+        ranged = re.match(r"\s*(?:-|–|to|through|until)\s*\d{1,2}/\d{1,2}(?![\d/])", after, re.I)
+        dated = bool(before) and re.fullmatch(_DATED_BY, before[0]) is not None
+        if valid(mo, d) and (ranged or dated):
+            return put(mo, d, None, "")
+        return m.group(0)
+
+    s = _US_DATE.sub(us, s)
+
+    def iso_md(m):
+        mo, d = int(m.group("m")), int(m.group("d"))
+        padded = m.group("m")[0] == "0" or m.group("d")[0] == "0"
+        if valid(mo, d) and (padded or m.group("at")):
+            return put(mo, d, None, "") + (m.group("at") or "")
+        return m.group(0)
+
+    return _ISO_MD.sub(iso_md, s)
 
 
 def _free(m) -> str:
@@ -1816,6 +1890,16 @@ _NAME, _TERM = "QQNAME", "QQTERM"
 _BOUNDARY = frozenset(",;:()[]{}!?.|/—–")
 
 
+def _same_day(fd: tuple, d: tuple) -> bool:
+    """Whether a fact's date ``fd`` is a sentence's ``d``: the same day, or (0112-cite14) the same
+    month and day where the sentence gives no year (year 0)."""
+    return fd[1:3] == d[1:3] and (d[0] == 0 or fd[0] == d[0])
+
+
+def _day_text(d: tuple) -> str:
+    return f"{d[1]:02d}-{d[2]:02d}" if d[0] == 0 else f"{d[0]:04d}-{d[1]:02d}-{d[2]:02d}"
+
+
 def _date(m) -> tuple:
     y, mo, d, hh, mm, ss = m.groups()
     return int(y), int(mo), int(d), ((int(hh), int(mm), int(ss or 0)) if hh else None)
@@ -1904,6 +1988,8 @@ def _parse(text: str, names, *, fact: bool = False) -> _Parsed:
         return mark(low)
 
     s = _QUOTED.sub(quoted, s)
+    if not fact:
+        s = _other_dates(s)
     s = _DATE.sub(date, s)
     s = _TIME.sub(time, s)
     if vocab.rule_rx is not None:
@@ -2260,6 +2346,13 @@ def _figure_words(
                 fams.setdefault(hit[0], hit)
 
         seg[at] = (stems(a, at, -2), stems(at + 1, b, 2), total, g, fams)
+    if not fact:
+        # (0112-cite14) a sentence's words between two figures are the next one's where they
+        # are its own words: "runs 100% of the time at a median 11% load": "median" is the 11%'s
+        for x, y in zip(ats, ats[1:]):
+            if x in seg and y in seg and clause[x] == clause[y]:
+                pre, post, *rest = seg[x]
+                seg[x] = (pre, post - seg[y][0], *rest)
     out = []
     for q in p.qty:
         if q.at not in seg:
@@ -4547,6 +4640,15 @@ def _quantity(toks: list, i: int, value: Decimal, raw: str):
         and toks[k + 1][1].lower() in _UNITS
     ):
         unit, k = f"{unit}/{toks[k + 1][1].lower()}", k + 2  # "kWh/day"
+    if unit in ("x", "x/day") and not sign:
+        # (0112-cite14) "it starts 13.2 times a day": that many of what its verb counts (the
+        # fact's "13.2 starts/day"), not a factor
+        x = j
+        while x >= 0 and toks[x][0] == "word" and toks[x][1].lower() in _TIMES_SKIP:
+            x -= 1
+        verb = toks[x][1].lower() if x >= 0 and toks[x][0] == "word" else ""
+        if verb.endswith("s") and _noun(verb):
+            unit = _noun(verb)
     if prev is not None and prev[0] == "num" and prev[3] == a:
         return None  # ".14" of "5.16.14": a section or version number
     if not unit and not sign and prev is not None:
@@ -4597,6 +4699,10 @@ def _quantity(toks: list, i: int, value: Decimal, raw: str):
     return _Qty(value.normalize(), sign, unit, base, role, year, i, of_noun=of_noun)
 
 
+#: (0112-cite14) words between a counting verb and its "N times" ("starts only 0.1 times/day")
+_TIMES_SKIP = frozenset(
+    "only about around roughly nearly almost just some approximately over under".split()
+)
 #: the words of a verdict count before what it counts ("1 ok result")
 _UNIT_NOUN_WORDS = {u: {u, u + "s"} for u in ("fault", "warn", "info", "ok")}
 
@@ -4700,6 +4806,8 @@ def _cue_after(toks: list, k: int) -> bool:
                 return True
             if tok.lower() in _NOUN_STOP or tok.lower() in _COMPARISONS:
                 return False  # "+0.5F beyond the allowance" is a result against it
+            if tok.lower() in ("against", "versus", "vs", "compared"):
+                return False  # (0112-cite14) "13.2 a day against a threshold of 6": a result
             seen += 1
         k += 1
     return False
@@ -4729,6 +4837,9 @@ def _scan_noun(toks: list, k: int, of: bool = False) -> str:
     while k < len(toks) and seen < (5 if of else 3):
         kind, tok, _a, _b = toks[k]
         w = tok.lower()
+        if kind == "sym" and tok in "'’" and k + 1 < len(toks) and toks[k + 1][1].lower() == "s":
+            k += 2  # (0112-cite14) a possessive: "11% of PLANT-1's run hours" is of hours
+            continue
         number = kind == "num" or (kind == "word" and _word_number(w) is not None)
         if of and number:
             seen += 1
@@ -4788,7 +4899,7 @@ def _labelled(qty: list) -> list:
     seen: dict = {}
     for q in qty:
         if q.at >= 0 and q.role != "setting":  # "fan_heat_f = 2.0": named, not labelled
-            seen[(q.at, q.unit)] = (q.pre or q.post, q.grp)
+            seen[(q.at, q.unit)] = (q.pre or q.post, q.grp, q.role)
     out = []
     for q in qty:
         if (q.at, q.unit) not in seen:
@@ -4796,8 +4907,10 @@ def _labelled(qty: list) -> list:
             continue
         own = seen[(q.at, q.unit)][0]
         others = set()
-        for (at, unit), (words, grp) in seen.items():
-            if unit == q.unit and at != q.at and grp == q.grp:
+        for (at, unit), (words, grp, role) in seen.items():
+            # (0112-cite14) a threshold is told apart from the thresholds listed with it, not
+            # from the results ("66% of run hrs below 40%": 40% is the only threshold)
+            if unit == q.unit and at != q.at and grp == q.grp and role == q.role:
                 others |= words
         out.append(replace(q, label=frozenset(own - others), sib=frozenset(others - own)))
     return out
@@ -5033,6 +5146,7 @@ class _FactClaims:
             else "",
             "role": role,  # a point's name alone ('"heat_valve" and "oa_damper"', #339)
         }
+        self.rule_name = str(data.get("rule") or "")  # (0112-cite14) the rule it is about
         self.facility = str(data.get("facility_id") or subj.get("facility_id") or "").lower()
         # (#341) the rule it is about, for a sentence that names one rule
         found = str(data.get("finding_id") or subj.get("finding") or "")
@@ -5431,6 +5545,171 @@ def _coverage_problems(vis: str, facts: list, p=None) -> list:
     return [f"{said!r}: no cited fact gives a coverage of 100%"]
 
 
+#: (0112-cite14) what a rule, a metric or a check is said to need of the data: "the low-load
+#: figure needs CHW flow and temperatures", "it requires a supply-air reading"
+_NEEDS_RX = re.compile(r"\b(?:needs?|needed|needing|requires?|required|requiring)\s+", re.I)
+#: what a fact says a rule needs: its words after "needs" (or "missing", of a rule skipped for a
+#: missing input) to the end of that clause; "reads X when mapped" is not a need
+_FACT_NEEDS_RX = re.compile(r"\b(?:needs?|needed|requires?|required|missing)\b([^;)\n]*)", re.I)
+#: what a fact says a rule reads when the input is there ("reads oat, warmup ... when mapped")
+_FACT_READS_RX = re.compile(r"\breads\b([^;)\n]*)", re.I)
+#: what ends the thing needed
+_NEEDS_END = re.compile(
+    r"[,;:.()\[\]!?—–]|\b(?:but|so|because|which|who|while|when|whenever|if|unless|to|before|"
+    r"after|since|than|then|until|whereas)\b",
+    re.I,
+)
+#: a hypothetical or an aside before the verb ("you would need", "I'd need"): no claim of a rule
+_NEEDS_ASIDE = frozenset("you i we i'd we'd you'd would could might will may should".split())
+#: a thing needed that is an input of the data (a point, a reading): only then is it checked
+_NEEDS_INPUTS = frozenset(
+    "flow flows temperature temperatures temp temps pressure pressures power status speed "
+    "humidity damper dampers valve valves airflow co2 setpoint setpoints occupancy enthalpy "
+    "command commands signal signals reading readings point points sensor sensors "
+    "input inputs meter meters".split()
+)
+#: what is done, not read: "the valve needs an inspection" is advice, not an input
+_NEEDS_ACTIONS = frozenset(
+    "check checks checking inspection inspecting repair repairs replacement replacing "
+    "recalibration calibration calibrating visit review attention fix fixing look investigation "
+    "verification verifying confirming confirmation test testing service maintenance tuning "
+    "adjustment reset work".split()
+)
+#: words of the thing needed that say nothing of which input it is
+_NEEDS_GENERIC = frozenset(
+    "a an the its their this that these those both either any some all and or of on in at for "
+    "with from by as one two each every own also only least more valid trended mapped measured "
+    "reading readings point points input inputs signal signals sensor sensors data value values "
+    "trend trends it them is be are was were been position positions".split()
+)
+_NEEDS_INPUT_STEMS = frozenset(_stem(w) for w in _NEEDS_INPUTS)
+_NEEDS_GENERIC_STEMS = frozenset(_stem(w) for w in _NEEDS_GENERIC)
+#: abbreviations a role id or a fact uses for the words a sentence spells out, and back
+_NEEDS_ABBREV = {
+    "chw": ("chilled", "water"),
+    "hw": ("hot", "water"),
+    "cw": ("condenser", "water"),
+    "oa": ("outdoor", "air"),
+    "oat": ("outdoor", "air", "temperatur"),
+    "sat": ("supply", "air", "temperatur"),
+    "rat": ("return", "air", "temperatur"),
+    "mat": ("mixed", "air", "temperatur"),
+    "temp": ("temperatur",),
+    "sp": ("setpoint",),
+    "dp": ("differential", "pressur"),
+}
+
+
+#: (0112-cite14) an order in time said of two things: "it was followed by a 16 h gap"
+_ORDER_RX = re.compile(
+    r"\b(?:(?P<after>followed\s+by|succeeded\s+by)|(?P<before>preceded\s+by))\b", re.I
+)
+
+
+def _first_time(fc) -> tuple | None:
+    """The earliest date (and time) a fact carries, or None."""
+    got = [(d[0], d[1], d[2], d[3] or (0, 0, 0)) for d in fc.claims.dates if d[0]]
+    return min(got) if got else None
+
+
+def _order_problems(vis: str, facts: list) -> list:
+    """(0112-cite14) "A was followed by B" / "preceded by B": B is what a cited fact carrying the
+    dates (or the figures) said after the words is about, and A every other cited fact; each A
+    must come before (followed by) or after (preceded by) B by their dates. With no cited fact
+    for one of them the order is not stated."""
+    text = _CITES.sub(" ", vis)
+    m = _ORDER_RX.search(text)
+    if m is None:
+        return []
+    said = " ".join(m.group(0).split())
+    after = _other_dates(text[m.end() :])
+    dates = {_date(x) for x in _DATE.finditer(after)}
+    timed: list = []
+    for fc in facts:
+        t = _first_time(fc)
+        if t is not None:
+            timed.append((fc, t))
+    if dates:
+        then = [
+            (fc, t)
+            for fc, t in timed
+            if any(_same_day(x, d) for x in fc.claims.dates for d in dates)
+        ]
+    else:
+        nums = set(re.findall(r"\d+(?:\.\d+)?", after))
+        then = [(fc, t) for fc, t in timed if nums & set(re.findall(r"\d+(?:\.\d+)?", fc.said))]
+    first = [(fc, t) for fc, t in timed if all(fc is not g for g, _t in then)]
+    if not then or not first:
+        return [f"{said!r}: no cited fact gives the time of each of the two things it orders"]
+    if m.group("after"):
+        ok = all(t < u for _f, t in first for _g, u in then)
+    else:
+        ok = all(t > u for _f, t in first for _g, u in then)
+    return [] if ok else [f"{said!r}: the cited facts' dates give the other order"]
+
+
+def _input_words(text: str) -> set:
+    """The stems of ``text``'s words, a role id's parts among them (``chw_flow``: chw, flow),
+    with each abbreviation's words and each abbreviation whose words are all there."""
+    out = {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower().replace("_", " "))}
+    for abbr, spelled in _NEEDS_ABBREV.items():
+        if abbr in out:
+            out |= set(spelled)
+        elif set(spelled) <= out:
+            out.add(abbr)
+    return out
+
+
+def _input_problems(vis: str, facts: list) -> list:
+    """(0112-cite14) A rule, metric or check said to need an input of the data ("the low-load
+    figure needs CHW flow") needs a cited fact that names that input: every word of what is
+    needed must be a word of a cited fact (a role id's parts and its abbreviation's words
+    count). Advice ("the valve needs an inspection"), an aside ("you would need ...") and a
+    negation ("needs no ...", read by the negation rule) are not read here."""
+    text = _CITES.sub(" ", vis)
+    why: list = []
+    if _NEEDS_RX.search(text) is None:
+        return why
+    have: set = set()  # what a cited fact says is needed
+    read: set = set()  # every input a cited fact names as needed or read
+    every: set = set()  # the rule's and the unit's own words
+    for fc in facts:
+        every |= _input_words(" ".join(fc.item.values()) + " " + fc.rule_name)
+        for seg in _FACT_NEEDS_RX.findall(fc.said):
+            have |= _input_words(seg)
+        for seg in _FACT_READS_RX.findall(fc.said):
+            read |= _input_words(seg)
+    read |= have
+    for m in _NEEDS_RX.finditer(text):
+        before = re.findall(r"[A-Za-z']+", text[: m.start()].lower())[-3:]
+        if any(w in _NEEDS_ASIDE or w.endswith("'d") for w in before):
+            continue
+        end = _NEEDS_END.search(text, m.end())
+        thing = text[m.end() : end.start() if end else len(text)]
+        words = re.findall(r"[a-z][a-z0-9]*", thing.lower().replace("_", " "))
+        named = "_" in thing or bool(set(words) & (_NEEDS_INPUTS | set(_NEEDS_ABBREV)))
+        named = named or bool({_stem(w) for w in words} & (read - _NEEDS_GENERIC_STEMS))
+        if not words or words[0] in _NEG or not named:
+            continue
+        if set(words) & _NEEDS_ACTIONS:
+            continue
+        said = _input_words(" ".join(words)) - _NEEDS_GENERIC_STEMS
+        # every word of the input is a word of what a cited fact says is needed ("CHW flow" of
+        # "needs CHW flow and temperatures"), or one naming the rule's or the unit's own
+        # ("chiller power" of chiller_staging's "needs power")
+        missing = sorted(
+            x
+            for x in said
+            if not x.isdigit()
+            and x not in have
+            and (x in _NEEDS_INPUT_STEMS or x in _NEEDS_ABBREV or x not in every)
+        )
+        if missing:
+            phrase = " ".join(thing.split())
+            why.append(f"{m.group(0).strip()} {phrase!r}: no cited fact says so ({missing[0]!r})")
+    return why
+
+
 def _strings(data, out: list, p: _Parsed, key: str = "", depth: int = 0) -> None:
     """The string values of ``data`` into ``out`` (lower case), and the dates of its non-name
     fields into ``p``."""
@@ -5767,11 +6046,11 @@ def _number_problems(p: _Parsed, facts: list, every=None) -> list:
             why.append(f"{q.show()}: no cited fact states this figure")
     for d in sorted(p.dates, key=str):
         if not any(
-            fd[:3] == d[:3] and (d[3] is None or fd[3] == d[3])
+            _same_day(fd, d) and (d[3] is None or fd[3] == d[3])
             for fc in facts
             for fd in fc.claims.dates
         ):
-            why.append(f"{d[0]:04d}-{d[1]:02d}-{d[2]:02d}: no cited fact carries this date")
+            why.append(f"{_day_text(d)}: no cited fact carries this date")
     for t in sorted(p.times):
         if not any(t in fc.claims.times or t in {fd[3] for fd in fc.claims.dates} for fc in facts):
             why.append(f"{t[0]:02d}:{t[1]:02d}: no cited fact carries this time")
@@ -7254,7 +7533,7 @@ def _date_problems(p: _Parsed, facts: list) -> list:
         return [
             fc
             for fc in facts
-            if any(x[:3] == d[:3] for x in fc.claims.dates)
+            if any(_same_day(x, d) for x in fc.claims.dates)
             or any(day and a <= day <= b and (b - a).days < 2 for a, b in fc.windows)
         ]
 
@@ -7284,8 +7563,7 @@ def _date_problems(p: _Parsed, facts: list) -> list:
             d = min(near, key=lambda x: x[0])[1]
         if not _match(q, carriers(d), q.claim):
             why.append(
-                f"{q.show()}: said of {d[0]:04d}-{d[1]:02d}-{d[2]:02d}, no cited fact about that "
-                "date states it"
+                f"{q.show()}: said of {_day_text(d)}, no cited fact about that date states it"
             )
     return why
 
@@ -7327,7 +7605,7 @@ def _bind_units(p: _Parsed, facts: list, vis: str) -> tuple:
         dated = [fc for fc in facts if fc.windows or fc.claims.dates]
 
         def carries(fc):
-            return any(x[:3] == d[:3] for x in fc.claims.dates) or any(
+            return any(_same_day(x, d) for x in fc.claims.dates) or any(
                 day and a <= day <= b for a, b in fc.windows
             )
 
@@ -7512,6 +7790,8 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     why += _site_problems(p, cl)
     why += _span_problems(vis, cl)
     why += _coverage_problems(vis, cl, p)
+    why += _input_problems(vis, cl)
+    why += _order_problems(vis, cl)
     return ("unsupported-claim" if why else ""), why
 
 
