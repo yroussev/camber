@@ -509,7 +509,7 @@ CAPABILITIES = (
             "(name, verdict, negation or direction) or not_judged (a label or heading it does "
             "not read: cite or drop it); failures come with why. "
             "Give each unit its own sentence. Never shorten fact ids: cite each id exactly as "
-            "issued. Call it last. Cheap."
+            "issued. Put unchecked remarks after the checked text. Call it last. Cheap."
         ),
         input_schema=INPUT_SCHEMA,
         output_schema=OUTPUT_SCHEMA,

@@ -212,6 +212,7 @@ Pure: regex + the fact whitelist, no LLM, no I/O.
 from __future__ import annotations
 
 import calendar
+import functools
 import os
 import re
 import unicodedata
@@ -1255,7 +1256,7 @@ _FUNCTION = frozenset(
         "very more less most least much many some any each every all both either neither same "
         "such other another which who whom whose what where how why here up down out off "
         "again further once own too yet still even above below beyond within inside across "
-        "around near s"
+        "around near among amongst s"
     ).split()
 )
 #: what a negation skips before the word it negates ("did not even leak", "is not a pass")
@@ -2695,6 +2696,14 @@ def _claim_words(p: _Parsed, toks: list, *, fact: bool) -> None:
         cls = _VERDICT.get(w)
         if cls is not None and nxt in _SETTING:
             cls = None  # "the fault threshold"
+        elif (
+            cls is not None
+            and nxt in ("or", "and", "/")
+            and k + 3 < n
+            and words[k + 2] in _VERDICT
+            and words[k + 3] in _SETTING
+        ):
+            cls = None  # (0112-cite16) "a warn or fault threshold": both name settings
         if cls == "ok" and w.startswith("pass") and nxt in _PASSES_WHAT:
             cls = None  # "passes flow when closed"
         if cls == "confidence" and (
@@ -4853,7 +4862,7 @@ def _scan_noun(toks: list, k: int, of: bool = False) -> str:
     figure, punctuation or a stop word; ``of``: what a percentage is of, in 5 words and past a
     count ("46% of the 64 free-cooling hours" is of hours). A part of a total counts what its
     total counts: "20 of the 106 flagged hours", "9 out of 11 points" (#336)."""
-    seen = 0
+    seen, lead = 0, True
     if not of:
         x = k + (k < len(toks) and toks[k][1].lower() == "out")
         if x < len(toks) and toks[x][1].lower() == "of":
@@ -4889,8 +4898,13 @@ def _scan_noun(toks: list, k: int, of: bool = False) -> str:
         nxt = toks[k + 1][1].lower() if k + 1 < len(toks) else ""
         if n and nxt not in _CUE_NOUNS:  # "the 20.0 fault threshold" counts no faults
             return n
-        seen += 1
         k += 1
+        # (0112-cite16) "780 judged occupied fan-on samples": participles right after the figure
+        # ("judged", "flagged") say which of them, not another thing, so they do not count
+        # towards the words scanned
+        lead = lead and w.endswith("ed") and not w.endswith("eed") and len(w) > 4
+        if not lead:
+            seen += 1
     return ""
 
 
@@ -5155,6 +5169,7 @@ class _FactClaims:
         self.roles = {n for n, _s, f in _ROLE_RX if f.search(roles)}
         subj = data.get("subject") if isinstance(data.get("subject"), dict) else {}
         self.point = bool(data.get("role") or subj.get("role"))  # a fact about one point
+        self.rule = str(data.get("rule") or "")  # (0112-cite16) the rule it is a result of
         self.subjects = {
             str(v).lower()
             for v in (
@@ -5799,6 +5814,31 @@ def _unit_tok(t) -> bool:
     )
 
 
+#: (0112-cite16) what makes the figure after it the object of a comparison, not a subject:
+#: "+3.4F beyond the 2F fan heat", "0.4 above the floor 0.3"
+_REL_OBJECT = frozenset((*_REL_PREP, "than", "vs", "versus", "against"))
+#: what may stand between such a word and the figure it takes
+_REL_OBJECT_SKIP = frozenset("the a an its their this that his her our your".split())
+
+
+def _rel_subject(toks, at: dict, x: int) -> int:
+    """(0112-cite16) The figure a comparison is said of, from the figure ``x`` nearest before it:
+    where ``x`` is itself the object of an earlier comparison word in the clause ("+3.4F
+    beyond the 2F fan heat, which is above the delta_thr_f of 3.0"), the clause's subject is
+    that word's own figure (+3.4F), not the nearest one (2F)."""
+    y = x - 1
+    while y >= 0 and toks[y][1].lower() in _REL_OBJECT_SKIP:
+        y -= 1
+    if y <= 0 or toks[y][0] != "word" or toks[y][1].lower() not in _REL_OBJECT:
+        return x
+    if toks[y - 1][1].lower() in ("or", "and", "at", "to", "from", "the"):
+        return x  # "40% or above the floor": a bound
+    z, units = y - 1, 0
+    while z >= 0 and toks[z][0] != "num" and _unit_tok(toks[z]) and units < 2:
+        z, units = z - 1, units + 1
+    return z if z in at else x
+
+
 def _relation_problems(p: _Parsed) -> tuple:
     """(0112-cite15) ``(why, held)``: a figure the sentence compares with another figure of its
     own ("CV(RMSE) 0.4% is above the 30% limit", "trust 0.70 is below the floor 0.5", "38.1% >
@@ -5852,6 +5892,8 @@ def _relation_problems(p: _Parsed) -> tuple:
                 x -= 1
             if x in at and at[x].unit and at[x].unit not in _MEASURES:
                 x = -1  # "11 points ... are below": a count of things, not a measure
+        if x in at:
+            x = _rel_subject(toks, at, x)
         left = at.get(x)
         if left is None or left.sign == "±" or left.year:
             continue
@@ -6240,7 +6282,7 @@ _METHOD_GENERIC = _NEEDS_GENERIC_STEMS | frozenset(
         "unit units equipment item items result results figure figures number numbers "
         "time times period window run against toward towards across within between through "
         "along among upon onto up down off per via into onto itself themselves missing "
-        "observed recorded actual "
+        "observed recorded actual allowance allowances "
         "when whenever "
         "while if unless where whether".split()
     )
@@ -6256,7 +6298,13 @@ _METHOD_VERBS = frozenset(
 
 
 #: words a fact and a sentence spell two ways
-_METHOD_SAME = {"outside": "outdoor", "configuration": "config", "configured": "config"}
+_METHOD_SAME = {
+    "outside": "outdoor",
+    "configuration": "config",
+    "configured": "config",
+    "level": "threshold",  # (0112-cite16) "the warn level comes from warn_pct"
+    "levels": "thresholds",
+}
 
 
 def _method_words(text: str) -> str:
@@ -6327,7 +6375,28 @@ def _part_negation_problems(vis: str, facts: list) -> list:
     return why
 
 
-def _method_problems(vis: str, facts: list) -> list:
+def _method_rx(rules) -> re.Pattern | None:
+    """(0112-cite16) :data:`_METHOD_RX` with a rule's own id as its subject ("supply_air_control
+    gated on trended occupancy"), for the rule ids ``rules``."""
+    named = sorted((r for r in rules if "_" in r), key=lambda r: (-len(r), r))
+    if not named:
+        return None
+    return _rule_method_rx("|".join(map(re.escape, named)))
+
+
+@functools.lru_cache(maxsize=64)
+def _rule_method_rx(alt: str) -> re.Pattern:
+    return re.compile(
+        _METHOD_RX.pattern.replace(
+            f"(?P<subj>{_METHOD_SUBJECT})",
+            rf"(?P<subj>(?<![\w-])(?:{alt})(?![\w-])(?:\s+(?:on|for|at)\s+[\"“]?[\w-]+[\"”]?)?)",
+            1,
+        ),
+        re.I,
+    )
+
+
+def _method_problems(vis: str, facts: list, vocab=None) -> list:
     """(0112-cite15) What CAMBER itself does, said of one of its parts (a view, a rule, a check,
     the tool, the model, the config: "the report view, which judges points in their operating
     state", "the tool defaulted to the forecast method", "the rule recommends declaring
@@ -6338,6 +6407,9 @@ def _method_problems(vis: str, facts: list) -> list:
     text = _CITES.sub(" ", vis)
     hits = [(m.group("verb"), m.group("obj")) for m in _METHOD_RX.finditer(text)]
     hits += [(m.group("verb"), m.group("obj")) for m in _SOURCE_RX.finditer(text)]
+    rx = _method_rx(getattr(vocab, "rules", ()) or ())
+    if rx is not None:  # (0112-cite16) "supply_air_control gated on trended occupancy"
+        hits += [(m.group("verb"), m.group("obj")) for m in rx.finditer(text)]
     if not hits:
         return []
     have: set = set()
@@ -6360,6 +6432,354 @@ def _method_problems(vis: str, facts: list) -> list:
             phrase = " ".join(f"{verb} {thing}".split())
             why.append(f"{phrase!r}: no cited fact says so ({missing[0]!r})")
     return why
+
+
+#: (0112-cite16) a reason joined to what it explains in one sentence. ``fwd``: the cause before
+#: it, the effect after ("only 4 days, so drift was not evaluated", ", which is why", ", as a
+#: result", ", therefore"); ``back``: the effect before it, the cause after ("not evaluated
+#: because the overlap is short", ", since only 4 days overlap", ", as the overlap is short")
+_CAUSE_FWD = re.compile(
+    r"(?:[,;—–]|\band)\s*(?:so|thus|hence|therefore|consequently)\b(?!\s*(?:far|much|many|long|"
+    r"that|on|called|as|to|too|few|little|well|high|low|large|small)\b)|[,;—–]\s*(?:(?:which|"
+    r"that|this)\s+is\s+why|as\s+a\s+(?:result|consequence))\b",
+    re.I,
+)
+_CAUSE_BACK = re.compile(
+    r"\bbecause\b(?!\s+of\b)|[,;—–]\s*since\b(?!\s*(?:\d|then|before|(?:jan|feb|mar|apr|may|"
+    r"jun|jul|aug|sep|oct|nov|dec)[a-z]*\b))|[,;—–]\s*as\b(?=\s+(?:the|its|it|there|only|no|this|"
+    r"these|those|they|their)\s+(?!\w+\s+(?:does|do|did|is|was)\b))",
+    re.I,
+)
+#: a reason given only as a possibility, or denied: not read here
+_CAUSE_HEDGE = re.compile(
+    r"\b(?:may|might|could|possibly|perhaps|likely|probably|maybe|if|whether|unless|not|n't|"
+    r"suggests?|appears?|seems?)\s*$",
+    re.I,
+)
+#: a fact's reason markers: its "because", "so", "since", "due to", "caused by", "explained
+#: by" and a colon between a statement and what explains it (either way round)
+_FACT_CAUSE = re.compile(
+    r"\b(?P<back>because|since|due\s+to|caused\s+by|explained\s+by|as\s+(?=the|its|it|there|only|"
+    r"no))\b|\b(?P<fwd>so|thus|hence|therefore|which\s+is\s+why|as\s+a\s+result)\b(?!\s*(?:far|"
+    r"much|many|long|that|on|called|to)\b)|(?P<colon>:|\s--|\s—|\s–)(?=\s)",
+    re.I,
+)
+#: words of a reason that say nothing of what it is
+_CAUSE_GENERIC = _METHOD_GENERIC | frozenset(
+    _stem(w)
+    for w in (
+        "was were is are be been being not no never only just so because since as which why "
+        "result consequence therefore thus hence over has have had do does did can will would "
+        "there here they them it its this that these those then than".split()
+    )
+)
+#: what a reason may be given for here: a result, a verdict or a decline of CAMBER's ("drift
+#: was not evaluated", "is a warn", "was skipped", "is conditional", "uncosted"), not a plain
+#: reading of the data ("100% coverage, so the data is gap-free")
+_CAUSE_OUTCOME = frozenset(
+    _stem(w)
+    for w in (
+        "evaluated judged assessed measured computed calculated estimated flagged declined "
+        "skipped warn warns warning fault faults conditional suspect untrusted explained "
+        "excluded passes passed fails failed compared scored masked gated uncosted costed "
+        "verified".split()
+    )
+) | {"#unjudged"}
+#: words for a check that was not judged, read as one outcome ("declined" is "not judged")
+_NOT_JUDGED_STEMS = frozenset(
+    _stem(w) for w in "declined skipped judged evaluated assessed unjudged".split()
+)
+_UNJUDGED_SAID = frozenset(_stem(w) for w in "declined skipped unjudged".split())
+#: advice, whose reason is the writer's: "so check its sensor", "should be confirmed because"
+_CAUSE_ADVICE = re.compile(
+    r"\b(?:should|must|ought|need\s+to|needs\s+to|worth|recommend\w*|consider|check|confirm|"
+    r"verify|investigate|inspect|review|fix|repair|replace|calibrate|treat|start|begin|look)\b",
+    re.I,
+)
+#: (0112-cite16b) a reason's words a sentence and a fact say two ways: "depends on" for "rests
+#: on" (a bias is not "disagrees": the fact's "warn (... bias +3.0)" is its comparison's verdict)
+_CAUSE_SAME = {
+    _stem(a): _stem(b)
+    for a, b in (
+        ("depends", "rest"),
+        ("relies", "rest"),
+        ("based", "rest"),
+    )
+}
+_CAUSE_FIG = re.compile(r"(?<![\w.\-])\d+(?:,\d{3})*(?:\.\d+)?")
+
+
+def _cause_side(text: str, ids: bool = False) -> tuple:
+    """(content stems, figures) of one side of a reason; ``ids``: an id's parts are its words
+    (a fact's "(missing heat_valve, cool_valve)" names what is missing by id)."""
+    figs = {Decimal(m.group(0).replace(",", "")).normalize() for m in _CAUSE_FIG.finditer(text)}
+    # a name with a figure in it ("AHU-1"), an id ("supply_air_temp") or a quoted name says
+    # whom, not what the reason is
+    bare = re.sub(r'"[^"]*"|“[^”]*”', " ", text)
+    bare = re.sub(r"[\w\-]*\d[\w\-.]*" if ids else r"[\w\-]*(?:\d|_)[\w\-.]*", " ", bare)
+    # the words as written (no abbreviation's words: "rate" is no return-air temperature)
+    raw = re.findall(r"[a-z0-9]+", _method_words(bare).replace("_", " "))
+    words = {_stem(w) for w in raw} - _CAUSE_GENERIC
+    words |= {_CAUSE_SAME[w] for w in words if w in _CAUSE_SAME}  # (0112-cite16b) "depends on"
+    if words & _NOT_JUDGED_STEMS and (
+        words & _UNJUDGED_SAID or re.search(r"\b(?:not|n['’]t|never|no|could\s+not)\b", text, re.I)
+    ):
+        words |= {"#unjudged"}  # declined, skipped, not evaluated: one outcome
+    return {w for w in words if len(w) > 1}, figs
+
+
+#: (0112-cite16b) a verdict given with its evidence, in any form a fact uses: "(suspect;
+#: clipped, outliers)", "condenser_water_reset (warn): <evidence>", "conditional on <the cause>"
+_FACT_VERDICT_WITH = (
+    re.compile(
+        r"\((?P<v>suspect|untrusted|trusted|warn|fault|ok|info)\s*[;,:]\s*"
+        r"(?P<why>[^()]*(?:\([^()]*\)[^()]*)*)\)",
+        re.I,
+    ),
+    re.compile(r"\((?P<v>warn|fault|ok|info|suspect)\):(?P<why>.*)", re.I | re.S),
+    re.compile(r"(?P<v>conditional)\s+on\s+(?P<why>[^;]*)", re.I),
+)
+
+
+def _fact_reasons(said: str) -> list:
+    """(0112-cite16) The reasons a fact's text states, as ``(effect, cause)`` sides (each
+    :func:`_cause_side`), read within one ``;``-part of it: what comes before a "because" and
+    after it, before a "so" and after it, and both ways round a colon or a dash (the clause
+    before it, the rest of the part after it). (0112-cite16b) And a verdict given with its
+    evidence (:data:`_FACT_VERDICT_WITH`): the verdict is the effect, the evidence (the rest of
+    the fact, for a result's "(warn): ...") its cause."""
+    out: list = []
+    parts = re.split(r";\s", said)
+    for rx in _FACT_VERDICT_WITH:
+        for m in rx.finditer(said):
+            out.append((_cause_side(m.group("v")), _cause_side(m.group("why"))))
+    if _DECLINE_FACT.search(said):
+        # (0112-cite16c) a check not judged and what it lacks, "(missing heat_valve, cool_valve)":
+        # the inputs it misses are why it was not judged
+        for m in re.finditer(r"\((missing\s[^)]*)\)", said):
+            out.append((_cause_side("not judged"), _cause_side(m.group(1), ids=True)))
+    for i, part in enumerate(parts):
+        for m in _FACT_CAUSE.finditer(part):
+            before, after = part[: m.start()], part[m.end() :]
+            if m.group("colon"):
+                # the clause before a colon or dash (not a list's other items), and what follows
+                # it to the next one ("does not meet G14 acceptance: for information only, not a
+                # verified saving")
+                before = re.split(r"[:,]|\s--|\s—|\s–", before)[-1]
+                after = re.split(r":|\s--|\s—|\s–", after)[0]
+                a, b = _cause_side(before), _cause_side(after)
+                out += [(a, b), (b, a)]
+            elif m.group("back"):
+                out.append((_cause_side(before), _cause_side(after)))
+            else:
+                if not before.strip() and i:  # "...; so the finding is explained by ...": the
+                    before = "; ".join(parts[:i])  # cause is what the fact says before it
+                out.append((_cause_side(after), _cause_side(before)))
+    return out
+
+
+def _cause_problems(vis: str, facts: list) -> list:
+    """(0112-cite16) A reason the sentence gives for something ("The comparison covers only 4
+    days, so drift was not evaluated", "not evaluated because the overlap is short", ", which is
+    why ...", ", as a result ...") needs a cited fact that states that link: one of its reasons
+    (:func:`_fact_reasons`) whose effect shares an outcome word with the sentence's and whose
+    cause shares a word or a figure with the sentence's cause. Two true halves joined by "so"
+    are not a reason the output gives. Read where the effect is a result, verdict or decline of
+    CAMBER's (:data:`_CAUSE_OUTCOME`), not advice; a hedged ("may be because") or denied reason
+    is not read here, nor one opening the sentence ("So, ..."), whose cause is elsewhere."""
+    text = " ".join(_CITES.sub(" ", vis).split())
+    found = []
+    for m in _CAUSE_FWD.finditer(text):
+        found.append((text[m.end() :], text[: m.start()], m.group(0)))
+    for m in _CAUSE_BACK.finditer(text):
+        if m.start() == 0 or _CAUSE_HEDGE.search(text[: m.start()]):
+            continue
+        found.append((text[: m.start()], text[m.end() :], m.group(0)))
+    lead = re.match(r"\W*(?:because|since)\b(?!\s+of\b)(?P<c>[^,]+),(?P<e>.+)", text, re.I)
+    if lead:
+        found.append((lead.group("e"), lead.group("c"), "because"))
+    if not found:
+        return []
+    reasons = [r for fc in facts for r in _fact_reasons(str(getattr(fc, "said", "") or ""))]
+    why: list = []
+    for effect, cause, said in found:
+        if _CAUSE_ADVICE.search(effect):
+            continue
+        (ew, _ef), (cw, cf) = _cause_side(effect), _cause_side(cause)
+        if not ew & _CAUSE_OUTCOME or not (cw or cf):
+            continue
+        if any(ew & fe[0] & _CAUSE_OUTCOME and (cw & fc_[0] or cf & fc_[1]) for fe, fc_ in reasons):
+            continue
+        why.append(
+            f"{' '.join(said.split()).strip(',;—– ')!r}: no cited fact gives this reason for it "
+            "(each half may be stated, the link between them is not)"
+        )
+        break
+    return why
+
+
+#: (0112-cite16) a check said not to have been judged: "Tower approach and bypass-leak checks
+#: weren't judged", "drift was not evaluated", "X was skipped", "X declined"
+_DECLINE_SAID = re.compile(
+    r"\b(?:(?:was|were|is|are|has|have|had)(?:n['’]t|\s+not)|not|never)\s+(?:been\s+|yet\s+)?"
+    r"(?:judged|evaluated|assessed|run|checked|scored|tested)\b|(?<!\bnot\s)(?<!\bnever\s)"
+    r"\b(?:skipped|declined|unjudged|went\s+unjudged|could\s+not\s+(?:be\s+)?(?:judged|"
+    r"evaluated))\b",
+    re.I,
+)
+#: a fact that says something was not judged
+_DECLINE_FACT = re.compile(
+    r"not\s+judged|not\s+evaluated|could\s+not\s+evaluate|declin|skipped|not\s+compared|"
+    r"insufficient\s+data|unjudged",
+    re.I,
+)
+#: words of a declined thing's name that say nothing of which check it is
+_DECLINE_GENERIC = _CAUSE_GENERIC | frozenset(
+    _stem(w)
+    for w in (
+        "check checks rule rules test tests detector detectors analysis analyses result results "
+        "finding findings equipment unit units either neither both any all none some most two "
+        "three four five six seven eight nine ten also still here plus well yet several many "
+        "few other others such".split()
+    )
+)
+#: what limits a not-judged claim to some of the results ("on 4 plants", "for PLANT-2")
+_DECLINE_SCOPE = re.compile(
+    r"\d|\b(?i:some|most|several|many|few|four|three|two|five|one|except|but|other|others|"
+    r"remaining|rest|only|partly|partially|mostly)\b|\b(?i:on|for|at|in)\s+(?i:the\s+|its\s+)?"
+    r"(?:[A-Z][\w-]*|\w*_\w*)"
+)
+_GIVEN_FOR = re.compile(r"given for (\d+) of its (\d+) results")
+
+
+def _declined_problems(vis: str, facts: list) -> list:
+    """(0112-cite16) A check said not to have been judged ("Tower approach and bypass-leak checks
+    weren't judged", "drift was not evaluated", "X was skipped"): every word naming what was
+    not judged must be a word of a cited fact that says something was not judged (skipped,
+    declined, not evaluated; its rule id's parts count), so a run's count of skips names no
+    rule; and where that fact declines it on only some of its results ("given for 4 of its 5
+    results"), the sentence must say which or how many."""
+    text = " ".join(_CITES.sub(" ", vis).split())
+    m = _DECLINE_SAID.search(text)
+    if (
+        m is None
+        or re.search(
+            r"\b(?:no|none|zero|0|without|nothing)\s+(?:\w+\s+)?$", text[: m.start()], re.I
+        )
+        or re.match(r"\s*(?:0|no|none|zero|nothing)\b", text[m.end() :], re.I)
+        or re.match(r"\s*(?:true|false)\b", text[m.end() :], re.I)
+    ):
+        # "no declined result", "skipped 0 pairs": a denial or a zero, read by the negations;
+        # (0112-cite16b) "declined false": a field and its value, quoted
+        return []
+    head = re.split(r"[,;:(]|\b(?:but|while|whereas|although|though)\b", text[: m.start()])[-1]
+    # (0112-cite16b) what a fact or caveat is said to say is the thing, not the saying: "the
+    # rule's caveat says hunting was not evaluated"
+    head = re.split(
+        r"\b(?:says?|said|states?|stated|notes?|noted|shows?|showed|reports?|reported|explains?|"
+        r"confirms?|that)\b",
+        head,
+    )[-1]
+    head = re.sub(r"^\W*(?:\d{1,3}[.)]\s*)?", "", head)
+    names = re.sub(r"[\w\-]*\d[\w\-.]*", " ", head)
+    said = {
+        w
+        for w in _input_words(_method_words(names)) - _DECLINE_GENERIC
+        if len(w) > 1 and not w.isdigit()
+    }
+    if not said:
+        return []
+    cover, have = [], set()
+    for fc in facts:
+        # what a fact says was not judged: the words of its clauses that say so, and what the
+        # fact is about (its unit, point, rule), not every word of it ("bias +3.0, drift not
+        # evaluated" says nothing of the bias)
+        said_ = str(getattr(fc, "said", "") or "")
+        pieces = re.split(r"[,;]\s", said_)
+        clauses = []
+        for k, c in enumerate(pieces):
+            d = _DECLINE_FACT.search(c)
+            if d is not None:
+                clauses.append(c)
+                if ":" in c[d.end() :]:
+                    # (0112-cite16b) "so not judged: airflow_tracking (...); unmet_setpoint_hours
+                    # (...)": the list after the colon names what was not judged
+                    clauses += pieces[k + 1 :]
+        if not clauses:
+            continue
+        # (0112-cite16b) and what the fact is about, said before its first colon ("... against
+        # its configured reference ... disagrees (warn)")
+        lead = said_.split(": ", 1)[0] if ": " in said_ else ""
+        # its subject only, not its verdict ("... reference "x" agrees within the comparison's
+        # thresholds (passed)" says nothing not judged of the comparison)
+        lead = re.split(r"\s(?:dis)?agrees\b|\s\(|\s(?:was|is|were|are)\s", lead)[0]
+        words = _input_words(
+            _method_words(" ".join(clauses + [lead] + sorted(getattr(fc, "subjects", ()) or ())))
+        )
+        words |= _input_words(str(getattr(fc, "rule", "") or ""))
+        if said & words:
+            cover.append(fc)
+            have |= words
+    missing = sorted(said - _abbrev_closure(have))
+    said_text = " ".join(m.group(0).split())
+    if missing:
+        return [
+            f"{said_text!r}: no cited fact says {missing[0]!r} was not judged (no cited fact "
+            "that says something was not judged names it)"
+        ]
+    if not _DECLINE_SCOPE.search(head + " " + text[m.end() :]):
+        for fc in cover:
+            g = _GIVEN_FOR.search(str(getattr(fc, "said", "") or ""))
+            if g and int(g.group(1)) < int(g.group(2)):
+                return [
+                    f"{said_text!r}: a cited fact says so of only {g.group(1)} of its "
+                    f"{g.group(2)} results: say which or how many"
+                ]
+    return []
+
+
+#: (0112-cite16) the verdict levels a rule_params or finding_detail fact lists: "verdict
+#: thresholds: warn_pct (warn), fault_pct (fault)"
+_FACT_LEVELS = re.compile(r"verdict thresholds: ([^;]*)")
+_FACT_LEVEL = re.compile(r"([a-z][a-z0-9]*(?:_[a-z0-9]+)+) \((warn|fault)\)")
+_PARAM_ID = r"(?P<p>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)"
+#: a parameter said to set a level: "warn_pct is the fault threshold", "the fault threshold is
+#: warn_pct", "warn_pct sets the warn level"
+_LEVEL_SAID = (
+    re.compile(
+        _PARAM_ID + r"\s*(?:\([^()]*\)\s*)?,?\s*(?:is|was|sets|gives|as|=|:)\s+(?:the\s+|its\s+|"
+        r"a\s+)?(?:rule['’]s\s+)?(?P<lv>warn(?:ing)?|fault)\s+(?:threshold|level|limit|trigger)",
+        re.I,
+    ),
+    re.compile(
+        r"(?P<lv>warn(?:ing)?|fault)\s+(?:threshold|level|limit|trigger)\s+(?:is|was|=|:|comes\s+"
+        r"from|parameter\s+is)\s+(?:the\s+)?" + _PARAM_ID,
+        re.I,
+    ),
+)
+
+
+def _level_problems(vis: str, facts: list) -> list:
+    """(0112-cite16) A parameter said to set a verdict level ("supply_air_control's fault
+    threshold is warn_pct") must be that level's in a cited fact's ``verdict thresholds:`` list
+    (rule_params, finding_detail): the warn level said as the fault one is a label swap."""
+    levels: dict = {}
+    for fc in facts:
+        for m in _FACT_LEVELS.finditer(str(getattr(fc, "said", "") or "")):
+            for p, lv in _FACT_LEVEL.findall(m.group(1)):
+                levels.setdefault(p, set()).add(lv)
+    if not levels:
+        return []
+    text = _CITES.sub(" ", vis)
+    for rx in _LEVEL_SAID:
+        for m in rx.finditer(text):
+            p, lv = m.group("p").lower(), m.group("lv").lower()[:5].replace("warni", "warn")
+            if p in levels and lv not in levels[p]:
+                return [
+                    f"{' '.join(m.group(0).split())!r}: a cited fact gives {p} as the "
+                    f"{'/'.join(sorted(levels[p]))} threshold, not the {lv} one"
+                ]
+    return []
 
 
 def _strings(data, out: list, p: _Parsed, key: str = "", depth: int = 0) -> None:
@@ -6694,6 +7114,16 @@ def _number_problems(p: _Parsed, facts: list, every=None) -> list:
                     "sentence gives it as a bound (more or less than), threshold, target or "
                     "setpoint"
                 )
+            elif q.base and all(f.base != q.base for f in same if f.unit == q.unit):
+                # (0112-cite16) the difference is what the share is of, which the figure alone
+                # does not show ("54.4 %: a cited fact has this number only as 54.4 %")
+                wholes = sorted({_base_name(f.base) for f in same if f.unit == q.unit and f.base})
+                of = f"as a share of {', '.join(wholes)}" if wholes else "with no whole next to it"
+                mine = _base_name(q.base)
+                why.append(
+                    f"{q.show()} of {mine}: a cited fact gives this figure {of}, not as a share "
+                    f"of {mine}"
+                )
             else:
                 why.append(f"{q.show()}: a cited fact has this number only as {shown}")
         else:
@@ -6709,6 +7139,13 @@ def _number_problems(p: _Parsed, facts: list, every=None) -> list:
         if not any(t in fc.claims.times or t in {fd[3] for fd in fc.claims.dates} for fc in facts):
             why.append(f"{t[0]:02d}:{t[1]:02d}: no cited fact carries this time")
     return why
+
+
+def _base_name(base: str) -> str:
+    """What a share is of, as a why says it: "h" -> "hours", "sample" -> "samples"."""
+    return {"h": "hours", "min": "minutes", "s": "seconds"}.get(
+        base, base if base.endswith("s") else f"{base}s"
+    )
 
 
 _ZEROS = frozenset({"zero", "share"})
@@ -8358,6 +8795,10 @@ _PARAM_VALUE = re.compile(r"(?<![\w-])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*=\s*([-+
 _NUMBER = re.compile(r"(?<![\w.\-@])[-+]?\d+(?:\.\d+)?(?![\w.]\d)")
 
 
+#: (0112-cite16) the words of a parameter's name that give its unit, not what it is
+_PARAM_UNIT_WORDS = frozenset("f c k pct kw gpm psi cfm hours h min thr".split())
+
+
 def _param_problems(vis: str, mine: list) -> tuple:
     """(0112-cite10) ``(reason, why)``: a sentence that names one parameter of a cited fact's
     list ("warn_pct = 10.0, ..., assumed_min_oa_pct = 20.0") and gives a figure that is another
@@ -8378,6 +8819,17 @@ def _param_problems(vis: str, mine: list) -> tuple:
     for m in _NUMBER.finditer(plain):
         d = Decimal(m.group(0)).copy_abs().normalize()
         if d in others and d not in own:
+            # (0112-cite16) "+3.4F beyond the 2F fan heat, which is above the delta_thr_f of 3.0":
+            # a figure said with another parameter's own words is that parameter's
+            near = set(re.findall(r"[a-z]+", plain[max(0, m.start() - 30) : m.end() + 30]))
+            if any(
+                d in v
+                and (w := [x for x in n.split("_") if len(x) > 1 and x not in _PARAM_UNIT_WORDS])
+                and set(w) <= near
+                for n, v in values.items()
+                if n != named[0]
+            ):
+                continue
             return "uncited-number", [
                 f"{m.group(0)}: a cited fact gives it for another parameter, not {named[0]!r}"
             ]
@@ -8463,7 +8915,8 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     why += _order_problems(vis, cl)
     why += rel + _band_problems(vis, cl) + _sign_problems(vis, cl) + _located_problems(vis, cl)
     why += _threshold_problems(vis, cl) + _zone_problems(vis, cl) + _part_negation_problems(vis, cl)
-    why += _method_problems(vis, cl)
+    why += _method_problems(vis, cl, vocab) + _cause_problems(vis, cl)
+    why += _declined_problems(vis, cl) + _level_problems(vis, cl)
     return ("unsupported-claim" if why else ""), why
 
 
@@ -9254,6 +9707,9 @@ def _judge(
             mine = claims(own)
             num = None if per_sentence else claims(text_cited)
             reason, why = _sentence_problems(vis, mine, own, vocab, num, claims)
+            if not reason:  # 0112-cite16: a count bound to the table or list next to it
+                why = _deictic_problems(text, seg.start, seg.end, vis)
+                reason = "unsupported-claim" if why else ""
             if not reason and own:  # 0112-cite10: a name no fact of the session gave; a note
                 reason, why = _session_problems(vis, mine, vocab, issued)
             if not reason and own:  # 0112-cite10: a parameter's figure is that parameter's
@@ -9267,6 +9723,107 @@ def _judge(
                 reason, why = _proto_a(vis, vocab, echo)
         out.append(_Judged(seg.start, seg.end, sent, own, unknown, reason, why))
     return out
+
+
+#: (0112-cite16) a count bound to the list or table next to it: "These are the 8 faults",
+#: "those 3 points", "the 7 findings above", "the following 4 rules", "the table below lists 5"
+_NUM_WORD = (
+    r"(?:\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+    r"fifteen|sixteen|seventeen|eighteen|nineteen|twenty)"
+)
+_DEICTIC = re.compile(
+    rf"\b(?P<dem>these|those)\s+(?:are|were)\s+(?:all\s+)?(?:the\s+)?(?P<n1>{_NUM_WORD})\b"
+    rf"|\b(?P<dem2>these|those|the\s+following|the\s+above)\s+(?P<n2>{_NUM_WORD})\b"
+    rf"|\bthe\s+(?P<n3>{_NUM_WORD})\s+(?:[a-z][\w-]*\s+){{0,2}}?(?P<where>above|below|listed\s+"
+    r"(?:above|below)|shown\s+(?:above|below))\b"
+    r"|\b(?:the\s+)?(?:table|list)\s+(?P<where2>above|below)\s+(?:lists|shows|has|gives|holds|"
+    rf"contains|covers)\s+(?:all\s+)?(?:the\s+)?(?P<n4>{_NUM_WORD})\b",
+    re.I,
+)
+_LIST_LINE = re.compile(r"\s*(?:[-*•+]|\d{1,3}[.)])\s+\S")
+#: the items a list or table can hold (not a measure: "those 106 hours")
+_DEICTIC_NOUN = re.compile(
+    r"\b(?:faults?|warns?|warnings?|findings?|results?|rules?|checks?|issues?|items?|rows?|"
+    r"points?|units?|equipment|zones?|boxes|vavs?|ahus?|plants?|chillers?|boilers?|meters?|"
+    r"sensors?|actions?|steps?|recommendations?|measures?|problems?|datasets?|facilities|"
+    r"buildings?|spans?|gaps?|savings?|caveats?|oks?|passes)\b",
+    re.I,
+)
+
+
+def _block_items(lines: list) -> int:
+    """The items of a block of lines: a markdown table's body rows (its header and rule row
+    left out) or a list's items; 0 when the lines are neither."""
+    if lines and all(ln.lstrip().startswith("|") for ln in lines):
+        rule = [i for i, ln in enumerate(lines) if _TABLE_RULE.fullmatch(ln.strip())]
+        return len(lines) - (rule[0] + 1) if rule else len(lines)
+    if lines and all(_LIST_LINE.match(ln) or ln.startswith((" ", "\t")) for ln in lines):
+        return sum(1 for ln in lines if _LIST_LINE.match(ln))
+    return 0
+
+
+def _next_block(lines: list) -> list:
+    """The first block of table rows or list items in ``lines`` (blank lines before it skipped,
+    and one line that introduces it)."""
+    out: list = []
+    for ln in lines:
+        item = ln.lstrip().startswith("|") or _LIST_LINE.match(ln)
+        if not ln.strip():
+            if out:
+                break
+            continue
+        if not item and not out:
+            return []
+        if not item and not ln.startswith((" ", "\t")):
+            break
+        out.append(ln)
+    return out
+
+
+def _deictic_problems(text: str, start: int, end: int, vis: str) -> list:
+    """(0112-cite16) A count said of the list or table next to the sentence ("These are the 8
+    faults in the run" under a table of 7 rows; "the following 4 rules" over a list of 3) must
+    be the number of its items: a true count of something else, bound to it by "these", "the
+    following", "above" or "below", says the wrong set."""
+    body = _CITES.sub(" ", vis)
+    m = _DEICTIC.search(body)
+    if m is None or re.search(r"\b(?:of|in|from|among)\s+$", body[: m.start()], re.I):
+        return []  # "20 of those 106 hours": a part of a count said before, not the list
+    if not _DEICTIC_NOUN.search(body[m.start() : m.end() + 40]):
+        return []  # "those 106 hours": a measure, not the items of a list
+    raw = next(g for g in (m.group("n1"), m.group("n2"), m.group("n3"), m.group("n4")) if g)
+    n = int(raw) if raw.isdigit() else _word_number(raw.lower())
+    if n is None:
+        return []
+    if len(set(extract_cites(vis))) == int(n):
+        return []  # "Those four points ... [L1][L2][L3][L4]": the facts it cites
+    own = re.search(r":\s*([^:]+)$", body[m.end() :].strip().rstrip(" ."))
+    if own and len(
+        [x for x in re.split(r",\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+", own.group(1)) if x.strip()]
+    ) == int(n):
+        return []  # (0112-cite16b) "These three rules ...: a, b and c": its own list
+    below = bool(re.search(r"following|below", m.group(0), re.I))
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if not below and _LIST_LINE.match(text[line_start:end]):
+        return []  # (0112-cite16b) a list's own item does not count the list it is in
+    lead = re.sub(r"^\s*(?:[-*•>]|\d{1,3}[.)])?\s*(?:\*\*|__)?", "", text[line_start:start])
+    tail = text[end : line_end if line_end >= 0 else len(text)]
+    if lead.strip() if not below else _CITES.sub("", tail).strip(" .:*_"):
+        return []  # not the line's first sentence (or, for "below", its last): not next to it
+    if below:
+        block = _next_block(text[line_end + 1 :].split("\n") if line_end >= 0 else [])
+    else:
+        block = _next_block(text[:line_start].split("\n")[::-1])[::-1]
+    items = _block_items(block)
+    if not items or int(n) == items:
+        return []
+    where = "below" if below else "above"
+    kind = "table" if block[0].lstrip().startswith("|") else "list"
+    return [
+        f"{' '.join(m.group(0).split())!r}: the {kind} {where} has {items}, not {int(n)}: say "
+        "what the count is of, apart from it"
+    ]
 
 
 def _unread(text: str, seg: _Seg) -> _Judged:
