@@ -1251,6 +1251,239 @@ def _zone_cases(claims: list) -> list:
     return out
 
 
+def _r16(d, ok, form, op_false, cap, cites, g, cores=None):
+    """(round 16) One case: ``d`` true when ``ok``, else false with operator ``op_false``."""
+    case = _r15_case(
+        d, "true" if ok else "false", form, "none" if ok else op_false, cap, cites, d, g
+    )
+    if cores is not None:
+        case["cores"] = list(cores)
+    return case
+
+
+def _cause_cases(claims: list) -> list:
+    """(round 16) A reason joined to what it explains: a comparison's drift not evaluated
+    because its overlap is short, true as its fact gives it ("because", "so", "since", "which
+    is why"), false with another reason or another effect, and false citing a comparison whose
+    fact does not give the reason (two true halves joined by "so")."""
+    out: list = []
+    older = {
+        (c.unit, c.point): c.fact_id
+        for c in claims
+        if c.attribute == "reference" and c.capability == "sensor_trust"
+    }
+    for c in (c for c in claims if c.attribute == "drift_note"):
+        d, u, pt = f"{c.value:g}", c.unit, c.point
+        bias = str(c.extra.get("bias") or "")
+        cites = (c.fact_id,)
+        g = _key("cause", c.fact_id)
+        rows = [
+            (True, f"{u}'s {pt} drift was not evaluated because the overlap spans only {d} days"),
+            (
+                True,
+                f"The overlap with {u}'s reference spans only {d} days, so its drift was not "
+                "evaluated",
+            ),
+            (True, f"Since the overlap spans only {d} days, {u}'s {pt} drift was not evaluated"),
+            (True, f"{u}'s overlap is {d} days, which is why its {pt} drift was not evaluated"),
+            (False, f"{u}'s {pt} drift was not evaluated because its bias is {bias}"),
+            (False, f"{u}'s {pt} drift was not evaluated because the reference logger disagrees"),
+            (False, f"The overlap spans only {d} days, so {u}'s {pt} was judged suspect"),
+            (False, f"{u}'s {pt} has a bias of {bias}, so its drift was not evaluated"),
+        ]
+        for ok, d0 in rows:
+            out.append(
+                _r16(f"{d0} {cite(*cites)}.", ok, "cause", "inject_cause", c.capability, cites, g)
+            )
+        old = older.get((u, pt))
+        if old is not None and old != c.fact_id:  # the frozen comparison: no reason given
+            d0 = f"The overlap spans only {d} days, so {u}'s {pt} drift was not evaluated"
+            out.append(
+                _r16(f"{d0} {cite(old)}.", False, "cause", "inject_cause", c.capability, (old,), g)
+            )
+    return out
+
+
+def _declined_cases(claims: list) -> list:
+    """(round 16) A check said not to have been judged: true of what a cited fact says was not
+    judged (a comparison's drift), false of something else it states (the bias, the comparison
+    itself), and false naming rules a run's count of skips does not name."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "drift_note"):
+        u, pt, cites = c.unit, c.point, (c.fact_id,)
+        g = _key("declined", c.fact_id)
+        rows = [
+            (True, f"{u}'s {pt} drift was not evaluated"),
+            (True, f"Drift was not evaluated for {u}'s {pt}"),
+            (False, f"{u}'s {pt} bias was not evaluated"),
+            (False, f"{u}'s {pt} RMSE was not evaluated"),
+            (False, f"{u}'s reference comparison was not evaluated"),
+        ]
+        for ok, d0 in rows:
+            out.append(
+                _r16(
+                    f"{d0} {cite(*cites)}.",
+                    ok,
+                    "declined",
+                    "inject_decline",
+                    c.capability,
+                    cites,
+                    g,
+                )
+            )
+    judged = sorted({c.rule for c in claims if c.attribute == "gate"})
+    for c in (c for c in claims if c.attribute == "skips"):
+        g = _key("declined", c.fact_id)
+        drafts = [f"Tower approach and bypass-leak checks weren't judged {cite(c.fact_id)}."]
+        drafts += [f"The {r} check was not judged {cite(c.fact_id)}." for r in judged]
+        drafts += [f"{r} was skipped for missing inputs {cite(c.fact_id)}." for r in judged]
+        for d0 in drafts:
+            out.append(_r16(d0, False, "declined", "inject_decline", "rule_run", (c.fact_id,), g))
+        d0 = f"{c.value} rule was skipped for missing inputs, so it was not judged"
+        d0 = f"{d0} {cite(c.fact_id)}."
+        out.append(_r16(d0, True, "declined", "inject_decline", "rule_run", (c.fact_id,), g))
+    return out
+
+
+def _deictic_cases(claims: list) -> list:
+    """(round 16) A count bound to the list above it ("These are the 2 faults in the run"):
+    true when the list holds that many, false when it holds one fewer (a true count of the run
+    said of a shorter list)."""
+    out: list = []
+    found: dict = {}
+    for c in claims:
+        if c.attribute == "verdict" and c.capability == "rule_run" and c.unit:
+            if c.fact_id.startswith("F"):
+                found.setdefault((c.fact_id.split("@")[1], c.verdict), []).append(c)
+    for c in claims:
+        if c.attribute != "count" or c.kind != "rule_run" or not c.value:
+            continue
+        verdict = c.label.split()[0]
+        cs = sorted(found.get((c.fact_id.split("@")[1], verdict), []), key=lambda x: x.fact_id)
+        if len(cs) != int(c.value) or len(cs) < 2:
+            continue
+        g = _key("deictic", c.fact_id)
+        rows = [f"- {x.unit} {x.rule} is a {verdict} {cite(x.fact_id)}." for x in cs]
+        said = f"These are the {len(cs)} {verdict}s in the run {cite(c.fact_id)}."
+        for ok, lines in ((True, rows), (False, rows[:-1])):
+            d = "\n".join(lines) + "\n\n" + said
+            cites = tuple(x.fact_id for x in cs[: len(lines)]) + (c.fact_id,)
+            out.append(_r16(d, ok, "deictic", "shrink_list", "rule_run", cites, g, [said]))
+        d = "\n".join(rows) + "\n\n" + f"The {len(cs) + 1} {verdict}s listed above are in the run "
+        d += f"{cite(c.fact_id)}."
+        cites = tuple(x.fact_id for x in cs) + (c.fact_id,)
+        out.append(
+            _r16(d, False, "deictic", "shrink_list", "rule_run", cites, g, [d.rsplit("\n", 1)[-1]])
+        )
+    return out
+
+
+def _subject_cases(claims: list) -> list:
+    """(round 16) A comparison said of a clause's subject past a figure that is the object of
+    another comparison word ("a mean gap of +1.0°F over the 55.0°F target, which is below the
+    2 °F warn gap floor"): the subject is compared, not the nearest figure. True and false both
+    ways, with the nearest figure on the other side of the bound (where binding to it keeps a
+    false one)."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "gap_floor"):
+        v, t, fl = float(c.value), float(c.extra["target"]), float(c.extra["floor"])
+        cites = (c.fact_id,)
+        g = _key("subject", c.fact_id)
+        lo = abs(v) < fl
+        gap = f"{'+' if v >= 0 else '-'}{abs(v):.1f}°F"
+        for word, holds in (("below", lo), ("above", not lo)):
+            for link in ("which is", "and that is"):
+                d = (
+                    f"{c.unit}'s mean gap of {gap} over the {t:.1f}°F {c.extra.get('of', '')}"
+                    f"target, {link} {word} the "
+                    f"{fl:g} °F warn gap floor {cite(*cites)}."
+                )
+                out.append(_r16(d, holds, "bound_subject", "flip_compare", c.capability, cites, g))
+    params = [c for c in claims if c.attribute == "param" and c.label == "fan_heat_f"]
+    for c in (c for c in claims if c.attribute == "fan_heat") if params else ():
+        p, a, v = params[0], float(c.extra["allowance"]), float(c.value)
+        cites = (c.fact_id, p.fact_id)
+        g = _key("subject", c.fact_id)
+        shift = f"{'+' if v >= 0 else '-'}{abs(v):g}F"
+        # the nearest figure (the allowance) equals the bound: binding to it keeps both ways
+        for word, holds in (("below", v <= float(p.value)), ("above", v >= float(p.value))):
+            d = (
+                f"{c.unit}'s air sat {shift} beyond the {a:g}F fan-heat allowance, which is "
+                f"{word} the fan_heat_f of {float(p.value):g} {cite(*cites)}."
+            )
+            out.append(_r16(d, holds, "bound_subject", "flip_compare", c.capability, cites, g))
+    return out
+
+
+#: (round 16) rules with no fan or occupancy gate among their parameters (a gate said of one is
+#: false)
+_UNGATED = frozenset(("simultaneous_heat_cool",))
+
+
+def _gate_cases(claims: list) -> list:
+    """(round 16) A rule's gate said of it: true as its finding fact names it ("gated on fan
+    status"), false said of a rule whose fact names no gate, or with another gate's value."""
+    out: list = []
+    gated = [c for c in claims if c.attribute == "gate"]
+    gated_rules = {c.rule for c in gated}
+    plain = {
+        c.unit: c
+        for c in sorted(claims, key=lambda c: c.fact_id)
+        if c.attribute == "verdict"
+        and c.capability == "rule_run"
+        and c.fact_id.startswith("F")
+        and c.rule not in gated_rules
+        and c.rule in _UNGATED
+    }
+    for c in gated:
+        said = c.extra["said"]
+        if "(" in said:
+            continue
+        cites = (c.fact_id,)
+        g = _key("gate", c.fact_id, c.label)
+        d = f"{c.rule} on {c.unit} is gated on {said} {cite(*cites)}."
+        out.append(_r16(d, True, "gate", "swap_gate", c.capability, cites, g))
+        other = plain.get(c.unit)
+        if other is not None:
+            d = f"{other.rule} on {c.unit} is gated on {said} {cite(other.fact_id)}."
+            out.append(_r16(d, False, "gate", "swap_gate", c.capability, (other.fact_id,), g))
+        d = f"{c.rule} on {c.unit} is gated on trended humidity {cite(*cites)}."
+        out.append(_r16(d, False, "gate", "swap_gate", c.capability, cites, g))
+    return out
+
+
+def _level_cases(claims: list) -> list:
+    """(round 16) Which parameter sets a rule's warn and fault levels, and whether it has a
+    fault threshold at all: true as its rule_params or parameters fact lists them, false with
+    the levels swapped or a missing one said to be there (or the reverse)."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "levels"):
+        warn, fault = c.extra.get("warn") or [], c.extra.get("fault") or []
+        cites = (c.fact_id,)
+        g = _key("levels", c.fact_id)
+        rows = []
+        for w in warn[:1]:
+            rows += [
+                (True, f"{c.rule}'s warn threshold is {w}"),
+                (False, f"{c.rule}'s fault threshold is {w}"),
+            ]
+        for f in fault[:1]:
+            rows += [
+                (True, f"{c.rule}'s fault threshold is {f}"),
+                (False, f"{c.rule}'s warn threshold is {f}"),
+            ]
+        if warn or fault:
+            rows += [
+                (not fault, f"{c.rule} has no fault threshold"),
+                (not warn, f"{c.rule} has no warn threshold"),
+            ]
+        for ok, d0 in rows:
+            out.append(
+                _r16(f"{d0} {cite(*cites)}.", ok, "levels", "swap_level", c.capability, cites, g)
+            )
+    return out
+
+
 def _pairs(claims: list, world: World) -> list:
     out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
     out += _short_id_cases(claims) + _caveat_cases(claims)
@@ -1258,6 +1491,8 @@ def _pairs(claims: list, world: World) -> list:
     out += _band_cases(claims) + _bound_cases(claims) + _sign_cases(claims)
     out += _reads_cases(claims) + _method_cases(claims) + _threshold_cases(claims)
     out += _located_cases(claims) + _zone_cases(claims)
+    out += _cause_cases(claims) + _declined_cases(claims) + _deictic_cases(claims)
+    out += _subject_cases(claims) + _gate_cases(claims) + _level_cases(claims)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):

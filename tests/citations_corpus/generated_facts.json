@@ -1242,6 +1242,17 @@
     "equip": "AHU-1",
     "finding": "supply_air_reset@AHU-1"
    }
+  },
+  {
+   "id": "F3@finding_detail-0d9ebd",
+   "kind": "parameters",
+   "value": 10,
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "finding": "supply_air_reset_compliance@AHU-2"
+   },
+   "text": "supply_air_reset_compliance ran with min_clg_sat = 55.0, t_max = 65.0, oat_min = 60.0, oat_max = 70.0, tol_f = 1.0, warn_pct = 40.0, warn_gap_f = 2.0, track_gap_f = 5.0, fan_gate = True, occupied_only = True; verdict thresholds: warn_pct (warn), warn_gap_f (warn); no fault threshold among its parameters"
   }
  ],
  "mv_summary": [
@@ -2466,6 +2477,151 @@
    "value": "inputs",
    "rule": "leaking_valve",
    "text": "leaking_valve inputs: needs cool_valve, mixed_air_temp and supply_air_temp; reads heat_valve, heat_coil_leaving_temp, cool_coil_leaving_temp, supply_fan_status and supply_fan_speed when mapped"
+  },
+  {
+   "id": "F2@rule_params-8614f3",
+   "kind": "rule_params",
+   "rule": "supply_air_control",
+   "value": 4,
+   "text": "supply_air_control (rule, run with rule_run) defaults: tol_F = 2.0 °F, warn_pct = 10.0 % of fan-on running samples, fault_pct = 25.0 % of fan-on running samples, occupancy_gate = 'trended' choice; verdict thresholds: warn_pct (warn), fault_pct (fault)",
+   "params": [
+    {
+     "name": "tol_F",
+     "default": 2.0,
+     "unit": "°F",
+     "range": [
+      0.5,
+      5.0
+     ]
+    },
+    {
+     "name": "warn_pct",
+     "default": 10.0,
+     "unit": "% of fan-on running samples",
+     "range": [
+      2.0,
+      30.0
+     ]
+    },
+    {
+     "name": "fault_pct",
+     "default": 25.0,
+     "unit": "% of fan-on running samples",
+     "range": [
+      10.0,
+      60.0
+     ]
+    },
+    {
+     "name": "occupancy_gate",
+     "default": "trended",
+     "unit": "choice",
+     "range": [
+      "trended",
+      "schedule",
+      "off"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "F3@rule_params-8614f3",
+   "kind": "rule_params",
+   "rule": "supply_air_reset_compliance",
+   "value": 10,
+   "text": "supply_air_reset_compliance (rule, run with rule_run) defaults: min_clg_sat = 55.0 °F, t_max = 65.0 °F, oat_min = 60.0 °F, oat_max = 70.0 °F, tol_f = 1.0 °F, warn_pct = 40.0 % of gated samples, warn_gap_f = 2.0 °F, track_gap_f = 5.0 °F, fan_gate = True flag, occupied_only = True flag; verdict thresholds: warn_pct (warn), warn_gap_f (warn); no fault threshold among its parameters",
+   "params": [
+    {
+     "name": "min_clg_sat",
+     "default": 55.0,
+     "unit": "°F",
+     "range": [
+      45.0,
+      60.0
+     ]
+    },
+    {
+     "name": "t_max",
+     "default": 65.0,
+     "unit": "°F",
+     "range": [
+      55.0,
+      70.0
+     ]
+    },
+    {
+     "name": "oat_min",
+     "default": 60.0,
+     "unit": "°F",
+     "range": [
+      40.0,
+      70.0
+     ]
+    },
+    {
+     "name": "oat_max",
+     "default": 70.0,
+     "unit": "°F",
+     "range": [
+      55.0,
+      85.0
+     ]
+    },
+    {
+     "name": "tol_f",
+     "default": 1.0,
+     "unit": "°F",
+     "range": [
+      0.5,
+      3.0
+     ]
+    },
+    {
+     "name": "warn_pct",
+     "default": 40.0,
+     "unit": "% of gated samples",
+     "range": [
+      10.0,
+      80.0
+     ]
+    },
+    {
+     "name": "warn_gap_f",
+     "default": 2.0,
+     "unit": "°F",
+     "range": [
+      0.5,
+      5.0
+     ]
+    },
+    {
+     "name": "track_gap_f",
+     "default": 5.0,
+     "unit": "°F",
+     "range": [
+      2.0,
+      10.0
+     ]
+    },
+    {
+     "name": "fan_gate",
+     "default": true,
+     "unit": "flag",
+     "range": [
+      false,
+      true
+     ]
+    },
+    {
+     "name": "occupied_only",
+     "default": true,
+     "unit": "flag",
+     "range": [
+      false,
+      true
+     ]
+    }
+   ]
   }
  ],
  "rule_run": [
@@ -2801,6 +2957,175 @@
    "rule": "supply_air_reset_compliance",
    "text": "\"AHU-1\" supply_air_reset_compliance (ok): \"AHU-1\": SAT median 55.1°F vs G36 target 55.0°F; below target 23% of hours (mean gap +1.0°F) -- tracks the G36 reset target; conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1; tracks_target true; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
    "value": "ok"
+  },
+  {
+   "id": "F1@rule_run-1ec067",
+   "kind": "rule_run",
+   "facility_id": "site-a",
+   "value": 6,
+   "counts": {
+    "fault": 0,
+    "warn": 0,
+    "info": 0,
+    "ok": 6
+   },
+   "text": "3 rules were run on 3 equipment of site-a and 2 of them returned a result, 6 rule-equipment result(s) in all: 0 fault, 0 warn, 0 info and 6 ok; 3 rule-equipment pair(s) (1 rule(s)) skipped for missing inputs: those pairs were not judged"
+  },
+  {
+   "id": "F3@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "supply_air_reset_compliance",
+   "equip": "AHU-1",
+   "finding_id": "supply_air_reset_compliance@AHU-1",
+   "text": "\"AHU-1\" supply_air_reset_compliance (ok): \"AHU-1\": SAT median 55.1°F vs G36 target 55.0°F; below target 23% of hours (mean gap +1.0°F) -- tracks the G36 reset target; conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1; tracks_target true; gates: fan_gate \"fan status\", occupancy_gate \"assumed schedule (weekdays 07-18)\"; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
+   "metrics": {
+    "actual_sat_median": 55.1,
+    "fan_gate": "fan status",
+    "mean_above_gap_f": -1.19,
+    "mean_abs_error_f": 1.36,
+    "mean_gap_f": 1.01,
+    "n": 165,
+    "n_gated": 165,
+    "n_warm": 139,
+    "occupancy_gate": "assumed schedule (weekdays 07-18)",
+    "pct_above_target": 0.0,
+    "pct_below_target": 23.0,
+    "reset_source": "g36_default",
+    "target_median": 55.0,
+    "target_source": "g36",
+    "track_gap_f": 5.0,
+    "tracks_target": true,
+    "warn_gap_floor_f": 2.0,
+    "warn_pct_threshold": 40.0
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "id": "F5@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "supply_air_reset_compliance",
+   "equip": "AHU-2",
+   "finding_id": "supply_air_reset_compliance@AHU-2",
+   "text": "\"AHU-2\" supply_air_reset_compliance (ok): \"AHU-2\": SAT median 55.1°F vs G36 target 55.0°F; below target 26% of hours (mean gap +1.0°F) -- tracks the G36 reset target; tracks_target true; gates: fan_gate \"fan status\", occupancy_gate \"assumed schedule (weekdays 07-18)\"; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
+   "metrics": {
+    "actual_sat_median": 55.1,
+    "fan_gate": "fan status",
+    "mean_above_gap_f": -1.15,
+    "mean_abs_error_f": 1.34,
+    "mean_gap_f": 1.04,
+    "n": 165,
+    "n_gated": 165,
+    "n_warm": 140,
+    "occupancy_gate": "assumed schedule (weekdays 07-18)",
+    "pct_above_target": 0.0,
+    "pct_below_target": 25.5,
+    "reset_source": "g36_default",
+    "target_median": 55.0,
+    "target_source": "g36",
+    "track_gap_f": 5.0,
+    "tracks_target": true,
+    "warn_gap_floor_f": 2.0,
+    "warn_pct_threshold": 40.0
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "id": "F7@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "supply_air_reset_compliance",
+   "equip": "AHU-3",
+   "finding_id": "supply_air_reset_compliance@AHU-3",
+   "text": "\"AHU-3\" supply_air_reset_compliance (ok): \"AHU-3\": SAT median 55.1°F vs G36 target 55.0°F; below target 25% of hours (mean gap +1.1°F) -- tracks the G36 reset target; tracks_target true; gates: fan_gate \"fan status\", occupancy_gate \"assumed schedule (weekdays 07-18)\"; thresholds: warn gap floor 2 °F (warn_gap_floor_f), warn threshold 40% (warn_pct_threshold)",
+   "metrics": {
+    "actual_sat_median": 55.1,
+    "fan_gate": "fan status",
+    "mean_above_gap_f": -1.21,
+    "mean_abs_error_f": 1.38,
+    "mean_gap_f": 1.12,
+    "n": 165,
+    "n_gated": 165,
+    "n_warm": 141,
+    "occupancy_gate": "assumed schedule (weekdays 07-18)",
+    "pct_above_target": 0.0,
+    "pct_below_target": 24.8,
+    "reset_source": "g36_default",
+    "target_median": 55.0,
+    "target_source": "g36",
+    "track_gap_f": 5.0,
+    "tracks_target": true,
+    "warn_gap_floor_f": 2.0,
+    "warn_pct_threshold": 40.0
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "id": "F2@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "leaking_valve",
+   "equip": "AHU-1",
+   "finding_id": "leaking_valve@AHU-1",
+   "text": "\"AHU-1\" leaking_valve (ok): \"AHU-1\": no valve leak -- with both valves shut, air holds near the 2F fan-heat allowance (median -0.9F beyond it); HW-leak 0% / CHW-leak 0% of both-valves-shut samples; conditional on sensor_drift:supply_air_temp warn (AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0) on AHU-1; fan_gated true",
+   "metrics": {
+    "chw_basis": "supply_air_temp",
+    "chw_leak_pct": 0.0,
+    "chw_median_delta_f": 1.1,
+    "fan_gated": true,
+    "fan_heat_f": 2.0,
+    "hw_basis": "supply_air_temp",
+    "hw_leak_pct": 0.0,
+    "hw_median_delta_f": -0.9,
+    "median_delta_f": -0.9,
+    "n_both_closed": 41
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "id": "F4@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "leaking_valve",
+   "equip": "AHU-2",
+   "finding_id": "leaking_valve@AHU-2",
+   "text": "\"AHU-2\" leaking_valve (ok): \"AHU-2\": no valve leak -- with both valves shut, air holds near the 2F fan-heat allowance (median -1.0F beyond it); HW-leak 0% / CHW-leak 0% of both-valves-shut samples; fan_gated true",
+   "metrics": {
+    "chw_basis": "supply_air_temp",
+    "chw_leak_pct": 0.0,
+    "chw_median_delta_f": 1.0,
+    "fan_gated": true,
+    "fan_heat_f": 2.0,
+    "hw_basis": "supply_air_temp",
+    "hw_leak_pct": 0.0,
+    "hw_median_delta_f": -1.0,
+    "median_delta_f": -1.0,
+    "n_both_closed": 40
+   },
+   "facility_id": "site-a"
+  },
+  {
+   "id": "F6@rule_run-1ec067",
+   "kind": "finding",
+   "value": "ok",
+   "rule": "leaking_valve",
+   "equip": "AHU-3",
+   "finding_id": "leaking_valve@AHU-3",
+   "text": "\"AHU-3\" leaking_valve (ok): \"AHU-3\": no valve leak -- with both valves shut, air holds near the 2F fan-heat allowance (median -1.1F beyond it); HW-leak 0% / CHW-leak 0% of both-valves-shut samples; fan_gated true",
+   "metrics": {
+    "chw_basis": "supply_air_temp",
+    "chw_leak_pct": 0.0,
+    "chw_median_delta_f": 0.9,
+    "fan_gated": true,
+    "fan_heat_f": 2.0,
+    "hw_basis": "supply_air_temp",
+    "hw_leak_pct": 0.0,
+    "hw_median_delta_f": -1.1,
+    "median_delta_f": -1.1,
+    "n_both_closed": 39
+   },
+   "facility_id": "site-a"
   }
  ],
  "sensor_trust": [
@@ -2971,6 +3296,46 @@
    "min_trust": 0.5,
    "text": "site-a: 27 points judged (report view: operating-state-aware, duct points judged with the fan on and plant points while their equipment runs): 23 trusted, 4 suspect, 0 untrusted; 0 below the trust floor 0.5",
    "value": 0
+  },
+  {
+   "id": "R1@sensor_trust-6420d0",
+   "kind": "reference_comparison",
+   "equip": "AHU-1",
+   "role": "supply_air_temp",
+   "value": "warn",
+   "verdict": "warn",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-1",
+    "role": "supply_air_temp"
+   },
+   "bias": 3.0,
+   "unit": "°F",
+   "rmse": 3.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-1\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" disagrees (warn): the point is suspect, and a finding that rests on it is conditional on this sensor: AHU-1 supply_air_temp: bias +3.0, drift not evaluated, RMSE 3.0, r=1.00 over 504 samples / 21 days -- biased +3.0; bias +3.0 °F, RMSE 3.0 °F: the bias is the median of the point minus the reference, so the point reads high against it; drift not evaluated because the overlap spans 21.0 days, under the 28 days a drift rate needs; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
+  },
+  {
+   "id": "R2@sensor_trust-6420d0",
+   "kind": "reference_comparison",
+   "equip": "AHU-2",
+   "role": "supply_air_temp",
+   "value": "ok",
+   "verdict": "ok",
+   "subject": {
+    "facility_id": "site-a",
+    "equip": "AHU-2",
+    "role": "supply_air_temp"
+   },
+   "bias": 0.0,
+   "unit": "°F",
+   "rmse": 0.0,
+   "n_samples": 504,
+   "overlap_start": "2026-03-02 00:00:00",
+   "overlap_end": "2026-03-22 23:00:00",
+   "text": "\"AHU-2\" \"supply_air_temp\" against its configured reference \"handheld reference logger\" agrees within the comparison's thresholds (passed): AHU-2 supply_air_temp: bias +0.0, drift not evaluated, RMSE 0.0, r=1.00 over 504 samples / 21 days -- tracks reference; bias +0.0 °F, RMSE 0.0 °F: the bias is the median of the point minus the reference, so the point reads neither high nor low against it; drift not evaluated because the overlap spans 21.0 days, under the 28 days a drift rate needs; 504 paired samples from 2026-03-02 00:00:00 to 2026-03-22 23:00:00"
   }
  ]
 }

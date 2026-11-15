@@ -197,6 +197,49 @@ def collect_r15(root: str) -> dict:
     return out
 
 
+def collect_r16(root: str) -> dict:
+    """(round 16) The facts the round-16 cases read, appended once to the frozen fact table:
+    the reference comparisons of the ``view="report"`` trust call (re-tokened to its frozen
+    trust summary), which now say why no drift rate was measured; the finding facts of a run of
+    three air-handler rules at ``min_severity="ok"`` that name their gates (and its leak
+    results, each a shift beyond the fan-heat allowance); the rule_params
+    facts of two rules, which name their verdict thresholds; and one finding_detail's
+    ``parameters`` fact, which names them too. ``{capability: [fact, ...]}``."""
+    from camber.capabilities import CallContext, default_registry
+    from camber.capabilities._ledger import canonical
+
+    st, configs = _store(root)
+    ctx = CallContext(store=st.root, allowed_facilities=frozenset(ALLOWED), config=configs)
+    reg = default_registry()
+    out: dict = {}
+    facts = reg.call("sensor_trust", {"facility_id": SITE, "view": "report"}, ctx).facts
+    out["sensor_trust"] = [
+        canonical(f)
+        for f in facts
+        if f.get("kind") == "reference_comparison" and "drift not evaluated because" in f["text"]
+    ]
+    args = {
+        "facility_id": SITE,
+        "min_severity": "ok",
+        "rules": ["supply_air_control", "supply_air_reset_compliance", "leaking_valve"],
+    }
+    facts = reg.call("rule_run", args, ctx).facts
+    out["rule_run"] = [
+        canonical(f)
+        for f in facts
+        if f.get("kind") == "rule_run"
+        or (f.get("kind") == "finding" and "; gates: " in f["text"])
+        or (f.get("kind") == "finding" and "fan-heat allowance (median" in f["text"])
+    ]
+    args = {"rules": ["supply_air_control", "supply_air_reset_compliance"], "detail": False}
+    facts = reg.call("rule_params", args, ctx).facts
+    out["rule_params"] = [canonical(f) for f in facts if f.get("kind") == "rule_params"]
+    fid = "supply_air_reset_compliance@AHU-2"
+    facts = reg.call("finding_detail", {"facility_id": SITE, "finding_id": fid}, ctx).facts
+    out["finding_detail"] = [canonical(f) for f in facts if f.get("kind") == "parameters"]
+    return out
+
+
 def load_or_collect(cache: str | None = None, root: str | None = None) -> dict:
     """:func:`collect`'s facts, read from ``cache`` when it exists, else collected under
     ``root`` (a temporary directory when none) and written to ``cache``."""
@@ -329,6 +372,31 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
     def add(**kw):
         out.append(Claim(**{**base, **kw}))
 
+    if kind == "finding" and "; gates: " in text:
+        # (round 16) the gates a finding names: 'occupancy_gate "trended occupancy"' (appended
+        # for the gate cases only: its other claims would make frozen mutants true)
+        rule = f.get("rule") or _rule_of_finding(f.get("finding_id", ""))
+        listed = text.split("; gates: ", 1)[1].split("; ", 1)[0]
+        for m in re.finditer(r'(\w+) "([^"]+)"', listed):
+            add(attribute="gate", rule=rule, label=m.group(1), extra={"said": m.group(2)})
+        return out
+    m = re.search(r"the ([\d.]+)F fan-heat allowance \(median ([-+]?[\d.]+)F beyond it\)", text)
+    if kind == "finding" and m:
+        # (round 16) a leak shift and the fan-heat allowance it is beyond (appended for the
+        # subject-binding cases only)
+        add(
+            attribute="fan_heat",
+            rule=str(f.get("rule") or ""),
+            value=_num(m.group(2)),
+            munit="F",
+            extra={"allowance": _num(m.group(1))},
+        )
+        return out
+    if kind == "rule_run" and "those pairs were not judged" in text:
+        # (round 16) a run that skipped rules: its count of skips names none of them
+        m = re.search(r"(\d+) rule\(s\)\) skipped", text)
+        add(attribute="skips", site="", unit="", value=int(m.group(1)) if m else 0)
+        return out
     if kind == "finding" and cap in ("rule_run", "finding_detail", "mv_summary", "drift"):
         rule = f.get("rule") or _rule_of_finding(f.get("finding_id", ""))
         add(attribute="verdict", rule=rule, verdict=str(f.get("value", "")))
@@ -383,6 +451,17 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
                 munit="%",
                 extra={"tier": _num(m.group(2))},
             )
+    m = re.search(r"vs ([\w ]*?)target ([\d.]+)°F; .*?\(mean gap ([-+]?[\d.]+)°F\)", text)
+    floor = re.search(r"warn gap floor ([\d.]+) °F", text)
+    if kind == "finding" and m and floor:
+        # (round 16) a gap, the target it is a gap from, and the floor it is held to
+        add(
+            attribute="gap_floor",
+            rule=str(f.get("rule") or ""),
+            value=_num(m.group(3)),
+            munit="°F",
+            extra={"target": _num(m.group(2)), "floor": _num(floor.group(1)), "of": m.group(1)},
+        )
     if kind == "finding" and "; thresholds: " in text:
         # (round 15) the thresholds a finding lists: "warn gap floor 2 °F (warn_gap_floor_f)"
         rule = f.get("rule") or _rule_of_finding(f.get("finding_id", ""))
@@ -396,6 +475,16 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
                 label=m.group(1).strip(),
                 extra={"key": m.group(4)},
             )
+    if kind in ("rule_params", "parameters") and (
+        "verdict thresholds: " in text or "no warn or fault threshold" in text
+    ):
+        # (round 16) which parameters set the rule's warn and fault levels, or that none does
+        rule = str(f.get("rule") or text.split(" ", 1)[0])
+        listed = text.split("verdict thresholds: ", 1)[-1] if "verdict thresholds: " in text else ""
+        lv = {"warn": [], "fault": []}
+        for m in re.finditer(r"(\w+) \((warn|fault)\)", listed):
+            lv[m.group(2)].append(m.group(1))
+        add(attribute="levels", site="", unit="", rule=rule, extra=lv)
     if kind == "conditional_not_listed":
         for m in re.finditer(r'"([^"]+)" (\w+) \((ok|warn|fault)\)', text):
             add(attribute="verdict", unit=m.group(1), rule=m.group(2), verdict=m.group(3))
@@ -425,6 +514,20 @@ def _extract(cap: str, f: dict) -> list:  # noqa: C901 - one branch per fact kin
             window=(_day(f.get("start")), _day(f.get("end"))),
             extra={"n_samples": f.get("n_samples")},
         )
+    elif kind == "reference_comparison" and "drift not evaluated because" in text:
+        # (round 16) why no drift rate was measured (appended for the reason and decline cases
+        # only: its other claims are the frozen comparisons' own)
+        sub = f.get("subject") or {}
+        m = re.search(r"overlap spans ([\d.]+) days, under the ([\d.]+) days", text)
+        b = re.search(r"bias ([-+]?[\d.]+) ?(°F|°C)", text)
+        if m:
+            add(
+                attribute="drift_note",
+                point=str(f.get("role") or sub.get("role") or ""),
+                value=_num(m.group(1)),
+                munit="days",
+                extra={"min": _num(m.group(2)), "bias": b.group(1) if b else ""},
+            )
     elif kind == "reference_comparison" and re.search(r", RMSE [\d.]+ ?(?:°F|°C):", text):
         # (round 14) a comparison listing its RMSE with its bias (appended to the frozen table
         # for the rmse cases only: its other claims are the frozen comparisons' own)
