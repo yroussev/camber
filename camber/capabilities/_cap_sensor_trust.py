@@ -16,6 +16,8 @@ are compared as ``rcx_report`` compares them; a disagreeing one makes its point 
 
 from __future__ import annotations
 
+import re
+
 from . import Capability, CapabilityError, CapabilityResult
 from ._common import (
     DATE,
@@ -123,6 +125,7 @@ _REFERENCE = {
             "type": ["number", "null"],
             "description": "null when the overlap is too short to measure a rate",
         },
+        "drift_note": {"type": ["string", "null"], "description": "why drift is null"},
         "n_samples": {"type": "integer", "minimum": 0, "description": "paired samples"},
         "overlap_start": {"type": ["string", "null"]},
         "overlap_end": {"type": ["string", "null"]},
@@ -303,6 +306,8 @@ def _references(ctx, fid: str, run, equips, roles) -> dict:
             "rmse": _num(m.get("rmse"), 3),
             "correlation": _num(m.get("correlation"), 3),
             "drift_per_month": _num(m.get("drift_per_month"), 3),
+            # 0112-cite16: why no drift rate was measured (the overlap too short for one)
+            "drift_note": _drift_note(f.caveats, m.get("drift_per_month")),
             "n_samples": int(m.get("n") or 0),
             "overlap_start": m.get("overlap_start"),
             "overlap_end": m.get("overlap_end"),
@@ -315,6 +320,36 @@ def _references(ctx, fid: str, run, equips, roles) -> dict:
             out["notes"].append(note)
     out["all"].sort(key=lambda r: (r["verdict"] not in ("fault", "warn"), r["equip"], r["role"]))
     return out
+
+
+def _drift_note(caveats, drift) -> str | None:
+    """Why a comparison measured no drift rate (0112-cite16), from its caveat ("drift not
+    evaluated: overlap spans 4.0 days (< 28); ..."), or None when it measured one. Hosts said
+    "only 4 days, so drift was not evaluated" and no output gave the reason."""
+    if drift is not None:
+        return None
+    for c in caveats or ():
+        c = " ".join(str(c).split())
+        if c.startswith("drift not evaluated"):
+            return plain(c.split("; ", 1)[0].split(": ", 1)[-1]).rstrip(" .")
+    return None
+
+
+def _drift_why(note: str) -> str:
+    """A drift note as the reason its fact gives: "overlap spans 4.0 days (< 28)" -> "the overlap
+    spans 4.0 days, under the 28 days a drift rate needs"."""
+    m = re.fullmatch(r"overlap spans ([\d.]+) days \(< ([\d.]+)\)", note)
+    if m:
+        return (
+            f"the overlap spans {m.group(1)} days, under the {m.group(2)} days a drift rate needs"
+        )
+    m = re.fullmatch(r"only (\d+) daily baselines \(< (\d+)\)", note)
+    if m:
+        return (
+            f"there are only {m.group(1)} daily baselines, under the {m.group(2)} a drift rate "
+            "needs"
+        )
+    return note
 
 
 #: what a comparison's verdict says, for its fact
@@ -350,6 +385,8 @@ def _reference_fact(fact_id: str, r: dict, fid: str | None = None) -> dict:
         if r["overlap_start"] and r["overlap_end"]
         else ""
     )
+    if r.get("drift_note"):  # 0112-cite16: the reason, so a "because" or "so" can cite it
+        sign += f"; drift not evaluated because {_drift_why(r['drift_note'])}"
     return {
         "id": fact_id,
         "kind": "reference_comparison",
@@ -501,6 +538,11 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
         if r["verdict"] == "trusted" and not r["below_floor"]:
             break
         why = ", ".join(r["flags"]) or "no single flag"
+        if any(f.startswith("reference_") for f in r["flags"]):
+            # 0112-cite16: the score reads the trend's shape; the reference's disagreement makes
+            # the point suspect whatever it scores ("trust 1.00 and still suspect" read as a
+            # contradiction)
+            why += ": its configured reference disagrees, so it is suspect whatever its score"
         facts.append(
             {
                 "id": f"F{i}@sensor_trust",

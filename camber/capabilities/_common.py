@@ -805,14 +805,74 @@ def _metric_thresholds(metrics: dict) -> str:
     )
 
 
+#: (0112-cite16) the longest gate value a finding fact gives in full
+_GATE_LEN = 60
+
+
+def _metric_gates(metrics: dict) -> str:
+    """The gates a finding's metrics name (0112-cite16), which hosts quote from the JSON ("gated
+    on trended occupancy"): ``gates: occupancy_gate "trended occupancy", fan_gate "fan status"``.
+    Each string metric with ``gate`` among its words, in the finding's own fact (a labels fact
+    is issued for a listed warn or fault only, so an ok result's gate was in no fact). Empty
+    when there is none."""
+    said = [
+        f"{k} {name(v, limit=_GATE_LEN)}"
+        for k, v in sorted(metrics.items())
+        if isinstance(v, str)
+        and v.strip()
+        and not str(k).startswith("_")
+        and "gate" in str(k).split("_")
+    ]
+    return "gates: " + ", ".join(said) if said else ""
+
+
+#: (0112-cite16) a word of a parameter's name that makes it a verdict level
+_LEVELS = ("warn", "fault")
+
+
+def verdict_levels(params) -> str:
+    """Which of a rule's parameters (their names) set its verdict levels (0112-cite16), so a
+    sentence can say which threshold makes a warn and which a fault, or that a rule has none:
+    ``verdict thresholds: warn_pct (warn), fault_pct (fault)``; ``verdict thresholds: warn_pct
+    (warn); no fault threshold among its parameters``; ``no warn or fault threshold among its
+    parameters``. A level is a parameter with ``warn`` or ``fault`` among the words of its name
+    (``warn_pct``, ``bias_fault``)."""
+    names = [str(p) for p in params or ()]
+    found = {lv: [n for n in names if lv in n.lower().split("_")] for lv in _LEVELS}
+    if not any(found.values()):
+        return "no warn or fault threshold among its parameters"
+    listed = ", ".join(f"{n} ({lv})" for lv in _LEVELS for n in found[lv])
+    missing = [lv for lv in _LEVELS if not found[lv]]
+    tail = f"; no {missing[0]} threshold among its parameters" if missing else ""
+    return f"verdict thresholds: {listed}{tail}"
+
+
+@lru_cache(maxsize=256)
+def rule_param_names(rule: str) -> tuple:
+    """The names of a documented rule's tunable parameters (empty for a drift detector or an
+    unknown rule)."""
+    try:
+        from ..rules.param_docs import describe, documented_rules
+
+        if rule not in documented_rules():
+            return ()
+        return tuple(str(p.get("name")) for p in describe(rule).get("params") or ())
+    except Exception:  # noqa: BLE001 - a rule the docs cannot describe has no levels to state
+        return ()
+
+
 def _metric_flags(metrics: dict) -> str:
     """What a finding's metrics say beyond its summary that hosts state from the JSON
     (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), its
+    gates (:func:`_metric_gates`, 0112-cite16), its
     energy and cost totals (:func:`_metric_totals`, 0112-cite14), its thresholds and limits
     (:func:`_metric_thresholds`, 0112-cite15) and the metrics it left null (``null:
     oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
     keys = [k for k in sorted(metrics) if not k.startswith("_")]
     parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
+    gates = _metric_gates(metrics)
+    if gates:
+        parts.append(gates)
     totals = _metric_totals(metrics)
     if totals:
         parts.append(totals)

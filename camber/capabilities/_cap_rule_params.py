@@ -9,7 +9,7 @@ import re
 from functools import lru_cache
 
 from . import Capability, CapabilityError, CapabilityResult
-from ._common import cite, jsonable, rule_inputs_fact
+from ._common import cite, jsonable, rule_inputs_fact, verdict_levels
 from ._page import OFFSET, page
 from ._sanitize import plain
 
@@ -207,8 +207,10 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "rule_params",
                 "rule": r["rule"],
                 "value": len(r["params"]),
+                # 0112-cite16: which parameters set its warn and fault levels, or that none does
                 "text": f"{r['rule']} ({r['kind']}, run with {r['run_with']}) defaults: "
-                f"{listed or 'no tunable parameters'}",
+                f"{listed or 'no tunable parameters'}; "
+                f"{verdict_levels(p['name'] for p in r['params'])}",
                 "params": [{k: v for k, v in p.items() if k in _FACT_FIELDS} for p in r["params"]],
             }
         )

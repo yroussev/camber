@@ -120,8 +120,15 @@ def _row(e) -> dict:
     }
 
 
+def _facility(e) -> str:
+    """The facility id a catalog entry ingests to (``ds-<id>``), or ""."""
+    return str((getattr(e, "ingest", None) or {}).get("facility") or "")
+
+
 def _haystack(e) -> str:
-    parts = [e.id, e.title, e.summary, e.equipment, e.publisher, e.kind, *e.teaches]
+    # 0112-cite16: its facility id too, so a search by the id rule_run takes finds the entry
+    parts = [e.id, _facility(e), e.title, e.summary, e.equipment, e.publisher, e.kind]
+    parts += list(e.teaches)
     return " ".join(str(p) for p in parts).lower()
 
 
@@ -245,8 +252,17 @@ def dataset_entry(ctx, arguments: dict) -> CapabilityResult:
     try:
         e = datasets.get(did)
     except KeyError:
+        # 0112-cite16: a facility id ("ds-<id>") names its catalog entry; the error names the
+        # entry's own id rather than failing on the prefix
+        by_fid = [x for x in datasets.catalog(licence="all") if _facility(x) == did]
+        if not by_fid:
+            raise CapabilityError(
+                "not_found", f"no catalog dataset {did!r} (see dataset_search)"
+            ) from None
         raise CapabilityError(
-            "not_found", f"no catalog dataset {did!r} (see dataset_search)"
+            "not_found",
+            f"{did!r} is the facility id of catalog dataset {by_fid[0].id!r}: pass "
+            f"dataset_id {by_fid[0].id!r}",
         ) from None
     rules = (e.suggested_analyses or {}).get("rules") or []
     issues = []

@@ -55,6 +55,7 @@ from ._common import (
     summary_text,
     trust_banner,
     trust_declines,
+    verdict_levels,
     when,
     window,
     with_rules,
@@ -933,7 +934,8 @@ def finding_detail(ctx, arguments: dict) -> CapabilityResult:
                 "kind": "parameters",
                 "value": len(params),
                 "subject": subject(fid, row["equip"], finding=row["finding_id"]),
-                "text": f"{rule} ran with {listed}",
+                # 0112-cite16: which of them set its warn and fault levels, or that none does
+                "text": f"{rule} ran with {listed}; {verdict_levels(p['name'] for p in params)}",
             }
         )
         text.append(cite(facts[-1]))
