@@ -1010,7 +1010,14 @@ given ("the CHW valve was open less than the HHW valve" of "CHW 85%, HHW 27%",
 part (`gap:set-scope-unlisted`); a comparison of a figure with a bound that the sentence words
 without a verb or comma between ("3 °F above the setpoint" is read as a difference); a band
 position said of a figure from another sentence ("That is outside the band" is read against the
-cited estimate itself).
+cited estimate itself). And these pass and can be wrong (round 16): a reason given in the next
+sentence ("The overlap is 4 days. So drift was not evaluated": the reason rule reads one
+sentence, `gap:reason-across-sentences`); a reason offered as a possibility ("This may be because
+the overlap is only 4 days", `gap:reason-hedged`); a reason for a plain reading of the data
+rather than a result, verdict or decline ("100% coverage, so the data is gap-free" is not read);
+"these are the faults" with no count under a list that holds only some of them
+(`gap:deictic-uncounted`); a count bound to a list that is not next to its sentence; an issue's
+type said in a word its cost fact does not carry ("the census findings, Issues 25 and 30").
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier

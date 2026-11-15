@@ -213,6 +213,16 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   with another threshold's words fails; "both faults are on AHU-1" needs every cited fault
   there; a denial a fact makes of a counted part ("5 saving(s) ... not a verified saving") is
   not one of all of them.
+- **Round 16.** A `sensor_trust` comparison that measured no drift rate says why
+  (`drift_note`; `drift not evaluated because the overlap spans 4.0 days, under the 28 days a
+  drift rate needs`); a finding's fact names its gates (`gates: occupancy_gate "trended
+  occupancy"`); `rule_params` and the `finding_detail` parameters fact say which parameters set
+  the warn and fault levels, or that none does. A reason ("so", "because", "since", "which is
+  why") given for a result, verdict or decline needs a cited fact that gives it; a check said
+  not to have been judged must be named by a cited fact that says so, with the count where it
+  declined only some; "These are the 8 faults" must count the list or table next to it; a
+  comparison is said of its clause's subject, not the nearest figure. Put remarks that are not
+  checked after the checked text, never above a line saying it was checked.
 - **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
   that says something of the lines under it (a verdict, negation, quantifier, direction or rank
   word: "**What is not fine**", "## Points that never move") and a short label or remark that

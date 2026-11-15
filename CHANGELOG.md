@@ -606,6 +606,31 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   savings". Eight first-corpus strict-xfail entries are now met and promoted; the generated cases
   add 797 with 0 escapes. Open, as strict-xfail corpus entries: `gap:compare-unstated`,
   `gap:set-scope-unlisted` and `gap:method-paraphrase`.
+- **Facts give drift's reason, a finding's gates and a rule's verdict levels (round 16).** A
+  `sensor_trust` reference comparison that measured no drift rate says why, in its JSON
+  (`drift_note`) and its fact (`drift not evaluated because the overlap spans 4.0 days, under the
+  28 days a drift rate needs`); a finding's fact names its gates (`gates: occupancy_gate
+  "trended occupancy"`; an ok result had them in no fact); `rule_params` and the `finding_detail`
+  parameters fact say which parameters set the warn and fault levels, or that none does
+  (`verdict thresholds: warn_pct (warn); no fault threshold among its parameters`); a point whose
+  reference disagrees says it is suspect whatever its score. `dataset_entry` given a facility id
+  (`ds-...`) names the catalog id, and `dataset_search` finds an entry by it.
+- **`check_citations` checks reasons, not-judged claims and counts of a list (round 16).** A
+  reason joined to what it explains ("only 4 days, so drift was not evaluated", "because",
+  "since", "which is why", "as a result") needs a cited fact that gives that reason for a
+  result, verdict or decline: two true halves joined by "so" are a claim of their own. A check
+  said not to have been judged ("Tower approach and bypass-leak checks weren't judged") must be
+  named by a cited fact that says it was not judged, and where that fact declines it on only
+  some results ("given for 4 of its 5") the sentence must say which or how many. A count bound
+  to the table or list next to it ("These are the 8 faults" under 7 rows, "the following 4")
+  must be its number of items. A comparison is said of its clause's subject ("+3.4F beyond the
+  2F fan heat, which is above 3.0" compares 3.4, not 2); a share's whole is read past the
+  participles before it ("54.4% of judged occupied fan-on samples"), and its why says what it
+  is of; a parameter said to set a level ("the fault threshold is warn_pct") must be that
+  level's; a rule's own id doing something ("supply_air_control gated on trended occupancy")
+  is read as what CAMBER does. Two strict-xfail corpus entries are now met and promoted; the
+  generated cases add 575 with 0 escapes. Open, as strict-xfail corpus entries:
+  `gap:reason-across-sentences`, `gap:reason-hedged` and `gap:deictic-uncounted`.
 - **`check_citations` reports text it does not read as `not_judged`, never as a pass
   (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
   quantifier, direction or rank word) and a short label or remark that cites nothing ("That
