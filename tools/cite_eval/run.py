@@ -158,7 +158,12 @@ def payload(case: dict, facts_by_id: dict) -> dict:
     return {
         "key": case["key"],
         "draft": case["draft"],
-        "facts": [facts_by_id[i] for i in case["cites"] if i in facts_by_id],
+        # (round 17) and the session's facts it does not cite (a ranked set), recorded too
+        "facts": [
+            facts_by_id[i]
+            for i in dict.fromkeys([*case["cites"], *case.get("ledger", ())])
+            if i in facts_by_id
+        ],
         "allowed": list(facttable.ALLOWED),
         "names": dict(facttable.REGISTRY_NAMES),
         **({"per_sentence": case["per_sentence"]} if "per_sentence" in case else {}),

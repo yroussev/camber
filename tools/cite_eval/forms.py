@@ -1484,6 +1484,211 @@ def _level_cases(claims: list) -> list:
     return out
 
 
+def _r17(d, ok, form, op_false, cap, cites, g, ledger=()):
+    """(round 17) One case, as :func:`_r16`; ``ledger``: facts of the session it does not cite
+    (the set a rank is read against), recorded with the cited ones."""
+    case = _r16(d, ok, form, op_false, cap, cites, g)
+    if ledger:
+        case["ledger"] = list(ledger)
+    return case
+
+
+def _joined_cause_cases(claims: list) -> list:
+    """(round 17) Two causes joined on one "so": true when each is a reason the cited fact
+    gives for that effect, false when one rides along with the other (a true figure of the fact
+    that is not why)."""
+    out: list = []
+    for c in (c for c in claims if c.attribute == "drift_note"):
+        d, u, pt = f"{c.value:g}", c.unit, c.point
+        bias = str(c.extra.get("bias") or "")
+        cites = (c.fact_id,)
+        g = _key("cause2", c.fact_id)
+        rows = [
+            (
+                True,
+                f"The overlap with {u}'s reference spans only {d} days, and that is too short "
+                f"for a drift rate, so its {pt} drift was not evaluated",
+            ),
+            (
+                False,
+                f"The overlap with {u}'s reference spans only {d} days, and its bias is {bias}, "
+                f"so its {pt} drift was not evaluated",
+            ),
+            (
+                False,
+                f"{u}'s {pt} reads {bias} against its reference; the overlap spans {d} days, so "
+                "its drift was not evaluated",
+            ),
+        ]
+        for ok, d0 in rows:
+            out.append(
+                _r17(f"{d0} {cite(*cites)}.", ok, "cause2", "join_cause", c.capability, cites, g)
+            )
+    return out
+
+
+def _one_verdict_cases(claims: list) -> list:
+    """(round 17) A trust verdict said of one point from a summary that only counts verdicts
+    ("23 trusted, 4 suspect"): false (the count names no point), true as a count."""
+    out: list = []
+    counts: dict = {}
+    for c in claims:
+        if c.capability == "sensor_trust" and c.attribute == "count" and c.label:
+            counts.setdefault(c.fact_id, {})[c.label.split()[0]] = c.value
+    named = [c for c in claims if c.attribute == "trust_class" and c.unit and c.point]
+    for fid, n in sorted(counts.items()):
+        if not (n.get("trusted") and n.get("suspect")):
+            continue
+        g = _key("one_verdict", fid)
+        rows = [
+            (True, f"{n['trusted']:g} points are trusted"),
+            (True, f"{n['suspect']:g} points are suspect"),
+        ]
+        same = [c for c in named if c.fact_id.split("@")[1] == fid.split("@")[1]][:2]
+        for c in same:
+            rows += [
+                (False, f"{c.unit}'s {c.point} is rated trusted"),
+                (False, f"The {c.point} on {c.unit} is marked suspect"),
+            ]
+        for ok, d0 in rows:
+            out.append(
+                _r17(
+                    f"{d0} {cite(fid)}.", ok, "one_verdict", "bind_item", "sensor_trust", (fid,), g
+                )
+            )
+    return out
+
+
+def _unit_counts_cases(claims: list) -> list:
+    """(round 17) A run's result counts said under one of its units ("AHU-2: 2 fault, 4 warn
+    and 12 ok results"): false (the counts are over all its equipment), true of the run."""
+    out: list = []
+    counts: dict = {}
+    for c in claims:
+        if c.capability == "rule_run" and c.attribute == "count" and c.kind == "rule_run":
+            counts.setdefault(c.fact_id, {})[c.label.split()[0]] = c.value
+    units: dict = {}
+    for c in claims:
+        if c.capability == "rule_run" and c.attribute == "verdict" and c.unit:
+            units.setdefault(c.fact_id.split("@")[1], set()).add(c.unit)
+    for fid, n in sorted(counts.items()):
+        us = sorted(units.get(fid.split("@")[1], ()))
+        if len(us) < 2 or not all(k in n for k in ("fault", "warn", "ok")):
+            continue
+        said = f"{n['fault']:g} fault, {n['warn']:g} warn and {n['ok']:g} ok results"
+        g = _key("unit_counts", fid)
+        rows = [(True, f"The run: {said}"), (True, f"Across the run there were {said}")]
+        rows += [(False, f"{u}: {said}") for u in us[:2]]
+        rows += [(False, f"Check the second AHU: the run counted {said}")]
+        for ok, d0 in rows:
+            out.append(
+                _r17(f"{d0} {cite(fid)}.", ok, "unit_counts", "bind_item", "rule_run", (fid,), g)
+            )
+    return out
+
+
+def _ranked_cases(claims: list) -> list:
+    """(round 17) A saving's band said to be the widest or narrowest of its set: read against
+    the session's other savings of that set (recorded, not cited): true as the bands rank,
+    false the other way round."""
+    out: list = []
+    bands: dict = {}
+    for c in claims:
+        if c.capability == "mv_summary" and c.attribute == "band" and c.extra.get("u"):
+            bands.setdefault(c.fact_id.split("@")[1], []).append(c)
+    for _call, cs in sorted(bands.items()):
+        cs = sorted(cs, key=lambda c: float(c.extra["u"]))
+        if len(cs) < 2 or float(cs[0].extra["u"]) == float(cs[-1].extra["u"]):
+            continue
+        lo, hi = cs[0], cs[-1]
+        g = _key("ranked", lo.fact_id, hi.fact_id)
+        rows = [
+            (True, hi, f"{hi.unit}'s band, ± {float(hi.extra['u']):g}, is the widest"),
+            (False, lo, f"{lo.unit}'s band, ± {float(lo.extra['u']):g}, is the widest"),
+            (True, lo, f"{lo.unit} has the narrowest band, ± {float(lo.extra['u']):g}"),
+            (False, hi, f"{hi.unit} has the narrowest band, ± {float(hi.extra['u']):g}"),
+        ]
+        for ok, c, d0 in rows:
+            others = tuple(x.fact_id for x in cs if x is not c)
+            out.append(
+                _r17(
+                    f"{d0} {cite(c.fact_id)}.",
+                    ok,
+                    "ranked",
+                    "flip_rank",
+                    c.capability,
+                    (c.fact_id,),
+                    g,
+                    ledger=others,
+                )
+            )
+    return out
+
+
+def _ranked_cited_cases(claims: list) -> list:
+    """(round 18) A saving's band said to be the widest of its set, in a draft whose other
+    sentence cites the wider one: read against that one too (a fact cited elsewhere in the draft
+    is still one of the set), true as the bands rank, false the other way round."""
+    out: list = []
+    bands: dict = {}
+    for c in claims:
+        if c.capability == "mv_summary" and c.attribute == "band" and c.extra.get("u"):
+            bands.setdefault(c.fact_id.split("@")[1], []).append(c)
+    for _call, cs in sorted(bands.items()):
+        cs = sorted(cs, key=lambda c: float(c.extra["u"]))
+        if len(cs) < 2 or float(cs[0].extra["u"]) == float(cs[-1].extra["u"]):
+            continue
+        lo, hi = cs[0], cs[-1]
+        g = _key("ranked_cited", lo.fact_id, hi.fact_id)
+
+        def band(c):
+            return f"± {float(c.extra['u']):g}"
+
+        rows = [
+            (True, lo, hi, f"{hi.unit}'s band, {band(hi)}, is the widest"),
+            (False, hi, lo, f"{lo.unit}'s band, {band(lo)}, is the widest"),
+        ]
+        for ok, first, ranked, d0 in rows:
+            others = tuple(x.fact_id for x in cs if x not in (first, ranked))
+            out.append(
+                _r17(
+                    f"{first.unit} has a band of {band(first)} {cite(first.fact_id)}. "
+                    f"{d0} {cite(ranked.fact_id)}.",
+                    ok,
+                    "ranked_cited",
+                    "flip_rank",
+                    ranked.capability,
+                    (first.fact_id, ranked.fact_id),
+                    g,
+                    ledger=others,
+                )
+            )
+    return out
+
+
+def _time_share_cases(claims: list) -> list:
+    """(round 17) A share of hours said "of the time": true; the same figure said of another
+    whole (zones, units) stays false."""
+    out: list = []
+    for c in claims:
+        if c.attribute != "share" or c.capability != "rule_run" or "hour" not in (c.label or ""):
+            continue
+        cites = (c.fact_id,)
+        g = _key("time_share", c.fact_id)
+        v = f"{c.value:g}"
+        rows = [
+            (True, f"On {c.unit}, both coils were open {v}% of the time"),
+            (False, f"On {c.unit}, both coils were open in {v}% of the zones"),
+        ]
+        for ok, d0 in rows:
+            out.append(
+                _r17(
+                    f"{d0} {cite(*cites)}.", ok, "time_share", "swap_whole", c.capability, cites, g
+                )
+            )
+    return out
+
+
 def _pairs(claims: list, world: World) -> list:
     out: list = _their_cases(claims, world) + _cell_parts_cases(claims, world)
     out += _short_id_cases(claims) + _caveat_cases(claims)
@@ -1493,6 +1698,9 @@ def _pairs(claims: list, world: World) -> list:
     out += _located_cases(claims) + _zone_cases(claims)
     out += _cause_cases(claims) + _declined_cases(claims) + _deictic_cases(claims)
     out += _subject_cases(claims) + _gate_cases(claims) + _level_cases(claims)
+    out += _joined_cause_cases(claims) + _one_verdict_cases(claims) + _unit_counts_cases(claims)
+    out += _ranked_cases(claims) + _time_share_cases(claims)
+    out += _ranked_cited_cases(claims)
     for gk, members in sorted(_pair_groups(claims).items(), key=lambda kv: str(kv[0])):
         members = sorted(members, key=lambda c: (c.unit, c.fact_id))
         for i, a in enumerate(members):
