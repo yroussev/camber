@@ -244,7 +244,12 @@ def excess_oa_penalty(
     }
     sa = col("SupplyCFM")
     priced = cool_s | heat_s
-    if sa is not None and bool(priced.any()):
+    why = ""  # 0112-cite18: why the kBtu totals are null
+    if sa is None or not bool(sa.notna().any()):
+        why = "no trended supply airflow (none is trended)"
+    elif not bool(priced.any()):
+        why = "no excess-OA cooling or heating sample is there to price"
+    else:
         sa = sa.where(sa > 0)
         p95 = sa.quantile(0.95)
         cover = float(sa[priced].notna().mean())
@@ -253,7 +258,28 @@ def excess_oa_penalty(
             out["oa_cost_excess_cool_kbtu"] = round(float((cool_rate * sa).sum()) * dt / 1e3, 3)
             out["oa_cost_excess_heat_kbtu"] = round(float((heat_rate * sa).sum()) * dt / 1e3, 3)
             out["oa_cost_airflow"] = "trended supply airflow"
+        elif not (p95 == p95 and p95 > _MIN_PLAUSIBLE_CFM):
+            why = (
+                "the trended supply airflow is not a plausible airflow (its 95th percentile is "
+                f"at most {_MIN_PLAUSIBLE_CFM:g} cfm)"
+            )
+        else:
+            why = f"the supply airflow is trended on only {cover:.0%} of the priced samples (< 90%)"
+    if why:
+        out["oa_cost_kbtu_declined"] = _kbtu_declined(why)
     return out
+
+
+def _kbtu_declined(why: str, nulls: str = "") -> str:
+    """(0112-cite18) What an excess-OA finding says when its kBtu totals are null, and why
+    (``oa_cost_kbtu_declined``): hosts wrote "no trended airflow, so the kBtu figures are null"
+    from the JSON, which said only ``null``. ``nulls``: the metrics that are null, when not the
+    two kBtu totals."""
+    nulls = nulls or "oa_cost_excess_cool_kbtu and oa_cost_excess_heat_kbtu are null"
+    return (
+        f"{why}, so its excess outside air is not costed in kBtu (no kBtu cost is calculated; "
+        f"{nulls})"
+    )
 
 
 def _observed_hours(frame: pd.DataFrame, cols) -> float:

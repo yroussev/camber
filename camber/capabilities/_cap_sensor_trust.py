@@ -272,6 +272,8 @@ def _run_frames(ctx, fid: str, equips, start, end):
         raise CapabilityError("invalid_params", f"the run config was refused: {msg}") from None
 
 
+#: (0112-cite17) the trusted points the page's trusted-points fact names (the rest are counted)
+_TRUSTED_NAMED = 20
 #: sort rank of a verdict: least trusted first (a point whose reference disagrees is suspect)
 _RANK = {"untrusted": 0, "suspect": 1, "trusted": 2}
 
@@ -562,6 +564,24 @@ def sensor_trust(ctx, arguments: dict) -> CapabilityResult:
                 + ("; its configured reference disagrees" if "reference" in why else "")
                 + f") [F{i}@sensor_trust]."
             )
+    # 0112-cite17: the trusted points of the page by name; the summary only counts them, and
+    # hosts said "the logger itself is rated trusted" of a count
+    trusted = [r for r in shown if r["verdict"] == "trusted" and not r["below_floor"]]
+    if trusted:
+        named = [f"{name(r['equip'])} {name(r['role'])}" for r in trusted[:_TRUSTED_NAMED]]
+        more = len(trusted) - len(named)
+        listed = (", ".join(named[:-1]) + " and " + named[-1]) if len(named) > 1 else named[0]
+        if more:
+            listed = ", ".join(named) + f" and {more} more"
+        facts.append(
+            {
+                "id": "T1@sensor_trust",
+                "kind": "trusted_points",
+                "value": len(trusted),
+                "text": f"{fid}: {listed} {'are' if len(trusted) > 1 else 'is'} trusted "
+                f"({len(trusted)} trusted point(s) on this page)",
+            }
+        )
     # 0.112 (#294): a point that never moves over the window can score trusted (a constant has
     # no outliers) yet decide a diagnosis (a valve that never opens, a setpoint that never
     # resets): each one on this page is a fact

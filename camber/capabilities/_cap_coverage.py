@@ -203,6 +203,25 @@ def _like(t, tz):
     return t.tz_localize("UTC").tz_convert(tz) if tz is not None else t
 
 
+#: (0112-cite17) the roles an equipment coverage fact names (the rest are counted)
+_ROLES_NAMED = 16
+
+
+def _roles_said(roles: list) -> str:
+    """`` (roles "airflow", "airflow_sp" and "damper")`` for an equipment coverage fact, sorted;
+    empty when there are none."""
+    roles = sorted(dict.fromkeys(str(r) for r in roles))
+    if not roles:
+        return ""
+    named = [name(r) for r in roles[:_ROLES_NAMED]]
+    more = len(roles) - len(named)
+    if more:
+        listed = ", ".join(named) + f" and {more} more"
+    else:
+        listed = (", ".join(named[:-1]) + " and " + named[-1]) if len(named) > 1 else named[0]
+    return f" (roles {listed})"
+
+
 def coverage(ctx, arguments: dict) -> CapabilityResult:
     """Coverage and gaps per point and per equipment of one allowed facility."""
     fid = arguments["facility_id"]
@@ -321,6 +340,11 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
     equipment_page = page(
         equipment, arguments, default=_PAGE, what="equipment", order="worst first"
     )
+    # 0112-cite17: each equipment's point roles, so a sentence naming them ("each has 9 points,
+    # including duct static") or the one a unit lacks has a fact that names them
+    roles_of: dict = {}
+    for p in points:
+        roles_of.setdefault(p["equip"], []).append(p["role"])
     for i, e in enumerate(equipment_page[:_FACTS], start=2):
         facts.append(
             {
@@ -332,8 +356,8 @@ def coverage(ctx, arguments: dict) -> CapabilityResult:
                 "subject": subject(fid, e["equip"]),
                 "text": f"{name(e['equip'])}: mean coverage {e['coverage'] * 100:.1f}% of the "
                 f"window over "
-                f"{e['n_points']} points; worst {name(e['worst_role'])} at "
-                f"{e['worst_coverage'] * 100:.1f}%",
+                f"{e['n_points']} points{_roles_said(roles_of.get(e['equip']) or [])}; worst "
+                f"{name(e['worst_role'])} at {e['worst_coverage'] * 100:.1f}%",
             }
         )
         if i - 1 <= _LISTED and e["coverage"] < 0.9:

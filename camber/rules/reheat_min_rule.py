@@ -246,7 +246,9 @@ class ReheatMinimization:
             summary=(
                 f"{equip}: reheating {100.0 * n_reheat / n:.0f}% of occupied hours; "
                 f"of those, {viol_pct:.0f}% with airflow above minimum outside the high heating "
-                f"loop (G36 §5.6.5 would hold min flow until deep heating demand)"
+                # 0112-cite18: as hosts say it ("while the heating loop is not high")
+                "loop, that is while the heating loop is not high (G36 §5.6.5 would hold min "
+                "flow until deep heating demand)"
             ),
         )
 

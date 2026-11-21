@@ -216,6 +216,27 @@ def rule_params(ctx, arguments: dict) -> CapabilityResult:
         )
         if named and i - 1 <= 10:
             text.append(cite(facts[-1]))
+    # 0112-cite17: with detail, how to calibrate each rule's parameters, which hosts quoted from
+    # the JSON ("the cooling cutoff is meant to be set to the economizer high limit") with no
+    # fact stating it; for the rules a call names (a default page of every rule would pass a
+    # host's tool-output limit)
+    if detail and named:
+        for k, r in enumerate(rows[:200], start=1):
+            said = [
+                f"{p['name']}: {plain(' '.join(str(p['calibrate']).split())).rstrip(' .;')}"
+                for p in r["params"]
+                if isinstance(p.get("calibrate"), str) and p["calibrate"].strip()
+            ]
+            if said:
+                facts.append(
+                    {
+                        "id": f"C{k}@rule_params",
+                        "kind": "parameter_calibrate",
+                        "rule": r["rule"],
+                        "value": len(said),
+                        "text": f"how to calibrate {r['rule']}'s parameters: " + "; ".join(said),
+                    }
+                )
     if detail:  # 0112-cite14: what each rule reads and when its parameters apply
         for k, r in enumerate(rows[:200], start=1):
             inputs = rule_inputs_fact(

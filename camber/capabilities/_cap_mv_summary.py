@@ -16,6 +16,7 @@ from ._common import (
     EQUIPS,
     FACILITY,
     FINDING_ROW,
+    _listing,
     by_severity,
     caller_config,
     caveat_facts,
@@ -325,9 +326,13 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
     }
     banners = [config_notice] if config_notice else []
     if info_only:
+        # 0112-cite18: of how many savings, and which (hosts wrote "five of the 8 savings" and
+        # named them), after the reason, so a sentence's "fails G14, so ..." still reads it
+        failing = [r["equip"] for r in saved if any(_INFO_ONLY in c for c in r["caveats"])]
         banners.append(
             f"{info_only} saving(s) rest on a baseline that does not meet G14 acceptance: for "
-            "information only, not a verified saving."
+            f"information only, not a verified saving. {_of(info_only, len(saved))}: "
+            f"{_listing(failing)}."
         )
     if unitless:
         banners.append(
@@ -340,6 +345,16 @@ def mv_summary(ctx, arguments: dict) -> CapabilityResult:
             "before quoting any saving."
         )
     return CapabilityResult(data=data, text=" ".join(text), facts=facts, banners=banners)
+
+
+def _of(k: int, n: int) -> str:
+    """(0112-cite18) Which savings a count is, of how many: ``They are 5 of the 8 savings``,
+    ``They are all 8 savings``, ``It is the only saving``."""
+    if n == 1:
+        return "It is the only saving"
+    if k == 1:
+        return f"It is 1 of the {n} savings"
+    return f"They are all {n} savings" if k == n else f"They are {k} of the {n} savings"
 
 
 CAPABILITIES = (

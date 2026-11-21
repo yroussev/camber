@@ -109,12 +109,28 @@ class AirflowTracking:
                 caveats=caveats,
             )
         low, high = self._off(rel, sp)
+        # 0112-cite17: with both gates, the occupied samples it could judge whatever the fan did,
+        # so a reader can tell when "occupied fan-on hours" are all the occupied hours
+        whole = {}
+        if fan_src != FAN_GATE_NONE and occ_label != "none trended":
+            occ = effective_occupied_mask(frame.index, occ=frame[Role.OCCUPANCY])
+            occupied = rel.notna() & (sp.abs() > self.min_sp)
+            occupied &= pd.Series(occ.to_numpy(dtype=bool), index=frame.index)
+            whole = {"n_occupied": int(occupied.sum())}
         under = 100.0 * float((low & active).sum()) / n  # starved / undershoot
         over = 100.0 * float((high & active).sum()) / n  # overshoot
         off_pct = under + over
         mean_abs = float(rel[active].abs().mean())
         sev = "fault" if off_pct >= self.fault_pct else "warn" if off_pct >= self.warn_pct else "ok"
         hours = self._hours(fan_src, occ_label)
+        # 0112-cite18: which way it missed, when only one way (hosts wrote "always too little air,
+        # never too much" of "starved 87%, over 0%", which judges read as "starved always")
+        n_low, n_high = int((low & active).sum()), int((high & active).sum())
+        side = ""
+        if n_low and not n_high:
+            side = ": off setpoint, it was always too little air (starved), never too much"
+        elif n_high and not n_low:
+            side = ": off setpoint, it was always too much air (over), never too little"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -125,12 +141,13 @@ class AirflowTracking:
                 "overshoot_pct": round(over, 2),
                 "mean_abs_rel_error": round(mean_abs, 3),
                 "n_active": n,
+                **whole,
                 "tol_frac": self.tol_frac,
                 **gate_metrics,
             },
             summary=(
                 f"{equip}: airflow off setpoint {off_pct:.0f}% of {hours} "
-                f"(mean |err| {mean_abs:.0%}; starved {under:.0f}%, over {over:.0f}%)"
+                f"(mean |err| {mean_abs:.0%}; starved {under:.0f}%, over {over:.0f}%{side})"
             ),
             caveats=caveats,
         )

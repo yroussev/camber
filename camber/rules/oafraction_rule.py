@@ -29,6 +29,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..oafraction import (
+    _kbtu_declined,
     _oaf_samples,
     _observed_hours,
     _sample_minima,
@@ -261,6 +262,11 @@ class OutdoorAirFraction:
             ):
                 if k in out:
                     out[k] = None
+            if out:  # 0112-cite18: and says why they are null
+                out["oa_cost_kbtu_declined"] = _kbtu_declined(
+                    "no min_oa_pct is configured (the 20% minimum is a generic default)",
+                    "its oa_cost_excess_* figures are null",
+                )
         return out
 
     def evidence(self, equip: str, frame: pd.DataFrame):

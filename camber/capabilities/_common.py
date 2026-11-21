@@ -861,15 +861,33 @@ def rule_param_names(rule: str) -> tuple:
         return ()
 
 
+def _metric_whole(metrics: dict) -> str:
+    """(0112-cite17) When a rule judged occupied fan-on samples and the fan ran in every occupied
+    one (``n_active == n_occupied``), that its occupied fan-on hours are all its occupied hours:
+    hosts said "87% of occupied hours" of "87% of occupied fan-on hours", true only then. Empty
+    otherwise."""
+    n, occ = metrics.get("n_active"), metrics.get("n_occupied")
+    if not isinstance(n, int) or isinstance(n, bool) or not n or n != occ:
+        return ""
+    return (
+        f"the fan ran in all {n} occupied samples it judged, so its occupied fan-on hours are "
+        "all its occupied hours"
+    )
+
+
 def _metric_flags(metrics: dict) -> str:
     """What a finding's metrics say beyond its summary that hosts state from the JSON
-    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), its
-    gates (:func:`_metric_gates`, 0112-cite16), its
+    (0112-cite13): its true/false flags (``fan_gated true``, ``method_declared false``), that
+    its occupied fan-on hours are all its occupied hours (:func:`_metric_whole`, 0112-cite17),
+    its gates (:func:`_metric_gates`, 0112-cite16), its
     energy and cost totals (:func:`_metric_totals`, 0112-cite14), its thresholds and limits
     (:func:`_metric_thresholds`, 0112-cite15) and the metrics it left null (``null:
     oa_cost_excess_cool_kbtu, ...``). Empty when it has none."""
     keys = [k for k in sorted(metrics) if not k.startswith("_")]
     parts = [f"{k} {str(metrics[k]).lower()}" for k in keys if isinstance(metrics[k], bool)]
+    whole = _metric_whole(metrics)
+    if whole:
+        parts.append(whole)
     gates = _metric_gates(metrics)
     if gates:
         parts.append(gates)
@@ -885,7 +903,27 @@ def _metric_flags(metrics: dict) -> str:
         parts.append(
             "null: " + ", ".join(nulls[:_NULLS_NAMED]) + (f" and {more} more" if more > 0 else "")
         )
+    parts += _metric_declined(metrics)
     return "; ".join(parts)
+
+
+def _is_declined(k, v) -> bool:
+    """(0112-cite18) A metric that says why a part of a finding was not computed: a string metric
+    whose name ends in ``_declined`` (``oa_cost_declined``, ``oa_cost_kbtu_declined``)."""
+    return isinstance(v, str) and bool(v.strip()) and str(k).endswith(_DECLINED)
+
+
+def _metric_declined(metrics: dict) -> list:
+    """(0112-cite18) Each ``*_declined`` metric of a finding, in its own words: what was not
+    computed and why (``oa_cost_kbtu_declined: no supply airflow is trended, so the excess outside
+    air is not calculated or costed in kBtu (...)``), which the JSON gave and no fact did: hosts
+    said why a cost was null from the JSON, and a fact that says only ``null`` could not support
+    it."""
+    return [
+        f"{k}: {prose(' '.join(str(v).split())).rstrip(' .;')}"
+        for k, v in sorted(metrics.items())
+        if not str(k).startswith("_") and _is_declined(k, v)
+    ]
 
 
 def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dict:
@@ -931,6 +969,10 @@ def finding_fact(fact_id: str, row: dict, facility_id: str | None = None) -> dic
 _MASKED = "n_masked"
 #: the longest label value a labels fact gives in full
 _LABEL_LEN = 160
+#: (0112-cite17) the metrics a labels fact gives as hour counts
+_HOURS = ("_h", "_hours")
+#: (0112-cite18) the end of a metric's name that says why a part of a finding was not computed
+_DECLINED = "_declined"
 
 
 def caveat_facts(
@@ -977,20 +1019,33 @@ def caveat_facts(
 def finding_labels(fact_id: str, row: dict, facility_id: str | None = None) -> dict | None:
     """The fact of a finding row's labels, kind ``finding_labels`` (None when it has none): its
     string-valued metrics (``missed_cause``, ``oa_cost_airflow``, ``fan_gate``, an M&V
-    ``method`` or ``kernel``) and the samples it masked (``n_masked_*``), each as ``key
-    "value"`` (a value is quoted: it may name a zone or a point from the data)."""
+    ``method`` or ``kernel``), the samples it masked (``n_masked_*``) and (0112-cite17) its hour
+    counts (``*_h``, ``*_hours``), each as ``key "value"`` (a value is quoted: it may name a
+    zone or a point from the data)."""
     metrics = row.get("metrics") or {}
     labels = [
         f"{k} {name(v, limit=_LABEL_LEN)}"
         for k, v in sorted(metrics.items())
-        if isinstance(v, str) and v.strip() and not k.startswith("_")
+        if isinstance(v, str) and v.strip() and not k.startswith("_") and not _is_declined(k, v)
     ]
+    # 0112-cite18: why a part of it was not computed, in its own words (not a quoted value)
+    declined = _metric_declined(metrics)
     masked = [
         f"{k} {v:g}"
         for k, v in sorted(metrics.items())
         if k.startswith(_MASKED) and isinstance(v, (int, float)) and not isinstance(v, bool)
     ]
-    if not labels and not masked:
+    # 0112-cite17: its hour counts (``oa_cost_cool_h``, ``oa_cost_economizing_h``), which hosts
+    # compared between units from the JSON with no fact giving them
+    hours = [
+        f"{k} {v:,g}"
+        for k, v in sorted(metrics.items())
+        if k.endswith(_HOURS)
+        and isinstance(v, (int, float))
+        and not isinstance(v, bool)
+        and math.isfinite(v)
+    ]
+    if not labels and not masked and not hours and not declined:
         return None
     equip = row["equip"]
     own = is_fleet_id(row["rule"], equip)
@@ -999,6 +1054,9 @@ def finding_labels(fact_id: str, row: dict, facility_id: str | None = None) -> d
         parts.append("labels: " + "; ".join(labels))
     if masked:
         parts.append("samples masked: " + "; ".join(masked))
+    if hours:
+        parts.append("hours: " + "; ".join(hours))
+    parts += declined
     return {
         "id": fact_id,
         "kind": "finding_labels",
