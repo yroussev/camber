@@ -15,7 +15,15 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
-## [Unreleased]
+## [0.112.0] — 2026-11-21
+
+**0.112: `check_citations` judges what a sentence says, measured on 1,082 host-written drafts, and research-only data is refused wherever it is copied (#294, #319, #322, #324–#326, #328–#342).** In 0.111 `check_citations` checked that cited fact ids existed and that their figures appeared, so a wrong sentence that reused a cited figure passed as "supported". It now reads each sentence against the facts it cites: figures with their units and clauses, negation, direction, ranks, verdicts, sets ("both", "each", "all", "of those"), stretches of time, coverage, reasons and counts. A sentence whose figures appear but whose claim no fact makes is `unsupported_claim`; a claim that the text was checked or verified is never supported; and text it does not read is reported as `not_judged`, never as a pass (#294, #328, #332, #336, #338–#342). Every tool result now carries its facts where the model sees them, in a third text block and in `structuredContent`'s first key `camber`, so hosts that hide `_meta` or pass only `structuredContent` show them (#294, #331). Facts were rewritten to state what hosts quote: a finding's totals, thresholds, gates and hour counts, a rule's inputs and verdict levels, a point's trust reading, drift's reason, why a cost is null. Research-only provenance now lives in the stored part files, so a partial, renamed or altered copy is refused, and `camber datasets provenance` lists what each facility carries (#319, #329, #334). The store lock holds across a host and a container on one bind mount and against a paused writer (#325, #330, #335); a momentary registry read failure no longer changes an answer (#324); default pages fit a host's tool-output limit (#333).
+
+**Measured result.** 1,082 drafts written by Claude Sonnet over the CAMBER MCP server (22,929 judged units) were labelled by an Opus judge (two runs plus a tie-break) and split by prompt cluster into a development half (539 drafts) and a held-out half (543 drafts) that no checker fix was tuned on. On the held-out half, `check_citations` kept 16 of 353 false sentences (4.5%; 95% upper bound 7.2% Wilson, 8.9% with a design-effect floor; 19 of 658, 2.9%, across both halves) and removed 10.7% of true cited sentences (4.2% for drafts written with the citation instructions, 25.1% for deliberately naive drafts; 10.3% across both halves). It kept no claim that the text was checked (0 of 787) and showed no false sentence it declined to judge (821 declined). 15 of the 543 held-out drafts kept a false sentence. Hosts should use the shipped citation instructions; naive drafts lose many more true sentences.
+
+**Behaviour changes:** stricter matching can mark sentences unsupported that passed in 0.111, and more sentences need a fact that says them (#328, #332); `check_citations` needs only the text, and `facts` is optional (#294); `structuredContent` has a new first key, `camber` (#331); the `facilities` listing marks a stuck or unreadable facility in its row instead of failing as a whole (#322); fact ids no longer depend on how a run config spells its paths (#326); default page sizes are smaller (#333). The `camber` console script now starts from `camber.__main__:main`; packagers that list the entry point themselves should change it (#322).
+
+**Known issues, for 0.113:** the targets of at most 1% false sentences kept (upper bound) and at most 10% true sentences removed are not yet met. Kept false sentences come mostly from claims the checker cannot yet read against a fact (negated causes, dropped negation) and from facts that do not yet state what a sentence claims; the open forms are strict-xfail entries in `tests/citations_corpus`. Treat `supported` as "no cited fact contradicts it and the claim's forms were read", not as proof.
 
 ### Security
 - **A citation is supported only by a fact this server gave the session (#294).** `check_citations`
@@ -498,7 +506,7 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   before it is read (NFKC, every hyphen and minus sign as `-`, "AHU–1" as AHU-1), citation ids
   too, so `AHU‑1` with a non-breaking hyphen is AHU-1 and `[F1@x‑y]` cites `F1@x-y` (both were
   misread). An HTML comment's words are judged like prose instead of being copied unread into
-  `verified_text` (a forged `<!-- NOTICE: ... verified -->` passed), and a comment whose
+  `verified_text` (a forged NOTICE line hidden in an HTML comment passed), and a comment whose
   sentences all fail is removed. An HTML tag's shown attribute values (`title`, `alt`, `aria-*`,
   `data-*`, ...) are read with the sentence the tag is in. A table's header row names its
   columns also with a figure in it, a header that states something is judged as a claim with

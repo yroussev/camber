@@ -500,10 +500,14 @@ Version numbers are given only where a release is already planned.
     - [x] #289–#293, #295–#304 the 0.110.0 findings: protocol, killable workers, paging, the trust floor, errors, redaction, notices;
     - [x] #306–#314 round 2: a fenced re-ingest, fact ids, validation, workers, judged samples, sensor references;
     - [x] #315–#318, #320, #321 rounds 3–5: config types, workers, fence edge cases, citations, gating.
+  - **0.112 — `check_citations` judges what a sentence says, measured on 1,082 drafts** (released 2026-11-21). Closes #294, #319, #322, #324–#326, #328–#342:
+    - [x] #294, #328, #332, #336, #338–#342 citation strength: facts the model sees, claims read against their facts, `not_judged`, never a checked claim;
+    - [x] #319, #329, #334 research-only provenance in the stored part files;
+    - [x] #322, #324–#326, #330, #331, #333, #335, #337 the 0.111 leftovers, the store lock, `structuredContent` hosts and page sizes.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
-- **Next — 0.112:** citation strength (#294), research-only provenance in the stored data (#319) and the 0.111 leftovers (#322), then an A2A server (#280) over the same capability registry. MCP Tasks (#279) is not scheduled yet.
+- **Next — 0.113:** an A2A server (#280) over the same capability registry, and the citation checker's open forms toward its targets (at most 1% false kept, 10% true removed). MCP Tasks (#279) is not scheduled yet.
 
 
 ## Road to 1.0
