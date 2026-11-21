@@ -631,6 +631,55 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   is read as what CAMBER does. Two strict-xfail corpus entries are now met and promoted; the
   generated cases add 575 with 0 escapes. Open, as strict-xfail corpus entries:
   `gap:reason-across-sentences`, `gap:reason-hedged` and `gap:deictic-uncounted`.
+- **Facts name trusted points, point roles, hour counts and calibration (round 17).**
+  `sensor_trust` issues a `T1` fact naming the trusted points of its page (the summary only
+  counted them, and hosts said "the logger itself is rated trusted" of the count);
+  `airflow_tracking` reports `n_occupied`, and a finding whose occupied fan-on samples are all
+  its occupied ones says so (`the fan ran in all 180 occupied samples it judged, so its occupied
+  fan-on hours are all its occupied hours`); a `coverage` equipment fact lists its point roles;
+  a finding's labels fact gives its hour counts (`hours: oa_cost_cool_h 81.5; ...`);
+  `rule_params` with `detail` issues, for each rule it names, a fact saying how to calibrate each parameter.
+- **`check_citations` reads joined causes, lists, one item's verdict and ranks (round 17).**
+  Two causes joined on one "so" ("5 savings fail G14 acceptance, and 8 are in the meter's own
+  units, so these are for information only") must each be a reason a cited fact gives. A
+  dependence said of the list next to the sentence ("the findings below depend on it") needs a
+  cited fact for each result it holds. A trust verdict said of one point ("the logger is rated
+  trusted") needs a fact about that point, not a summary's count; a run's result counts said
+  under one of its units ("Check the third AHU: the run counted 6 fault ...") are the run's. A
+  figure said to be the highest or lowest of its set ("± 570,988, the widest band") or one of a
+  set said to be the only one with something ("the only meter with a large increase, -15.8%")
+  is read against the session's other facts of that set, which `check_citations` now reads from
+  the session's ledger (a rule's other findings on that facility; a facility's coverage rows).
+  Fewer true sentences are stripped: a share "of those" in a fact is of the share before it, and
+  "of the time" is a share of hours or samples; a fact's verdict linked to its evidence
+  ("disagrees (warn): the point is suspect" and the comparison under it) and a cause in an
+  outcome's subject ("a pass measured with that input is conditional as well") are reasons;
+  "further" names no check; "more than one" is not a count of 1. The generated cases add 25
+  with 0 escapes. Open, as strict-xfail corpus entries: `gap:rank-without-figure` and
+  `gap:rank-narrowed-set`.
+- **Facts say why a cost is null, which way airflow missed, and which savings fail G14 (round
+  18).** An excess-OA finding whose kBtu totals are null says why, in its finding fact and its
+  labels fact (`oa_cost_kbtu_declined: no trended supply airflow (none is trended), so its
+  excess outside air is not costed in kBtu (...)`; or an implausible airflow, one trended on too
+  few of the priced samples, nothing to price, the generic minimum): hosts wrote "no trended
+  airflow, so the kBtu cost is null" from the JSON, which said only `null`. Any `*_declined`
+  metric of a finding is stated in its own words. `airflow_tracking` says which way a finding
+  missed when it missed one way only ("off setpoint, it was always too little air (starved),
+  never too much"); `reheat_minimization_g36`'s "outside the high heating loop" also reads
+  "while the heating loop is not high". The M&V notice of savings on a baseline that fails G14
+  acceptance gives their whole and names them ("They are 5 of the 8 savings: ...").
+- **`check_citations` reads a rank against facts cited elsewhere, and a dataset is no unit
+  (round 18).** A figure said to be the widest or lowest of its set, or one of a set said to be
+  the only one with something, is read against that set's facts that another sentence of the
+  draft cites too (the ledger's peers left every cited fact out, so "± 570,988, the widest band"
+  kept where the wider band was cited in another bullet). A word of the run's facility id ("the
+  g36 VAV fleet" of `ds-synthetic-g36-vav-fleet`) before the run's result counts names the run's
+  scope, not one of its units. A trust verdict of one point from a summary's count now says to
+  cite the page's trusted-points fact. A sentence saying a figure is absent ("its excess-OA
+  energy totals are null") now agrees with a fact saying it is "not costed" (or not calculated,
+  computed or estimated) instead of being read as the opposite; a clause that states the figure
+  ("is costed in kBtu") is still the opposite. The generated cases add 2 with 0 escapes. Open, as
+  strict-xfail corpus entries: `gap:negated-cause-after-could-not` and `gap:negation-dropped`.
 - **`check_citations` reports text it does not read as `not_judged`, never as a pass
   (0112-cite12).** A heading that says something of the lines under it (a verdict, negation,
   quantifier, direction or rank word) and a short label or remark that cites nothing ("That

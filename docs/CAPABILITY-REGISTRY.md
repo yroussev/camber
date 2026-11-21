@@ -97,9 +97,11 @@ well as the digits.
 | `A<n>` `claimed_figure` | `mv_summary` with `claim` | each figure the caller's claim states, `basis` `claimed`: what the claim says, never a measured result (only the figure and its unit are written, never the claim's words) |
 | `N<n>` `notice` | every capability | each banner of the result, `basis` `notice`, its text exactly the banner's, so a draft that repeats a NOTICE can cite it |
 | `V<n>` `caveat` | `rule_run`, `finding_detail`, `mv_summary` | (0112-cite10) each caveat a rule gives its findings, in the rule's words, one fact per rule and caveat text naming every unit it was given for (`rule`, `finding_ids`, and `equip` with `subject` when there is one unit, else `equips`): the leaking_valve rule's "a heat rise downstream of the coils ... can read as a heating leak", an M&V saving's "no mv.method declared: the SEP default, forecast, was used" or its G14-kernel band note, the days a baseline dropped |
-| `M<n>` `finding_labels` | `rule_run` (fault and warn findings), `finding_detail` | (0112-cite10) a finding's string-valued metrics (`missed_cause "economizer_not_commanded"`, `oa_cost_airflow "trended supply airflow"`, `fan_gate`, a basis or source) and the samples it masked (`n_masked_fan_off 824`), each value quoted |
+| `M<n>` `finding_labels` | `rule_run` (fault and warn findings), `finding_detail` | (0112-cite10) a finding's string-valued metrics (`missed_cause "economizer_not_commanded"`, `oa_cost_airflow "trended supply airflow"`, `fan_gate`, a basis or source) and the samples it masked (`n_masked_fan_off 824`), each value quoted; (round 18) a `*_declined` metric, which says what was not computed and why, in its own words, as the finding fact gives it |
 | `K1` `skipped_rules` | `rule_run` | (0112-cite10) the rules the run skipped for missing inputs, by name, each with the inputs it lacked and the equipment it was skipped on (`rules` lists them; `F1` counts them), so a draft naming a skipped rule can cite it |
 | `B1` `parameter_basis` | `finding_detail` | (0112-cite10) the basis the rule gives for its parameters' values ("max_starts_per_day: CAMBER judgment: a generic cycling limit ...") |
+| `T1` `trusted_points` | `sensor_trust` | (round 17) the trusted points of the page by name (the first 20, the rest counted), so a draft saying one point is trusted can cite a fact that names it |
+| `C<n>` `parameter_calibrate` | `rule_params` with `detail`, for the rules named | (round 17) how to calibrate each of a rule's parameters, in its words ("cooling_cutoff_f: Set it to the economizer high limit of the sequence") |
 | `F1` `trust_summary` | `sensor_trust` | (round 11) the points it judged by the call's own filter: "4 supply_air_temp points judged", "6 points on AHU-1 judged" (was "matching points"), so a draft that says which points were judged can cite it |
 | `F<n>` evidence chart | `finding_detail` | (round 11) a diagnostic scatter's axes by role and in words: "of oa_fraction_pct (outdoor-air fraction, y) against oat (outdoor-air temperature, x)" |
 
@@ -1017,7 +1019,16 @@ the overlap is only 4 days", `gap:reason-hedged`); a reason for a plain reading 
 rather than a result, verdict or decline ("100% coverage, so the data is gap-free" is not read);
 "these are the faults" with no count under a list that holds only some of them
 (`gap:deictic-uncounted`); a count bound to a list that is not next to its sentence; an issue's
-type said in a word its cost fact does not carry ("the census findings, Issues 25 and 30").
+type said in a word its cost fact does not carry ("the census findings, Issues 25 and 30"). And
+these (round 17): "the only meter with a large increase" with no figure to read against the
+set (`gap:rank-without-figure`); a rank over a set the sentence narrows ("the widest of the
+chilled water meters", "of the three": `gap:rank-narrowed-set`); a rank over a set the session
+did not see whole (one page of eight meters); a dependence said of a set with no list next to
+it ("its findings are conditional on that sensor"); "average" said of a median. And these
+(round 18): a cause after "could not be calculated ... because no X is trended", which reads
+the negated cause as stated (`gap:negated-cause-after-could-not`); a sentence that drops a
+fact's negation ("while the heating loop is high" against "is not high", "too much air"
+against "never too much": `gap:negation-dropped`).
 Of counted things and labels (#336), these pass when their figures and names match and can be
 wrong: a claim about every one of a set of items, when each item has a cited fact about it, beyond
 the words above ("Every AHU has a new actuator" citing a fact about each AHU: the quantifier

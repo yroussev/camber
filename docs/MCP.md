@@ -223,6 +223,20 @@ has a JSON Schema for its arguments and for its result, and the same rules apply
   declined only some; "These are the 8 faults" must count the list or table next to it; a
   comparison is said of its clause's subject, not the nearest figure. Put remarks that are not
   checked after the checked text, never above a line saying it was checked.
+- **Round 17.** `sensor_trust` names the trusted points of its page (`T1`); `airflow_tracking`
+  says when its occupied fan-on hours are all its occupied hours; a `coverage` equipment fact
+  lists its point roles; a labels fact gives a finding's hour counts; `rule_params` with
+  `detail` says how to calibrate each parameter. Each of two causes joined on one "so" must be
+  a cited reason; "the findings below depend on it" needs a fact for each result of the list; a
+  trust verdict of one point needs a fact about it; a run's counts are not one unit's; "the
+  widest", "the lowest" and "the only ... with" are read against the session's other facts of
+  the cited fact's set (a rule's other findings on that facility).
+- **Round 18.** An excess-OA finding says why its kBtu totals are null (`oa_cost_kbtu_declined`:
+  no trended supply airflow, ...); `airflow_tracking` says when it was always too little air
+  (or too much); `reheat_minimization_g36` says "while the heating loop is not high"; the M&V
+  G14 notice gives its whole and names the savings. A rank is also read against the facts of its
+  set that other sentences of the draft cite; a word of the run's facility id is the run's
+  scope, not a unit.
 - **Not judged** (0112-cite12). Text the checker does not read is never a pass: a heading
   that says something of the lines under it (a verdict, negation, quantifier, direction or rank
   word: "**What is not fine**", "## Points that never move") and a short label or remark that
