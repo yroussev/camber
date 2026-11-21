@@ -381,6 +381,20 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         )
     context = _context(facts_in)
     known = set(context.ids())
+    # 0112-cite17: the facts of the same sets as the cited ones (a rule's other findings on that
+    # facility, its other coverage rows), which a sentence ranking a cited one is read against
+    peers = []
+    if ledger is not None:
+        from ._ledger import ISSUED, peer_key
+
+        for pid in ledger.peers(known):
+            state, fact = ledger.lookup(pid)
+            if state == ISSUED and isinstance(fact, dict) and fact.get("text"):
+                peers.append(fact)
+        # 0112-cite18: and the cited facts of a set: one another sentence of the draft cites is
+        # still one of the set a sentence ranks its own fact in (the ledger's peers leave every
+        # cited fact out, so "the widest band" kept where the wider one was cited elsewhere)
+        peers += [f for f in facts_in if isinstance(f, dict) and f.get("text") and peer_key(f)]
     per = arguments.get("per_sentence")
     per = True if per is None else bool(per)
     draft = arguments["text"]
@@ -401,6 +415,7 @@ def check_citations(ctx, arguments: dict) -> CapabilityResult:
         rules=rules,
         issued=issued,
         unread=True,  # a heading or label it does not read is not_judged, never a pass
+        peers=_context(peers).facts if peers else (),
     )
     sentences = []
     for i, j in enumerate(judged):

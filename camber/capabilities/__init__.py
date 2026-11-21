@@ -431,7 +431,9 @@ class Registry:
                 ids = [i for i in cap.cites(arguments) if isinstance(i, str)]
             except Exception:  # noqa: BLE001 - malformed arguments: the call refuses them
                 ids = []
-        return ledger.view(ids)
+        # 0112-cite17: and the facts of the same sets as those (a sentence ranking one of them
+        # among its set is read against the others)
+        return ledger.view(ids + ledger.peers(ids)) if ids else ledger.view(ids)
 
     def call(self, name: str, arguments: dict, ctx: CallContext) -> CapabilityResult:
         """Validate ``arguments``, run the handler under the policy, check the result; with a

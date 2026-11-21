@@ -2058,6 +2058,8 @@ def _one_counts(toks: list, i: int) -> bool:
         return False
     if before and before[-1] in ("not", "single"):
         return False  # "not one of the 8", "not a single one": none (#336)
+    if before[-2:] == ["more", "than"]:
+        return False  # (0112-cite17) "when more than one chiller runs": multi-chiller, not 1
     nxt = toks[i + 1] if i + 1 < len(toks) else None
     if nxt is None or nxt[0] != "word":
         return False
@@ -2183,6 +2185,21 @@ def _fill(qty: list, toks: list) -> None:
                     qty[k] = replace(q, base=a.base)
                     inherited.add(q.at)
                 break
+    # (0112-cite17) a fact's own "43% of those samples" is a share of samples, as before (only
+    # a sentence's "of those hours" is marked); "reheating 99% of occupied hours; of those, 65%
+    # with airflow above minimum": a share after "of those" (these, them, which) is of a part of
+    # what the share before it is of
+    for k, q in enumerate(qty):
+        if q.base.startswith(_THOSE):
+            qty[k] = q = replace(q, base=q.base.removeprefix(_THOSE))
+    for k, q in enumerate(qty):
+        if q.unit != "%" or q.base or q.at < 2:
+            continue
+        lead = [t[1].lower() for t in toks[max(0, q.at - 3) : q.at] if t[1] != ","]
+        if lead[-2:-1] == ["of"] and lead[-1] in _BACK_REFS:
+            prev = [a for a in qty[:k] if a.unit == "%" and a.base and 0 <= a.at < q.at]
+            if prev:
+                qty[k] = replace(q, base=_THOSE + prev[-1].base.removeprefix(_THOSE))
     # "32 of 37 judged samples, 86.5%": the share is of those samples (#338)
     for k, q in enumerate(qty):
         if q.unit != "%" or q.base or q.at < 0:
@@ -2207,6 +2224,24 @@ def _fill(qty: list, toks: list) -> None:
 
 #: what may stand between two figures that share a unit ("0.83 vs expected 0.35 in. w.c.")
 _LINKS = frozenset("vs versus expected and or to from".split())
+#: (0112-cite17) "of those, 65%": the words that point back at the whole of the share before
+_BACK_REFS = frozenset("those these them which".split())
+#: a whole reached through "of those" (a part of the whole said before), as a base's prefix
+_THOSE = "those:"
+#: (0112-cite17) the wholes a share "of the time" may be of: hours, samples, days, minutes
+_TIME_WHOLES = frozenset({"h", "sample", "min", "day", "time"})
+
+
+def _same_whole(said: str, given: str) -> bool:
+    """A sentence's share of ``said`` is of a fact's share of ``given``: the same whole, or
+    "of the time" for a share of hours, samples, minutes or days (0112-cite17: "SAT off
+    setpoint 0% of the time" for "0% of occupied running hours"). A fact's share "of those"
+    (a part of the whole before it, :data:`_THOSE`) is said only as one of those; a sentence's
+    "of those hours" is any share of hours."""
+    if given.startswith(_THOSE):  # a fact's "of those, 65%": only "65% of those hours" says it
+        return said == given
+    said = said.removeprefix(_THOSE)
+    return said == given or (said == "time" and given in _TIME_WHOLES)
 
 
 def _clauses(toks: list, boundary=_BOUNDARY) -> list:
@@ -4505,7 +4540,10 @@ def _zero(toks, k, q, cont, item, words, last_noun, fact, clause_words, marks):
         ]
         if not before:
             return None
-        base = _stem(q.base) if q.base else ""
+        # (0112-cite17) "0% of the time" names no whole of its own (hours, samples): see
+        # _same_whole
+        whole = q.base.removeprefix(_THOSE)
+        base = _stem(whole) if whole and whole != "time" else ""
         stems = set(cont[before[-1]]) | ({base} if base else set())
         kind, head, subject = "share", cont[before[-1]][-1], base
         cw = frozenset(clause_words(k) | stems)
@@ -4728,6 +4766,8 @@ def _quantity(toks: list, i: int, value: Decimal, raw: str):
     base = ""
     if unit == "%" and k < len(toks) and toks[k][1].lower() == "of":
         base = _scan_noun(toks, k + 1, of=True)
+        if base and k + 1 < len(toks) and toks[k + 1][1].lower() in _BACK_REFS:
+            base = _THOSE + base  # (0112-cite17) "65% of those hours": the hours said before
     threshold = _cue_before(toks, j) or _cue_after(toks, k) or _cue_subject(toks, j)
     role = "threshold" if threshold else "result"
     if j >= 1 and toks[j][1] == "=" and toks[j - 1][1].startswith(_NAME):
@@ -6504,9 +6544,23 @@ _CAUSE_SAME = {
         ("depends", "rest"),
         ("relies", "rest"),
         ("based", "rest"),
+        ("ok", "pass"),  # (0112-cite17) "the ok result" of "a pass measured with that input"
     )
 }
 _CAUSE_FIG = re.compile(r"(?<![\w.\-])\d+(?:,\d{3})*(?:\.\d+)?")
+#: (0112-cite17) a fact's outcome said of a subject whose own words give the cause: "a pass
+#: measured with that input is conditional as well", "a finding that rests on it is conditional"
+_FACT_SUBJECT_CAUSE = re.compile(
+    r"\b(?:a|an|the|each|every|any)\s+(?P<c>\w+\s+(?:\w+ed|(?:that|which)\s+\w+)\s+"
+    r"(?:with|on|from|by|in|against)\b[^;:,()]*?)\s+(?:is|are|was|were)\s+(?:also\s+|then\s+)?"
+    r"(?P<e>\w+)",
+    re.I,
+)
+#: (0112-cite17) how long or how much a comparison covered: not why its verdict is what it is
+#: (a short overlap is why drift went unmeasured, not why the point is suspect)
+_CAUSE_EXTENT = frozenset(
+    _stem(w) for w in "day days hour hours sample samples overlap span spans window week".split()
+)
 
 
 def _cause_side(text: str, ids: bool = False) -> tuple:
@@ -6575,7 +6629,20 @@ def _fact_reasons(said: str) -> list:
                 if not before.strip() and i:  # "...; so the finding is explained by ...": the
                     before = "; ".join(parts[:i])  # cause is what the fact says before it
                 out.append((_cause_side(after), _cause_side(before)))
-    return out
+        for m in _FACT_SUBJECT_CAUSE.finditer(part):
+            effect = _cause_side(m.group("e"))
+            if effect[0] & _CAUSE_OUTCOME:
+                out.append((effect, _cause_side(m.group("c"))))
+    # (0112-cite17) one step through an outcome: "disagrees (warn): the point is suspect" and
+    # "(warn): ... bias +3.0 ... reads high" give "reads high, so it is suspect"; the chained
+    # cause is words only, without how long or how much the evidence covered
+    chained: list = [
+        (e1, (c2[0] - _CAUSE_EXTENT, set()))
+        for e1, c1 in out
+        for e2, c2 in out
+        if e2 is not e1 and c1[0] & e2[0] & _CAUSE_OUTCOME and not e1[0] & e2[0] & _CAUSE_OUTCOME
+    ]
+    return out + chained
 
 
 def _cause_problems(vis: str, facts: list) -> list:
@@ -6608,14 +6675,36 @@ def _cause_problems(vis: str, facts: list) -> list:
         (ew, _ef), (cw, cf) = _cause_side(effect), _cause_side(cause)
         if not ew & _CAUSE_OUTCOME or not (cw or cf):
             continue
-        if any(ew & fe[0] & _CAUSE_OUTCOME and (cw & fc_[0] or cf & fc_[1]) for fe, fc_ in reasons):
-            continue
-        why.append(
-            f"{' '.join(said.split()).strip(',;—– ')!r}: no cited fact gives this reason for it "
-            "(each half may be stated, the link between them is not)"
-        )
-        break
+
+        def given(words, figs, ew=ew):
+            return any(
+                ew & fe[0] & _CAUSE_OUTCOME and (words & fc_[0] or figs & fc_[1])
+                for fe, fc_ in reasons
+            )
+
+        if not given(cw, cf):
+            why.append(
+                f"{' '.join(said.split()).strip(',;—– ')!r}: no cited fact gives this reason for "
+                "it (each half may be stated, the link between them is not)"
+            )
+            break
+        # (0112-cite17) two causes joined on one "so" ("5 savings fail G14 acceptance, and 8
+        # are in the meter's own units, so these are for information only"): each must be a
+        # reason a cited fact gives for that effect, not ride along with the one that is
+        joined = [c for c in _CAUSE_JOIN.split(cause) if _cause_side(c)[0]]
+        miss = [c for c in joined if not given(*_cause_side(c))] if len(joined) > 1 else []
+        if miss:
+            why.append(
+                f"{' '.join(said.split()).strip(',;—– ')!r}: no cited fact gives "
+                f"{' '.join(miss[0].split()).strip(' .,;')!r} as a reason for it (only another of "
+                "the causes joined to it is one)"
+            )
+            break
     return why
+
+
+#: (0112-cite17) causes joined into one: "A, and B, so C"; "A; B, so C"
+_CAUSE_JOIN = re.compile(r",\s*(?:and|plus)\s+|;\s+", re.I)
 
 
 #: (0112-cite16) a check said not to have been judged: "Tower approach and bypass-leak checks
@@ -6640,7 +6729,7 @@ _DECLINE_GENERIC = _CAUSE_GENERIC | frozenset(
         "check checks rule rules test tests detector detectors analysis analyses result results "
         "finding findings equipment unit units either neither both any all none some most two "
         "three four five six seven eight nine ten also still here plus well yet several many "
-        "few other others such".split()
+        "few other others such further additional extra remaining".split()
     )
 )
 #: what limits a not-judged claim to some of the results ("on 4 plants", "for PLANT-2")
@@ -6782,6 +6871,108 @@ def _level_problems(vis: str, facts: list) -> list:
     return []
 
 
+#: (0112-cite17) a trust verdict said of one thing: "The logger itself is rated trusted",
+#: "AHU-2's sensor was marked suspect"
+_ONE_VERDICT = re.compile(
+    r"\b(?:is|was)\s+(?:also\s+|still\s+)?(?:(?:rated|marked|judged|scored|classed|classified|"
+    r"flagged|graded|listed)\s+(?:as\s+)?)?(?:a\s+)?(?P<v>trusted|suspect|untrusted)\b(?![\w-])(?!\s+free\b)",
+    re.I,
+)
+_TRUST_VERDICTS = ("trusted", "suspect", "untrusted")
+#: what makes a subject a count, not one named thing ("all 4", "both loggers", "none", "a
+#: single point")
+_MANY = re.compile(
+    r"\b(?:all|both|each|every|none|no|neither|nor|most|some|several|many|any|few|not|n't|"
+    r"a|an|one|single|only|two|three|four|five|six|seven|eight|nine|ten|\d+)\b",
+    re.I,
+)
+
+
+def _one_verdict_problems(vis: str, facts: list) -> list:
+    """(0112-cite17) A trust verdict said of one thing ("The logger itself is rated trusted")
+    needs a cited fact that gives it of an item, not only as a count of a summary that has
+    other verdicts too ("3 trusted, 1 suspect"): such a count names none of them."""
+    text = " ".join(_CITES.sub(" ", vis).split())
+    for m in _ONE_VERDICT.finditer(text):
+        subject = re.split(r"[:;,(]|\b(?:and|but|while|so)\b", text[: m.start()])[-1]
+        if not subject.strip() or _MANY.search(subject):
+            continue
+        v = m.group("v").lower()
+        said = [str(getattr(fc, "said", "") or "") for fc in facts]
+        given = [x for s in said for x in re.finditer(rf"(\d+\s+)?\b{v}\b", s, re.I)]
+        if not given or any(x.group(1) is None for x in given):
+            continue  # no cited fact has it (the verdict rules read that), or one gives it of one
+        mixed = any(
+            int(n) > 0
+            for s in said
+            if re.search(rf"\d+\s+{v}\b", s, re.I)
+            for o in _TRUST_VERDICTS
+            if o != v
+            for n in re.findall(rf"(\d+)\s+{o}\b", s, re.I)
+        )
+        if mixed:
+            # (0112-cite18) which fact names it: hosts cited the summary where the page's
+            # trusted_points fact (T1) or the point's own fact says it
+            which = (
+                "sensor_trust's trusted_points fact (its T1 fact), which names the trusted points"
+                if v == "trusted"
+                else f"the fact of the {v} point itself"
+            )
+            return [
+                f"{' '.join(m.group(0).split())!r}: the cited facts give {v!r} only as a count "
+                f"among other verdicts, of no named point: cite {which}"
+            ]
+    return []
+
+
+#: (0112-cite17) one unit, named by its place in a list: "the third AHU", "the other plant"
+_ONE_UNIT = re.compile(
+    r"\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|other|"
+    r"remaining|next|single)\s+(?:AHU|air[\s-]handler|unit|plant|chiller|boiler|zone|VAV|box|"
+    r"meter|tower|pump|fan|RTU)\b(?!s)",
+    re.I,
+)
+_RESULT_COUNT = re.compile(r"\b(\d+)\s+(fault|warn|info|ok)s?\b", re.I)
+_RUN_FACT = re.compile(r"\bon (\d+) equipment\b.*rule-equipment result\(s\) in all", re.I)
+
+
+def _unit_counts_problems(vis: str, facts: list) -> list:
+    """(0112-cite17) A run's result counts said under one unit ("Check the third AHU: the run
+    counted 6 fault, 0 warn, 1 info and 3 ok results", "AHU-3: 6 fault, 3 ok") are over every
+    equipment of the run: a cited run fact over more than one equipment does not give them of
+    that unit."""
+    text = " ".join(_CITES.sub(" ", vis).split())
+    lead, colon, rest = text.partition(":")
+    if not colon:
+        return []
+    said = _RESULT_COUNT.findall(rest)
+    if len(said) < 2:
+        return []
+    ids = [w for w in re.findall(r"[\w\-]+", lead) if _UNIT_ID.match(w) or "__" in w]
+    one = _ONE_UNIT.search(lead)
+    if not one and len(ids) != 1:
+        return []
+    for fc in facts:
+        s = str(getattr(fc, "said", "") or "")
+        run = _RUN_FACT.search(s)
+        if run and int(run.group(1)) > 1:
+            # (0112-cite18) a word of the run's own facility id ("the g36 VAV fleet" of
+            # ds-synthetic-g36-vav-fleet) names the run's scope, not one unit of it
+            scope = re.search(r"\bequipment of (\S+)", s)
+            whole = scope.group(1).lower().rstrip(",;.") if scope else ""
+            parts = set(re.split(r"[-_.]+", whole)) | {whole} if whole else set()
+            if not one and ids[0].lower() in parts:
+                continue
+            have = {(n, v.lower()) for n, v in _RESULT_COUNT.findall(s)}
+            if {(n, v.lower()) for n, v in said} <= have:
+                unit = one.group(0) if one else ids[0]
+                return [
+                    f"{unit!r}: the counts are the run's, over its {run.group(1)} equipment, "
+                    "not that unit's"
+                ]
+    return []
+
+
 def _strings(data, out: list, p: _Parsed, key: str = "", depth: int = 0) -> None:
     """The string values of ``data`` into ``out`` (lower case), and the dates of its non-name
     fields into ``p``."""
@@ -6878,7 +7069,7 @@ def _match(q: _Qty, facts: list, claim: bool = False, bound: bool = True, pool=N
                 continue
             if q.sign == "±" and f.sign != "±":
                 continue
-            if (q.unit and f.unit != q.unit) or (q.base and f.base != q.base):
+            if (q.unit and f.unit != q.unit) or (q.base and not _same_whole(q.base, f.base)):
                 continue
             if bound and not (_bound(q, f) and _same_label(q, f)):
                 continue
@@ -7142,7 +7333,10 @@ def _number_problems(p: _Parsed, facts: list, every=None) -> list:
 
 
 def _base_name(base: str) -> str:
-    """What a share is of, as a why says it: "h" -> "hours", "sample" -> "samples"."""
+    """What a share is of, as a why says it: "h" -> "hours", "sample" -> "samples"; one reached
+    through "of those" (0112-cite17): "those hours"."""
+    if base.startswith(_THOSE):
+        return "those " + _base_name(base.removeprefix(_THOSE))
     return {"h": "hours", "min": "minutes", "s": "seconds"}.get(
         base, base if base.endswith("s") else f"{base}s"
     )
@@ -8219,6 +8413,8 @@ def _claim_problems(
             if f.kind == "share" and any(q.unit == "%" and q.value == 0 for q in p.qty):
                 continue  # (#342) "with 0% of occupied hours off setpoint": the same zero share
             if f.head in stated and need <= stated:
+                if _absence_agrees(f.head, text or _UNMASK.sub(" ", p.masked)):
+                    continue  # (0112-cite18b) "its totals are null" against "not costed"
                 flagged.add(f.head)
                 why.append(f"{f.raw!r}: a cited fact says so, and the sentence states the opposite")
             elif (
@@ -8238,6 +8434,33 @@ def _claim_problems(
                     "states the opposite"
                 )
     return why
+
+
+#: (0112-cite18b) a fact's decline of a figure ("not costed in kBtu", "not calculated") and the
+#: words a sentence says the same with ("the totals are null", "declined", "uncosted")
+_ABSENT_HEADS = frozenset(
+    _stem(w) for w in "costed calculated computed estimated priced totalled evaluated".split()
+)
+_ABSENT_SAID = re.compile(
+    r"\b(?:null|nulls|declined|uncosted|n/a|unavailable|missing|none|no|not|never)\b", re.I
+)
+_CLAUSE_CUT = re.compile(r"[,;:()—–]|\b(?:and|but|so|while|whereas|because)\b", re.I)
+
+
+def _absence_agrees(head: str, text: str) -> bool:
+    """(0112-cite18b) Whether a sentence says of a declined figure what the fact's negation says:
+    every clause of it that uses the fact's word ("cost", "calculated") also says it is null,
+    declined, uncosted or not there ("its OA-cost airflow is null, so its energy totals are
+    null" against "not costed in kBtu"). A clause that states the figure ("the cost is
+    calculated") is still the opposite."""
+    if head not in _ABSENT_HEADS:
+        return False
+    used = [
+        c
+        for c in _CLAUSE_CUT.split(_CITES.sub(" ", text or ""))
+        if c and any(_stem(w) == head for w in re.findall(r"[a-z]+", c.lower()))
+    ]
+    return bool(used) and all(_ABSENT_SAID.search(c) for c in used)
 
 
 #: (round 11) the parts a leak is said of: the leaking_valve rule's "no valve leak" denies a
@@ -8917,6 +9140,7 @@ def _plain_problems(vis: str, mine: list, own: list, vocab, num=None) -> tuple:
     why += _threshold_problems(vis, cl) + _zone_problems(vis, cl) + _part_negation_problems(vis, cl)
     why += _method_problems(vis, cl, vocab) + _cause_problems(vis, cl)
     why += _declined_problems(vis, cl) + _level_problems(vis, cl)
+    why += _one_verdict_problems(vis, cl) + _unit_counts_problems(vis, cl)
     return ("unsupported-claim" if why else ""), why
 
 
@@ -9622,6 +9846,7 @@ def _judge(
     rules=(),
     issued=None,
     unread=False,
+    peers=(),
 ) -> list:
     """Every judged sentence of ``text`` against ``context``'s facts, as :class:`_Judged`, in
     order (headings and known notices are not judged; see the module doc). ``aliases`` maps a
@@ -9630,7 +9855,10 @@ def _judge(
     of the session gave (:func:`_issued_names`; by default those of ``context``'s facts), so a
     name no fact gave fails closed (0112-cite10). ``unread`` (check_citations): each heading or
     label that could state something and is not read is listed too, with the reason
-    ``not-judged`` (a not-judged unit is never a pass); without it they are skipped."""
+    ``not-judged`` (a not-judged unit is never a pass); without it they are skipped.
+    ``peers`` (0112-cite17): the session's other facts of the cited facts' sets (a rule's other
+    findings on that facility), which a sentence ranking a cited fact among them is read
+    against."""
     text = text or ""
     all_ids = set(context.ids())
     vocab = _Vocab(_known_names(context), aliases, terms, rules)
@@ -9709,6 +9937,12 @@ def _judge(
             reason, why = _sentence_problems(vis, mine, own, vocab, num, claims)
             if not reason:  # 0112-cite16: a count bound to the table or list next to it
                 why = _deictic_problems(text, seg.start, seg.end, vis)
+                reason = "unsupported-claim" if why else ""
+            if not reason and own:  # 0112-cite17: a dependence said of a set of results
+                why = _set_depends_problems(text, seg.start, seg.end, vis, mine)
+                reason = "unsupported-claim" if why else ""
+            if not reason and own and peers:  # 0112-cite17: a cited fact ranked in its set
+                why = _ranked_problems(vis, [context.by_id(i) for i in own], peers)
                 reason = "unsupported-claim" if why else ""
             if not reason and own:  # 0112-cite10: a name no fact of the session gave; a note
                 reason, why = _session_problems(vis, mine, vocab, issued)
@@ -9824,6 +10058,221 @@ def _deictic_problems(text: str, start: int, end: int, vis: str) -> list:
         f"{' '.join(m.group(0).split())!r}: the {kind} {where} has {items}, not {int(n)}: say "
         "what the count is of, apart from it"
     ]
+
+
+#: (0112-cite17) a dependence said of a set: "the findings below depend on it", "these results
+#: rest on that sensor", "all the faults are conditional on it"
+_SET_DEPENDS = re.compile(
+    r"\b(?:the|these|those|all(?:\s+the)?|other|its|their)\s+(?:[a-z][\w-]*\s+){0,2}?"
+    r"(?:findings|results|faults|warns|warnings|issues|checks|diagnoses|verdicts)"
+    r"(?:\s+(?P<where>below|above|listed\s+(?:below|above)|that\s+follow|shown\s+(?:below|above)))?"
+    r"\s+(?:all\s+|each\s+|also\s+)?(?:(?:depend|rest|rely|hinge)s?\s+on|are\s+(?:all\s+)?"
+    r"(?:conditional|based)\s+on)\b",
+    re.I,
+)
+#: a fact that counts the results resting on an input: "2 listed finding(s) rest on an input"
+_FACT_DEPENDS_N = re.compile(
+    r"\b(\d+)\s+(?:listed\s+|ok\s+)?(?:finding|result)\(s\)[^;.]*?\brest\s+on"
+)
+
+
+def _set_depends_problems(text: str, start: int, end: int, vis: str, facts: list) -> list:
+    """(0112-cite17) A dependence said of the list next to the sentence ("the findings below
+    depend on it", "the results listed above rest on that sensor") needs cited facts that give
+    it for as many results as the list holds, and for more than one: each finding's own
+    "conditional on ...", or a fact that counts the results resting on that input. One
+    finding's fact supports no "the findings below"; "its findings are conditional on that
+    sensor", said of no list, is read by the reason and claim rules."""
+    body = " ".join(_CITES.sub(" ", vis).split())
+    m = _SET_DEPENDS.search(body)
+    if m is None or not m.group("where"):
+        return []  # "its findings are conditional on that sensor": no list it is said of
+    if re.search(r"\b(?:not|never|none|no)\b|n['’]t\b", m.group(0), re.I):
+        return []
+    if re.search(r"\b(?:not|none|no|neither)\s+(?:\w+\s+){0,3}$", body[: m.start()], re.I):
+        return []
+    have = 0
+    for fc in facts:
+        said = str(getattr(fc, "said", "") or "")
+        counted = [int(x) for x in _FACT_DEPENDS_N.findall(said)]
+        have += max(counted) if counted else int(bool(re.search(r"\bconditional on\b", said)))
+    phrase = " ".join(m.group(0).split())
+    if have < 2:
+        return [
+            f"{phrase!r}: the cited facts give that dependence for {have} result(s); a set's needs "
+            "each result's fact, or one that counts them"
+        ]
+    below = bool(re.search(r"below|follow", m.group("where"), re.I))
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", end)
+    if below:
+        block = _next_block(text[line_end + 1 :].split("\n") if line_end >= 0 else [])
+    else:
+        block = _next_block(text[:line_start].split("\n")[::-1])[::-1]
+    items = _block_items(block)
+    if items > have:
+        return [
+            f"{phrase!r}: the list {'below' if below else 'above'} has {items} items; the "
+            f"cited facts give that dependence for {have}"
+        ]
+    return []
+
+
+#: (0112-cite17) a figure ranked highest or lowest of its set ("± 570,988, the widest band"),
+#: and the ranks a fact's set is read for; "largest", "biggest", "worst" and "best" are read as
+#: a cited rank (:data:`_SUPERLATIVE`)
+_RANK_MAX = frozenset("widest highest longest greatest".split())
+_RANK_MIN = frozenset("narrowest lowest shortest smallest fewest".split())
+_RANKED_SAID = re.compile(
+    r"\b(?:the|its|their)\s+(?P<w>" + "|".join(sorted(_RANK_MAX | _RANK_MIN)) + r")\b",
+    re.I,
+)
+#: "the only meter with ...": one of a set said to be alone in something
+_ONLY_SAID = re.compile(
+    r"\bthe\s+only\s+(?P<n>[a-z][\w-]*)\s+(?:with|whose|that|where|showing|in\s+which)\b", re.I
+)
+#: a set narrowed by what the sentence says ("of the three", "among the passing fits"): not
+#: the fact's set
+_RANK_NARROWED = re.compile(
+    r"^\W*(?:[\w-]+\s+){0,4}?(?:of|among)\s+(?:the|these|those)\s+(?:\d+|two|three|four|five|"
+    r"six|seven|eight|nine|ten|passing|failing|accepted|listed|chilled|electric|cooling|"
+    r"heating)\b|^\W*(?:[\w-]+\s+){0,4}?among\b",
+    re.I,
+)
+_RANK_FIG = re.compile(
+    r"(?P<pm>±\s*)?(?<![\w.\-−])(?P<sign>[−\-+])?(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+    r"(?P<pct>\s*%)?(?![\w.])"
+)
+
+
+def _rank_figs(text: str) -> list:
+    """``(position, class, value)`` of each figure of ``text``: class ``pm`` (a ± band), ``pct``
+    (a percentage) or ``num``; a year (four digits, no comma) is no figure here."""
+    out = []
+    for m in _RANK_FIG.finditer(text):
+        raw = m.group("num")
+        if re.fullmatch(r"(?:19|20)\d\d", raw) and not m.group("pct") and not m.group("pm"):
+            continue
+        v = Decimal(raw.replace(",", ""))
+        if m.group("sign") in ("-", "−"):
+            v = -v
+        kind = "pm" if m.group("pm") else "pct" if m.group("pct") else "num"
+        out.append((m.start(), kind, v))
+    return out
+
+
+def _set_key(f) -> tuple | None:
+    from ..capabilities._ledger import peer_key
+
+    data = getattr(f, "data", None) or {}
+    return peer_key({**data, "kind": getattr(f, "kind", "") or data.get("kind")})
+
+
+def _first_fig(text: str, kind: str):
+    for _at, k, v in _rank_figs(text):
+        if k == kind:
+            return v
+    return None
+
+
+def _ranked_problems(vis: str, cited: list, peers) -> list:
+    """(0112-cite17) A cited fact's figure said to be the highest or lowest of its set ("± 570,988,
+    the widest band"), or one of the set said to be the only one with something ("the only meter
+    with a large increase, -15.8%"), is read against the session's other facts of that set (a
+    rule's other findings on that facility): one with a larger (smaller) figure of the same kind
+    refutes the rank, and one with at least about as large a figure of the same sign refutes
+    "the only". Not read: a rank a cited fact itself says ("the longest 17 hours"), a set the
+    sentence narrows ("the widest of the three"), a figure no cited fact of a set gives."""
+    text = " ".join(_CITES.sub(" ", vis).split())
+    said = [str(getattr(f, "text", "") or "") for f in cited if f is not None]
+    figs = _rank_figs(text)
+    if not figs:
+        return []
+    for m in list(_RANKED_SAID.finditer(text)) + list(_ONLY_SAID.finditer(text)):
+        only = m.re is _ONLY_SAID
+        w = "only" if only else m.group("w").lower()
+        if not only and any(re.search(rf"\b{w}\b", s, re.I) for s in said):
+            continue  # the fact's own rank: "62 gaps, the longest 17 hours"
+        if _RANK_NARROWED.search(text[m.end() :]):
+            continue
+        own = _ranked_fig(text, figs, m, only)
+        if own is None:
+            continue
+        _at, kind, v = own
+        holder = next(
+            (f for f, s in zip(cited, said) if _first_fig_of(s, kind, v) and _set_key(f)), None
+        )
+        if holder is None:
+            continue
+        key = _set_key(holder)
+        for p in peers:
+            if _set_key(p) != key or getattr(p, "id", None) == getattr(holder, "id", None):
+                continue
+            pv = _first_fig(str(getattr(p, "text", "") or ""), kind)
+            if pv is None:
+                continue
+            if only:
+                bad = (pv < 0) == (v < 0) and abs(pv) >= abs(v) * Decimal("0.9") and v != 0
+            elif w in _RANK_MAX:
+                bad = abs(pv) > abs(v)
+            else:
+                bad = abs(pv) < abs(v)
+            if bad:
+                phrase = " ".join(m.group(0).split())
+                return [
+                    f"{phrase!r}: {p.id} of the same set gives {_rank_show(kind, pv)} "
+                    f"(the sentence's figure: {_rank_show(kind, v)})"
+                ]
+    return []
+
+
+#: what ends a clause for :func:`_ranked_fig`
+_RANK_CLAUSE = re.compile(r",(?!\d{3})|[;:()—–]|\s(?:and|but|while|whereas|so)\s", re.I)
+
+
+def _ranked_fig(text: str, figs: list, m, only: bool):
+    """The figure a rank word at ``m`` is said of: one in its own clause ("the lowest coverage
+    at 98.0%"); else, for a rank in apposition ("± 570,988, the widest band"), the last of the
+    clause before; else the first of the clause after ("the longest gap, 17 hours"). For "the
+    only ...", its clause's percentage first."""
+    cuts = [0] + [c.end() for c in _RANK_CLAUSE.finditer(text)] + [len(text) + 1]
+    spans = list(zip(cuts, cuts[1:]))
+    at = next(i for i, (a, b) in enumerate(spans) if a <= m.start() < b)
+
+    def within(i):
+        if 0 <= i < len(spans):
+            a, b = spans[i]
+            return [x for x in figs if a <= x[0] < b]
+        return []
+
+    mine = within(at)
+    if mine:
+        if only:
+            return next((x for x in mine if x[1] == "pct" and x[0] > m.end()), mine[-1])
+        return mine[-1] if mine[-1][0] < m.start() else mine[0]
+    lead = text[spans[at][0] : m.start()].strip(" ,;")
+    if re.fullmatch(r"(?:(?:is|was|are|were|remains|stays|it\s+is|it['’]s)\b)?", lead, re.I) and (
+        within(at - 1)
+    ):
+        return within(at - 1)[-1]  # "± 570,988, the widest band"; "its band, ± 125, is the widest"
+    nxt = within(at + 1)
+    if only:
+        return next((x for x in nxt if x[1] == "pct"), nxt[0] if nxt else None)
+    return nxt[0] if nxt else None
+
+
+def _first_fig_of(text: str, kind: str, value) -> bool:
+    """Whether ``text`` gives ``value`` as a figure of ``kind`` (sign aside for a band)."""
+    return any(
+        k == kind and (x == value or (kind == "pm" and abs(x) == abs(value)))
+        for _a, k, x in _rank_figs(text)
+    )
+
+
+def _rank_show(kind: str, v) -> str:
+    s = f"{abs(v):,f}".rstrip("0").rstrip(".") if "." in f"{v}" else f"{abs(v):,}"
+    sign = "-" if v < 0 else ""
+    return f"± {s}" if kind == "pm" else f"{sign}{s}%" if kind == "pct" else f"{sign}{s}"
 
 
 def _unread(text: str, seg: _Seg) -> _Judged:

@@ -17,6 +17,11 @@ older ones read as never issued. Thread-safe; it pickles (without its lock), so 
 It also keeps the names its facts gave (0112-cite10, :meth:`~FactLedger.names`): every slug and
 identifier of every fact it recorded, forgotten ones included, so ``check_citations`` can fail a
 sentence that names a unit, dataset or rule no fact of the session named. A view carries them.
+
+And it keeps which facts are of one set (0112-cite17, :meth:`~FactLedger.peers`): the findings of
+one rule on one facility, the equipment or point coverage rows of one facility. A sentence that
+ranks a cited fact among its set ("the widest band", "the only meter with ...") is read against
+the set's other facts the session was given; a view carries the cited facts' peers.
 """
 
 from __future__ import annotations
@@ -55,6 +60,28 @@ def canonical(fact: dict) -> dict:
     return _safe(fact)
 
 
+#: (0112-cite17) the fact kinds whose facts form a set a sentence may rank one of them in
+_PEER_KINDS = frozenset({"finding", "equip_coverage", "point_coverage"})
+#: the most peers a view or a check carries
+_PEERS_MAX = 200
+
+
+def peer_key(fact: dict) -> tuple | None:
+    """``(kind, rule, facility)`` of the set ``fact`` is one of (the findings of one rule on one
+    facility; one facility's equipment or point coverage rows), or None."""
+    kind = fact.get("kind")
+    if kind not in _PEER_KINDS:
+        return None
+    rule = str(fact.get("rule") or "")
+    subj = fact.get("subject")
+    fac = str(
+        fact.get("facility_id") or (subj.get("facility_id") if isinstance(subj, dict) else "")
+    )
+    if not fac or (kind == "finding" and not rule):
+        return None
+    return (str(kind), rule, fac)
+
+
 class FactLedger:
     """The facts issued to one session, by id, oldest forgotten first (see the module doc)."""
 
@@ -67,6 +94,7 @@ class FactLedger:
         self._forgotten: OrderedDict = OrderedDict()  # id -> None
         self._bytes = 0
         self._names: set = set()  # 0112-cite10: the names its facts gave
+        self._keys: dict = {}  # 0112-cite17: id -> the set it is one of (peer_key)
         self._lock = threading.Lock()
 
     def __getstate__(self) -> dict:
@@ -77,6 +105,7 @@ class FactLedger:
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
         self.__dict__.setdefault("_names", set())
+        self.__dict__.setdefault("_keys", {})
         self._lock = threading.Lock()
 
     def __len__(self) -> int:
@@ -96,11 +125,27 @@ class FactLedger:
                     )
                     self._put(f["id"], text)
                     self._names |= _issued_names([fact])
+                    key = peer_key(fact)
+                    if key is not None:
+                        self._keys[f["id"]] = key
 
     def names(self) -> frozenset:
         """The names (lower case) the facts recorded here gave, forgotten ones included."""
         with self._lock:
             return frozenset(self._names)
+
+    def peers(self, ids: Iterable[str]) -> list:
+        """(0112-cite17) The ids of the held facts of the same set (:func:`peer_key`) as a held
+        fact of ``ids``, not those themselves, oldest first (at most :data:`_PEERS_MAX`)."""
+        ids = {i for i in ids if isinstance(i, str)}
+        with self._lock:
+            keys = {self._keys[i] for i in ids if i in self._keys and i in self._facts}
+            if not keys:
+                return []
+            out = [
+                i for i, k in self._keys.items() if k in keys and i not in ids and i in self._facts
+            ]
+        return out[:_PEERS_MAX]
 
     def ids(self) -> list:
         """The ids of the facts held, oldest first (0112-cite13: a bare short id's why names
@@ -112,12 +157,14 @@ class FactLedger:
         old = self._facts.pop(fid, None)
         if old is not None:
             self._bytes -= len(old)
+            self._keys.pop(fid, None)
         self._forgotten.pop(fid, None)
         self._facts[fid] = text
         self._bytes += len(text)
         while self._bytes > self.max_bytes and len(self._facts) > 1:
             gone, was = self._facts.popitem(last=False)
             self._bytes -= len(was)
+            self._keys.pop(gone, None)
             self._forget(gone)
 
     def _forget(self, fid: str) -> None:
@@ -147,6 +194,8 @@ class FactLedger:
                     self._facts.move_to_end(fid)
                     out._facts[fid] = text
                     out._bytes += len(text)
+                    if fid in self._keys:
+                        out._keys[fid] = self._keys[fid]
                 elif fid in self._forgotten:
                     out._forgotten[fid] = None
         return out
