@@ -248,14 +248,18 @@ class TaskStore:
             if isinstance(outcome, BaseException):
                 err = error_of(outcome)
                 state = p.REJECTED if err["code"] in REJECTED_CODES else p.FAILED
-                task.finish(state, error=err, notices=getattr(outcome, "banners", None) or ())
+                # an error the pool raised itself (timeout, a lost worker) brings no notices:
+                # those that apply are read here (#343)
+                notes = getattr(outcome, "banners", None) or self.notices()
+                task.finish(state, error=err, notices=notes)
                 what = f"{'rejected' if state == p.REJECTED else 'failed'}, {err['code']}"
             else:
                 try:
                     artifact = artifact_for(task.skill, outcome, self.version)
                 except Exception:  # noqa: BLE001 - a result that is no JSON: internal
                     log.exception("task %s: its result could not be sent", task.id)
-                    task.finish(p.FAILED, error=error_info("internal", _ERROR_TEXT))
+                    notes = list(getattr(outcome, "banners", None) or ()) or self.notices()
+                    task.finish(p.FAILED, error=error_info("internal", _ERROR_TEXT), notices=notes)
                     what = "failed, internal"
                 else:
                     task.finish(p.COMPLETED, artifact=artifact)
@@ -287,10 +291,13 @@ class TaskStore:
     def cancel_all(self) -> int:
         """Mark every unfinished task cancelled (the server is stopping); how many there were."""
         n = 0
+        notes = self.notices()
         with self.lock:
             for task in self._tasks.values():
                 if task.finish(
-                    p.CANCELED, error=error_info("cancelled", "the server stopped before it ended")
+                    p.CANCELED,
+                    error=error_info("cancelled", "the server stopped before it ended"),
+                    notices=notes,
                 ):
                     n += 1
         return n

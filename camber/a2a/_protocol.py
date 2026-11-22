@@ -66,7 +66,6 @@ REASONS = {
     VERSION_NOT_SUPPORTED: "VERSION_NOT_SUPPORTED",
 }
 _ERROR_INFO = "type.googleapis.com/google.rpc.ErrorInfo"
-_BAD_REQUEST = "type.googleapis.com/google.rpc.BadRequest"
 
 # task states (ProtoJSON enum names)
 SUBMITTED = "TASK_STATE_SUBMITTED"
@@ -115,15 +114,6 @@ def error_detail(reason: str, metadata: dict | None = None, *, domain: str = "a2
     if metadata:
         out["metadata"] = {str(k): str(v) for k, v in metadata.items()}
     return out
-
-
-def bad_request(errors: list) -> dict:
-    """A ``google.rpc.BadRequest`` detail from validator errors ``["<pointer>: <problem>"]``."""
-    violations = []
-    for e in errors:
-        field, sep, desc = str(e).partition(": ")
-        violations.append({"field": field if sep else "", "description": desc if sep else field})
-    return {"@type": _BAD_REQUEST, "fieldViolations": violations}
 
 
 def now() -> str:

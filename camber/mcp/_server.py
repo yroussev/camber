@@ -39,8 +39,6 @@ import math
 import time
 from typing import Any
 
-from .._grounding import error_info, grounding
-
 log = logging.getLogger("camber.mcp")
 
 #: The protocol revision served statelessly (per-request ``_meta``).
@@ -388,6 +386,11 @@ def _structured(data: Any, facts: list, banners: list) -> Any:
     }
     rest = {k: v for k, v in data.items() if k != RESULT_KEY}
     return {RESULT_KEY: {"facts": index, "notices": list(banners)}, **rest}
+
+
+def _notices_data(banners: list) -> Any:
+    """The ``data`` of a JSON-RPC error that carries notices (0.113, #343), else ``None``."""
+    return {"camber/banners": list(banners)} if banners else None
 
 
 def _facts_block(facts: list) -> str:
@@ -775,15 +778,19 @@ class McpServer:
 
     def _call_tool(self, params: dict, caller: str, *, modern: bool) -> dict:
         name = params.get("name")
-        if not isinstance(name, str):
-            raise _RpcError(INVALID_PARAMS, 'Invalid params: "name" must be a string')
         arguments = params.get("arguments")
         if arguments is None:
             arguments = {}
-        if not isinstance(arguments, dict):
-            raise _RpcError(INVALID_PARAMS, 'Invalid params: "arguments" must be an object')
-        if name not in self._tool_names:
-            raise _RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
+        refused = None
+        if not isinstance(name, str):
+            refused = 'Invalid params: "name" must be a string'
+        elif not isinstance(arguments, dict):
+            refused = 'Invalid params: "arguments" must be an object'
+        elif name not in self._tool_names:
+            refused = f"Unknown tool: {name}"
+        if refused is not None or not isinstance(name, str):  # refused before the registry:
+            # its notices, read here (#343)
+            raise _RpcError(INVALID_PARAMS, str(refused), _notices_data(self._error_notices()))
         context = self._context_for(caller, name, arguments)
         call = ToolCall(None, name, arguments, context, caller, modern)
         if self._defer:
@@ -800,6 +807,11 @@ class McpServer:
         name, caller, took = call.name, call.caller, time.monotonic() - t0
         if isinstance(outcome, BaseException):
             cap_err = _capability_error(outcome)
+            # 0.113 (#343): the notices that apply to the call however it ended; an error the
+            # pool or this server raised itself (busy, timeout, a lost worker) has none, so they
+            # are read here, from this server's context
+            banners = [str(b) for b in getattr(outcome, "banners", None) or ()]
+            banners = banners or self._error_notices()
             if cap_err is None:  # the contract says this never happens
                 log.error(
                     "tool %s (%s) raised; answered as an internal error",
@@ -807,7 +819,7 @@ class McpServer:
                     caller,
                     exc_info=outcome,
                 )
-                raise _RpcError(INTERNAL_ERROR, "Internal error") from None
+                raise _RpcError(INTERNAL_ERROR, "Internal error", _notices_data(banners)) from None
             code, message, data = cap_err
             log.info("tool %s (%s): %s after %.2fs", name, caller, code, took)
             if code == "too_large":  # over the memory guard: the reply would be larger still
@@ -816,8 +828,9 @@ class McpServer:
                 if isinstance(cap, int) and isinstance(size, int):
                     message, data = _too_large_text(size, cap, at_least=True)
             if code not in TOOL_ERROR_CODES:
-                raise _RpcError(INTERNAL_ERROR, f"Internal error: {message}") from None
-            banners = [str(b) for b in getattr(outcome, "banners", None) or ()]
+                raise _RpcError(
+                    INTERNAL_ERROR, f"Internal error: {message}", _notices_data(banners)
+                ) from None
             return self._tool_error(code, message, data, banners)
         result = self._tool_result(outcome, modern=call.modern)
         # 0.111 (#299): the cap bounds the reply as sent -- the summary, the JSON text block,
@@ -830,7 +843,9 @@ class McpServer:
             size = 0
         if isinstance(cap, int) and size > cap:
             log.info("tool %s (%s): too_large (%d bytes) after %.2fs", name, caller, size, took)
-            return self._tool_error("too_large", *_too_large_text(size, cap))
+            message, data = _too_large_text(size, cap)
+            banners = list(getattr(outcome, "banners", None) or ())
+            return self._tool_error("too_large", message, data, banners)
         if self.ledger is not None:  # sent: issued (#294)
             self.ledger.record(getattr(outcome, "facts", None) or ())
         log.info("tool %s (%s): ok in %.2fs", name, caller, took)
@@ -852,12 +867,31 @@ class McpServer:
             log.exception("internal error answering tools/call")
             return _error(call.id, INTERNAL_ERROR, "Internal error")
 
+    def _error_notices(self) -> list:
+        """The notices an error of this server's calls carries when its outcome brought none
+        (0.113, #343): the registry's ``_error_notices`` for this server's context; none with a
+        registry of another shape, or when they cannot be read."""
+        try:
+            from ..capabilities import _error_notices
+            from ..capabilities._policy import known_roots
+        except ImportError:
+            return []
+        try:
+            return list(_error_notices(self.context, known_roots(self.context)))
+        except Exception:  # noqa: BLE001 - a notice that cannot be read is left out
+            return []
+
     @staticmethod
     def _tool_error(code: str, message: str, data: Any, banners: Any = ()) -> dict:
-        """A tool execution error (``isError: true``). 0.113 (#343): like a result, it carries its
-        notices (``NOTICE:`` lines first) and, in ``structuredContent`` under
-        :data:`RESULT_KEY`, the shared grounding object: ``facts`` (none), ``notices`` and
-        ``error`` (``code``, ``message``, ``data``)."""
+        """A tool execution error (``isError: true``). 0.113 (#343): it carries its notices, the
+        ``NOTICE:`` lines first in its text (what hosts show for an error) and in
+        ``_meta["camber/banners"]``.
+
+        It carries **no** ``structuredContent``, deliberately: MCP clients check
+        ``structuredContent`` against the tool's ``outputSchema`` even on an error result (the
+        TypeScript SDK's client, 1.32.2, validates whenever it is present, whatever ``isError``
+        says), and an error object never matches a tool's schema, so the client would throw a
+        schema error and hide this error and its notices."""
         err: dict = {"code": code}
         if data is not None:
             try:
@@ -872,9 +906,6 @@ class McpServer:
         return {
             "content": [{"type": "text", "text": text}],
             "isError": True,
-            "structuredContent": {
-                RESULT_KEY: grounding((), notices, error=error_info(code, message, err.get("data")))
-            },
             "_meta": {"camber/error": err, "camber/banners": notices},
         }
 

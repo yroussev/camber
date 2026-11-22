@@ -315,17 +315,16 @@ class A2AServer:
 
     def _precheck(self, cap: Any, arguments: dict) -> dict | None:
         """The input schema and the facility policy, before a worker is used: an error (the task
-        is rejected) or ``None``. Invalid input is a JSON-RPC ``-32602``; the policy check is
-        repeated by the registry in the worker, which decides when this one cannot."""
+        is rejected, with the notices that apply, #343) or ``None``. Invalid input is
+        ``invalid_params`` with the validator's ``errors``, as a ``camber mcp`` tool error; the
+        policy check is repeated by the registry in the worker, which decides when this one
+        cannot."""
         from ..capabilities._schema import validate
 
         errors = validate(arguments, cap.input_schema)
         if errors:
-            raise p.RpcError(
-                p.INVALID_PARAMS,
-                ("Invalid params: the skill input: " + "; ".join(errors[:3]))[:600],
-                [p.bad_request(errors[:20])],
-            )
+            message = ("the skill input: " + "; ".join(errors[:3]))[:600]
+            return error_info("invalid_params", message, {"errors": errors[:50]})
         try:
             from ..capabilities._policy import check_arguments
 

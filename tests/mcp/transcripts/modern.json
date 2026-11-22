@@ -491,16 +491,6 @@
           }
         ],
         "isError": true,
-        "structuredContent": {
-          "camber": {
-            "facts": {},
-            "notices": [],
-            "error": {
-              "code": "not_allowed",
-              "message": "facility 'elsewhere' is not in this server's allowlist"
-            }
-          }
-        },
         "_meta": {
           "camber/error": {
             "code": "not_allowed"
@@ -549,20 +539,6 @@
           }
         ],
         "isError": true,
-        "structuredContent": {
-          "camber": {
-            "facts": {},
-            "notices": [],
-            "error": {
-              "code": "refused_licence",
-              "message": "research-only data (CC BY-NC-ND) is never served to an AI client",
-              "data": {
-                "facility": "research-only",
-                "licence": "CC-BY-NC-ND-4.0"
-              }
-            }
-          }
-        },
         "_meta": {
           "camber/error": {
             "code": "refused_licence",
@@ -616,16 +592,6 @@
           }
         ],
         "isError": true,
-        "structuredContent": {
-          "camber": {
-            "facts": {},
-            "notices": [],
-            "error": {
-              "code": "invalid_params",
-              "message": "n must be of type integer"
-            }
-          }
-        },
         "_meta": {
           "camber/error": {
             "code": "invalid_params"
@@ -674,16 +640,6 @@
           }
         ],
         "isError": true,
-        "structuredContent": {
-          "camber": {
-            "facts": {},
-            "notices": [],
-            "error": {
-              "code": "not_found",
-              "message": "no rows for facility 'empty'"
-            }
-          }
-        },
         "_meta": {
           "camber/error": {
             "code": "not_found"
@@ -733,16 +689,6 @@
           }
         ],
         "isError": true,
-        "structuredContent": {
-          "camber": {
-            "facts": {},
-            "notices": [],
-            "error": {
-              "code": "too_large",
-              "message": "5000 rows exceed the cap of 1000"
-            }
-          }
-        },
         "_meta": {
           "camber/error": {
             "code": "too_large"

@@ -316,14 +316,13 @@ def test_failures_while_running_are_failed_tasks_with_the_code(agent):
     assert err["code"] == "internal" and "/" not in err["message"]
 
 
-def test_invalid_input_is_invalid_params_with_field_violations(agent):
-    resp = _send(agent, mode="nonsense", extra=1)
-    err = resp["error"]
-    assert err["code"] == p.INVALID_PARAMS
-    violations = err["data"][0]["fieldViolations"]
-    assert {v["field"] for v in violations} == {"/", "/mode"}
-    assert err["data"][0]["@type"].endswith("BadRequest")
-    assert agent.tasks.all() == []  # nothing was queued
+def test_invalid_input_is_a_rejected_task_with_the_errors(agent):
+    task = _send(agent, mode="nonsense", extra=1)["result"]["task"]
+    assert task["status"]["state"] == p.REJECTED
+    err = _parts(task["status"]["message"])["grounded-facts"]["data"]["error"]
+    assert err["code"] == "invalid_params"
+    assert {e.split(":")[0] for e in err["data"]["errors"]} == {"/", "/mode"}
+    assert agent.tasks.all()[0].job is None  # it never reached a runner
 
 
 def _bad(msg=None, **params):
@@ -536,10 +535,6 @@ def test_protocol_helpers():
     for bad in (None, "", "2026-11-21T10:00:00"):
         with pytest.raises(ValueError):
             p.parse_time(bad)
-    assert p.bad_request(["no colon"]) == {
-        "@type": "type.googleapis.com/google.rpc.BadRequest",
-        "fieldViolations": [{"field": "", "description": "no colon"}],
-    }
     assert p.RpcError(p.INVALID_PARAMS, "x").data is None
     assert p.RpcError(p.TASK_NOT_FOUND, "x").data[0]["reason"] == "TASK_NOT_FOUND"
     assert p.now().endswith("Z")
