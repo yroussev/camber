@@ -78,6 +78,11 @@ Every request needs `Authorization: Bearer <token>`: 401 without one, 403 for a 
 
 Every token holder sees every allowed facility; there are no per-peer scopes yet.
 
+The card's interface URL is built from the request's `Host` header, which the allowlist has
+already checked. With `--allow-host '*'` the `Host` check is off, so a caller decides the URL the
+card advertises: a peer that trusts such a card can be sent elsewhere. Name the hosts instead of
+`*`.
+
 ## The agent card
 
 `GET /.well-known/agent-card.json` returns the card: name, description, the one interface
@@ -175,6 +180,14 @@ Each A2A error carries a `google.rpc.ErrorInfo` detail in `error.data`. HTTP err
 - One token for all peers, and no per-peer facility scopes.
 - Tasks live in memory: a restart forgets them.
 - HTTP only; TLS is a reverse proxy's job.
+
+Planned for phase 2 (#280):
+
+- `--public-url`: the interface URL the card advertises, for a server behind a reverse proxy
+  (today the URL is `http://` plus the request's `Host`);
+- streaming (`SendStreamingMessage`, `SubscribeToTask`);
+- per-peer facility scopes;
+- more skills.
 
 ## From Python
 
