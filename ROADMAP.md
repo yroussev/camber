@@ -508,6 +508,8 @@ Version numbers are given only where a release is already planned.
   boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
   maintainers have reviewed them.
 - **Next — 0.113:** an A2A server (#280) over the same capability registry, and the citation checker's open forms toward its targets (at most 1% false kept, 10% true removed). MCP Tasks (#279) is not scheduled yet.
+  - [x] #280 phase 1: `camber a2a`, A2A 1.0 over JSON-RPC, the skills `rcx-report` and `findings`, the `grounded-facts` extension (provisional);
+  - [ ] #280 phase 2: streaming, per-peer facility scopes, more skills.
 
 
 ## Road to 1.0

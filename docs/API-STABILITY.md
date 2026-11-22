@@ -981,7 +981,7 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `research_only`, `run_config_for`), the error codes, the built-in capabilities `facilities` and
   `points` with their input and output schemas, and the `_cap_<name>.py` module convention.
   Names, schemas and error codes may change in a minor release while the MCP (0.110) and A2A
-  (0.112) adapters settle. `camber.capabilities._schema` (the JSON Schema subset validator) and
+  (0.113) adapters settle. `camber.capabilities._schema` (the JSON Schema subset validator) and
   `_policy` are private.
 - **The first read-only capability set and the built-in prompts** (0.110; #278), additive and
   provisional: the capabilities `coverage`, `sensor_trust`, `rule_run`, `finding_detail`,
@@ -1038,6 +1038,19 @@ notices, and declared in every `outputSchema`. **Behaviour change:** `camber mcp
   result -- the text blocks (a third, the facts, since 0.112), the `NOTICE:` lines, the
   `camber` key of `structuredContent` (0.112) and the `_meta` keys `camber/facts`,
   `camber/banners`, `camber/truncated` and `camber/error` -- are provisional too.
+- **`camber.a2a`** (added in 0.113, provisional, #280) -- the Agent2Agent server behind
+  `camber a2a`: `A2AServer` (`handle`, `rpc`, `card`), `LocalRunner`, `make_server`, `launch`,
+  `agent_card`, `Skill`, `SKILLS` and the constants `PROTOCOL_VERSION`, `SUPPORTED_VERSIONS`,
+  `CARD_PATH`, `RPC_PATH`, `GROUNDED_FACTS_URI`, `BODY_LIMIT`, `MAX_TASKS`, `DEFAULT_PORT` and
+  `TOKEN_ENV`; the `camber a2a` options `--store`, `--allow`, `--allow-all-active`, `--config`,
+  `--min-trust`, `--host`, `--port`, `--allow-host`, `--max-concurrent` and `--max-queued`; the
+  environment variable `CAMBER_A2A_TOKEN`; the `a2a` extra (empty). The skill ids
+  (`rcx-report`, `findings`) and their inputs, the card's contents, the part markers
+  (`camber/part`: `summary`, `result`, `grounded-facts`), the artifact and task metadata keys
+  (`camber/version`, `camber/skill`, `camber/capability`, `camber/truncated`) and the
+  `grounded-facts` extension (its URI, `https://yroussev.github.io/camber/a2a/grounded-facts/`,
+  and its data: `facts`, `notices`, `error`, `records`) are provisional too, versioned with the
+  package. The wire behaviour follows A2A 1.0 (JSON-RPC binding).
 
 ### The read API server: `camber.api.server`
 

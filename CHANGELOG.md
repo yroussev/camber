@@ -15,6 +15,37 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [Unreleased]
+
+### Added
+- **`camber a2a`: an Agent2Agent (A2A 1.0) server over the capability registry (#280,
+  provisional).** Another AI agent can now ask CAMBER for work: it sends a message whose one data
+  part names a skill and its input, and gets an A2A task back. Two skills: `rcx-report` (the
+  `rcx_report` capability) and `findings` (`rule_run`). It is a separate process speaking the
+  JSON-RPC binding on `POST /a2a` (`SendMessage`, `GetTask`, `ListTasks`, `CancelTask`,
+  `GetExtendedAgentCard`), with the agent card at `/.well-known/agent-card.json`; `camber serve`
+  stays GET-only and does not advertise it. Any `A2A-Version` other than `1.0` (a missing one
+  means 0.3) is refused with `VersionNotSupportedError`. Streaming and push notifications are not
+  offered, and the card says so. See docs/A2A.md.
+- **The launch model of `camber mcp`.** `--store`, `--allow` / `--allow-all-active`, `--config`,
+  `--min-trust`, `--max-concurrent` and `--max-queued` mean the same, and the skills run in the
+  same killable worker processes, no-persist, with the same time and size caps. Research-only
+  data is always refused (the task is rejected). Every launch mistake exits 2 with one line on
+  stderr.
+- **A bearer token on every request.** It is `CAMBER_A2A_TOKEN`, or a per-run token saved in the
+  private launch file `a2a-<port>.url`. The server binds `127.0.0.1` by default; there the agent
+  card needs no token, and on any other bind it does. The `Host` allowlist and the cross-site
+  check of `camber serve` apply.
+- **The `grounded-facts` A2A extension** (docs/a2a/grounded-facts.md, whose site URL is the
+  extension's URI). Every artifact carries a cited summary, the result data, and a data part
+  with the facts the summary cites and the notices to show. A failed, rejected or cancelled
+  task carries its error code the same way, in its status message.
+- **Peer input is data.** Text parts are never read: no model sees them, and they never become a
+  config, a path or a command. The skill input is validated against the capability's schema
+  before any work starts. Result labels travel in data parts.
+- **The `a2a` extra**, empty like `mcp`, since the server is standard library only. The
+  official `a2a-sdk` (1.3.1) joins the `dev` extra as a test client.
+
 ## [0.112.0] — 2026-11-21
 
 **0.112: `check_citations` judges what a sentence says, measured on 1,082 host-written drafts, and research-only data is refused wherever it is copied (#294, #319, #322, #324–#326, #328–#342).** In 0.111 `check_citations` checked that cited fact ids existed and that their figures appeared, so a wrong sentence that reused a cited figure passed as "supported". It now reads each sentence against the facts it cites: figures with their units and clauses, negation, direction, ranks, verdicts, sets ("both", "each", "all", "of those"), stretches of time, coverage, reasons and counts. A sentence whose figures appear but whose claim no fact makes is `unsupported_claim`; a claim that the text was checked or verified is never supported; and text it does not read is reported as `not_judged`, never as a pass (#294, #328, #332, #336, #338–#342). Every tool result now carries its facts where the model sees them, in a third text block and in `structuredContent`'s first key `camber`, so hosts that hide `_meta` or pass only `structuredContent` show them (#294, #331). Facts were rewritten to state what hosts quote: a finding's totals, thresholds, gates and hour counts, a rule's inputs and verdict levels, a point's trust reading, drift's reason, why a cost is null. Research-only provenance now lives in the stored part files, so a partial, renamed or altered copy is refused, and `camber datasets provenance` lists what each facility carries (#319, #329, #334). The store lock holds across a host and a container on one bind mount and against a paused writer (#325, #330, #335); a momentary registry read failure no longer changes an answer (#324); default pages fit a host's tool-output limit (#333).

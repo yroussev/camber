@@ -120,6 +120,8 @@ nav:
       - Grounded explanation & Q&A: AGENT.md
       - Capability registry: CAPABILITY-REGISTRY.md
       - "MCP server: camber mcp": MCP.md
+      - "A2A server: camber a2a": A2A.md
+      - "A2A extension: grounded-facts": a2a/grounded-facts.md
   - Platform:
       - CLI: CLI.md
       # BEGIN 098-thresholds (#90)
