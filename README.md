@@ -77,6 +77,9 @@ Full API-level detail — every capability, its flags, and the standard it cites
 - **AI-assist (advisory, provider-agnostic)** — assisted point mapping and **grounded** explanation
   and Q&A over the deterministic layers, citing the rule and data behind every claim. Fully useful
   with no LLM wired; no vendor named, no SDK, no network ([AGENT](https://github.com/yroussev/camber/blob/main/docs/AGENT.md)).
+  The same read-only capabilities reach AI clients through an MCP server (`camber mcp`) and other
+  agents through an A2A server (`camber a2a`, provisional), every answer carrying the facts it cites
+  ([MCP](https://github.com/yroussev/camber/blob/main/docs/MCP.md), [A2A](https://github.com/yroussev/camber/blob/main/docs/A2A.md)).
 - **Reporting & visualization** — ASHRAE/ACCA Standard 211 audits, a portfolio rollup ranked by
   recoverable dollars, ten chart patterns where **every rule renders its own evidence**, a
   self-contained HTML dashboard with cross-panel brush linking, and a live web UI.

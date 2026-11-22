@@ -190,15 +190,20 @@ class CapabilityResult:
 
 
 class CapabilityError(Exception):
-    """A refused or failed call. ``code`` is one of :data:`ERROR_CODES`."""
+    """A refused or failed call. ``code`` is one of :data:`ERROR_CODES`. ``banners`` are the
+    notices that apply to the call however it ended (0.113, #343: the facility registry's notice
+    while it cannot be trusted), which :meth:`Registry.call` adds."""
 
-    def __init__(self, code: str, message: str, *, data: dict | None = None):
+    def __init__(
+        self, code: str, message: str, *, data: dict | None = None, banners: list | None = None
+    ):
         if code not in ERROR_CODES:
             raise ValueError(f"unknown capability error code {code!r}")
         super().__init__(message)
         self.code = code
         self.message = message
         self.data = data
+        self.banners = list(banners or [])
 
     def __str__(self) -> str:
         return f"{self.code}: {self.message}"
@@ -475,18 +480,26 @@ class Registry:
                 ledger.record(out.facts)
             return out
         except _SchemaError as e:  # built from the schema and the caller's own arguments
-            raise CapabilityError(e.code, e.message, data=e.data) from None
+            raise CapabilityError(
+                e.code, e.message, data=e.data, banners=_error_notices(ctx, secrets)
+            ) from None
         except CapabilityError as e:
             data = _redact_data(e.data, secrets)
             # one line: data cannot add a NOTICE; the spans' marks kept for redact (#307)
             msg = unmark(redact(one_line(e.message, keep_marks=True), *secrets))
-            raise CapabilityError(e.code, msg, data=data) from None
+            notices = _error_notices(ctx, secrets)
+            raise CapabilityError(e.code, msg, data=data, banners=notices) from None
         except Exception as e:  # noqa: BLE001 - nothing else may escape to a transport
             store_err = _unavailable(e, ctx)
             if store_err is not None:
+                store_err.banners = _error_notices(ctx, secrets)
                 raise store_err from None
             msg = redact(one_line(f"{type(e).__name__}: {e}"), *secrets)
-            raise CapabilityError("internal", f"capability {name!r} failed: {msg}") from None
+            raise CapabilityError(
+                "internal",
+                f"capability {name!r} failed: {msg}",
+                banners=_error_notices(ctx, secrets),
+            ) from None
 
     def _call(self, name, arguments, ctx: CallContext) -> CapabilityResult:
         from .._servable import call_snapshot
@@ -708,6 +721,20 @@ def _unavailable(exc: BaseException, ctx) -> CapabilityError | None:
         else "a retry will not help until the file is repaired or the facility is re-ingested"
     )
     return CapabilityError("unavailable", f"{where} cannot be read: {reason}; {hint}", data=data)
+
+
+def _error_notices(ctx: Any, secrets: list) -> list:
+    """The notices a refused or failed call carries (0.113, #343): those every result of the call
+    would have carried whatever it did, today the facility registry's while it cannot be trusted
+    (:func:`~._policy.registry_notice`). Never raises: a notice that cannot be read is left out
+    (the error itself says what went wrong)."""
+    from ._policy import registry_notice
+
+    try:
+        notice = registry_notice(ctx) if isinstance(ctx, CallContext) else None
+    except Exception:  # noqa: BLE001 - e.g. the registry being replaced right now
+        return []
+    return [unmark(redact(finish(notice), *secrets))] if notice else []
 
 
 def _fact_text(fact: dict, secrets: list) -> str:

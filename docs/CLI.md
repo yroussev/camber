@@ -24,6 +24,7 @@ camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset
 camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
 camber mcp     --store S (--allow ID ... | --allow-all-active) [--config F ...] [--min-trust T] [--max-concurrent N] [--max-queued N]   # MCP server (stdio)
+camber a2a     --store S (--allow ID ... | --allow-all-active) [--config F ...] [--host H] [--port P] [--allow-host N ...]   # A2A server (HTTP)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
@@ -747,6 +748,22 @@ client starts it; you do not run it by hand.
   stdin (#322).
 
 See [MCP.md](MCP.md) for client setup and the protocol details.
+
+## A2A server: `camber a2a` (provisional, 0.113)
+
+```
+camber a2a --store PATH (--allow FACILITY [--allow FACILITY ...] | --allow-all-active)
+           [--config PATH ...] [--min-trust 0.5] [--host 127.0.0.1] [--port 8770]
+           [--allow-host NAME ...] [--max-concurrent 2] [--max-queued 8]
+```
+
+An [Agent2Agent](A2A.md) server over HTTP, for other AI agents: the skills `rcx-report` and
+`findings` as A2A tasks. `--store`, `--allow` / `--allow-all-active`, `--config`, `--min-trust`,
+`--max-concurrent` and `--max-queued` are as for `camber mcp` above. `--host` and `--port` set
+the bind (default `127.0.0.1:8770`; a wildcard bind needs `--allow-host`). Every request needs
+the bearer token (`$CAMBER_A2A_TOKEN`, else a per-run token saved in the launch file
+`a2a-<port>.url`); the agent card needs none on a loopback bind. Every launch mistake exits 2 with
+one line on stderr. See [A2A.md](A2A.md).
 
 ## Store and cache locks
 

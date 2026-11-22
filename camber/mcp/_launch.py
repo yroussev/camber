@@ -685,16 +685,23 @@ def _launch(
         mpl_dir = isolate_matplotlib()  # before any worker starts: they inherit it
         return _serve(capabilities, ctx, max_concurrent, max_queued, len(refused))
     finally:
-        if mpl_dir is not None:
-            import shutil
+        release_matplotlib(mpl_dir)
 
-            while _MPL_BEATS:  # the heartbeat never puts the owner file back after this
-                stop, beat = _MPL_BEATS.pop()
-                stop.set()
-                beat.join(5.0)
-            shutil.rmtree(mpl_dir, ignore_errors=True)
-            while _MPL_LOCKS:  # the directory is gone: its lock is no longer needed
-                os.close(_MPL_LOCKS.pop())
+
+def release_matplotlib(mpl_dir: str | None) -> None:
+    """Undo :func:`isolate_matplotlib`: stop the heartbeat, remove the directory, drop its lock
+    (``None``: nothing to undo). ``camber a2a`` shares it (0.113, #280)."""
+    if mpl_dir is None:
+        return
+    import shutil
+
+    while _MPL_BEATS:  # the heartbeat never puts the owner file back after this
+        stop, beat = _MPL_BEATS.pop()
+        stop.set()
+        beat.join(5.0)
+    shutil.rmtree(mpl_dir, ignore_errors=True)
+    while _MPL_LOCKS:  # the directory is gone: its lock is no longer needed
+        os.close(_MPL_LOCKS.pop())
 
 
 def settle_stderr() -> None:

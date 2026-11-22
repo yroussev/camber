@@ -93,6 +93,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev,brick,xlsx]   # brick + xlsx extras so the rdflib and workbook paths are tested
 
+      # the official A2A client on one leg only, so the `camber a2a` round trip with it runs in CI
+      # (tests/a2a/test_a2a_e2e.py skips it elsewhere); every other leg keeps the install above
+      - name: Install the A2A test client (newest Python only)
+        if: matrix.python-version == '3.13' && matrix.numpy == ''
+        run: pip install -e .[dev,brick,xlsx,a2a-test]
+
       - name: Pin numpy ${{ matrix.numpy }}
         if: matrix.numpy != ''
         run: pip install "numpy${{ matrix.numpy }}"

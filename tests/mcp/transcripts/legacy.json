@@ -403,7 +403,8 @@
         "_meta": {
           "camber/error": {
             "code": "not_allowed"
-          }
+          },
+          "camber/banners": []
         }
       }
     }

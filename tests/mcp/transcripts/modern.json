@@ -495,6 +495,7 @@
           "camber/error": {
             "code": "not_allowed"
           },
+          "camber/banners": [],
           "io.modelcontextprotocol/serverInfo": {
             "name": "camber",
             "title": "CAMBER",
@@ -546,6 +547,7 @@
               "licence": "CC-BY-NC-ND-4.0"
             }
           },
+          "camber/banners": [],
           "io.modelcontextprotocol/serverInfo": {
             "name": "camber",
             "title": "CAMBER",
@@ -594,6 +596,7 @@
           "camber/error": {
             "code": "invalid_params"
           },
+          "camber/banners": [],
           "io.modelcontextprotocol/serverInfo": {
             "name": "camber",
             "title": "CAMBER",
@@ -641,6 +644,7 @@
           "camber/error": {
             "code": "not_found"
           },
+          "camber/banners": [],
           "io.modelcontextprotocol/serverInfo": {
             "name": "camber",
             "title": "CAMBER",
@@ -689,6 +693,7 @@
           "camber/error": {
             "code": "too_large"
           },
+          "camber/banners": [],
           "io.modelcontextprotocol/serverInfo": {
             "name": "camber",
             "title": "CAMBER",

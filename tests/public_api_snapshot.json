@@ -2,6 +2,24 @@
   "camber": [
     "__version__"
   ],
+  "camber.a2a": [
+    "A2AServer",
+    "BODY_LIMIT",
+    "CARD_PATH",
+    "DEFAULT_PORT",
+    "GROUNDED_FACTS_URI",
+    "LocalRunner",
+    "MAX_TASKS",
+    "PROTOCOL_VERSION",
+    "RPC_PATH",
+    "SKILLS",
+    "SUPPORTED_VERSIONS",
+    "Skill",
+    "TOKEN_ENV",
+    "agent_card",
+    "launch",
+    "make_server"
+  ],
   "camber.actionplan": [
     "ActionItem",
     "action_plan_html",

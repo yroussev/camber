@@ -1,7 +1,7 @@
 # Capability registry
 
 `camber.capabilities` (0.110, #275; **provisional**) is one read-only core that CAMBER's assistant
-servers expose: the MCP server (0.110) and the A2A server (0.112) are thin adapters over it, so
+servers expose: the MCP server (0.110) and the A2A server (0.113, [A2A.md](A2A.md)) are thin adapters over it, so
 the rules about what a caller may see and do are enforced in one place.
 
 A **capability** is a named, read-only operation with JSON Schema 2020-12 input and output
@@ -26,7 +26,9 @@ every tool's `structuredContent`, under the key `camber` (`{"facts": {id: text},
 A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
 `unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
 e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`,
-`unavailable` (the stored data could not be read; see below) or `internal`.
+`unavailable` (the stored data could not be read; see below) or `internal`. Its `banners`
+(0.113, #343) are the notices that apply to the call however it ended, which `Registry.call`
+adds: the facility registry's notice while the registry cannot be trusted, else none.
 
 ```python
 import pandas as pd
@@ -423,8 +425,8 @@ names the ids a call needs (`Capability.cites`), and `Registry.ledger_view(name,
 ledger)` returns just those as a small ledger, which a transport that runs calls elsewhere puts
 in the call's context instead of the whole one (`camber mcp` sends it to the worker process with
 the call, and records the result's facts in the session's ledger, kept in the server process,
-itself). A server with several client sessions (the coming A2A server) keeps one ledger per
-session.
+itself). A server with several client sessions keeps one ledger per session; the A2A server
+(0.113) runs no capability that reads the ledger (no `check_citations`), so it keeps none.
 
 **What "supported" means.** The ledger settles where a cited fact came from; the match below
 decides whether the sentence says what that fact says. `check_citations` (and

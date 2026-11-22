@@ -397,6 +397,23 @@ def _cmd_mcp(args) -> int:  # pragma: no cover - blocking stdio loop (run in a s
     )
 
 
+def _cmd_a2a(args) -> int:  # pragma: no cover - blocking server loop (run in a subprocess)
+    from .a2a import launch
+
+    return launch(
+        args.store,
+        allow=args.allow,
+        allow_all_active=args.allow_all_active,
+        config=args.config,
+        min_trust=args.min_trust,
+        host=args.host,
+        port=args.port,
+        allowed_hosts=args.allow_host,
+        max_concurrent=args.max_concurrent,
+        max_queued=args.max_queued,
+    )
+
+
 def _cmd_explain(args) -> int:
     from .agent import explain
     from .config import run_config_file
@@ -3401,6 +3418,80 @@ def _build_parser() -> argparse.ArgumentParser:
         "refused as busy (default 8)",
     )
     pmcp.set_defaults(func=_cmd_mcp, _parser_error=pmcp.error)
+
+    # ----- a2a (0.113, #280)
+    pa2a = sub.add_parser(
+        "a2a",
+        help="Agent2Agent (A2A 1.0) server over HTTP for other agents (read-only; docs/A2A.md)",
+        usage="%(prog)s --store PATH (--allow FACILITY [--allow FACILITY ...] | "
+        "--allow-all-active)\n"
+        "       [--config PATH ...] [--min-trust 0.5] [--host 127.0.0.1] [--port 8770]\n"
+        "       [--allow-host NAME ...] [--max-concurrent 2] [--max-queued 8]",
+    )
+    _one_line_errors(pa2a)
+    pa2a.add_argument(
+        "--store",
+        required=True,
+        help="the ParquetStore directory the skills read (or a portfolio workspace: its store)",
+    )
+    a2a_allow = pa2a.add_mutually_exclusive_group(required=True)
+    a2a_allow.add_argument(
+        "--allow",
+        action="append",
+        metavar="FACILITY",
+        help="a facility id the skills may read (repeatable); every other facility is refused",
+    )
+    a2a_allow.add_argument(
+        "--allow-all-active",
+        action="store_true",
+        help="allow the store's active facilities, as they are at startup",
+    )
+    pa2a.add_argument(
+        "--config",
+        action="append",
+        metavar="PATH",
+        help="run/report config (JSON or YAML) for one facility; repeat it for more (one per "
+        "facility). Checked at startup: a config camber run refuses is refused here",
+    )
+    pa2a._negative_number_matcher = re.compile(r"^-(?:\d|\.\d|inf|nan)", re.IGNORECASE)
+    pa2a.add_argument(
+        "--min-trust",
+        type=_unit_interval,
+        default=0.5,
+        help="minimum data-trust score, 0-1, the skills apply to the data they read (default 0.5)",
+    )
+    pa2a.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (default 127.0.0.1; any other bind needs the token for the agent "
+        "card too)",
+    )
+    pa2a.add_argument(
+        "--port", type=_port, default=8770, help="bind port, 0-65535 (default 8770; 0: any free)"
+    )
+    pa2a.add_argument(
+        "--allow-host",
+        action="append",
+        metavar="NAME",
+        help="also answer requests whose Host is NAME or NAME:PORT (repeatable; a proxy or DNS "
+        "name). Binding 0.0.0.0 / :: needs one",
+    )
+    pa2a.add_argument(
+        "--max-concurrent",
+        type=_whole_number(1, 64),
+        default=2,
+        metavar="N",
+        help="tasks run at once, each in its own worker process, 1-64 (default 2)",
+    )
+    pa2a.add_argument(
+        "--max-queued",
+        type=_whole_number(0, 1024),
+        default=8,
+        metavar="N",
+        help="tasks that may wait for a free worker, 0-1024; beyond that a task is rejected as "
+        "busy (default 8)",
+    )
+    pa2a.set_defaults(func=_cmd_a2a, _parser_error=pa2a.error)
 
     pb = sub.add_parser(
         "bacnet-discover",
