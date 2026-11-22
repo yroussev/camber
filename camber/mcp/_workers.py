@@ -117,15 +117,17 @@ def _load_factory(spec: str):
 
 def _outcome(registry: Any, name: str, arguments: dict, ctx: Any) -> tuple:
     """``Registry.call`` as a picklable tuple: ``("ok", fields)``, ``("err", code, message,
-    data)`` for a CapabilityError (recognised by shape), ``("exc", type name)`` for anything
-    else (a registry breaking its contract; the traceback goes to stderr)."""
+    data, banners)`` for a CapabilityError (recognised by shape; ``banners`` since 0.113, #343),
+    ``("exc", type name)`` for anything else (a registry breaking its contract; the traceback
+    goes to stderr)."""
     try:
         res = registry.call(name, arguments, ctx)
         return ("ok", (res.data, res.text, res.facts, res.banners, res.truncated))
     except Exception as exc:  # noqa: BLE001 - carried to the parent
         code, message = getattr(exc, "code", None), getattr(exc, "message", None)
         if isinstance(code, str) and isinstance(message, str):
-            return ("err", code, message, getattr(exc, "data", None))
+            banners = [str(b) for b in getattr(exc, "banners", None) or ()]
+            return ("err", code, message, getattr(exc, "data", None), banners)
         import traceback
 
         traceback.print_exc()
@@ -279,9 +281,10 @@ class RemoteError(Exception):
     """A ``CapabilityError`` from a worker, or one the pool raises itself (``busy``, ``timeout``,
     ``internal``): the shape the server recognises (``code``, ``message``, ``data``)."""
 
-    def __init__(self, code: str, message: str, data: Any = None):
+    def __init__(self, code: str, message: str, data: Any = None, banners: Any = None):
         super().__init__(message)
         self.code, self.message, self.data = code, message, data
+        self.banners = list(banners or ())
 
 
 def _decode(outcome: tuple) -> Any:
@@ -289,7 +292,7 @@ def _decode(outcome: tuple) -> Any:
     if kind == "ok":
         return _RemoteResult(*outcome[1])
     if kind == "err":
-        return RemoteError(outcome[1], outcome[2], outcome[3])
+        return RemoteError(*outcome[1:5])
     return RuntimeError(f"the capability call raised {outcome[1]}")
 
 

@@ -14,6 +14,7 @@ import _a2a_registry as fake
 import pytest
 
 from camber import __version__
+from camber._grounding import error_info, fact_index, grounding
 from camber.a2a import (
     CARD_PATH,
     GROUNDED_FACTS_URI,
@@ -26,7 +27,6 @@ from camber.a2a import (
 from camber.a2a import _protocol as p
 from camber.a2a._tasks import Task, TaskStore, error_of, grounded_part
 from camber.capabilities import CallContext
-from camber.capabilities._grounding import error_info, fact_index, grounding
 
 TOKEN = "s3cret-token-of-enough-length"
 HOST = "127.0.0.1:8770"

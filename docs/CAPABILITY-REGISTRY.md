@@ -26,7 +26,9 @@ every tool's `structuredContent`, under the key `camber` (`{"facts": {id: text},
 A refused or failed call raises `CapabilityError` with a `code`: `invalid_params`,
 `unknown_capability` (no capability by that name), `not_found` (the capability found nothing,
 e.g. a facility with no stored data), `not_allowed`, `refused_licence`, `too_large`, `timeout`,
-`unavailable` (the stored data could not be read; see below) or `internal`.
+`unavailable` (the stored data could not be read; see below) or `internal`. Its `banners`
+(0.113, #343) are the notices that apply to the call however it ended, which `Registry.call`
+adds: the facility registry's notice while the registry cannot be trusted, else none.
 
 ```python
 import pandas as pd

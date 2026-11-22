@@ -1,10 +1,12 @@
-"""The facts and notices of one outcome as one JSON object, for any transport (0.113, #280).
+"""The facts and notices of one outcome as one JSON object, for any transport (0.113, #280, #343).
 
 ``camber a2a`` attaches :func:`grounding` to every artifact and to every failed, rejected or
 cancelled task, as the data part of the ``grounded-facts`` extension (docs/a2a/grounded-facts.md):
 a successful result carries its facts and notices, a refusal or failure its error code too, so a
 peer reads one shape either way. ``facts`` and ``notices`` are the same as the ``camber`` key of
-an MCP tool's ``structuredContent`` (``camber.mcp.RESULT_KEY``, 0.112, #331). Private module.
+an MCP tool's ``structuredContent`` (``camber.mcp.RESULT_KEY``, 0.112, #331), and ``camber mcp``
+puts this whole object there for an error result too (#343). Standard library only, outside
+``camber.capabilities`` so the transports import it without the registry. Private module.
 """
 
 from __future__ import annotations

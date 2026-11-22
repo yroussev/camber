@@ -17,6 +17,21 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
 
 ## [Unreleased]
 
+### Changed
+- **MCP error results carry `structuredContent` and their notices (#343).** A tool error
+  (`isError: true`) used to carry only a `code: message` text and `_meta["camber/error"]`, so a
+  host that shows the model only `structuredContent` showed nothing, and a damaged facility
+  registry's notice was missing from errors. It now also carries `structuredContent` with the
+  one key `camber`: `{"facts": {}, "notices": [...], "error": {"code", "message", "data"}}`, the
+  shape of a result's `camber` key plus `error`, made by the helper the A2A server uses. The
+  notices (today the registry's while it cannot be trusted) come first in the text as
+  `NOTICE:` lines and in `_meta["camber/banners"]`. **Behaviour change for MCP clients:** error
+  results gain `structuredContent` and `_meta["camber/banners"]`, and their text may start with
+  `NOTICE:` lines. The object does not match the tool's `outputSchema`; the specification and
+  the official SDKs check that schema only on results that are not errors.
+- **`CapabilityError.banners` (#343).** `Registry.call` attaches to every error the notices that
+  apply to the call however it ended, and `camber mcp`'s worker processes carry them back.
+
 ### Added
 - **`camber a2a`: an Agent2Agent (A2A 1.0) server over the capability registry (#280,
   provisional).** Another AI agent can now ask CAMBER for work: it sends a message whose one data
@@ -39,7 +54,8 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
 - **The `grounded-facts` A2A extension** (docs/a2a/grounded-facts.md, whose site URL is the
   extension's URI). Every artifact carries a cited summary, the result data, and a data part
   with the facts the summary cites and the notices to show. A failed, rejected or cancelled
-  task carries its error code the same way, in its status message.
+  task carries its error code and the notices that apply the same way, in its status message
+  (#343).
 - **Peer input is data.** Text parts are never read: no model sees them, and they never become a
   config, a path or a command. The skill input is validated against the capability's schema
   before any work starts. Result labels travel in data parts.

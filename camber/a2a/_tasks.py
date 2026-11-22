@@ -21,7 +21,7 @@ import threading
 import time
 from typing import Any
 
-from ..capabilities._grounding import error_info, grounding
+from .._grounding import error_info, grounding
 from . import _protocol as p
 
 log = logging.getLogger("camber.a2a")
@@ -86,8 +86,16 @@ class Task:
             return p.WORKING
         return self.state
 
-    def finish(self, state: str, *, artifact: dict | None = None, error: dict | None = None):
-        """Move to the terminal ``state`` (once; a later call is ignored)."""
+    def finish(
+        self,
+        state: str,
+        *,
+        artifact: dict | None = None,
+        error: dict | None = None,
+        notices: Any = (),
+    ):
+        """Move to the terminal ``state`` (once; a later call is ignored). A failure's
+        ``notices`` (#343) go in its status message with the error."""
         if self.state in p.TERMINAL_STATES:
             return False
         self.state = state
@@ -95,19 +103,21 @@ class Task:
         if artifact is not None:
             self.artifacts = [artifact]
         if error is not None:
-            self.status_message = self._agent_message(error)
+            self.status_message = self._agent_message(error, [str(n) for n in notices or ()])
         self.done.set()
         return True
 
-    def _agent_message(self, error: dict) -> dict:
+    def _agent_message(self, error: dict, notices: list) -> dict:
         word = {p.REJECTED: "rejected", p.CANCELED: "cancelled"}.get(self.state, "failed")
         text = f"{word}: {error['code']}: {error['message']}"
+        if notices:  # first, as on a completed task's summary
+            text = "\n".join(f"NOTICE: {n}" for n in notices) + "\n\n" + text
         return {
             "messageId": p.new_id(),
             "contextId": self.context_id,
             "taskId": self.id,
             "role": p.ROLE_AGENT,
-            "parts": [_part("text", text, "summary"), grounded_part((), (), error)],
+            "parts": [_part("text", text, "summary"), grounded_part((), notices, error)],
             "extensions": [p.GROUNDED_FACTS_URI],
         }
 
@@ -171,9 +181,14 @@ def error_of(outcome: BaseException) -> dict:
 class TaskStore:
     """The tasks of one server, newest last; at most :data:`MAX_TASKS` finished ones are kept."""
 
-    def __init__(self, runner: Any, version: str, *, max_tasks: int = MAX_TASKS):
+    def __init__(
+        self, runner: Any, version: str, *, max_tasks: int = MAX_TASKS, notices: Any = None
+    ):
         self.runner = runner
         self.version = version
+        #: ``notices()``: the notices that apply to a task refused or cancelled here, without
+        #: a worker's outcome to carry them (#343)
+        self.notices: Any = notices or (lambda: [])
         self.max_tasks = int(max_tasks)
         self.lock = threading.Lock()
         self._tasks: collections.OrderedDict = collections.OrderedDict()
@@ -206,7 +221,7 @@ class TaskStore:
 
     def reject(self, task: Task, error: dict) -> Task:
         """Add ``task`` already refused (it never runs)."""
-        task.finish(p.REJECTED, error=dict(error))
+        task.finish(p.REJECTED, error=dict(error), notices=self.notices())
         self._add(task)
         log.info("task %s (%s): rejected, %s", task.id, task.skill.id, error["code"])
         return task
@@ -219,7 +234,7 @@ class TaskStore:
             job = self.runner.submit(call, lambda job: self._done(task, job))
             if job is None:
                 busy = self.runner.busy_error()
-                task.finish(p.REJECTED, error=error_of(busy))
+                task.finish(p.REJECTED, error=error_of(busy), notices=self.notices())
             else:
                 task.job = job
         if job is None:
@@ -233,7 +248,7 @@ class TaskStore:
             if isinstance(outcome, BaseException):
                 err = error_of(outcome)
                 state = p.REJECTED if err["code"] in REJECTED_CODES else p.FAILED
-                task.finish(state, error=err)
+                task.finish(state, error=err, notices=getattr(outcome, "banners", None) or ())
                 what = f"{'rejected' if state == p.REJECTED else 'failed'}, {err['code']}"
             else:
                 try:
@@ -254,11 +269,13 @@ class TaskStore:
                 raise p.RpcError(p.TASK_NOT_CANCELABLE, "Task cannot be canceled: it has finished")
             job = task.job
         stopped = job is not None and self.runner.cancel(job)
+        notes = self.notices() if stopped or job is None else []
         with self.lock:
             if stopped or job is None:
                 task.finish(
                     p.CANCELED,
                     error=error_info("cancelled", "the task was cancelled at the caller's request"),
+                    notices=notes,
                 )
                 log.info("task %s (%s): cancelled", task.id, task.skill.id)
                 return

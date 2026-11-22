@@ -400,10 +400,21 @@
           }
         ],
         "isError": true,
+        "structuredContent": {
+          "camber": {
+            "facts": {},
+            "notices": [],
+            "error": {
+              "code": "not_allowed",
+              "message": "facility 'elsewhere' is not in this server's allowlist"
+            }
+          }
+        },
         "_meta": {
           "camber/error": {
             "code": "not_allowed"
-          }
+          },
+          "camber/banners": []
         }
       }
     }

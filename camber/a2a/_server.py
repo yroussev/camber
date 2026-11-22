@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from .. import _access
-from ..capabilities._grounding import error_info
+from .._grounding import error_info
 from . import _protocol as p
 from ._tasks import Task, TaskStore
 
@@ -147,7 +147,7 @@ class A2AServer:
         self.loopback = _access.is_loopback(bind_host)
         self.hosts = _access.HostAllowlist(bind_host, int(port), allowed_hosts)
         self.served = sorted(served if served is not None else context.allowed_facilities)
-        self.tasks = TaskStore(runner, self.version)
+        self.tasks = TaskStore(runner, self.version, notices=self._notices)
         for skill in p.SKILLS:
             registry.get(skill.capability)  # a registry without the capability: fail at start
 
@@ -341,6 +341,17 @@ class A2AServer:
                 )
                 return error_info(code, message, getattr(exc, "data", None))
         return None
+
+    def _notices(self) -> list:
+        """The notices a task refused or cancelled in this process carries (#343): those a call
+        of the registry would carry however it ended (the facility registry's while it cannot be
+        trusted); none for a registry of another shape."""
+        try:
+            from ..capabilities import _error_notices
+            from ..capabilities._policy import known_roots
+        except ImportError:
+            return []
+        return _error_notices(self.context, known_roots(self.context))
 
     def _context(self) -> Any:
         import dataclasses

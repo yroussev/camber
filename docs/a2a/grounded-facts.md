@@ -18,12 +18,13 @@ is an object:
 | Key | Type | Meaning |
 |---|---|---|
 | `facts` | object | Each fact id the outcome issued, mapped to the fact's one-line text, in order. The summary text cites these ids in brackets, such as `[F1@rule_run-1a2b3c]`. |
-| `notices` | array of strings | Licence, trust and truncation notices. Show them to the user. A cut list's notice says how to ask for the rest. |
+| `notices` | array of strings | Licence, trust and truncation notices. Show them to the user. A cut list's notice says how to ask for the rest. A failure carries the notices that apply to its call however it ended, such as the facility registry's notice while the registry cannot be trusted. |
 | `error` | object or `null` | `null` for a completed task. For a failed, rejected or cancelled task: `code`, `message` and, when there is one, `data` (see below). |
 | `records` | array of objects | The full fact records: `id`, `kind`, `text`, and the fact's own fields (equipment, value, unit and so on). |
 
-`facts` and `notices` hold exactly what the `camber` key of a `camber mcp` tool result's
-`structuredContent` holds ([MCP.md](../MCP.md)).
+This object is exactly what the `camber` key of a `camber mcp` tool result's
+`structuredContent` holds for an error result, and `facts` and `notices` are what it holds for a
+successful one ([MCP.md](../MCP.md)).
 
 The other parts of an artifact, also marked by `camber/part`:
 

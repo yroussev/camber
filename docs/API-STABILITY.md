@@ -1050,7 +1050,11 @@ notices, and declared in every `outputSchema`. **Behaviour change:** `camber mcp
   (`camber/version`, `camber/skill`, `camber/capability`, `camber/truncated`) and the
   `grounded-facts` extension (its URI, `https://yroussev.github.io/camber/a2a/grounded-facts/`,
   and its data: `facts`, `notices`, `error`, `records`) are provisional too, versioned with the
-  package. The wire behaviour follows A2A 1.0 (JSON-RPC binding).
+  package. The wire behaviour follows A2A 1.0 (JSON-RPC binding). **Changed in 0.113 (#343):**
+  `CapabilityError` gains `banners` (the notices that apply to the call however it ended, added
+  by `Registry.call`) and `camber.mcp.WorkerPool`'s `RemoteError` carries them; an MCP error
+  result (`isError: true`) gains `structuredContent` (`{"camber": {"facts", "notices",
+  "error"}}`) and `_meta["camber/banners"]`, and its text may start with `NOTICE:` lines.
 
 ### The read API server: `camber.api.server`
 

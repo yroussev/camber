@@ -39,6 +39,8 @@ import math
 import time
 from typing import Any
 
+from .._grounding import error_info, grounding
+
 log = logging.getLogger("camber.mcp")
 
 #: The protocol revision served statelessly (per-request ``_meta``).
@@ -815,7 +817,8 @@ class McpServer:
                     message, data = _too_large_text(size, cap, at_least=True)
             if code not in TOOL_ERROR_CODES:
                 raise _RpcError(INTERNAL_ERROR, f"Internal error: {message}") from None
-            return self._tool_error(code, message, data)
+            banners = [str(b) for b in getattr(outcome, "banners", None) or ()]
+            return self._tool_error(code, message, data, banners)
         result = self._tool_result(outcome, modern=call.modern)
         # 0.111 (#299): the cap bounds the reply as sent -- the summary, the JSON text block,
         # structuredContent and _meta together -- not only the result's data
@@ -850,7 +853,11 @@ class McpServer:
             return _error(call.id, INTERNAL_ERROR, "Internal error")
 
     @staticmethod
-    def _tool_error(code: str, message: str, data: Any) -> dict:
+    def _tool_error(code: str, message: str, data: Any, banners: Any = ()) -> dict:
+        """A tool execution error (``isError: true``). 0.113 (#343): like a result, it carries its
+        notices (``NOTICE:`` lines first) and, in ``structuredContent`` under
+        :data:`RESULT_KEY`, the shared grounding object: ``facts`` (none), ``notices`` and
+        ``error`` (``code``, ``message``, ``data``)."""
         err: dict = {"code": code}
         if data is not None:
             try:
@@ -858,10 +865,17 @@ class McpServer:
                 err["data"] = data
             except (TypeError, ValueError):
                 pass
+        notices = [str(b) for b in banners or ()]
+        text = f"{code}: {message}"
+        if notices:
+            text = "\n".join(f"NOTICE: {n}" for n in notices) + "\n\n" + text
         return {
-            "content": [{"type": "text", "text": f"{code}: {message}"}],
+            "content": [{"type": "text", "text": text}],
             "isError": True,
-            "_meta": {"camber/error": err},
+            "structuredContent": {
+                RESULT_KEY: grounding((), notices, error=error_info(code, message, err.get("data")))
+            },
+            "_meta": {"camber/error": err, "camber/banners": notices},
         }
 
     @staticmethod

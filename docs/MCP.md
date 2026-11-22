@@ -533,7 +533,14 @@ integer 5, as JSON Schema says); `5.5` is `invalid_params`.
 **Errors.** Following the specification, a problem the model can fix by changing its call is a
 tool result with `isError: true` and a `code: message` text (`invalid_params`, `not_found`,
 `not_allowed`, `refused_licence`, `too_large`, `timeout`, `unavailable`, `busy`); the code is also
-in `_meta["camber/error"]`. `busy` means the server is already running and queueing as many calls
+in `_meta["camber/error"]`. Since 0.113 (#343) an error result also has `structuredContent`, an
+object with the one key `camber`: `{"facts": {}, "notices": [...], "error": {"code", "message",
+"data"}}`, the shape a result's `camber` key has plus `error` (`data` only when the error has
+some). Its notices are the ones any result of the call would carry, today the facility
+registry's notice while the registry cannot be trusted; they also come first in the text, one
+`NOTICE:` line each, and in `_meta["camber/banners"]`. Clients that check `structuredContent`
+against a tool's `outputSchema` skip error results, as the specification says (the official
+TypeScript and Python SDKs do). `busy` means the server is already running and queueing as many calls
 as it was started for; its `data` is `{"retryable": true, "max_concurrent": N, "max_queued": M}`. `unavailable` means the stored data could not be read: its `data` says
 whether a retry will likely work (`"retryable": true`, e.g. a part file a concurrent
 `camber datasets ingest` replaced, or a call that a re-ingest of its facility overlapped: a
