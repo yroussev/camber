@@ -185,9 +185,7 @@ from camber.capabilities import CallContext, default_registry
 reg = default_registry()
 ctx = CallContext(store="store", allowed_facilities=frozenset({"hq"}))
 agent = A2AServer(reg, ctx, LocalRunner(reg), token="a-token-of-16-or-more")
-status, headers, body = agent.handle(
-    "GET", "/.well-known/agent-card.json", {"Host": "127.0.0.1:0"}
-)
+status, headers, body = agent.handle("GET", "/.well-known/agent-card.json", {"Host": "127.0.0.1:0"})
 ```
 
 `LocalRunner` runs tasks on threads of the calling process; `camber a2a` uses the killable worker

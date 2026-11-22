@@ -442,7 +442,8 @@ class A2AHandler(BaseHTTPRequestHandler):
             refused = self._body_problem()
             if refused is not None:
                 status, payload = refused
-                self._send(*agent._http(status, {"error": payload}), method)
+                code, hdrs, data = agent._http(status, {"error": payload})
+                self._send(code, hdrs, data, method)
                 return
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length)
