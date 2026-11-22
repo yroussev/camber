@@ -18,13 +18,14 @@ is an object:
 | Key | Type | Meaning |
 |---|---|---|
 | `facts` | object | Each fact id the outcome issued, mapped to the fact's one-line text, in order. The summary text cites these ids in brackets, such as `[F1@rule_run-1a2b3c]`. |
-| `notices` | array of strings | Licence, trust and truncation notices. Show them to the user. A cut list's notice says how to ask for the rest. A failure carries the notices that apply to its call however it ended, such as the facility registry's notice while the registry cannot be trusted. |
+| `notices` | array of strings | Licence, trust and truncation notices. Show them to the user. A cut list's notice says how to ask for the rest. A failure carries the notices that apply to its call however it ended, whoever refused it (such as the facility registry's notice while the registry cannot be trusted). |
 | `error` | object or `null` | `null` for a completed task. For a failed, rejected or cancelled task: `code`, `message` and, when there is one, `data` (see below). |
 | `records` | array of objects | The full fact records: `id`, `kind`, `text`, and the fact's own fields (equipment, value, unit and so on). |
 
-This object is exactly what the `camber` key of a `camber mcp` tool result's
-`structuredContent` holds for an error result, and `facts` and `notices` are what it holds for a
-successful one ([MCP.md](../MCP.md)).
+`facts` and `notices` hold what the `camber` key of a successful `camber mcp` tool result's
+`structuredContent` holds ([MCP.md](../MCP.md)). An MCP error result carries the same notices,
+in its text and `_meta`, but no `structuredContent` (MCP clients would check it against the
+tool's output schema); A2A has no such check, so a failed task carries this whole object.
 
 The other parts of an artifact, also marked by `camber/part`:
 
@@ -45,7 +46,7 @@ The `error.code` of a task is one of the capability registry's codes or one of t
 | `not_allowed` | rejected | The facility is not one this server was started with. |
 | `refused_licence` | rejected | Research-only (non-commercial / no-derivatives) data, or a facility whose licence cannot be established. Always refused. |
 | `busy` | rejected | Every worker is busy and the queue is full. `data.retryable` is `true`. |
-| `invalid_params` | rejected | The input was refused once it ran (normally it is refused before, as a JSON-RPC `-32602`). |
+| `invalid_params` | rejected | The skill input does not match the capability's schema; `data.errors` lists each problem (`/facility_id: ...`). |
 | `timeout` | failed | The skill ran past its time cap and was stopped. |
 | `unavailable` | failed | A store read failed, or a re-ingest overlapped the call. `data.retryable` says whether to retry. |
 | `too_large` | failed | The result is over the size cap; narrow the input. |

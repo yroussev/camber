@@ -1053,8 +1053,10 @@ notices, and declared in every `outputSchema`. **Behaviour change:** `camber mcp
   package. The wire behaviour follows A2A 1.0 (JSON-RPC binding). **Changed in 0.113 (#343):**
   `CapabilityError` gains `banners` (the notices that apply to the call however it ended, added
   by `Registry.call`) and `camber.mcp.WorkerPool`'s `RemoteError` carries them; an MCP error
-  result (`isError: true`) gains `structuredContent` (`{"camber": {"facts", "notices",
-  "error"}}`) and `_meta["camber/banners"]`, and its text may start with `NOTICE:` lines.
+  result (`isError: true`) gains `_meta["camber/banners"]` and its text may start with
+  `NOTICE:` lines, on every error path; an `Internal error` or a tools/call `Invalid params`
+  refusal may gain `error.data` (`{"camber/banners": [...]}`). An error result carries no
+  `structuredContent` (clients would check it against the tool's output schema).
 
 ### The read API server: `camber.api.server`
 

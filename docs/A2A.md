@@ -130,7 +130,8 @@ task `TASK_STATE_SUBMITTED` or `TASK_STATE_WORKING`; poll `GetTask` with its `id
 | The four push-notification config methods | `PushNotificationNotSupportedError` (-32003). |
 
 A task ends `TASK_STATE_COMPLETED` (one artifact), `TASK_STATE_FAILED`, `TASK_STATE_REJECTED`
-(refused before it ran: a facility outside the allowlist, research-only data, every worker busy)
+(refused before it ran: input that fails the capability's schema, a facility outside the
+allowlist, research-only data, every worker busy)
 or `TASK_STATE_CANCELED`. A task takes no follow-up message: send a new message without `taskId`.
 The server keeps the last 256 finished tasks, in memory only.
 
@@ -145,14 +146,16 @@ A completed task's artifact has three parts, each marked by `metadata["camber/pa
   error code. See [the extension](a2a/grounded-facts.md).
 
 A failed, rejected or cancelled task carries its error code the same way, in its status
-message's `grounded-facts` part.
+message's `grounded-facts` part, with the notices that apply to its call however it ended
+(#343): the facility registry's notice while the registry cannot be trusted, whether the
+registry, the worker pool (a timeout, a lost worker) or the server refused the task.
 
 ### Refusals
 
 | JSON-RPC error | When |
 |---|---|
 | `-32009` VersionNotSupportedError | `A2A-Version` is missing (which means 0.3) or is not `1.0`. It may also come as the query parameter `?A2A-Version=1.0`. |
-| `-32602` Invalid params | A malformed message or configuration, an unknown field, no data part or more than one, an unknown skill, or input that fails the capability's schema (the `data` lists each field). |
+| `-32602` Invalid params | A malformed message or configuration, an unknown field, no data part or more than one, or an unknown skill. |
 | `-32005` ContentTypeNotSupportedError | A `raw` or `url` part (no file or URL is ever fetched), or `acceptedOutputModes` without `application/json`. |
 | `-32003` PushNotificationNotSupportedError | A push notification config. |
 | `-32001` TaskNotFoundError | An unknown task id. |

@@ -18,17 +18,19 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
 ## [Unreleased]
 
 ### Changed
-- **MCP error results carry `structuredContent` and their notices (#343).** A tool error
+- **MCP errors carry the notices that apply to their call (#343).** A tool error
   (`isError: true`) used to carry only a `code: message` text and `_meta["camber/error"]`, so a
-  host that shows the model only `structuredContent` showed nothing, and a damaged facility
-  registry's notice was missing from errors. It now also carries `structuredContent` with the
-  one key `camber`: `{"facts": {}, "notices": [...], "error": {"code", "message", "data"}}`, the
-  shape of a result's `camber` key plus `error`, made by the helper the A2A server uses. The
-  notices (today the registry's while it cannot be trusted) come first in the text as
-  `NOTICE:` lines and in `_meta["camber/banners"]`. **Behaviour change for MCP clients:** error
-  results gain `structuredContent` and `_meta["camber/banners"]`, and their text may start with
-  `NOTICE:` lines. The object does not match the tool's `outputSchema`; the specification and
-  the official SDKs check that schema only on results that are not errors.
+  damaged facility registry's notice never reached the model with an error. Every error path now
+  carries it, whichever part refused the call: the registry (refusals, invalid arguments), the
+  worker pool (`busy`, `timeout`, a lost worker) or the server (`internal`, a reply over the size
+  cap, a call refused before the registry). The error's text, which hosts show for an error
+  result, now leads with the notices as `NOTICE:` lines, and `_meta["camber/banners"]` lists
+  them; an `Internal error` or an `Invalid params` refusal carries them in its JSON-RPC
+  `error.data` (`{"camber/banners": [...]}`). Error results still carry no `structuredContent`,
+  on purpose: MCP clients check it against the tool's output schema even on errors (the
+  TypeScript SDK's client does), and an error object would fail that check and hide the error.
+  **Behaviour change for MCP clients:** an error's text may start with `NOTICE:` lines, error
+  results gain `_meta["camber/banners"]`, and those JSON-RPC errors may gain `data`.
 - **`CapabilityError.banners` (#343).** `Registry.call` attaches to every error the notices that
   apply to the call however it ended, and `camber mcp`'s worker processes carry them back.
 
@@ -58,7 +60,8 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   (#343).
 - **Peer input is data.** Text parts are never read: no model sees them, and they never become a
   config, a path or a command. The skill input is validated against the capability's schema
-  before any work starts. Result labels travel in data parts.
+  before any work starts; input that fails it is a rejected task with `invalid_params` and the
+  problems listed. Result labels travel in data parts.
 - **The `a2a` extra**, empty like `mcp`, since the server is standard library only. The
   official `a2a-sdk` (1.3.1) is a test client only, in its own `a2a-test` extra (not in `dev`);
   the round trip with it skips without it, and one CI leg (Python 3.13) installs it.
