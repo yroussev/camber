@@ -425,4 +425,4 @@ def test_the_all_extra_names_every_runtime_extra():
     extras = set(re.findall(r"^([a-z][a-z0-9-]*) = ", section, re.M))
     block = section.split("\nall = [", 1)[1].split("]\n", 1)[0]
     named = set(",".join(re.findall(r"camber-toolkit\[([^\]]+)\]", block + "]")).split(","))
-    assert named == extras - {"all", "dev", "docs", "mcp", "a2a", "edge"}
+    assert named == extras - {"all", "dev", "docs", "mcp", "a2a", "a2a-test", "edge"}

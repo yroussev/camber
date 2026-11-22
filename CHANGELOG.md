@@ -44,7 +44,8 @@ Releases before 0.110.0 are archived under [`docs/changelog/`](docs/changelog/in
   config, a path or a command. The skill input is validated against the capability's schema
   before any work starts. Result labels travel in data parts.
 - **The `a2a` extra**, empty like `mcp`, since the server is standard library only. The
-  official `a2a-sdk` (1.3.1) joins the `dev` extra as a test client.
+  official `a2a-sdk` (1.3.1) is a test client only, in its own `a2a-test` extra (not in `dev`);
+  the round trip with it skips without it, and one CI leg (Python 3.13) installs it.
 
 ## [0.112.0] — 2026-11-21
 

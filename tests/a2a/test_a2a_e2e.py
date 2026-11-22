@@ -1,6 +1,6 @@
 """``camber a2a`` end to end (#280): the real command line on a temporary store of synthetic data,
 driven with plain HTTP; the launch configuration and its mistakes; the official ``a2a-sdk`` client
-(a dev-only dependency; skipped without it).
+(the ``a2a-test`` extra; skipped without it).
 
 Every store here is built in a tmp directory from the RCx fixture's synthetic AHUs; nothing reads a
 real store, a user cache or the network.
